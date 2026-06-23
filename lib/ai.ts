@@ -1,0 +1,23 @@
+// lib/ai.ts
+// مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
+import { supabase } from "./supabase";
+
+export type AiAction = "summarize" | "ask" | "quiz";
+
+/** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */
+export async function aiAssist(
+  action: AiAction,
+  text: string,
+  question?: string
+): Promise<string> {
+  if (!text.trim()) return "";
+
+  const { data, error } = await supabase.functions.invoke("ai-assist", {
+    body: { action, text, question },
+  });
+
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+
+  return String(data?.result ?? "");
+}

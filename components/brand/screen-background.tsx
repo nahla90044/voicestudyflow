@@ -1,0 +1,51 @@
+// components/brand/screen-background.tsx
+// خلفية متدرّجة مع "بقع" ضوئية ناعمة تعطي إحساس احترافي عميق.
+import { LinearGradient } from "expo-linear-gradient";
+import React from "react";
+import { StyleSheet, View, type ViewStyle } from "react-native";
+import Svg, { Circle, Defs, RadialGradient, Stop } from "react-native-svg";
+
+import { Gradients, Palette } from "../../constants/design";
+
+type Props = {
+  children: React.ReactNode;
+  style?: ViewStyle;
+};
+
+export function ScreenBackground({ children, style }: Props) {
+  return (
+    <View style={[styles.root, style]}>
+      <LinearGradient
+        colors={Gradients.bg}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* توهّج أورورا نيون (طابع Web3) */}
+      <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <RadialGradient id="glowA" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={Palette.neonBlue} stopOpacity="0.40" />
+            <Stop offset="1" stopColor={Palette.neonBlue} stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="glowB" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={Palette.neonViolet} stopOpacity="0.34" />
+            <Stop offset="1" stopColor={Palette.neonViolet} stopOpacity="0" />
+          </RadialGradient>
+          <RadialGradient id="glowC" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={Palette.neonCyan} stopOpacity="0.22" />
+            <Stop offset="1" stopColor={Palette.neonCyan} stopOpacity="0" />
+          </RadialGradient>
+        </Defs>
+        <Circle cx="12%" cy="6%" r="170" fill="url(#glowA)" />
+        <Circle cx="95%" cy="18%" r="200" fill="url(#glowB)" />
+        <Circle cx="80%" cy="92%" r="190" fill="url(#glowC)" />
+      </Svg>
+      {children}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Palette.bg },
+});
