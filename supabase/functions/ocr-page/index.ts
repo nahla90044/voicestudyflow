@@ -56,37 +56,64 @@ Deno.serve(async (req: Request) => {
     const pix = pg.toPixmap(mupdf.Matrix.scale(2, 2), mupdf.ColorSpace.DeviceRGB, false);
     const png = pix.asPNG() as Uint8Array;
 
+    const ocrSpaceKey = Deno.env.get("OCR_SPACE_API_KEY");
     const visionKey = Deno.env.get("GOOGLE_VISION_API_KEY");
-    if (!visionKey) {
+    if (!ocrSpaceKey && !visionKey) {
       // وضع اختبار: نتأكد فقط أن التحويل نجح
       return json({ rendered: true, pngBytes: png.length, page: p, totalPages });
     }
 
-    // OCR عبر Google Vision
     const b64 = bytesToBase64(png);
-    const vRes = await fetch(
-      `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requests: [
-            {
-              image: { content: b64 },
-              features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-              imageContext: { languageHints: ["ar", "en"] },
-            },
-          ],
-        }),
-      }
-    );
+    let text = "";
 
-    const vJson = await vRes.json();
-    if (!vRes.ok) {
-      const msg = vJson?.error?.message ?? `Vision ${vRes.status}`;
-      return json({ error: msg }, 500);
+    if (ocrSpaceKey) {
+      // OCR.space (مجاني، يدعم العربي عبر المحرّك 1)
+      const form = new URLSearchParams();
+      form.set("base64Image", `data:image/png;base64,${b64}`);
+      form.set("language", "ara");
+      form.set("OCREngine", "1");
+      form.set("isOverlayRequired", "false");
+      form.set("scale", "true");
+      const r = await fetch("https://api.ocr.space/parse/image", {
+        method: "POST",
+        headers: {
+          apikey: ocrSpaceKey,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: form.toString(),
+      });
+      const j = await r.json();
+      if (j?.IsErroredOnProcessing) {
+        const msg = Array.isArray(j?.ErrorMessage) ? j.ErrorMessage.join(" ") : String(j?.ErrorMessage ?? "OCR.space error");
+        return json({ error: msg }, 500);
+      }
+      text = j?.ParsedResults?.[0]?.ParsedText ?? "";
+    } else if (visionKey) {
+      // Google Vision (دقة أعلى، يتطلب تفعيل الفوترة)
+      const vRes = await fetch(
+        `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requests: [
+              {
+                image: { content: b64 },
+                features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
+                imageContext: { languageHints: ["ar", "en"] },
+              },
+            ],
+          }),
+        }
+      );
+      const vJson = await vRes.json();
+      if (!vRes.ok) {
+        const msg = vJson?.error?.message ?? `Vision ${vRes.status}`;
+        return json({ error: msg }, 500);
+      }
+      text = vJson?.responses?.[0]?.fullTextAnnotation?.text ?? "";
     }
-    const text = vJson?.responses?.[0]?.fullTextAnnotation?.text ?? "";
+
     return json({ text, page: p, totalPages });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
