@@ -236,29 +236,37 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
   opts.onStart?.();
 
+  let step = "تجهيز";
   try {
     const gender = opts.gender ?? "female";
 
+    step = "توليد الصوت";
     const file = await synthToFile(clean, gender);
 
+    step = "وضع الصوت";
     await ensureAudioMode();
     currentFileUri = file.uri;
 
-    const player = createAudioPlayer(file.uri);
+    step = "إنشاء المشغّل";
+    const player = createAudioPlayer({ uri: file.uri });
     currentPlayer = player;
     if (opts.rate && opts.rate > 0) player.playbackRate = opts.rate;
 
+    let finished = false;
     player.addListener("playbackStatusUpdate", (status) => {
-      if (status.didJustFinish) {
+      if (status.didJustFinish && !finished) {
+        finished = true;
         opts.onDone?.();
         disposePlayer();
       }
     });
 
+    step = "التشغيل";
     player.play();
   } catch (e) {
-    // فشل الصوت البشري → بلّغ السبب ثم ارجع لصوت الجهاز ويكمل التسلسل
-    const reason = (e as Error)?.message ?? String(e);
+    // فشل الصوت البشري → بلّغ الخطوة والسبب ثم ارجع لصوت الجهاز ويكمل التسلسل
+    const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
+    console.warn("VSF_TTS_FALLBACK", reason); // يظهر في سجل خادم التطوير
     opts.onFallback?.(reason);
     speakWithDevice(clean, opts);
   }
