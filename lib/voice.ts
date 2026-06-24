@@ -54,12 +54,22 @@ let audioModeReady = false;
 
 async function ensureAudioMode() {
   if (audioModeReady) return;
-  // يشغّل الصوت حتى لو الجهاز على الصامت، ويكمل في الخلفية / عند قفل الشاشة
-  await setAudioModeAsync({
-    playsInSilentMode: true,
-    shouldPlayInBackground: true,
-    interruptionMode: "doNotMix",
-  });
+  // يشغّل الصوت حتى لو الجهاز على الصامت، ويكمل في الخلفية / عند قفل الشاشة.
+  // مهم: لا نسمح لفشل ضبط الوضع بإسقاط التشغيل (في Expo Go قد لا تتوفر
+  // خاصية التشغيل بالخلفية) — نجرّب إعدادًا أبسط بدلًا من رمي الخطأ.
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: "doNotMix",
+    });
+  } catch {
+    try {
+      await setAudioModeAsync({ playsInSilentMode: true });
+    } catch {
+      // نتجاهل — التشغيل العادي يكفي
+    }
+  }
   audioModeReady = true;
 }
 
