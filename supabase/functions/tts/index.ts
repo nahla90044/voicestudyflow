@@ -17,8 +17,8 @@ function json(body: unknown, status = 200) {
 }
 
 const VOICES: Record<string, string> = {
-  female: "21m00Tcm4TlvDq8ikWAM", // Rachel
-  male: "pNInz6obpgDQGcFmaJgB", // Adam
+  female: "RaelJk8tltOJ5KMrKjDu", // Layla — صوت عربي فصيح سردي (أنثى)
+  male: "apsZFlSToM2vmFpwz5jX", // Omar — صوت عربي فصيح سردي (ذكر)
 };
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -55,7 +55,7 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+          voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.0, use_speaker_boost: true },
         }),
       }
     );
