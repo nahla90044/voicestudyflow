@@ -64,6 +64,7 @@ export default function ReaderScreen() {
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
+  const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
 
   // علامات + تظليل + ملاحظات
   const [bookmarks, setBookmarks] = useState<number[]>([]);
@@ -281,6 +282,7 @@ export default function ReaderScreen() {
       gender,
       rate,
       onDone: () => playSentence(sents, i + 1, p, total),
+      onFallback: (reason) => setVoiceWarn(reason),
       onError: (e) => {
         setStatus(`تعذّر تشغيل الصوت: ${(e as any)?.message ?? "خطأ"}`);
         stop();
@@ -295,6 +297,7 @@ export default function ReaderScreen() {
       return;
     }
     setStatus("");
+    setVoiceWarn("");
     setViewMode("text"); // أظهر النص ليبان التحديد المتحرك أثناء القراءة
     playingRef.current = true;
     setSpeaking(true);
@@ -564,6 +567,9 @@ export default function ReaderScreen() {
         </Text>
 
         {status ? <Text style={styles.statusTxt}>{status}</Text> : null}
+        {voiceWarn ? (
+          <Text style={styles.warnTxt}>⚠️ تعذّر الصوت البشري: {voiceWarn}</Text>
+        ) : null}
       </View>
 
       {/* مودال الملاحظات والعلامات */}
@@ -996,4 +1002,5 @@ const styles = StyleSheet.create({
 
   pageInfo: { color: Palette.textMuted, textAlign: "center", fontWeight: "800", fontSize: 13 },
   statusTxt: { color: Palette.neonCyan, textAlign: "center", fontWeight: "700", fontSize: 12, marginTop: 2 },
+  warnTxt: { color: Palette.warn, textAlign: "center", fontWeight: "700", fontSize: 12, marginTop: 4 },
 });

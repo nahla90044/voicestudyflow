@@ -23,6 +23,8 @@ export type SpeakCallbacks = {
   onStart?: () => void;
   onDone?: () => void;
   onError?: (e: unknown) => void;
+  // يُستدعى عند فشل الصوت البشري والرجوع لصوت الجهاز (للتشخيص)
+  onFallback?: (reason: string) => void;
 };
 
 export type SpeakOptions = {
@@ -77,7 +79,7 @@ function disposePlayer() {
 //  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
-const CACHE_DIR_NAME = "tts-cache";
+const CACHE_DIR_NAME = "tts-cache-v2"; // v2: تجاهل أي ملفات قديمة تالفة
 const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
 
 function cacheDir(): Directory {
@@ -244,8 +246,10 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     });
 
     player.play();
-  } catch {
-    // فشل الصوت البشري → ارجع لصوت الجهاز ويكمل التسلسل (لا نوقف القراءة)
+  } catch (e) {
+    // فشل الصوت البشري → بلّغ السبب ثم ارجع لصوت الجهاز ويكمل التسلسل
+    const reason = (e as Error)?.message ?? String(e);
+    opts.onFallback?.(reason);
     speakWithDevice(clean, opts);
   }
 }
