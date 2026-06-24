@@ -36,13 +36,7 @@ import {
 } from "../../lib/readerPrefs";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { supabase } from "../../lib/supabase";
-import {
-  isHumanVoiceEnabled,
-  speakText,
-  stopSpeaking,
-  type VoiceGender,
-  type VoiceLang,
-} from "../../lib/voice";
+import { speakText, stopSpeaking, type VoiceGender } from "../../lib/voice";
 import { Palette, Radius, Spacing } from "../../constants/design";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -63,7 +57,6 @@ export default function ReaderScreen() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [lang, setLang] = useState<VoiceLang>("ar");
   const [gender, setGender] = useState<VoiceGender>("female");
   const [rate, setRate] = useState(1);
   const [sleepMin, setSleepMin] = useState(0);
@@ -90,7 +83,6 @@ export default function ReaderScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const offsetsRef = useRef<number[]>([]);
   const playStartRef = useRef<number | null>(null);
-  const humanVoice = isHumanVoiceEnabled();
 
   // رابط موقّت موقّع للعرض في WebView (الحاوية خاصة، ليست عامة)
   const [pdfUrl, setPdfUrl] = useState("");
@@ -279,7 +271,6 @@ export default function ReaderScreen() {
 
     setActiveSentence(i);
     speakText(sents[i], {
-      lang,
       gender,
       rate,
       onDone: () => playSentence(sents, i + 1, p, total),
@@ -292,6 +283,7 @@ export default function ReaderScreen() {
       stop();
       return;
     }
+    setViewMode("text"); // أظهر النص ليبان التحديد المتحرك أثناء القراءة
     playingRef.current = true;
     setSpeaking(true);
     playStartRef.current = Date.now();
@@ -299,10 +291,22 @@ export default function ReaderScreen() {
     playFromPage(page);
   }
 
+  // تنقّل بين الصفحات: يحمّل نص الصفحة الجديدة، ويكمل القراءة إن كانت شغّالة
   function goPage(delta: number) {
     const next = Math.max(1, totalPages ? Math.min(totalPages, page + delta) : page + delta);
+    if (next === page) return;
+    const wasPlaying = playingRef.current;
     stop();
     setPage(next);
+    setViewMode("text");
+    if (wasPlaying) {
+      playingRef.current = true;
+      setSpeaking(true);
+      playStartRef.current = Date.now();
+      playFromPage(next);
+    } else {
+      loadSentences(next);
+    }
   }
 
   // تحميل نص الصفحة للعرض فقط (بدون قراءة)
@@ -480,29 +484,26 @@ export default function ReaderScreen() {
 
       {/* لوحة التحكم بالصوت */}
       <View style={styles.player}>
-        {/* اختيار اللغة والصوت */}
+        {/* اختيار صوت القارئ */}
         <View style={styles.optionsRow}>
           <View style={styles.segment}>
-            <Seg label="عربي" active={lang === "ar"} onPress={() => setLang("ar")} />
-            <Seg label="EN" active={lang === "en"} onPress={() => setLang("en")} />
-          </View>
-          <View style={styles.segment}>
-            <Seg label="👩" active={gender === "female"} onPress={() => setGender("female")} />
-            <Seg label="👨" active={gender === "male"} onPress={() => setGender("male")} />
+            <Seg label="👩 امرأة" active={gender === "female"} onPress={() => setGender("female")} />
+            <Seg label="👨 رجل" active={gender === "male"} onPress={() => setGender("male")} />
           </View>
         </View>
 
-        {/* التحكم */}
+        {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
         <View style={styles.controls}>
-          <Pressable onPress={() => goPage(-1)} style={styles.navBtn} disabled={page <= 1}>
-            <Ionicons name="play-skip-forward" size={20} color={page <= 1 ? Palette.textDim : Palette.text} />
+          <Pressable onPress={() => goPage(-1)} style={styles.navBtn} disabled={page <= 1} hitSlop={6}>
+            <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
+            <Text style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>السابقة</Text>
           </Pressable>
 
           <Pressable onPress={togglePlay} style={styles.playBtn}>
             {busy ? (
               <ActivityIndicator color="#0b1220" />
             ) : (
-              <Ionicons name={speaking ? "pause" : "play"} size={26} color="#0b1220" />
+              <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
             )}
           </Pressable>
 
@@ -510,12 +511,16 @@ export default function ReaderScreen() {
             onPress={() => goPage(1)}
             style={styles.navBtn}
             disabled={!!totalPages && page >= totalPages}
+            hitSlop={6}
           >
             <Ionicons
-              name="play-skip-back"
-              size={20}
+              name="chevron-back"
+              size={22}
               color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text}
             />
+            <Text style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
+              التالية
+            </Text>
           </Pressable>
         </View>
 
@@ -523,7 +528,7 @@ export default function ReaderScreen() {
         <View style={styles.extraRow}>
           <Pressable onPress={cycleSpeed} style={styles.chip}>
             <Ionicons name="speedometer-outline" size={16} color={Palette.text} />
-            <Text style={styles.chipTxt}>{rate}x</Text>
+            <Text style={styles.chipTxt}>السرعة {rate}x</Text>
           </Pressable>
 
           <Pressable
@@ -544,10 +549,6 @@ export default function ReaderScreen() {
         <Text style={styles.pageInfo}>
           الصفحة {page}
           {totalPages ? ` من ${totalPages}` : ""}
-        </Text>
-
-        <Text style={styles.voiceBadge}>
-          {humanVoice ? "🗣️ صوت بشري (ElevenLabs)" : "⚠️ صوت الجهاز — أضِف مفتاح ElevenLabs"}
         </Text>
       </View>
 
@@ -929,7 +930,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     gap: 12,
   },
-  optionsRow: { flexDirection: "row", justifyContent: "space-between" },
+  optionsRow: { flexDirection: "row", justifyContent: "center" },
   segment: {
     flexDirection: "row",
     backgroundColor: Palette.surface,
@@ -944,13 +945,16 @@ const styles = StyleSheet.create({
 
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 24 },
   navBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    minWidth: 66,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: Radius.md,
     alignItems: "center",
     justifyContent: "center",
+    gap: 2,
     backgroundColor: Palette.surface,
   },
+  navTxt: { color: Palette.text, fontSize: 11, fontWeight: "800" },
   playBtn: {
     width: 66,
     height: 66,
@@ -977,5 +981,4 @@ const styles = StyleSheet.create({
   chipTxtActive: { color: "#fff" },
 
   pageInfo: { color: Palette.textMuted, textAlign: "center", fontWeight: "800", fontSize: 13 },
-  voiceBadge: { color: Palette.textDim, fontSize: 12, fontWeight: "700", textAlign: "center" },
 });

@@ -4,11 +4,32 @@
 // على مستوى قاعدة البيانات. لاحقًا يقدر المستخدم يربط بريدًا إلكترونيًا
 // للمزامنة بين الأجهزة عبر linkEmail/signInWithEmail.
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
 
 let ensuring: Promise<string> | null = null;
+
+const DEVICE_KEY = "vsf_device_user_id";
+
+// معرّف جهاز محلي — يُستخدم فقط كاحتياط أثناء التجربة إذا لم يُفعّل
+// "Anonymous sign-ins" بعد في Supabase. في الإنتاج تُستخدم جلسة المصادقة الحقيقية.
+function uuidv4(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+async function getLocalDeviceId(): Promise<string> {
+  const existing = await AsyncStorage.getItem(DEVICE_KEY);
+  if (existing) return existing;
+  const id = uuidv4();
+  await AsyncStorage.setItem(DEVICE_KEY, id);
+  return id;
+}
 
 /** يضمن وجود جلسة (مجهولة إن لزم) ويُرجع معرّف المستخدم الحقيقي. */
 export async function getUserId(): Promise<string> {
@@ -28,7 +49,18 @@ export async function getUserId(): Promise<string> {
       ensuring = null;
     });
   }
-  return ensuring;
+
+  try {
+    return await ensuring;
+  } catch (e) {
+    // الحساب المجهول غير مفعّل بعد → معرّف محلي للتجربة فقط
+    console.warn(
+      "[auth] Anonymous sign-in unavailable — using local device id (dev only). " +
+        "Enable Anonymous sign-ins in Supabase for production.",
+      e
+    );
+    return getLocalDeviceId();
+  }
 }
 
 /** الجلسة الحالية (أو null). */

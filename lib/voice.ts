@@ -144,13 +144,10 @@ export function clearAudioCache() {
 
 /* ---------------- الواجهة العامة ---------------- */
 
-/** هل الأصوات البشرية مفعّلة؟ (مفتاح محلي أو دالة Supabase السحابية) */
+/** نحاول دائمًا الصوت البشري (محلي أو سحابي) مع رجوع تلقائي لصوت الجهاز عند الفشل. */
 export function isHumanVoiceEnabled(): boolean {
-  return !!ELEVEN_KEY || cloudTtsAvailable;
+  return true;
 }
-
-// نفترض توفّر الدالة السحابية ما لم تفشل بشكل مؤكّد (404 = غير منشورة).
-let cloudTtsAvailable = true;
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
 async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
@@ -187,12 +184,7 @@ async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
   const { data, error } = await supabase.functions.invoke("tts", {
     body: { text, gender },
   });
-  if (error) {
-    // 404/خطأ غير قابل للاسترجاع = الدالة غير منشورة → لا نحاول السحابة مرة أخرى
-    const status = (error as { context?: { status?: number } })?.context?.status;
-    if (status === 404) cloudTtsAvailable = false;
-    throw error;
-  }
+  if (error) throw error;
   const b64 = (data as { audio?: string; error?: string })?.audio;
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
@@ -210,12 +202,6 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
   await stopSpeaking();
 
   opts.onStart?.();
-
-  // لا يوجد أي مسار للصوت البشري → صوت الجهاز مباشرة
-  if (!ELEVEN_KEY && !cloudTtsAvailable) {
-    speakWithDevice(clean, opts);
-    return;
-  }
 
   try {
     const gender = opts.gender ?? "female";
@@ -237,9 +223,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     });
 
     player.play();
-  } catch (e) {
-    opts.onError?.(e);
-    // فشل السحابة → ارجع لصوت الجهاز حتى لا يبقى المستخدم بدون صوت
+  } catch {
+    // فشل الصوت البشري → ارجع لصوت الجهاز ويكمل التسلسل (لا نوقف القراءة)
     speakWithDevice(clean, opts);
   }
 }
