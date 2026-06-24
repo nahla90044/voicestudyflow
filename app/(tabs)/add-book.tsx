@@ -17,6 +17,7 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
+import { extractPdfPageText } from "../../lib/pdfText";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
 
@@ -70,15 +71,32 @@ export default function AddBookScreen() {
       return manual;
     }
 
-    // 2) غير كذا: نحسبه تلقائيًا من Edge Function
-    const { data, error } = await supabase.functions.invoke("pdf-pagecount", {
-      body: { bookId, pdfPath },
-    });
+    // 2) غير كذا: نحسبه تلقائيًا من Edge Function (مع بديل عند الفشل)
+    try {
+      const { data, error } = await supabase.functions.invoke("pdf-pagecount", {
+        body: { bookId, pdfPath },
+      });
+      if (!error) {
+        const n = Number(data?.pageCount ?? 0);
+        if (Number.isFinite(n) && n > 0) return n;
+      }
+    } catch {
+      // نتجاهل ونجرّب البديل
+    }
 
-    if (error) throw error;
+    // بديل: استخرج عدد الصفحات من دالة استخراج النص (totalPages)
+    try {
+      const res = await extractPdfPageText(pdfPath, 1);
+      const n = Number(res.totalPages ?? 0);
+      if (Number.isFinite(n) && n > 0) {
+        await supabase.from("books").update({ page_count: n }).eq("id", bookId);
+        return n;
+      }
+    } catch {
+      // نتجاهل
+    }
 
-    const n = Number(data?.pageCount ?? 0);
-    return Number.isFinite(n) ? n : 0;
+    return 0;
   }
 
   async function save(createPlanNow: boolean) {
@@ -131,10 +149,15 @@ export default function AddBookScreen() {
         const pageCount = await resolvePageCount(book.id, path);
 
         if (!pageCount || pageCount <= 0) {
+          // الكتاب اتضاف فعلاً، بس ما قدرنا نحسب الصفحات للخطة
           Alert.alert(
-            "تنبيه",
-            "تعذّر تحديد عدد صفحات الكتاب تلقائيًا. اكتبه يدويًا في خانة الصفحات وحاول مرة ثانية."
+            "تمت إضافة الكتاب ✅",
+            "لكن تعذّر تحديد عدد الصفحات تلقائيًا لإنشاء الخطة. تقدرين كتابة عدد الصفحات يدويًا وإنشاء الخطة لاحقًا."
           );
+          setTitle("");
+          setPageCountManual("");
+          setFile(null);
+          router.push("/library");
           return;
         }
 

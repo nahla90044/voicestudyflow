@@ -357,7 +357,7 @@ export default function ReaderScreen() {
       const out = await aiAssist(action, text, aiQuestion);
       setAiResult(out || "لا توجد نتيجة.");
     } catch {
-      setAiResult("تعذّر تنفيذ الطلب. تأكد من نشر دالة ai-assist وضبط مفتاح Claude.");
+      setAiResult("تعذّر تنفيذ الطلب. ميزة الذكاء تحتاج تفعيل مفتاح Claude.");
     } finally {
       setAiBusy(false);
     }
@@ -381,7 +381,7 @@ export default function ReaderScreen() {
       const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle })));
       setAiResult(`✅ تم حفظ ${n} بطاقة مراجعة. راجعيها من تبويب «البطاقات».`);
     } catch {
-      setAiResult("تعذّر تنفيذ الطلب. تأكد من نشر دالة ai-assist.");
+      setAiResult("تعذّر تنفيذ الطلب. ميزة الذكاء تحتاج تفعيل مفتاح Claude.");
     } finally {
       setAiBusy(false);
     }
