@@ -63,6 +63,7 @@ export default function ReaderScreen() {
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
+  const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
 
   // علامات + تظليل + ملاحظات
   const [bookmarks, setBookmarks] = useState<number[]>([]);
@@ -226,6 +227,7 @@ export default function ReaderScreen() {
   async function playFromPage(p: number) {
     if (!pdfPath) return;
     setBusy(true);
+    setStatus(`جارٍ تحضير نص الصفحة ${p}…`);
     try {
       const res = await extractPdfPageText(pdfPath, p);
       if (res.totalPages) setTotalPages(res.totalPages);
@@ -240,16 +242,20 @@ export default function ReaderScreen() {
       if (sents.length === 0) {
         // صفحة بدون نص (قد تكون صورة ممسوحة) → جرّب التالية أو أوقف
         if (res.page < res.totalPages) {
+          setStatus(`الصفحة ${res.page} بدون نص — أتنقّل للتالية…`);
           return playFromPage(res.page + 1);
         }
+        setStatus("لا يوجد نص قابل للقراءة في هذا الكتاب.");
         stop();
         return;
       }
 
       setBusy(false);
+      setStatus("");
       playSentence(sents, 0, res.page, res.totalPages);
-    } catch {
+    } catch (e: any) {
       setBusy(false);
+      setStatus(`تعذّر تحميل النص: ${e?.message ?? "تحقّقي من الاتصال"}`);
       stop();
     }
   }
@@ -270,19 +276,25 @@ export default function ReaderScreen() {
     }
 
     setActiveSentence(i);
+    setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
     speakText(sents[i], {
       gender,
       rate,
       onDone: () => playSentence(sents, i + 1, p, total),
-      onError: () => stop(),
+      onError: (e) => {
+        setStatus(`تعذّر تشغيل الصوت: ${(e as any)?.message ?? "خطأ"}`);
+        stop();
+      },
     });
   }
 
   function togglePlay() {
     if (speaking) {
       stop();
+      setStatus("");
       return;
     }
+    setStatus("");
     setViewMode("text"); // أظهر النص ليبان التحديد المتحرك أثناء القراءة
     playingRef.current = true;
     setSpeaking(true);
@@ -550,6 +562,8 @@ export default function ReaderScreen() {
           الصفحة {page}
           {totalPages ? ` من ${totalPages}` : ""}
         </Text>
+
+        {status ? <Text style={styles.statusTxt}>{status}</Text> : null}
       </View>
 
       {/* مودال الملاحظات والعلامات */}
@@ -981,4 +995,5 @@ const styles = StyleSheet.create({
   chipTxtActive: { color: "#fff" },
 
   pageInfo: { color: Palette.textMuted, textAlign: "center", fontWeight: "800", fontSize: 13 },
+  statusTxt: { color: Palette.neonCyan, textAlign: "center", fontWeight: "700", fontSize: 12, marginTop: 2 },
 });
