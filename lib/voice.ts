@@ -7,13 +7,14 @@
 //   EXPO_PUBLIC_ELEVENLABS_VOICE_FEMALE=<voice_id>   (اختياري)
 //   EXPO_PUBLIC_ELEVENLABS_VOICE_MALE=<voice_id>     (اختياري)
 //
-// لاحقاً للنشر: نحوّل نداء fetch إلى Supabase Edge Function بدل مناداة
-// ElevenLabs مباشرة، عشان لا ينكشف المفتاح. الواجهة (speakText/stopSpeaking)
-// تبقى كما هي.
+// الإنتاج: إذا لم يوجد مفتاح محلي، نستدعي دالة Supabase «tts» التي تحفظ
+// المفتاح سرّيًا بالسيرفر. الواجهة (speakText/stopSpeaking) تبقى كما هي.
 
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import { File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
+
+import { supabase } from "./supabase";
 
 export type VoiceGender = "male" | "female";
 export type VoiceLang = "ar" | "en";
@@ -51,8 +52,12 @@ let audioModeReady = false;
 
 async function ensureAudioMode() {
   if (audioModeReady) return;
-  // يشغّل الصوت حتى لو الجهاز على الصامت
-  await setAudioModeAsync({ playsInSilentMode: true });
+  // يشغّل الصوت حتى لو الجهاز على الصامت، ويكمل في الخلفية / عند قفل الشاشة
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: true,
+    interruptionMode: "doNotMix",
+  });
   audioModeReady = true;
 }
 
@@ -73,9 +78,57 @@ function disposePlayer() {
 
 /* ---------------- الواجهة العامة ---------------- */
 
-/** هل الأصوات البشرية مفعّلة (يوجد مفتاح)؟ */
+/** هل الأصوات البشرية مفعّلة؟ (مفتاح محلي أو دالة Supabase السحابية) */
 export function isHumanVoiceEnabled(): boolean {
-  return !!ELEVEN_KEY;
+  return !!ELEVEN_KEY || cloudTtsAvailable;
+}
+
+// نفترض توفّر الدالة السحابية ما لم تفشل بشكل مؤكّد (404 = غير منشورة).
+let cloudTtsAvailable = true;
+
+/** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
+async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
+  const file = new File(Paths.cache, `tts-${Date.now()}.mp3`);
+
+  if (ELEVEN_KEY) {
+    // مسار التطوير المباشر (المفتاح موجود محليًا)
+    const voiceId = VOICE_IDS[gender];
+    const res = await fetch(`${ELEVEN_BASE}/${voiceId}?output_format=mp3_44100_128`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVEN_KEY,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => "");
+      throw new Error(`ElevenLabs ${res.status}: ${msg}`);
+    }
+    file.write(new Uint8Array(await res.arrayBuffer()));
+    return file;
+  }
+
+  // مسار الإنتاج: الدالة السحابية (المفتاح سرّي بالسيرفر)
+  const { data, error } = await supabase.functions.invoke("tts", {
+    body: { text, gender },
+  });
+  if (error) {
+    // 404/خطأ غير قابل للاسترجاع = الدالة غير منشورة → لا نحاول السحابة مرة أخرى
+    const status = (error as { context?: { status?: number } })?.context?.status;
+    if (status === 404) cloudTtsAvailable = false;
+    throw error;
+  }
+  const b64 = (data as { audio?: string; error?: string })?.audio;
+  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
+  file.write(b64, { encoding: "base64" });
+  return file;
 }
 
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
@@ -88,41 +141,18 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
   opts.onStart?.();
 
-  // لا يوجد مفتاح → صوت الجهاز
-  if (!ELEVEN_KEY) {
+  // لا يوجد أي مسار للصوت البشري → صوت الجهاز مباشرة
+  if (!ELEVEN_KEY && !cloudTtsAvailable) {
     speakWithDevice(clean, opts);
     return;
   }
 
   try {
     const gender = opts.gender ?? "female";
-    const voiceId = VOICE_IDS[gender];
 
-    const res = await fetch(`${ELEVEN_BASE}/${voiceId}?output_format=mp3_44100_128`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": ELEVEN_KEY,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text: clean,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-      }),
-    });
-
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "");
-      throw new Error(`ElevenLabs ${res.status}: ${msg}`);
-    }
-
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    const file = await synthToFile(clean, gender);
 
     await ensureAudioMode();
-
-    const file = new File(Paths.cache, `tts-${Date.now()}.mp3`);
-    file.write(bytes);
     currentFileUri = file.uri;
 
     const player = createAudioPlayer(file.uri);

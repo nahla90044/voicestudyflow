@@ -2,7 +2,7 @@
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
 import { supabase } from "./supabase";
 
-export type AiAction = "summarize" | "ask" | "quiz";
+export type AiAction = "summarize" | "ask" | "quiz" | "flashcards";
 
 /** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */
 export async function aiAssist(
@@ -20,4 +20,23 @@ export async function aiAssist(
   if (data?.error) throw new Error(data.error);
 
   return String(data?.result ?? "");
+}
+
+/** يولّد بطاقات مراجعة (سؤال/إجابة) من نص عبر الذكاء. */
+export async function generateFlashcards(
+  text: string
+): Promise<{ front: string; back: string }[]> {
+  const raw = await aiAssist("flashcards", text);
+  // استخرج مصفوفة JSON حتى لو لفّها الموديل بنص أو ```json
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const arr = JSON.parse(match[0]);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((c: any) => ({ front: String(c?.front ?? "").trim(), back: String(c?.back ?? "").trim() }))
+      .filter((c) => c.front && c.back);
+  } catch {
+    return [];
+  }
 }

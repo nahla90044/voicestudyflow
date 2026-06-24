@@ -16,7 +16,7 @@ import { GlassCard } from "../../components/brand/glass-card";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Palette, Radius } from "../../constants/design";
-import { getDeviceUserId } from "../../lib/device";
+import { getUserId } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 
 type ViewMode = "daily" | "weekly" | "monthly";
@@ -54,6 +54,7 @@ type CalendarBlock = {
 // الأسبوع يبدأ الأحد، والعطلة الجمعة (مؤشر 5) والسبت (مؤشر 6)
 const ايام_الاسبوع = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const ايام_مختصرة = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
+const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKEND_IDX = [5, 6]; // الجمعة، السبت
 
 function pad2(n: number) {
@@ -61,6 +62,10 @@ function pad2(n: number) {
 }
 function todayISO() {
   const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+// ✅ تنسيق محلي (لا UTC) — يتفادى تزحلق اليوم في التوقيتات غير UTC
+function toLocalISO(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
@@ -82,7 +87,7 @@ function addDaysISO(startISO: string, add: number) {
   // ✅ لو صار شيء غريب، رجّع اليوم بدل crash
   const t = d.getTime();
   if (!Number.isFinite(t) || Number.isNaN(t)) return todayISO();
-  return d.toISOString().slice(0, 10);
+  return toLocalISO(d);
 }
 
 function startOfWeekISO(anyISO: string) {
@@ -90,18 +95,21 @@ function startOfWeekISO(anyISO: string) {
   const day = d.getDay(); // 0 Sunday ... 6 Saturday
   // الأسبوع يبدأ الأحد → نرجع لأقرب أحد
   d.setDate(d.getDate() - day);
-  return d.toISOString().slice(0, 10);
+  return toLocalISO(d);
 }
 
 function monthKey(iso: string) {
   return iso.slice(0, 7); // YYYY-MM
 }
 
+// أشهر ميلادية بالعربي (ثابتة) — نتفادى ar-SA لأنها هجرية
+const اشهر_ميلادية = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+];
 function formatMonthArabic(iso: string) {
   const d = safeDateFromISO(iso);
-  const monthName = d.toLocaleDateString("ar-SA", { month: "long" });
-  const year = d.getFullYear();
-  return `${monthName} ${year}`;
+  return `${اشهر_ميلادية[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function compareTime(a?: string, b?: string) {
@@ -179,7 +187,7 @@ export default function CalendarScreen() {
   async function load() {
     setLoading(true);
     try {
-      const userId = await getDeviceUserId();
+      const userId = await getUserId();
 
       // نحدد نطاق التحميل حسب mode
       let from = cursorISO;
@@ -560,7 +568,7 @@ export default function CalendarScreen() {
           <View style={{ paddingHorizontal: 16 }}>
             {/* رؤوس أيام الأسبوع */}
             <View style={styles.monthHeadRow}>
-              {ايام_مختصرة.map((d, i) => (
+              {DAYS_EN.map((d, i) => (
                 <Text
                   key={d}
                   style={[styles.monthHeadCell, WEEKEND_IDX.includes(i) && { color: Palette.warn }]}

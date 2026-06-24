@@ -4,12 +4,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "vsf:stats:v1";
 
+export type DayLog = { m: number; p: number }; // دقائق، صفحات
+
 export type Stats = {
   streak: number; // أيام متتالية
   lastActive: string; // YYYY-MM-DD
   totalMinutes: number;
   totalPages: number;
   booksCompleted: number;
+  days: Record<string, DayLog>; // نشاط كل يوم (للخريطة الحرارية)
 };
 
 const EMPTY: Stats = {
@@ -18,10 +21,16 @@ const EMPTY: Stats = {
   totalMinutes: 0,
   totalPages: 0,
   booksCompleted: 0,
+  days: {},
 };
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+// تنسيق محلي (لا UTC) — يتفادى تزحلق اليوم
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function daysBetween(aISO: string, bISO: string): number {
@@ -61,11 +70,26 @@ export async function recordActivity(opts: {
     s.streak = 1;
   }
 
-  s.totalMinutes += Math.max(0, Math.round(opts.minutes ?? 0));
-  s.totalPages += Math.max(0, Math.round(opts.pages ?? 0));
+  const mins = Math.max(0, Math.round(opts.minutes ?? 0));
+  const pages = Math.max(0, Math.round(opts.pages ?? 0));
+  s.totalMinutes += mins;
+  s.totalPages += pages;
+
+  // سجل اليوم (للخريطة الحرارية + هدف اليوم)
+  if (!s.days) s.days = {};
+  const d = s.days[today] ?? { m: 0, p: 0 };
+  d.m += mins;
+  d.p += pages;
+  s.days[today] = d;
 
   await save(s);
   return s;
+}
+
+/** نشاط اليوم (دقائق/صفحات). */
+export async function getTodayActivity(): Promise<DayLog> {
+  const s = await getStats();
+  return s.days?.[todayISO()] ?? { m: 0, p: 0 };
 }
 
 export async function recordBookCompleted(): Promise<void> {

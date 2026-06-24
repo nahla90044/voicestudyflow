@@ -16,7 +16,7 @@ import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
-import { getDeviceUserId } from "../../lib/device";
+import { getUserId } from "../../lib/auth";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
 
@@ -92,8 +92,11 @@ export default function AddBookScreen() {
     try {
       setBusy(true);
 
-      // 1) upload
-      const path = `books/${Date.now()}_${randomId(8)}.pdf`;
+      // معرّف المستخدم الحقيقي (تفرضه RLS على القاعدة والتخزين)
+      const userId = await getUserId();
+
+      // 1) upload — المسار يبدأ بمجلّد المستخدم حتى لا يصل غيره لملفاته
+      const path = `${userId}/${Date.now()}_${randomId(8)}.pdf`;
       const buffer = await fetch(file.uri).then((r) => r.arrayBuffer());
 
       const { error: upErr } = await supabase.storage.from("pdfs").upload(path, buffer, {
@@ -110,6 +113,7 @@ export default function AddBookScreen() {
       const { data: book, error: bErr } = await supabase
         .from("books")
         .insert({
+          user_id: userId,
           title: safeTitle,
           pdf_path: path,
           page_count: 0, // سيتم تحديثه بعد قليل
@@ -121,7 +125,6 @@ export default function AddBookScreen() {
 
       // 3) create plan
       if (createPlanNow) {
-        const userId = await getDeviceUserId();
         const today = new Date().toISOString().slice(0, 10);
 
         const minutesPerPage = await getMinutesPerPage();

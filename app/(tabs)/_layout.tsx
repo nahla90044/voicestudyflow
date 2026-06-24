@@ -61,24 +61,28 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="more"
+        name="flashcards"
         options={{
-          title: "المزيد",
+          title: "البطاقات",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="menu" color={color} size={size} />
+            <Ionicons name="albums" color={color} size={size} />
           ),
         }}
       />
 
       <Tabs.Screen
-        name="explore"
+        name="activity"
         options={{
-          title: "الأرشيف",
+          title: "النشاط",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="file-tray" color={color} size={size} />
+            <Ionicons name="stats-chart" color={color} size={size} />
           ),
         }}
       />
+
+      {/* مخفية من الشريط — تُفتح من القائمة الجانبية */}
+      <Tabs.Screen name="more" options={{ href: null }} />
+      <Tabs.Screen name="explore" options={{ href: null }} />
     </Tabs>
   );
 }

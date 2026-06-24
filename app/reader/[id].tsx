@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -14,7 +15,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
-import { aiAssist, type AiAction } from "../../lib/ai";
+import { aiAssist, generateFlashcards, type AiAction } from "../../lib/ai";
+import { addCards } from "../../lib/flashcards";
+import {
+  addHighlight,
+  getBookmarks,
+  getHighlights,
+  removeHighlight,
+  setHighlightNote,
+  toggleBookmark,
+  type Highlight,
+} from "../../lib/annotations";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
@@ -60,6 +71,12 @@ export default function ReaderScreen() {
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
 
+  // علامات + تظليل + ملاحظات
+  const [bookmarks, setBookmarks] = useState<number[]>([]);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
+
   // مساعد الذكاء الاصطناعي
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -75,10 +92,23 @@ export default function ReaderScreen() {
   const playStartRef = useRef<number | null>(null);
   const humanVoice = isHumanVoiceEnabled();
 
-  const pdfUrl = useMemo(() => {
-    if (!pdfPath) return "";
-    const { data } = supabase.storage.from("pdfs").getPublicUrl(pdfPath);
-    return data.publicUrl || "";
+  // رابط موقّت موقّع للعرض في WebView (الحاوية خاصة، ليست عامة)
+  const [pdfUrl, setPdfUrl] = useState("");
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!pdfPath) {
+        setPdfUrl("");
+        return;
+      }
+      const { data } = await supabase.storage
+        .from("pdfs")
+        .createSignedUrl(pdfPath, 60 * 60); // ساعة
+      if (active) setPdfUrl(data?.signedUrl ?? "");
+    })();
+    return () => {
+      active = false;
+    };
   }, [pdfPath]);
 
   // تحميل التفضيلات: آخر صفحة + السرعة
@@ -105,6 +135,52 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (prefsLoadedRef.current && bookId && page >= 1) setLastPage(bookId, page);
   }, [bookId, page]);
+
+  // تحميل العلامات والتظليلات
+  useEffect(() => {
+    (async () => {
+      const [bm, hl] = await Promise.all([getBookmarks(bookId), getHighlights(bookId)]);
+      setBookmarks(bm);
+      setHighlights(hl);
+    })();
+  }, [bookId]);
+
+  const isBookmarked = bookmarks.includes(page);
+
+  async function onToggleBookmark() {
+    setBookmarks(await toggleBookmark(bookId, page));
+  }
+
+  // ضغطة مطوّلة على جملة في وضع النص → تظليل/إزالة
+  async function onSentenceLongPress(text: string) {
+    const existing = highlights.find((h) => h.page === page && h.text === text);
+    if (existing) {
+      setHighlights(await removeHighlight(bookId, existing.id));
+    } else {
+      setHighlights(await addHighlight(bookId, { page, text }));
+    }
+  }
+
+  function isHighlighted(text: string) {
+    return highlights.some((h) => h.page === page && h.text === text);
+  }
+
+  async function saveNoteDraft() {
+    if (!noteDraft) return;
+    setHighlights(await setHighlightNote(bookId, noteDraft.id, noteDraft.text.trim()));
+    setNoteDraft(null);
+  }
+
+  async function deleteHighlight(id: string) {
+    setHighlights(await removeHighlight(bookId, id));
+  }
+
+  function jumpTo(p: number) {
+    setNotesOpen(false);
+    stop();
+    setPage(p);
+    if (viewMode === "text") loadSentences(p);
+  }
 
   function stop() {
     playingRef.current = false;
@@ -283,6 +359,30 @@ export default function ReaderScreen() {
     }
   }
 
+  async function makeFlashcards() {
+    setAiBusy(true);
+    setAiResult("");
+    try {
+      const text = await ensurePageText();
+      if (!text.trim()) {
+        setAiResult("لا يوجد نص في هذه الصفحة.");
+        return;
+      }
+      const cards = await generateFlashcards(text);
+      if (cards.length === 0) {
+        setAiResult("تعذّر توليد بطاقات من هذه الصفحة.");
+        return;
+      }
+      const bookTitle = typeof title === "string" ? title : undefined;
+      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle })));
+      setAiResult(`✅ تم حفظ ${n} بطاقة مراجعة. راجعيها من تبويب «البطاقات».`);
+    } catch {
+      setAiResult("تعذّر تنفيذ الطلب. تأكد من نشر دالة ai-assist.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   function goBack() {
     stop();
     router.back();
@@ -299,9 +399,25 @@ export default function ReaderScreen() {
           {typeof title === "string" && title.trim() ? title : "الكتاب"}
         </Text>
 
+        <Pressable onPress={onToggleBookmark} style={styles.iconBtn} hitSlop={8}>
+          <Ionicons
+            name={isBookmarked ? "bookmark" : "bookmark-outline"}
+            size={18}
+            color={isBookmarked ? Palette.warn : Palette.text}
+          />
+        </Pressable>
+
+        <Pressable onPress={() => setNotesOpen(true)} style={styles.iconBtn} hitSlop={8}>
+          <Ionicons name="list" size={18} color={Palette.text} />
+          {bookmarks.length + highlights.length > 0 ? (
+            <View style={styles.countDot}>
+              <Text style={styles.countDotTxt}>{bookmarks.length + highlights.length}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+
         <Pressable onPress={() => setAiOpen(true)} style={styles.aiBtn} hitSlop={8}>
           <Ionicons name="sparkles" size={15} color="#fff" />
-          <Text style={styles.aiBtnTxt}>ذكاء</Text>
         </Pressable>
 
         <Pressable onPress={toggleViewMode} style={styles.modeToggle} hitSlop={8}>
@@ -323,19 +439,30 @@ export default function ReaderScreen() {
                 {busy ? "جارٍ تحميل النص…" : "لا يوجد نص لعرضه في هذه الصفحة."}
               </Text>
             ) : (
-              sentences.map((s, i) => (
-                <View
-                  key={i}
-                  onLayout={(e) => {
-                    offsetsRef.current[i] = e.nativeEvent.layout.y;
-                  }}
-                  style={i === activeSentence ? styles.sentenceRowActive : styles.sentenceRow}
-                >
-                  <Text style={i === activeSentence ? styles.sentenceActive : styles.sentence}>
-                    {s}
-                  </Text>
-                </View>
-              ))
+              sentences.map((s, i) => {
+                const hl = isHighlighted(s);
+                return (
+                  <Pressable
+                    key={i}
+                    onLongPress={() => onSentenceLongPress(s)}
+                    delayLongPress={300}
+                    onLayout={(e) => {
+                      offsetsRef.current[i] = e.nativeEvent.layout.y;
+                    }}
+                    style={
+                      i === activeSentence
+                        ? styles.sentenceRowActive
+                        : hl
+                        ? styles.sentenceRowHL
+                        : styles.sentenceRow
+                    }
+                  >
+                    <Text style={i === activeSentence ? styles.sentenceActive : styles.sentence}>
+                      {s}
+                    </Text>
+                  </Pressable>
+                );
+              })
             )}
           </ScrollView>
         ) : pdfUrl ? (
@@ -424,6 +551,92 @@ export default function ReaderScreen() {
         </Text>
       </View>
 
+      {/* مودال الملاحظات والعلامات */}
+      <Modal visible={notesOpen} transparent animationType="slide" onRequestClose={() => setNotesOpen(false)}>
+        <View style={styles.aiMask}>
+          <View style={styles.aiSheet}>
+            <View style={styles.aiHeader}>
+              <Text style={styles.aiTitle}>🔖 علاماتي وملاحظاتي</Text>
+              <Pressable onPress={() => setNotesOpen(false)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={Palette.textMuted} />
+              </Pressable>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
+              {bookmarks.length === 0 && highlights.length === 0 ? (
+                <Text style={styles.notesHint}>
+                  لا توجد علامات بعد. استخدمي 🔖 لحفظ صفحة، أو اضغطي مطوّلاً على جملة في وضع النص لتظليلها.
+                </Text>
+              ) : null}
+
+              {bookmarks.length > 0 ? (
+                <>
+                  <Text style={styles.notesSection}>الصفحات المحفوظة</Text>
+                  <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: 8 }}>
+                    {bookmarks.map((p) => (
+                      <Pressable key={p} onPress={() => jumpTo(p)} style={styles.bmChip}>
+                        <Ionicons name="bookmark" size={13} color={Palette.warn} />
+                        <Text style={styles.bmChipTxt}>صفحة {p}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
+              {highlights.length > 0 ? (
+                <Text style={styles.notesSection}>المقاطع المظلّلة</Text>
+              ) : null}
+              {highlights.map((h) => (
+                <View key={h.id} style={styles.hlCard}>
+                  <Pressable onPress={() => jumpTo(h.page)}>
+                    <Text style={styles.hlPage}>صفحة {h.page}</Text>
+                    <Text style={styles.hlText} numberOfLines={3}>{h.text}</Text>
+                  </Pressable>
+
+                  {noteDraft?.id === h.id ? (
+                    <View style={{ flexDirection: "row-reverse", gap: 8, marginTop: 8 }}>
+                      <TextInput
+                        value={noteDraft.text}
+                        onChangeText={(t) => setNoteDraft({ id: h.id, text: t })}
+                        placeholder="اكتبي ملاحظة…"
+                        placeholderTextColor={Palette.placeholder}
+                        style={styles.noteInput}
+                        textAlign="right"
+                        autoFocus
+                      />
+                      <Pressable onPress={saveNoteDraft} style={styles.noteSave}>
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      </Pressable>
+                    </View>
+                  ) : h.note ? (
+                    <Pressable onPress={() => setNoteDraft({ id: h.id, text: h.note ?? "" })}>
+                      <Text style={styles.hlNote}>📝 {h.note}</Text>
+                    </Pressable>
+                  ) : null}
+
+                  <View style={styles.hlActions}>
+                    <Pressable onPress={() => setNoteDraft({ id: h.id, text: h.note ?? "" })} hitSlop={6}>
+                      <Text style={styles.hlAction}>{h.note ? "تعديل الملاحظة" : "+ ملاحظة"}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        Alert.alert("حذف", "حذف هذا التظليل؟", [
+                          { text: "إلغاء", style: "cancel" },
+                          { text: "حذف", style: "destructive", onPress: () => deleteHighlight(h.id) },
+                        ])
+                      }
+                      hitSlop={6}
+                    >
+                      <Text style={[styles.hlAction, { color: Palette.danger }]}>حذف</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* مودال الذكاء الاصطناعي */}
       <Modal visible={aiOpen} transparent animationType="slide" onRequestClose={() => setAiOpen(false)}>
         <View style={styles.aiMask}>
@@ -443,6 +656,10 @@ export default function ReaderScreen() {
               <Pressable style={styles.aiAction} onPress={() => runAi("quiz")} disabled={aiBusy}>
                 <Ionicons name="help-circle" size={18} color={Palette.neonViolet} />
                 <Text style={styles.aiActionTxt}>اختبرني</Text>
+              </Pressable>
+              <Pressable style={styles.aiAction} onPress={makeFlashcards} disabled={aiBusy}>
+                <Ionicons name="albums" size={18} color={Palette.neonPink} />
+                <Text style={styles.aiActionTxt}>بطاقات</Text>
               </Pressable>
             </View>
 
@@ -540,6 +757,73 @@ const styles = StyleSheet.create({
   },
   aiBtnTxt: { color: "#fff", fontWeight: "900", fontSize: 13 },
 
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Palette.surface,
+  },
+  countDot: {
+    position: "absolute",
+    top: -4,
+    left: -4,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: Palette.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countDotTxt: { color: "#fff", fontSize: 10, fontWeight: "900" },
+
+  notesHint: { color: Palette.textDim, fontSize: 13, lineHeight: 20, textAlign: "right" },
+  notesSection: { color: Palette.textMuted, fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 4 },
+  bmChip: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  bmChipTxt: { color: Palette.text, fontWeight: "800", fontSize: 13 },
+  hlCard: {
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    borderRadius: Radius.md,
+    padding: 12,
+  },
+  hlPage: { color: Palette.warn, fontSize: 12, fontWeight: "800", textAlign: "right" },
+  hlText: { color: Palette.textMuted, fontSize: 14, lineHeight: 22, textAlign: "right", marginTop: 4 },
+  hlNote: { color: Palette.neonCyan, fontSize: 13, textAlign: "right", marginTop: 8 },
+  hlActions: { flexDirection: "row-reverse", justifyContent: "space-between", marginTop: 8 },
+  hlAction: { color: Palette.primary, fontSize: 13, fontWeight: "800" },
+  noteInput: {
+    flex: 1,
+    height: 42,
+    paddingHorizontal: 12,
+    borderRadius: Radius.sm,
+    backgroundColor: Palette.bgElevated,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    color: Palette.text,
+  },
+  noteSave: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Palette.primary,
+  },
+
   aiMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   aiSheet: {
     backgroundColor: Palette.bgElevated,
@@ -599,6 +883,14 @@ const styles = StyleSheet.create({
   textContent: { padding: 16, gap: 8 },
   readingText: { color: Palette.textMuted, fontSize: 18, lineHeight: 32, textAlign: "right" },
   sentenceRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: Radius.sm },
+  sentenceRowHL: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: Radius.sm,
+    backgroundColor: "rgba(241,196,15,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(241,196,15,0.4)",
+  },
   sentenceRowActive: {
     paddingVertical: 6,
     paddingHorizontal: 10,

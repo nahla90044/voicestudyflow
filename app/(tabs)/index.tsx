@@ -1,49 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppDrawer } from "../../components/brand/app-drawer";
 import { FadeIn } from "../../components/brand/fade-in";
 import { GlassCard } from "../../components/brand/glass-card";
 import { ReadListenArt } from "../../components/brand/illustrations";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
-import { getStats, type Stats } from "../../lib/stats";
 
 type Feature = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   sub: string;
   color: string;
-  route: "/library" | "/add-book" | "/calendar" | "/more";
+  route: "/library" | "/add-book" | "/calendar" | "/activity";
 };
 
 const FEATURES: Feature[] = [
   { icon: "library", label: "المكتبة", sub: "كل كتبك", color: Palette.neonBlue, route: "/library" },
   { icon: "add-circle", label: "إضافة كتاب", sub: "ارفع PDF", color: Palette.neonViolet, route: "/add-book" },
   { icon: "calendar", label: "خطة اليوم", sub: "نظّم وقتك", color: Palette.neonCyan, route: "/calendar" },
-  { icon: "options", label: "الإعدادات", sub: "الصوت والمزيد", color: Palette.neonPink, route: "/more" },
+  { icon: "stats-chart", label: "النشاط", sub: "تقدّمك وسلسلتك", color: Palette.neonPink, route: "/activity" },
 ];
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [stats, setStats] = useState<Stats | null>(null);
-
-  // نحدّث الإحصائيات كل ما ترجع للشاشة
-  useFocusEffect(
-    useCallback(() => {
-      getStats().then(setStats);
-    }, [])
-  );
-
-  const statItems = [
-    { icon: "flame" as const, label: "سلسلة", value: `${stats?.streak ?? 0}`, color: Palette.neonPink },
-    { icon: "headset" as const, label: "دقائق", value: `${stats?.totalMinutes ?? 0}`, color: Palette.neonCyan },
-    { icon: "documents" as const, label: "صفحات", value: `${stats?.totalPages ?? 0}`, color: Palette.neonBlue },
-    { icon: "checkmark-done" as const, label: "كتب", value: `${stats?.booksCompleted ?? 0}`, color: Palette.neonViolet },
-  ];
 
   return (
     <ScreenBackground>
@@ -52,6 +37,11 @@ export default function HomeScreen() {
           contentContainerStyle={{ padding: Spacing.xl, paddingBottom: 110 }}
           showsVerticalScrollIndicator={false}
         >
+          {/* الشريط العلوي: قائمة جانبية */}
+          <View style={styles.topBar}>
+            <AppDrawer />
+          </View>
+
           {/* الهيرو الزجاجي */}
           <FadeIn delay={0}>
             <GlassCard radius={Radius.xl} glow={Palette.neonViolet} style={{ marginBottom: Spacing.xl }}>
@@ -63,23 +53,8 @@ export default function HomeScreen() {
             </GlassCard>
           </FadeIn>
 
-          {/* بطاقة الإحصائيات */}
-          <FadeIn delay={90}>
-            <GlassCard glow={Palette.neonPink} style={{ marginBottom: Spacing.xl }}>
-              <View style={styles.statsRow}>
-                {statItems.map((s) => (
-                  <View key={s.label} style={styles.statItem}>
-                    <Ionicons name={s.icon} size={20} color={s.color} />
-                    <Text style={styles.statValue}>{s.value}</Text>
-                    <Text style={styles.statLabel}>{s.label}</Text>
-                  </View>
-                ))}
-              </View>
-            </GlassCard>
-          </FadeIn>
-
           {/* زر رئيسي نيون */}
-          <FadeIn delay={180}>
+          <FadeIn delay={120}>
             <Pressable
               onPress={() => router.push("/library")}
               style={({ pressed }) => [styles.cta, pressed && styles.pressed]}
@@ -138,6 +113,8 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
 
+  topBar: { flexDirection: "row-reverse", marginBottom: Spacing.md },
+
   hero: { alignItems: "center", padding: Spacing.xl },
   title: { color: Palette.text, fontSize: 28, fontWeight: "900", textAlign: "center", marginTop: Spacing.sm },
   subtitle: {
@@ -147,6 +124,36 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: Spacing.sm,
   },
+
+  goalCard: { padding: Spacing.lg, gap: 10 },
+  goalHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  goalTitle: { color: Palette.text, fontWeight: "900", fontSize: 16, textAlign: "right" },
+  goalChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  goalChipTxt: { color: Palette.text, fontWeight: "800", fontSize: 13 },
+  goalBarBg: { height: 12, borderRadius: Radius.pill, backgroundColor: Palette.surfaceStrong, overflow: "hidden" },
+  goalBarFill: { height: 12, borderRadius: Radius.pill },
+  goalSub: { color: Palette.textDim, fontSize: 13, fontWeight: "700", textAlign: "right" },
+  heatCard: { padding: Spacing.lg, gap: 14 },
+  reviewCard: { flexDirection: "row-reverse", alignItems: "center", gap: 12, padding: Spacing.lg },
+  reviewIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewTitle: { color: Palette.text, fontWeight: "900", fontSize: 16, textAlign: "right" },
+  reviewSub: { color: Palette.textDim, fontSize: 12, textAlign: "right", marginTop: 2 },
+  dueBadge: { minWidth: 26, height: 26, paddingHorizontal: 6, borderRadius: 13, backgroundColor: Palette.neonPink, alignItems: "center", justifyContent: "center" },
+  dueBadgeTxt: { color: "#fff", fontWeight: "900", fontSize: 13 },
 
   statsRow: { flexDirection: "row-reverse", justifyContent: "space-around", paddingVertical: Spacing.lg, paddingHorizontal: Spacing.sm },
   statItem: { alignItems: "center", gap: 4 },

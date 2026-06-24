@@ -1,4 +1,10 @@
 
+[functions.tts]
+enabled = true
+verify_jwt = true
+import_map = "./functions/tts/deno.json"
+entrypoint = "./functions/tts/index.ts"
+
 [functions.ai-assist]
 enabled = true
 verify_jwt = true

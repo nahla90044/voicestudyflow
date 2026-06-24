@@ -17,7 +17,7 @@ import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius } from "../../constants/design";
-import { getDeviceUserId } from "../../lib/device";
+import { getUserId } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 
 type Book = {
@@ -84,7 +84,7 @@ export default function LibraryScreen() {
   async function load() {
     setLoading(true);
 
-    const userId = await getDeviceUserId();
+    const userId = await getUserId();
 
     const { data: books, error: booksErr } = await supabase
       .from("books")
