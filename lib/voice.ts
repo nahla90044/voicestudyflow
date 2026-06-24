@@ -250,7 +250,14 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     step = "إنشاء المشغّل";
     const player = createAudioPlayer({ uri: file.uri });
     currentPlayer = player;
-    if (opts.rate && opts.rate > 0) player.playbackRate = opts.rate;
+    // ضبط السرعة عبر الدالة الصحيحة (الخاصية للقراءة فقط)؛ ولا نسمح لفشلها بكسر التشغيل
+    if (opts.rate && opts.rate > 0 && opts.rate !== 1) {
+      try {
+        player.setPlaybackRate(opts.rate);
+      } catch {
+        // نتجاهل — التشغيل بالسرعة الافتراضية أهم من توقّف الصوت
+      }
+    }
 
     let finished = false;
     player.addListener("playbackStatusUpdate", (status) => {
