@@ -30,20 +30,41 @@ export type SpeakCallbacks = {
 export type SpeakOptions = {
   lang?: VoiceLang;
   gender?: VoiceGender;
+  voiceId?: string; // معرّف صوت محدد من الكتالوج (يتجاوز gender)
   rate?: number;
   pitch?: number;
 } & SpeakCallbacks;
+
+/* ---------------- كتالوج أصوات ElevenLabs العربية ---------------- */
+
+export type VoiceOption = {
+  id: string;
+  name: string; // الاسم المعروض في الواجهة
+  voiceId: string; // معرّف ElevenLabs
+  gender: VoiceGender;
+};
+
+// أصوات عربية حقيقية (فصحى + سعودية) مضافة لحساب ElevenLabs.
+export const VOICE_CATALOG: VoiceOption[] = [
+  { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female" },
+  { id: "omar", name: "عمر · فصحى", voiceId: "apsZFlSToM2vmFpwz5jX", gender: "male" },
+  { id: "nasser", name: "نصر · سعودي", voiceId: "cFUFIbKkO2iZFwS8cRnY", gender: "male" },
+  { id: "ali_ahmed", name: "علي أحمد · سعودي", voiceId: "OoE8swS3hImZANNOodf6", gender: "male" },
+  { id: "ali_salman", name: "علي سلمان · سعودي", voiceId: "8uRbbhgs2KE6XVJRydYE", gender: "male" },
+  { id: "noura", name: "نورة · سعودي", voiceId: "qby5WU0hOX8igIszsSvl", gender: "female" },
+];
+
+export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
 
 /* ---------------- إعدادات ElevenLabs ---------------- */
 
 const ELEVEN_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
 const ELEVEN_BASE = "https://api.elevenlabs.io/v1/text-to-speech";
 
-// أصوات متعددة اللغات (تعمل للعربية والإنجليزية مع eleven_multilingual_v2).
-// تقدرين تغيّرينها من .env بمعرّفات أصوات عربية مخصصة لنطق أفضل.
+// احتياطي عند غياب voiceId (المسار المباشر فقط)
 const VOICE_IDS: Record<VoiceGender, string> = {
-  female: process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_FEMALE ?? "21m00Tcm4TlvDq8ikWAM", // Rachel
-  male: process.env.EXPO_PUBLIC_ELEVENLABS_VOICE_MALE ?? "pNInz6obpgDQGcFmaJgB", // Adam
+  female: "RaelJk8tltOJ5KMrKjDu", // Layla
+  male: "apsZFlSToM2vmFpwz5jX", // Omar
 };
 
 /* ---------------- حالة التشغيل ---------------- */
@@ -114,9 +135,8 @@ function hashKey(s: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-function cacheFileFor(text: string, gender: VoiceGender): File {
-  const voiceId = VOICE_IDS[gender];
-  const name = `${gender}_${hashKey(voiceId + "|" + text)}.mp3`;
+function cacheFileFor(text: string, voiceId: string): File {
+  const name = `${hashKey(voiceId)}_${hashKey(voiceId + "|" + text)}.mp3`;
   return new File(cacheDir(), name);
 }
 
@@ -189,15 +209,16 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
-async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
+async function synthToFile(text: string, gender: VoiceGender, voiceId?: string): Promise<File> {
+  const vid = voiceId || VOICE_IDS[gender];
+
   // 1) موجود في التخزين؟ شغّله مباشرة بدون تكلفة/إنترنت
-  const file = cacheFileFor(text, gender);
+  const file = cacheFileFor(text, vid);
   if (file.exists && (file.size ?? 0) > 0) return file;
 
   if (ELEVEN_KEY) {
     // مسار التطوير المباشر (المفتاح موجود محليًا)
-    const voiceId = VOICE_IDS[gender];
-    const res = await fetch(`${ELEVEN_BASE}/${voiceId}?output_format=mp3_44100_128`, {
+    const res = await fetch(`${ELEVEN_BASE}/${vid}?output_format=mp3_44100_128`, {
       method: "POST",
       headers: {
         "xi-api-key": ELEVEN_KEY,
@@ -221,7 +242,7 @@ async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
 
   // مسار الإنتاج: الدالة السحابية (المفتاح سرّي بالسيرفر)
   const { data, error } = await supabase.functions.invoke("tts", {
-    body: { text, gender },
+    body: { text, gender, voiceId: vid },
   });
   if (error) throw error;
   const b64 = (data as { audio?: string; error?: string })?.audio;
@@ -248,7 +269,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const gender = opts.gender ?? "female";
 
     step = "توليد الصوت";
-    const file = await synthToFile(clean, gender);
+    const file = await synthToFile(clean, gender, opts.voiceId);
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
 
     step = "وضع الصوت";

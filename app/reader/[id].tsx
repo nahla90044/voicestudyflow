@@ -36,7 +36,12 @@ import {
 } from "../../lib/readerPrefs";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { supabase } from "../../lib/supabase";
-import { speakText, stopSpeaking, type VoiceGender } from "../../lib/voice";
+import {
+  DEFAULT_VOICE_ID,
+  speakText,
+  stopSpeaking,
+  VOICE_CATALOG,
+} from "../../lib/voice";
 import { Palette, Radius, Spacing } from "../../constants/design";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -57,7 +62,7 @@ export default function ReaderScreen() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [gender, setGender] = useState<VoiceGender>("female");
+  const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   const [rate, setRate] = useState(1);
   const [sleepMin, setSleepMin] = useState(0);
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
@@ -279,7 +284,7 @@ export default function ReaderScreen() {
     setActiveSentence(i);
     setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
     speakText(sents[i], {
-      gender,
+      voiceId,
       rate,
       onDone: () => playSentence(sents, i + 1, p, total),
       onFallback: (reason) => setVoiceWarn(reason),
@@ -500,12 +505,26 @@ export default function ReaderScreen() {
       {/* لوحة التحكم بالصوت */}
       <View style={styles.player}>
         {/* اختيار صوت القارئ */}
-        <View style={styles.optionsRow}>
-          <View style={styles.segment}>
-            <Seg label="👩 امرأة" active={gender === "female"} onPress={() => setGender("female")} />
-            <Seg label="👨 رجل" active={gender === "male"} onPress={() => setGender("male")} />
-          </View>
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.voiceRow}
+        >
+          {VOICE_CATALOG.map((v) => {
+            const active = v.voiceId === voiceId;
+            return (
+              <Pressable
+                key={v.id}
+                onPress={() => setVoiceId(v.voiceId)}
+                style={[styles.voiceChip, active && styles.voiceChipActive]}
+              >
+                <Text style={[styles.voiceChipTxt, active && styles.voiceChipTxtActive]}>
+                  {v.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
         {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
         <View style={styles.controls}>
@@ -717,22 +736,6 @@ export default function ReaderScreen() {
         </View>
       </Modal>
     </SafeAreaView>
-  );
-}
-
-function Seg({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.seg, active && styles.segActive]}>
-      <Text style={[styles.segTxt, active && styles.segTxtActive]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -950,20 +953,20 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     gap: 12,
   },
-  optionsRow: { flexDirection: "row", justifyContent: "center" },
-  segment: {
-    flexDirection: "row",
-    backgroundColor: Palette.surface,
+  voiceRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 2 },
+  voiceChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: Radius.pill,
-    padding: 3,
-    gap: 2,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
   },
-  seg: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: Radius.pill },
-  segActive: { backgroundColor: Palette.primary },
-  segTxt: { color: Palette.textDim, fontWeight: "800", fontSize: 13 },
-  segTxtActive: { color: "#fff" },
+  voiceChipActive: { backgroundColor: Palette.primary, borderColor: Palette.primary },
+  voiceChipTxt: { color: Palette.textDim, fontWeight: "800", fontSize: 13 },
+  voiceChipTxtActive: { color: "#fff" },
 
-  controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 24 },
+  controls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 24 },
   navBtn: {
     minWidth: 66,
     paddingVertical: 8,
