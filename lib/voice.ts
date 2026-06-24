@@ -11,7 +11,7 @@
 // المفتاح سرّيًا بالسيرفر. الواجهة (speakText/stopSpeaking) تبقى كما هي.
 
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
-import { File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
 import { supabase } from "./supabase";
@@ -68,12 +68,78 @@ function disposePlayer() {
     } catch {}
     currentPlayer = null;
   }
-  if (currentFileUri) {
-    try {
-      new File(currentFileUri).delete();
-    } catch {}
-    currentFileUri = null;
+  // لا نحذف الملف: صار مخبّأً (cache) لإعادة استخدامه بدون تكلفة جديدة
+  currentFileUri = null;
+}
+
+/* ---------------- تخزين الصوت محليًا (cache) ---------------- */
+// نخبّئ كل مقطع صوتي باسم مشتق من (الجنس + الصوت + النص) حتى:
+//  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
+//  - يعمل التشغيل بدون إنترنت بعد أول مرة
+
+const CACHE_DIR_NAME = "tts-cache";
+const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
+
+function cacheDir(): Directory {
+  const dir = new Directory(Paths.cache, CACHE_DIR_NAME);
+  if (!dir.exists) dir.create({ intermediates: true });
+  return dir;
+}
+
+// تجزئة بسيطة (FNV-1a 32-bit) لاسم ملف ثابت لكل نص
+function hashKey(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
   }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function cacheFileFor(text: string, gender: VoiceGender): File {
+  const voiceId = VOICE_IDS[gender];
+  const name = `${gender}_${hashKey(voiceId + "|" + text)}.mp3`;
+  return new File(cacheDir(), name);
+}
+
+/** يحذف أقدم الملفات إذا تجاوز التخزين السقف. */
+function pruneCache() {
+  try {
+    const items = cacheDir().list();
+    const files = items.filter((f): f is File => f instanceof File);
+    let total = files.reduce((sum, f) => sum + (f.size ?? 0), 0);
+    if (total <= CACHE_MAX_BYTES) return;
+    // الأقدم أولًا (حسب وقت التعديل إن توفّر، وإلا حسب الاسم)
+    files.sort((a, b) => (a.modificationTime ?? 0) - (b.modificationTime ?? 0));
+    for (const f of files) {
+      if (total <= CACHE_MAX_BYTES) break;
+      const size = f.size ?? 0;
+      try {
+        f.delete();
+        total -= size;
+      } catch {}
+    }
+  } catch {}
+}
+
+/** حجم التخزين الصوتي الحالي بالبايت. */
+export function audioCacheSize(): number {
+  try {
+    return cacheDir()
+      .list()
+      .filter((f): f is File => f instanceof File)
+      .reduce((sum, f) => sum + (f.size ?? 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
+/** يمسح كل الصوت المخبّأ (من الإعدادات). */
+export function clearAudioCache() {
+  try {
+    const dir = cacheDir();
+    if (dir.exists) dir.delete();
+  } catch {}
 }
 
 /* ---------------- الواجهة العامة ---------------- */
@@ -88,7 +154,9 @@ let cloudTtsAvailable = true;
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
 async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
-  const file = new File(Paths.cache, `tts-${Date.now()}.mp3`);
+  // 1) موجود في التخزين؟ شغّله مباشرة بدون تكلفة/إنترنت
+  const file = cacheFileFor(text, gender);
+  if (file.exists && (file.size ?? 0) > 0) return file;
 
   if (ELEVEN_KEY) {
     // مسار التطوير المباشر (المفتاح موجود محليًا)
@@ -111,6 +179,7 @@ async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
       throw new Error(`ElevenLabs ${res.status}: ${msg}`);
     }
     file.write(new Uint8Array(await res.arrayBuffer()));
+    pruneCache();
     return file;
   }
 
@@ -128,6 +197,7 @@ async function synthToFile(text: string, gender: VoiceGender): Promise<File> {
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
   file.write(b64, { encoding: "base64" });
+  pruneCache();
   return file;
 }
 

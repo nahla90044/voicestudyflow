@@ -27,7 +27,13 @@ import {
   sendTestNotification,
 } from "../../lib/notify";
 import { getMinutesPerPage, setMinutesPerPage } from "../../lib/settings";
-import { isHumanVoiceEnabled, speakText, stopSpeaking } from "../../lib/voice";
+import {
+  audioCacheSize,
+  clearAudioCache,
+  isHumanVoiceEnabled,
+  speakText,
+  stopSpeaking,
+} from "../../lib/voice";
 import { ONBOARDING_KEY } from "../onboarding";
 
 const ACC_ID = "kbd-more";
@@ -46,6 +52,25 @@ export default function MoreScreen() {
   const [reminderOn, setReminderOn] = useState(false);
   const [reminderHour, setReminderHour] = useState(20);
 
+  // تخزين الصوت
+  const [cacheBytes, setCacheBytes] = useState(0);
+
+  function refreshCacheSize() {
+    setCacheBytes(audioCacheSize());
+  }
+
+  function clearCache() {
+    clearAudioCache();
+    refreshCacheSize();
+    Alert.alert("تم", "تم مسح الصوت المخزّن.");
+  }
+
+  function formatBytes(n: number) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
   useEffect(() => {
     (async () => {
       const v = await getMinutesPerPage();
@@ -53,6 +78,7 @@ export default function MoreScreen() {
       const r = await getReminder();
       setReminderOn(r.enabled);
       setReminderHour(r.hour);
+      refreshCacheSize();
       setLoading(false);
     })();
   }, []);
@@ -296,6 +322,22 @@ export default function MoreScreen() {
             icon="sparkles"
             colors={Gradients.neonViolet}
             onPress={replayTutorial}
+          />
+        </GlassCard>
+
+        {/* التخزين */}
+        <GlassCard contentStyle={styles.cardC} glow={Palette.neonCyan}>
+          <Text style={styles.title}>التخزين</Text>
+          <Text style={styles.help}>
+            يُحفظ الصوت المقروء محليًا حتى يعمل بدون إنترنت ولا يُعاد توليده مرة أخرى.
+            {"\n"}
+            المستخدَم حاليًا: {formatBytes(cacheBytes)}
+          </Text>
+          <GradientButton
+            title="مسح الصوت المخزّن"
+            icon="trash"
+            colors={Gradients.neon}
+            onPress={clearCache}
           />
         </GlassCard>
 
