@@ -3,7 +3,7 @@
 // الطلب:  { pdfPath: string, page?: number }   (page تبدأ من 1)
 // الرد:   { page, totalPages, text }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@1.6.2";
+import { getDocumentProxy } from "https://esm.sh/unpdf@1.6.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,13 +46,26 @@ Deno.serve(async (req: Request) => {
 
     const buf = new Uint8Array(await file.arrayBuffer());
     const pdf = await getDocumentProxy(buf);
-
-    // نص كل الصفحات كمصفوفة
-    const { totalPages, text } = await extractText(pdf, { mergePages: false });
-    const pages = Array.isArray(text) ? text : [String(text)];
-
+    const totalPages = pdf.numPages;
     const page = Math.min(requestedPage, totalPages);
-    const pageText = (pages[page - 1] ?? "").replace(/\s+/g, " ").trim();
+
+    // نستخرج عناصر النص مع الفواصل: نضيف مسافة بين كل عنصر حتى لا تلتصق
+    // الكلمات (مشكلة شائعة في PDF العربي)، ونحترم نهايات الأسطر.
+    const pg = await pdf.getPage(page);
+    const content = await pg.getTextContent();
+    let out = "";
+    for (const item of content.items as Array<{ str?: string; hasEOL?: boolean }>) {
+      const s = item?.str ?? "";
+      if (s) out += s + " ";
+      if (item?.hasEOL) out += "\n";
+    }
+    const pageText = out
+      .replace(/[ \t]+/g, " ")
+      .replace(/ *\n */g, "\n")
+      .replace(/\n{2,}/g, "\n")
+      .replace(/\s+([.,،:؛!؟)])/g, "$1") // لا مسافة قبل علامات الترقيم
+      .replace(/([(])\s+/g, "$1")
+      .trim();
 
     return json({ page, totalPages, text: pageText });
   } catch (error) {
