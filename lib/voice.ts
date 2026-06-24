@@ -73,8 +73,14 @@ async function ensureAudioMode() {
   audioModeReady = true;
 }
 
+// رمز تشغيل يتغيّر مع كل إيقاف — يُلغي أي صوت كان قيد التحضير (يمنع التراكب)
+let playToken = 0;
+
 function disposePlayer() {
   if (currentPlayer) {
+    try {
+      currentPlayer.pause(); // إيقاف فعلي قبل الحذف
+    } catch {}
     try {
       currentPlayer.remove();
     } catch {}
@@ -233,6 +239,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
   // أوقف أي صوت شغّال أولاً
   await stopSpeaking();
+  const myToken = playToken; // بصمة هذا التشغيل بعد الإيقاف
 
   opts.onStart?.();
 
@@ -242,9 +249,11 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "توليد الصوت";
     const file = await synthToFile(clean, gender);
+    if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
 
     step = "وضع الصوت";
     await ensureAudioMode();
+    if (myToken !== playToken) return;
     currentFileUri = file.uri;
 
     step = "إنشاء المشغّل";
@@ -329,6 +338,7 @@ async function speakWithDevice(text: string, opts: SpeakOptions) {
 
 /** إيقاف الصوت (السحابي وصوت الجهاز معاً). */
 export async function stopSpeaking(): Promise<void> {
+  playToken++; // يُبطل أي صوت قيد التحضير حتى لا يشتغل بعد الإيقاف
   Speech.stop();
   disposePlayer();
 }
