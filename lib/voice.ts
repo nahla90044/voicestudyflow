@@ -44,14 +44,14 @@ export type VoiceOption = {
   gender: VoiceGender;
 };
 
-// أصوات عربية حقيقية (فصحى + سعودية) مضافة لحساب ElevenLabs.
+// أصوات عربية حقيقية بلهجة بيضاء واضحة (فصحى + خليجي محايد) مضافة لحساب ElevenLabs.
 export const VOICE_CATALOG: VoiceOption[] = [
   { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female" },
+  { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female" },
+  { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female" },
   { id: "omar", name: "عمر · فصحى", voiceId: "apsZFlSToM2vmFpwz5jX", gender: "male" },
-  { id: "nasser", name: "نصر · سعودي", voiceId: "cFUFIbKkO2iZFwS8cRnY", gender: "male" },
-  { id: "ali_ahmed", name: "علي أحمد · سعودي", voiceId: "OoE8swS3hImZANNOodf6", gender: "male" },
-  { id: "ali_salman", name: "علي سلمان · سعودي", voiceId: "8uRbbhgs2KE6XVJRydYE", gender: "male" },
-  { id: "noura", name: "نورة · سعودي", voiceId: "qby5WU0hOX8igIszsSvl", gender: "female" },
+  { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male" },
+  { id: "abdullah", name: "عبدالله · فصحى", voiceId: "XdoLPWNt7ytn6BtU4FBf", gender: "male" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
