@@ -31,36 +31,45 @@ async function getLocalDeviceId(): Promise<string> {
   return id;
 }
 
+// نخزّن المعرّف بعد أول حساب حتى لا نكرّر نداء الشبكة في كل مرة (يسرّع التطبيق)
+let cachedUserId: string | null = null;
+let anonDisabled = false;
+
 /** يضمن وجود جلسة (مجهولة إن لزم) ويُرجع معرّف المستخدم الحقيقي. */
 export async function getUserId(): Promise<string> {
+  if (cachedUserId) return cachedUserId;
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (session?.user?.id) return session.user.id;
-
-  // تفادي إنشاء أكثر من جلسة مجهولة عند النداء المتزامن
-  if (!ensuring) {
-    ensuring = (async () => {
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (error) throw error;
-      if (!data.user?.id) throw new Error("تعذّر إنشاء جلسة");
-      return data.user.id;
-    })().finally(() => {
-      ensuring = null;
-    });
+  if (session?.user?.id) {
+    cachedUserId = session.user.id;
+    return cachedUserId;
   }
 
-  try {
-    return await ensuring;
-  } catch (e) {
-    // الحساب المجهول غير مفعّل بعد → معرّف محلي للتجربة فقط
-    console.warn(
-      "[auth] Anonymous sign-in unavailable — using local device id (dev only). " +
-        "Enable Anonymous sign-ins in Supabase for production.",
-      e
-    );
-    return getLocalDeviceId();
+  // إذا سبق وفشل الحساب المجهول، لا نكرّر نداء الشبكة — نستخدم معرّف الجهاز فورًا
+  if (!anonDisabled) {
+    if (!ensuring) {
+      ensuring = (async () => {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error) throw error;
+        if (!data.user?.id) throw new Error("تعذّر إنشاء جلسة");
+        return data.user.id;
+      })().finally(() => {
+        ensuring = null;
+      });
+    }
+    try {
+      cachedUserId = await ensuring;
+      return cachedUserId;
+    } catch {
+      // الحساب المجهول غير مفعّل → لا نحاول مرة أخرى هذه الجلسة
+      anonDisabled = true;
+    }
   }
+
+  cachedUserId = await getLocalDeviceId();
+  return cachedUserId;
 }
 
 /** الجلسة الحالية (أو null). */
@@ -96,4 +105,5 @@ export async function signInWithEmail(email: string, password: string) {
 /** تسجيل الخروج (يعود الحساب مجهولًا عند أول استخدام لاحق). */
 export async function signOut() {
   await supabase.auth.signOut();
+  cachedUserId = null;
 }
