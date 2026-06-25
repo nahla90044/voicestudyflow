@@ -709,7 +709,7 @@ export default function ReaderScreen() {
               <ScrollView
                 ref={pdfScrollRef}
                 style={{ flex: 1 }}
-                contentContainerStyle={styles.pdfImgWrap}
+                contentContainerStyle={[styles.pdfImgWrap, fullText && styles.pdfImgWrapFull]}
                 maximumZoomScale={6}
                 minimumZoomScale={1}
                 centerContent
@@ -722,7 +722,7 @@ export default function ReaderScreen() {
                   source={{ uri: pageImg }}
                   style={
                     fullText
-                      ? { height: "100%", aspectRatio: pageImgAspect } // ملء الطول
+                      ? { flex: 1, width: "100%" } // يتّسع للإطار فوق الأزرار
                       : { width: "100%", aspectRatio: pageImgAspect } // ملء العرض
                   }
                   resizeMode="contain"
@@ -1343,6 +1343,7 @@ const styles = StyleSheet.create({
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1a1f2e" },
+  pdfImgWrapFull: { paddingTop: 8, paddingBottom: 110 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { backgroundColor: Palette.bgElevated },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
