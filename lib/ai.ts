@@ -2,7 +2,7 @@
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
 import { supabase } from "./supabase";
 
-export type AiAction = "summarize" | "ask" | "quiz" | "flashcards" | "cleanup";
+export type AiAction = "summarize" | "ask" | "quiz" | "flashcards" | "cleanup" | "syllabus";
 
 /** ينظّف نصًا مستخرجًا آليًا (يصلح المسافات وأخطاء OCR) دون تغيير المعنى. */
 // يزيل مقدمات يضيفها الموديل أحيانًا مثل «النص المصحّح:» من بداية النص

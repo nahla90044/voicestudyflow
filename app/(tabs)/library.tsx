@@ -335,6 +335,16 @@ export default function LibraryScreen() {
                 Alert.alert(item.title, "اختر إجراءً", [
                   { text: "إلغاء", style: "cancel" },
 
+                  // 📋 المنهج الدراسي (syllabus)
+                  {
+                    text: "📋 المنهج الدراسي",
+                    onPress: () =>
+                      router.push({
+                        pathname: "/syllabus/[id]",
+                        params: { id: item.id, title: item.title, pdf_path: item.pdf_path },
+                      }),
+                  },
+
                   // ✅ زر الأرشفة
                   { text: "نقل للأرشيف", onPress: () => archiveBook(item) },
 
@@ -376,6 +386,19 @@ export default function LibraryScreen() {
                     <Text style={styles.metaTxt}>لا توجد خطة</Text>
                   )}
                 </View>
+
+                <Pressable
+                  onPress={() =>
+                    router.push({
+                      pathname: "/syllabus/[id]",
+                      params: { id: item.id, title: item.title, pdf_path: item.pdf_path },
+                    })
+                  }
+                  style={styles.syllabusChip}
+                  hitSlop={6}
+                >
+                  <Text style={styles.syllabusChipTxt}>📋 المنهج الدراسي</Text>
+                </Pressable>
               </GlassCard>
             </Pressable>
           );
@@ -503,6 +526,17 @@ const styles = StyleSheet.create({
   coverTitle: { color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "right" },
   meta: { padding: 12, gap: 4 },
   metaTxt: { color: "#c9d4e2", fontSize: 12, textAlign: "right" },
+  syllabusChip: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(124,92,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(124,92,255,0.5)",
+  },
+  syllabusChipTxt: { color: "#cdbdff", fontSize: 12, fontWeight: "800" },
 
   undoBar: {
     position: "absolute",
