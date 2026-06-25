@@ -758,7 +758,10 @@ export default function ReaderScreen() {
         {fullText && (
           <View style={styles.floatBar}>
             <Pressable onPress={() => setFullText(false)} style={styles.floatBtn} hitSlop={8}>
-              <Ionicons name="contract" size={22} color={Palette.text} />
+              <Ionicons name="contract" size={20} color={Palette.text} />
+            </Pressable>
+            <Pressable onPress={() => goPage(1)} style={styles.floatBtn} hitSlop={8} disabled={!!totalPages && page >= totalPages}>
+              <Ionicons name="chevron-back" size={22} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
             </Pressable>
             <Pressable onPress={togglePlay} style={styles.floatPlay}>
               {busy ? (
@@ -766,6 +769,9 @@ export default function ReaderScreen() {
               ) : (
                 <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
               )}
+            </Pressable>
+            <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
+              <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
             <Pressable onPress={cycleSpeed} style={styles.floatBtn} hitSlop={8}>
               <Text style={styles.floatSpeed}>{rate}x</Text>
@@ -788,11 +794,16 @@ export default function ReaderScreen() {
             return (
               <Pressable
                 key={v.id}
-                onPress={() => setVoiceId(v.voiceId)}
+                onPress={() => {
+                  // ضغطة أولى: اختيار الصوت — ضغطة على الصوت المختار: ابدأ/أوقف القراءة
+                  if (active) togglePlay();
+                  else setVoiceId(v.voiceId);
+                }}
                 style={[styles.voiceChip, active && styles.voiceChipActive]}
               >
                 <Text style={[styles.voiceChipTxt, active && styles.voiceChipTxtActive]}>
                   {v.name}
+                  {active ? (speaking ? " ⏸︎" : " ▶︎") : ""}
                 </Text>
               </Pressable>
             );
