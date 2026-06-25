@@ -136,6 +136,7 @@ export default function ReaderScreen() {
 
   // صورة الصفحة الحالية (عالية الدقة، قابلة للتكبير، تتابع القراءة)
   const [pageImg, setPageImg] = useState<string | null>(null);
+  const [pageImgAspect, setPageImgAspect] = useState(0.7); // العرض/الارتفاع
   const [pageImgLoading, setPageImgLoading] = useState(false);
   useEffect(() => {
     if (viewMode !== "pdf" || !pdfPath) return;
@@ -143,9 +144,15 @@ export default function ReaderScreen() {
     setPageImgLoading(true);
     (async () => {
       const uri = await getPageImage(pdfPath, page).catch(() => null);
-      if (active) {
-        setPageImg(uri);
-        setPageImgLoading(false);
+      if (!active) return;
+      setPageImg(uri);
+      setPageImgLoading(false);
+      if (uri) {
+        Image.getSize(
+          uri,
+          (w, h) => active && h > 0 && setPageImgAspect(w / h),
+          () => {}
+        );
       }
     })();
     return () => {
@@ -656,7 +663,11 @@ export default function ReaderScreen() {
                 showsVerticalScrollIndicator={false}
                 showsHorizontalScrollIndicator={false}
               >
-                <Image source={{ uri: pageImg }} style={styles.pdfImg} resizeMode="contain" />
+                <Image
+                  source={{ uri: pageImg }}
+                  style={{ width: "100%", aspectRatio: pageImgAspect }}
+                  resizeMode="contain"
+                />
               </ScrollView>
             ) : (
               <View style={styles.empty}>
@@ -1214,8 +1225,7 @@ const styles = StyleSheet.create({
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
-  pdfImgWrap: { flexGrow: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#1a1f2e" },
-  pdfImg: { width: "100%", height: "100%" },
+  pdfImgWrap: { flexGrow: 1, backgroundColor: "#1a1f2e" },
   textScroll: { backgroundColor: Palette.bgElevated },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
