@@ -102,6 +102,21 @@ export async function generateUnitQuiz(context: string): Promise<QuizQ[]> {
 export type MindBranch = { label: string; points: string[] };
 export type MindMap = { center: string; branches: MindBranch[] };
 
+/** يجمع نص الكتاب الفعلي من الصفحات المخزّنة (للخريطة الذهنية المطابقة للكتاب). */
+export async function getBookText(pdfPath: string, maxChars = 16000): Promise<string> {
+  const { data: pages } = await supabase
+    .from("page_cache")
+    .select("text,page")
+    .eq("pdf_path", pdfPath)
+    .neq("source", "empty")
+    .order("page")
+    .limit(60);
+  return (pages ?? [])
+    .map((p: any) => p.text)
+    .join("\n")
+    .slice(0, maxChars);
+}
+
 /** يولّد خريطة ذهنية من محتوى وحدة (بالذكاء). */
 export async function generateMindmap(context: string): Promise<MindMap | null> {
   const raw = await aiAssist("mindmap", context);
