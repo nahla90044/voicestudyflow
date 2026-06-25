@@ -15,7 +15,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
-import { aiAssist, generateFlashcards, type AiAction } from "../../lib/ai";
+import { aiAssist, defineWord, generateFlashcards, type AiAction } from "../../lib/ai";
+import { ingestBook, stopIngest } from "../../lib/ingest";
 import { addCards } from "../../lib/flashcards";
 import {
   addHighlight,
@@ -70,6 +71,17 @@ export default function ReaderScreen() {
   const [activeSentence, setActiveSentence] = useState(-1);
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
+
+  // قاموس: معنى الكلمة عند لمسها
+  const [dictOpen, setDictOpen] = useState(false);
+  const [dictWord, setDictWord] = useState("");
+  const [dictMeaning, setDictMeaning] = useState("");
+  const [dictLoading, setDictLoading] = useState(false);
+
+  // تحميل الكتاب كامل (تجهيز كل الصفحات مسبقًا)
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestDone, setIngestDone] = useState(0);
+  const [ingestTotal, setIngestTotal] = useState(0);
 
   // علامات + تظليل + ملاحظات
   const [bookmarks, setBookmarks] = useState<number[]>([]);
@@ -126,6 +138,7 @@ export default function ReaderScreen() {
       playingRef.current = false;
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
       stopSpeaking();
+      stopIngest();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -407,8 +420,54 @@ export default function ReaderScreen() {
     }
   }
 
+  // لمس كلمة → عرض معناها حسب سياقها
+  async function onWordTap(rawWord: string, context: string) {
+    const word = rawWord.replace(/[^\p{L}\p{M}]/gu, "").trim();
+    if (!word) return;
+    setDictWord(word);
+    setDictMeaning("");
+    setDictLoading(true);
+    setDictOpen(true);
+    try {
+      const m = await defineWord(word, context);
+      setDictMeaning(m || "لا يوجد معنى متاح.");
+    } catch {
+      setDictMeaning("تعذّر جلب المعنى. تأكدي من تفعيل الذكاء (مفتاح Claude).");
+    } finally {
+      setDictLoading(false);
+    }
+  }
+
+  // تحميل/تجهيز الكتاب كامل مسبقًا حتى يُقرأ بسلاسة
+  async function startIngest() {
+    if (ingesting) {
+      stopIngest();
+      setIngesting(false);
+      return;
+    }
+    let total = totalPages;
+    if (!total) {
+      const res = await extractPdfPageText(pdfPath, page);
+      total = res.totalPages || 0;
+      if (res.totalPages) setTotalPages(res.totalPages);
+    }
+    if (!total) {
+      setStatus("تعذّر معرفة عدد الصفحات.");
+      return;
+    }
+    setIngestTotal(total);
+    setIngestDone(0);
+    setIngesting(true);
+    await ingestBook(pdfPath, total, (d, t) => {
+      setIngestDone(d);
+      setIngestTotal(t);
+    });
+    setIngesting(false);
+  }
+
   function goBack() {
     stop();
+    stopIngest();
     router.back();
   }
 
@@ -457,7 +516,7 @@ export default function ReaderScreen() {
       {/* العارض: PDF أو نص بتظليل الجملة المقروءة */}
       <View style={styles.viewer}>
         {viewMode === "text" ? (
-          <ScrollView ref={scrollRef} contentContainerStyle={styles.textContent}>
+          <ScrollView ref={scrollRef} style={styles.textScroll} contentContainerStyle={styles.textContent}>
             {sentences.length === 0 ? (
               <Text style={styles.emptyTextSmall}>
                 {busy ? "جارٍ تحميل النص…" : "لا يوجد نص لعرضه في هذه الصفحة."}
@@ -482,7 +541,19 @@ export default function ReaderScreen() {
                     }
                   >
                     <Text style={i === activeSentence ? styles.sentenceActive : styles.sentence}>
-                      {s}
+                      {s.split(/(\s+)/).map((tok, wi) =>
+                        /\S/.test(tok) ? (
+                          <Text
+                            key={wi}
+                            onPress={() => onWordTap(tok, s)}
+                            suppressHighlighting
+                          >
+                            {tok}
+                          </Text>
+                        ) : (
+                          tok
+                        )
+                      )}
                     </Text>
                   </Pressable>
                 );
@@ -584,6 +655,27 @@ export default function ReaderScreen() {
           الصفحة {page}
           {totalPages ? ` من ${totalPages}` : ""}
         </Text>
+
+        {/* تحميل الكتاب كامل */}
+        <Pressable onPress={startIngest} style={styles.ingestBtn}>
+          <Ionicons
+            name={ingesting ? "stop-circle" : "cloud-download-outline"}
+            size={16}
+            color={Palette.neonCyan}
+          />
+          <Text style={styles.ingestTxt}>
+            {ingesting
+              ? `جارٍ تحميل الكتاب… ${ingestDone}/${ingestTotal} (إيقاف)`
+              : "تحميل الكتاب كامل للقراءة بدون انتظار"}
+          </Text>
+        </Pressable>
+        {ingesting && ingestTotal > 0 ? (
+          <View style={styles.ingestBarBg}>
+            <View
+              style={[styles.ingestBarFill, { width: `${Math.round((ingestDone / ingestTotal) * 100)}%` }]}
+            />
+          </View>
+        ) : null}
 
         {status ? <Text style={styles.statusTxt}>{status}</Text> : null}
         {voiceWarn ? (
@@ -734,6 +826,28 @@ export default function ReaderScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* قاموس: معنى الكلمة الملموسة */}
+      <Modal visible={dictOpen} transparent animationType="fade" onRequestClose={() => setDictOpen(false)}>
+        <Pressable style={styles.dictMask} onPress={() => setDictOpen(false)}>
+          <Pressable style={styles.dictCard} onPress={() => {}}>
+            <View style={styles.dictHead}>
+              <Text style={styles.dictWord}>{dictWord}</Text>
+              <Pressable onPress={() => setDictOpen(false)} hitSlop={8}>
+                <Ionicons name="close" size={20} color={Palette.textMuted} />
+              </Pressable>
+            </View>
+            {dictLoading ? (
+              <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator color={Palette.primary} />
+                <Text style={styles.dictHint}>جارٍ جلب المعنى…</Text>
+              </View>
+            ) : (
+              <Text style={styles.dictMeaning}>{dictMeaning}</Text>
+            )}
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -904,27 +1018,43 @@ const styles = StyleSheet.create({
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
-  textContent: { padding: 16, gap: 8 },
-  readingText: { color: Palette.textMuted, fontSize: 18, lineHeight: 32, textAlign: "right" },
-  sentenceRow: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: Radius.sm },
+  textScroll: { backgroundColor: Palette.bgElevated },
+  textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
+  sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
   sentenceRowHL: {
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     backgroundColor: "rgba(241,196,15,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(241,196,15,0.4)",
   },
   sentenceRowActive: {
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 10,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     backgroundColor: Palette.primarySoft,
-    borderWidth: 1,
-    borderColor: Palette.primary,
   },
-  sentence: { color: Palette.textDim, fontSize: 18, lineHeight: 32, textAlign: "right" },
-  sentenceActive: { color: Palette.text, fontSize: 18, lineHeight: 32, textAlign: "right", fontWeight: "800" },
+  sentence: { color: Palette.textMuted, fontSize: 21, lineHeight: 40, textAlign: "right" },
+  sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right", fontWeight: "700" },
+
+  ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
+  ingestTxt: { color: Palette.neonCyan, fontSize: 12, fontWeight: "800" },
+  ingestBarBg: { height: 6, borderRadius: 3, backgroundColor: Palette.surfaceStrong, overflow: "hidden" },
+  ingestBarFill: { height: 6, borderRadius: 3, backgroundColor: Palette.neonCyan },
+
+  dictMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
+  dictCard: {
+    backgroundColor: Palette.bgElevated,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    padding: Spacing.lg,
+    gap: 12,
+  },
+  dictHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  dictWord: { color: Palette.primary, fontSize: 22, fontWeight: "900", textAlign: "right" },
+  dictHint: { color: Palette.textDim, fontSize: 14 },
+  dictMeaning: { color: Palette.text, fontSize: 17, lineHeight: 28, textAlign: "right" },
 
   viewer: {
     flex: 1,

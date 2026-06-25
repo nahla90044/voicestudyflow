@@ -20,6 +20,18 @@ export async function cleanupText(text: string): Promise<string> {
   }
 }
 
+/** يُرجع معنى كلمة حسب سياقها في الجملة (قاموس ذكي). */
+export async function defineWord(word: string, context: string): Promise<string> {
+  const w = word.trim();
+  if (!w) return "";
+  const { data, error } = await supabase.functions.invoke("ai-assist", {
+    body: { action: "define", question: w, text: context.slice(0, 600) },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return String(data?.result ?? "").trim();
+}
+
 /** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */
 export async function aiAssist(
   action: AiAction,
