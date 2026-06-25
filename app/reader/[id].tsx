@@ -48,6 +48,21 @@ import { Palette, Radius, Spacing } from "../../constants/design";
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
 const SLEEP_OPTIONS = [0, 5, 15, 30] as const; // 0 = مطفأ (بالدقائق)
 
+// أي كلمة (حسب ترتيبها في الجملة) تُقرأ عند نسبة تقدّم frac (0..1)،
+// بتوزيع زمني تقريبي مرجّح بطول الكلمة.
+function wordIndexAtFraction(sentence: string, frac: number): number {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return -1;
+  const weights = words.map((w) => w.length + 1);
+  const total = weights.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  for (let k = 0; k < words.length; k++) {
+    acc += weights[k];
+    if (frac <= acc / total) return k;
+  }
+  return words.length - 1;
+}
+
 export default function ReaderScreen() {
   const router = useRouter();
   const { id, title, pdf_path } = useLocalSearchParams<{
@@ -69,6 +84,7 @@ export default function ReaderScreen() {
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
+  const [activeWord, setActiveWord] = useState(-1); // الكلمة المقروءة حاليًا داخل الجملة
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
 
@@ -77,6 +93,9 @@ export default function ReaderScreen() {
   const [dictWord, setDictWord] = useState("");
   const [dictMeaning, setDictMeaning] = useState("");
   const [dictLoading, setDictLoading] = useState(false);
+
+  // وضع القيادة (واجهة كبيرة مبسّطة)
+  const [drivingMode, setDrivingMode] = useState(false);
 
   // تحميل الكتاب كامل (تجهيز كل الصفحات مسبقًا)
   const [ingesting, setIngesting] = useState(false);
@@ -199,6 +218,7 @@ export default function ReaderScreen() {
     stopSpeaking();
     setSpeaking(false);
     setActiveSentence(-1);
+    setActiveWord(-1);
 
     // سجّل دقائق الاستماع لهذه الجلسة + حدّث السلسلة
     if (playStartRef.current) {
@@ -295,11 +315,16 @@ export default function ReaderScreen() {
     }
 
     setActiveSentence(i);
+    setActiveWord(-1);
     setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
     speakText(sents[i], {
       voiceId,
       rate,
-      onDone: () => playSentence(sents, i + 1, p, total),
+      onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
+      onDone: () => {
+        setActiveWord(-1);
+        playSentence(sents, i + 1, p, total);
+      },
       onFallback: (reason) => setVoiceWarn(reason),
       onError: (e) => {
         setStatus(`تعذّر تشغيل الصوت: ${(e as any)?.message ?? "خطأ"}`);
@@ -482,6 +507,10 @@ export default function ReaderScreen() {
           {typeof title === "string" && title.trim() ? title : "الكتاب"}
         </Text>
 
+        <Pressable onPress={() => setDrivingMode(true)} style={styles.iconBtn} hitSlop={8}>
+          <Ionicons name="car-sport" size={18} color={Palette.neonCyan} />
+        </Pressable>
+
         <Pressable onPress={onToggleBookmark} style={styles.iconBtn} hitSlop={8}>
           <Ionicons
             name={isBookmarked ? "bookmark" : "bookmark-outline"}
@@ -541,19 +570,24 @@ export default function ReaderScreen() {
                     }
                   >
                     <Text style={i === activeSentence ? styles.sentenceActive : styles.sentence}>
-                      {s.split(/(\s+)/).map((tok, wi) =>
-                        /\S/.test(tok) ? (
-                          <Text
-                            key={wi}
-                            onPress={() => onWordTap(tok, s)}
-                            suppressHighlighting
-                          >
-                            {tok}
-                          </Text>
-                        ) : (
-                          tok
-                        )
-                      )}
+                      {(() => {
+                        let wc = -1;
+                        return s.split(/(\s+)/).map((tok, wi) => {
+                          if (!/\S/.test(tok)) return tok;
+                          wc++;
+                          const isSpoken = i === activeSentence && wc === activeWord;
+                          return (
+                            <Text
+                              key={wi}
+                              onPress={() => onWordTap(tok, s)}
+                              suppressHighlighting
+                              style={isSpoken ? styles.wordSpoken : undefined}
+                            >
+                              {tok}
+                            </Text>
+                          );
+                        });
+                      })()}
                     </Text>
                   </Pressable>
                 );
@@ -828,6 +862,54 @@ export default function ReaderScreen() {
         </View>
       </Modal>
 
+      {/* وضع القيادة: واجهة كبيرة مبسّطة للقراءة بدون نظر */}
+      <Modal visible={drivingMode} animationType="slide" onRequestClose={() => setDrivingMode(false)}>
+        <View style={styles.driveWrap}>
+          <Pressable onPress={() => setDrivingMode(false)} style={styles.driveClose} hitSlop={10}>
+            <Ionicons name="close" size={28} color={Palette.textMuted} />
+          </Pressable>
+
+          <View style={styles.driveTextWrap}>
+            <Text style={styles.driveSentence}>
+              {activeSentence >= 0 && sentences[activeSentence]
+                ? sentences[activeSentence]
+                : "اضغط تشغيل لبدء القراءة"}
+            </Text>
+          </View>
+
+          <Text style={styles.drivePage}>
+            الصفحة {page}
+            {totalPages ? ` من ${totalPages}` : ""}
+          </Text>
+
+          <View style={styles.driveControls}>
+            <Pressable onPress={() => goPage(-1)} style={styles.driveNav} disabled={page <= 1}>
+              <Ionicons name="play-back" size={36} color={page <= 1 ? Palette.textDim : Palette.text} />
+            </Pressable>
+
+            <Pressable onPress={togglePlay} style={styles.drivePlay}>
+              {busy ? (
+                <ActivityIndicator size="large" color="#0b1220" />
+              ) : (
+                <Ionicons name={speaking ? "pause" : "play"} size={64} color="#0b1220" />
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => goPage(1)}
+              style={styles.driveNav}
+              disabled={!!totalPages && page >= totalPages}
+            >
+              <Ionicons name="play-forward" size={36} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
+            </Pressable>
+          </View>
+
+          <Pressable onPress={cycleSpeed} style={styles.driveSpeed}>
+            <Text style={styles.driveSpeedTxt}>السرعة {rate}x</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
       {/* قاموس: معنى الكلمة الملموسة */}
       <Modal visible={dictOpen} transparent animationType="fade" onRequestClose={() => setDictOpen(false)}>
         <Pressable style={styles.dictMask} onPress={() => setDictOpen(false)}>
@@ -1035,6 +1117,7 @@ const styles = StyleSheet.create({
   },
   sentence: { color: Palette.textMuted, fontSize: 21, lineHeight: 40, textAlign: "right" },
   sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right", fontWeight: "700" },
+  wordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   ingestTxt: { color: Palette.neonCyan, fontSize: 12, fontWeight: "800" },
@@ -1055,6 +1138,17 @@ const styles = StyleSheet.create({
   dictWord: { color: Palette.primary, fontSize: 22, fontWeight: "900", textAlign: "right" },
   dictHint: { color: Palette.textDim, fontSize: 14 },
   dictMeaning: { color: Palette.text, fontSize: 17, lineHeight: 28, textAlign: "right" },
+
+  driveWrap: { flex: 1, backgroundColor: Palette.bg, padding: Spacing.xl, justifyContent: "center", alignItems: "center" },
+  driveClose: { position: "absolute", top: 54, left: 24, width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
+  driveTextWrap: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 8 },
+  driveSentence: { color: Palette.text, fontSize: 30, lineHeight: 52, textAlign: "center", fontWeight: "800" },
+  drivePage: { color: Palette.textDim, fontSize: 16, fontWeight: "800", marginBottom: 18 },
+  driveControls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 36, marginBottom: 24 },
+  driveNav: { width: 76, height: 76, borderRadius: 38, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
+  drivePlay: { width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
+  driveSpeed: { paddingVertical: 12, paddingHorizontal: 28, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  driveSpeedTxt: { color: Palette.text, fontSize: 18, fontWeight: "800" },
 
   viewer: {
     flex: 1,

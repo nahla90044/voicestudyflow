@@ -25,6 +25,8 @@ export type SpeakCallbacks = {
   onError?: (e: unknown) => void;
   // يُستدعى عند فشل الصوت البشري والرجوع لصوت الجهاز (للتشخيص)
   onFallback?: (reason: string) => void;
+  // تقدّم التشغيل 0..1 (لتحديد الكلمة المقروءة)
+  onProgress?: (fraction: number) => void;
 };
 
 export type SpeakOptions = {
@@ -117,7 +119,7 @@ function disposePlayer() {
 //  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
-const CACHE_DIR_NAME = "tts-cache-v2"; // v2: تجاهل أي ملفات قديمة تالفة
+const CACHE_DIR_NAME = "tts-cache-v3"; // v3: إعدادات صوت أكثر تعبيرًا
 const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
 
 function cacheDir(): Directory {
@@ -279,7 +281,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     currentFileUri = file.uri;
 
     step = "إنشاء المشغّل";
-    const player = createAudioPlayer({ uri: file.uri });
+    const player = createAudioPlayer({ uri: file.uri }, { updateInterval: 80 }); // تتبّع الكلمة
     currentPlayer = player;
     // ضبط السرعة عبر الدالة الصحيحة (الخاصية للقراءة فقط)؛ ولا نسمح لفشلها بكسر التشغيل
     if (opts.rate && opts.rate > 0 && opts.rate !== 1) {
@@ -292,8 +294,12 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     let finished = false;
     player.addListener("playbackStatusUpdate", (status) => {
+      if (opts.onProgress && status.duration && status.duration > 0) {
+        opts.onProgress(Math.min(1, Math.max(0, status.currentTime / status.duration)));
+      }
       if (status.didJustFinish && !finished) {
         finished = true;
+        opts.onProgress?.(1);
         opts.onDone?.();
         disposePlayer();
       }
