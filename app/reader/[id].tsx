@@ -140,7 +140,6 @@ export default function ReaderScreen() {
   const offsetsRef = useRef<number[]>([]);
   const resumeIdxRef = useRef(0); // الجملة التي يبدأ منها التشغيل بعد تخطٍّ يدوي
   const prevHeaderRef = useRef(""); // بداية الصفحة السابقة (لكشف الترويسة المتكرّرة)
-  const flipLockRef = useRef(false); // يمنع تكرار قلب الصفحة في نفس السحبة
   const playStartRef = useRef<number | null>(null);
 
   // صورة الصفحة الحالية (عالية الدقة، قابلة للتكبير، تتابع القراءة)
@@ -150,7 +149,6 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (viewMode !== "pdf" || !pdfPath) return;
     let active = true;
-    flipLockRef.current = false; // صفحة جديدة → اسمح بقلب جديد
     setPageImgLoading(true);
     (async () => {
       const uri = await getPageImage(pdfPath, page).catch(() => null);
@@ -426,26 +424,6 @@ export default function ReaderScreen() {
     playStartRef.current = Date.now();
     recordActivity({});
     playFromPage(target, 0, true);
-  }
-
-  // تمرير طولي على صورة الصفحة → قلب الصفحات (عند الإيقاف فقط، وغير مكبّرة).
-  // أثناء القراءة تبقى الصفحة مثبّتة (التمرير التلقائي يتحكّم بها).
-  function onPdfScroll(e: { nativeEvent: any }) {
-    if (speaking) return; // مثبّتة أثناء القراءة
-    const ne = e.nativeEvent;
-    if (ne.zoomScale && ne.zoomScale > 1.05) return; // مكبّرة → لا نقلب
-    const y = ne.contentOffset?.y ?? 0;
-    const viewH = ne.layoutMeasurement?.height ?? 0;
-    const contentH = ne.contentSize?.height ?? 0;
-    const OVER = 70;
-    if (flipLockRef.current) return;
-    if (y < -OVER) {
-      flipLockRef.current = true;
-      goPage(-1); // اسحب للأسفل في الأعلى → الصفحة السابقة
-    } else if (viewH > 0 && contentH > 0 && y + viewH > contentH + OVER) {
-      flipLockRef.current = true;
-      goPage(1); // اسحب للأعلى في الأسفل → الصفحة التالية
-    }
   }
 
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
@@ -764,8 +742,6 @@ export default function ReaderScreen() {
                 showsHorizontalScrollIndicator={false}
                 onLayout={(e) => (pdfViewH.current = e.nativeEvent.layout.height)}
                 onContentSizeChange={(_w, h) => (pdfContentH.current = h)}
-                onScroll={onPdfScroll}
-                scrollEventThrottle={16}
               >
                 <Image
                   source={{ uri: pageImg }}
@@ -922,6 +898,17 @@ export default function ReaderScreen() {
             <Text style={[styles.chipTxt, sleepMin > 0 && styles.chipTxtActive]}>
               {sleepMin > 0 ? `${sleepMin} دقيقة` : "مؤقّت النوم"}
             </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              setGotoValue(String(page));
+              setGotoOpen(true);
+            }}
+            style={styles.chip}
+          >
+            <Ionicons name="keypad-outline" size={16} color={Palette.text} />
+            <Text style={styles.chipTxt}>انتقال لصفحة</Text>
           </Pressable>
         </View>
 
