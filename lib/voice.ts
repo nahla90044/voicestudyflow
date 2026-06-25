@@ -14,6 +14,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
+import { numbersToArabicWords } from "./arabicNumbers";
 import { supabase } from "./supabase";
 
 export type VoiceGender = "male" | "female";
@@ -263,7 +264,8 @@ async function synthToFile(text: string, gender: VoiceGender, voiceId?: string):
 
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
-  const clean = text?.trim();
+  // نحوّل الأرقام إلى كلمات عربية للنطق الصحيح (النص المعروض لا يتغيّر)
+  const clean = numbersToArabicWords(text?.trim() ?? "");
   if (!clean) return;
 
   // أوقف أي صوت شغّال أولاً
