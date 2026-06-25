@@ -44,6 +44,7 @@ export type VoiceOption = {
   name: string; // الاسم المعروض في الواجهة
   voiceId: string; // معرّف ElevenLabs
   gender: VoiceGender;
+  rate?: number; // سرعة تشغيل خاصة بالصوت (< 1 = أبطأ وأعمق)
 };
 
 // أصوات عربية حقيقية: سعودية واضحة + فصحى + خليجي محايد (مضافة لحساب ElevenLabs).
@@ -52,7 +53,7 @@ export const VOICE_CATALOG: VoiceOption[] = [
   { id: "abdullah", name: "عبدالله · فصحى جهوري", voiceId: "XdoLPWNt7ytn6BtU4FBf", gender: "male" },
   { id: "tariq", name: "طارق · فصحى رنّان", voiceId: "18HMWpalD7cscJTD8lEY", gender: "male" },
   { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female" },
-  { id: "haytham", name: "هيثم · حكواتي", voiceId: "UR972wNGq3zluze0LoIp", gender: "male" },
+  { id: "haytham", name: "هيثم · حكواتي", voiceId: "UR972wNGq3zluze0LoIp", gender: "male", rate: 0.82 },
   { id: "yahya", name: "يحيى · حكواتي فصحى", voiceId: "QRq5hPRAKf5ZhSlTBH6r", gender: "male" },
   { id: "fatima", name: "فاطمة · مصرية", voiceId: "vWDp3PLsTWjIhBxxUKh9", gender: "female" },
   { id: "sufyan", name: "سفيان · عراقي", voiceId: "9FHjCdVXgA4tYxIYHTcZ", gender: "male" },
@@ -287,10 +288,17 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     step = "إنشاء المشغّل";
     const player = createAudioPlayer({ uri: file.uri }, { updateInterval: 80 }); // تتبّع الكلمة
     currentPlayer = player;
-    // ضبط السرعة عبر الدالة الصحيحة (الخاصية للقراءة فقط)؛ ولا نسمح لفشلها بكسر التشغيل
-    if (opts.rate && opts.rate > 0 && opts.rate !== 1) {
+    // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. الأصوات ذات السرعة
+    // الخاصة (< 1) نلغي تصحيح طبقة الصوت لها فتصير أعمق مع البطء.
+    const voiceRate = VOICE_CATALOG.find((v) => v.voiceId === opts.voiceId)?.rate ?? 1;
+    const userRate = opts.rate && opts.rate > 0 ? opts.rate : 1;
+    const finalRate = userRate * voiceRate;
+    try {
+      (player as { shouldCorrectPitch?: boolean }).shouldCorrectPitch = voiceRate >= 1;
+    } catch {}
+    if (finalRate !== 1) {
       try {
-        player.setPlaybackRate(opts.rate);
+        player.setPlaybackRate(finalRate);
       } catch {
         // نتجاهل — التشغيل بالسرعة الافتراضية أهم من توقّف الصوت
       }
