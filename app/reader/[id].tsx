@@ -96,6 +96,8 @@ export default function ReaderScreen() {
 
   // وضع القيادة (واجهة كبيرة مبسّطة)
   const [drivingMode, setDrivingMode] = useState(false);
+  // وضع ملء الشاشة للقراءة (إخفاء الأزرار وتكبير النص)
+  const [fullText, setFullText] = useState(false);
 
   // تحميل الكتاب كامل (تجهيز كل الصفحات مسبقًا)
   const [ingesting, setIngesting] = useState(false);
@@ -499,6 +501,7 @@ export default function ReaderScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       {/* الهيدر */}
+      {!fullText && (
       <View style={styles.header}>
         <Pressable onPress={goBack} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
@@ -506,6 +509,10 @@ export default function ReaderScreen() {
         <Text style={styles.hTitle} numberOfLines={1}>
           {typeof title === "string" && title.trim() ? title : "الكتاب"}
         </Text>
+
+        <Pressable onPress={() => { setViewMode("text"); setFullText(true); }} style={styles.iconBtn} hitSlop={8}>
+          <Ionicons name="expand" size={18} color={Palette.text} />
+        </Pressable>
 
         <Pressable onPress={() => setDrivingMode(true)} style={styles.iconBtn} hitSlop={8}>
           <Ionicons name="car-sport" size={18} color={Palette.neonCyan} />
@@ -541,9 +548,10 @@ export default function ReaderScreen() {
           <Text style={styles.modeToggleTxt}>{viewMode === "pdf" ? "نص" : "PDF"}</Text>
         </Pressable>
       </View>
+      )}
 
       {/* العارض: PDF أو نص بتظليل الجملة المقروءة */}
-      <View style={styles.viewer}>
+      <View style={[styles.viewer, fullText && styles.viewerFull]}>
         {viewMode === "text" ? (
           <ScrollView ref={scrollRef} style={styles.textScroll} contentContainerStyle={styles.textContent}>
             {sentences.length === 0 ? (
@@ -605,9 +613,29 @@ export default function ReaderScreen() {
             </Text>
           </View>
         )}
+
+        {/* شريط تحكّم عائم في وضع ملء الشاشة */}
+        {fullText && (
+          <View style={styles.floatBar}>
+            <Pressable onPress={() => setFullText(false)} style={styles.floatBtn} hitSlop={8}>
+              <Ionicons name="contract" size={22} color={Palette.text} />
+            </Pressable>
+            <Pressable onPress={togglePlay} style={styles.floatPlay}>
+              {busy ? (
+                <ActivityIndicator color="#0b1220" />
+              ) : (
+                <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
+              )}
+            </Pressable>
+            <Pressable onPress={cycleSpeed} style={styles.floatBtn} hitSlop={8}>
+              <Text style={styles.floatSpeed}>{rate}x</Text>
+            </Pressable>
+          </View>
+        )}
       </View>
 
       {/* لوحة التحكم بالصوت */}
+      {!fullText && (
       <View style={styles.player}>
         {/* اختيار صوت القارئ */}
         <ScrollView
@@ -716,6 +744,7 @@ export default function ReaderScreen() {
           <Text style={styles.warnTxt}>⚠️ تعذّر الصوت البشري: {voiceWarn}</Text>
         ) : null}
       </View>
+      )}
 
       {/* مودال الملاحظات والعلامات */}
       <Modal visible={notesOpen} transparent animationType="slide" onRequestClose={() => setNotesOpen(false)}>
@@ -1149,6 +1178,25 @@ const styles = StyleSheet.create({
   drivePlay: { width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
   driveSpeed: { paddingVertical: 12, paddingHorizontal: 28, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   driveSpeedTxt: { color: Palette.text, fontSize: 18, fontWeight: "800" },
+
+  viewerFull: { marginHorizontal: 0, marginTop: 0, borderRadius: 0, borderWidth: 0 },
+  floatBar: {
+    position: "absolute",
+    bottom: 26,
+    alignSelf: "center",
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.bgElevated,
+    borderWidth: 1,
+    borderColor: Palette.border,
+  },
+  floatBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
+  floatPlay: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
+  floatSpeed: { color: Palette.text, fontSize: 15, fontWeight: "900" },
 
   viewer: {
     flex: 1,

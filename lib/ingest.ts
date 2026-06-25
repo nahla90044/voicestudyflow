@@ -1,10 +1,13 @@
 // lib/ingest.ts
 // تجهيز الكتاب كامل: يمرّ على كل الصفحات ويستخرج/يحوّل نصها ويخزّنها
-// (عبر extractPdfPageText الذي يخزّن في page_cache). يتخطّى المخزّن بسرعة،
-// فيُكمل من حيث توقف. يدعم التقدّم والإيقاف.
+// (عبر extractPdfPageText الذي يخزّن في page_cache). المخزّن يبقى محفوظًا في
+// قاعدة البيانات، فالتحميل قابل للاستئناف. عند انقطاع النت يعيد المحاولة تلقائيًا
+// (backoff) حتى يرجع النت ويكمل. يتخطّى المخزّن بسرعة.
 import { extractPdfPageText } from "./pdfText";
 
 let runToken = 0;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** يوقف أي تجهيز جارٍ. */
 export function stopIngest() {
@@ -12,8 +15,8 @@ export function stopIngest() {
 }
 
 /**
- * يجهّز كل صفحات الكتاب. onProgress(done,total) يُستدعى بعد كل صفحة.
- * يعمل بتزامن محدود حتى لا يُجهد الخدمات.
+ * يجهّز كل صفحات الكتاب. onProgress(done,total) بعد كل صفحة.
+ * تزامن أعلى للسرعة، وإعادة محاولة للصفحات الفاشلة (انقطاع نت) حتى تنجح.
  */
 export async function ingestBook(
   pdfPath: string,
@@ -22,22 +25,34 @@ export async function ingestBook(
 ): Promise<void> {
   if (!pdfPath || totalPages <= 0) return;
   const myToken = ++runToken;
-  const CONCURRENCY = 3;
-  let nextPage = 1;
+  const CONCURRENCY = 6; // أسرع
+  const MAX_RETRIES = 12; // يصبر على انقطاع النت
+
+  const pending: number[] = [];
+  for (let p = 1; p <= totalPages; p++) pending.push(p);
+  const retries: Record<number, number> = {};
   let done = 0;
 
   async function worker() {
     while (true) {
       if (myToken !== runToken) return; // أُوقف
-      const p = nextPage++;
-      if (p > totalPages) return;
+      const p = pending.shift();
+      if (p === undefined) return;
       try {
         await extractPdfPageText(pdfPath, p);
+        done++;
+        onProgress(done, totalPages);
       } catch {
-        // نتجاهل صفحة فشلت ونكمل
+        // فشل (غالبًا انقطاع نت) → أعد الصفحة للطابور وانتظر قليلاً ثم أكمل
+        retries[p] = (retries[p] || 0) + 1;
+        if (retries[p] <= MAX_RETRIES && myToken === runToken) {
+          pending.push(p);
+          await sleep(Math.min(15000, 1500 * retries[p])); // backoff تصاعدي
+        } else {
+          done++; // تجاوزنا حد المحاولات → نعدّها منجزة ونكمل
+          onProgress(done, totalPages);
+        }
       }
-      done++;
-      onProgress(done, totalPages);
     }
   }
 
