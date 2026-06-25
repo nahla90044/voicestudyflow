@@ -9,6 +9,8 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassCard } from "../../components/brand/glass-card";
+import { aiAssist } from "../../lib/ai";
+import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../../lib/voice";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../../constants/design";
@@ -62,6 +64,12 @@ export default function SyllabusScreen() {
   const [qScore, setQScore] = useState(0);
   const [quizDone, setQuizDone] = useState(false);
 
+  // الملخّص الصوتي
+  const [sumUnit, setSumUnit] = useState<number | null>(null);
+  const [sumLoading, setSumLoading] = useState(false);
+  const [sumText, setSumText] = useState("");
+  const [sumPlaying, setSumPlaying] = useState(false);
+
   async function loadSchedule(unitCount: number) {
     try {
       setSched(await getUnitSchedule(bookId, unitCount));
@@ -98,6 +106,56 @@ export default function SyllabusScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function startSummary(i: number) {
+    if (!syl) return;
+    const u = syl.units[i];
+    setSumUnit(i);
+    setSumLoading(true);
+    setSumText("");
+    setSumPlaying(false);
+    try {
+      const ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${
+        u.outcome ? ` الهدف: ${u.outcome}.` : ""
+      } اشرح هذه النقاط بإيجاز في فقرة متصلة مناسبة للاستماع.`;
+      const text = (await aiAssist("summarize", ctx)).trim();
+      if (!text) {
+        setSumUnit(null);
+        setErr("تعذّر إنشاء الملخّص.");
+        return;
+      }
+      setSumText(text);
+      playSummary(text);
+    } catch {
+      setSumUnit(null);
+    } finally {
+      setSumLoading(false);
+    }
+  }
+
+  function playSummary(text: string) {
+    setSumPlaying(true);
+    speakText(text, {
+      voiceId: DEFAULT_VOICE_ID,
+      onDone: () => setSumPlaying(false),
+      onError: () => setSumPlaying(false),
+    });
+  }
+
+  function toggleSummaryPlay() {
+    if (sumPlaying) {
+      stopSpeaking();
+      setSumPlaying(false);
+    } else if (sumText) {
+      playSummary(sumText);
+    }
+  }
+
+  function closeSummary() {
+    stopSpeaking();
+    setSumPlaying(false);
+    setSumUnit(null);
   }
 
   async function startQuiz(i: number) {
@@ -298,20 +356,37 @@ export default function SyllabusScreen() {
                       <Text style={styles.outcome}>🎯 {u.outcome}</Text>
                     )}
 
-                    <Pressable
-                      onPress={() => startQuiz(i)}
-                      disabled={quizLoading}
-                      style={styles.quizBtn}
-                    >
-                      {quizLoading && quizUnit === i ? (
-                        <ActivityIndicator size="small" color={Palette.neonViolet} />
-                      ) : (
-                        <Ionicons name="help-circle" size={16} color={Palette.neonViolet} />
-                      )}
-                      <Text style={styles.quizBtnTxt}>
-                        {quizLoading && quizUnit === i ? "جارٍ التحضير…" : "🧠 اختبرني في هذه الوحدة"}
-                      </Text>
-                    </Pressable>
+                    <View style={styles.unitActions}>
+                      <Pressable
+                        onPress={() => startSummary(i)}
+                        disabled={sumLoading}
+                        style={[styles.quizBtn, styles.sumBtn]}
+                      >
+                        {sumLoading && sumUnit === i ? (
+                          <ActivityIndicator size="small" color={Palette.neonCyan} />
+                        ) : (
+                          <Ionicons name="headset" size={15} color={Palette.neonCyan} />
+                        )}
+                        <Text style={[styles.quizBtnTxt, { color: Palette.neonCyan }]}>
+                          {sumLoading && sumUnit === i ? "…" : "🎧 ملخّص صوتي"}
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => startQuiz(i)}
+                        disabled={quizLoading}
+                        style={[styles.quizBtn, { flex: 1, marginTop: 0 }]}
+                      >
+                        {quizLoading && quizUnit === i ? (
+                          <ActivityIndicator size="small" color={Palette.neonViolet} />
+                        ) : (
+                          <Ionicons name="help-circle" size={15} color={Palette.neonViolet} />
+                        )}
+                        <Text style={styles.quizBtnTxt}>
+                          {quizLoading && quizUnit === i ? "…" : "🧠 اختبرني"}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </GlassCard>
                 </Pressable>
               );
@@ -417,6 +492,36 @@ export default function SyllabusScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* مودال الملخّص الصوتي */}
+        <Modal
+          visible={sumUnit !== null && !!sumText}
+          transparent
+          animationType="slide"
+          onRequestClose={closeSummary}
+        >
+          <View style={styles.quizMask}>
+            <View style={styles.quizSheet}>
+              <View style={styles.quizHeader}>
+                <Text style={styles.quizHeaderTxt} numberOfLines={1}>
+                  🎧 ملخّص: {sumUnit !== null ? syl?.units[sumUnit]?.title : ""}
+                </Text>
+                <Pressable onPress={closeSummary} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={Palette.textMuted} />
+                </Pressable>
+              </View>
+
+              <Pressable onPress={toggleSummaryPlay} style={styles.sumPlay}>
+                <Ionicons name={sumPlaying ? "pause" : "play"} size={20} color="#0b1220" />
+                <Text style={styles.sumPlayTxt}>{sumPlaying ? "إيقاف مؤقّت" : "استماع"}</Text>
+              </Pressable>
+
+              <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
+                <Text style={styles.sumText}>{sumText}</Text>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ScreenBackground>
   );
@@ -498,6 +603,24 @@ const styles = StyleSheet.create({
     borderColor: "rgba(124,92,255,0.4)",
   },
   quizBtnTxt: { color: "#cdbdff", fontSize: 13, fontWeight: "800" },
+  unitActions: { flexDirection: "row-reverse", gap: 8, marginTop: 12 },
+  sumBtn: {
+    marginTop: 0,
+    backgroundColor: "rgba(34,211,238,0.12)",
+    borderColor: "rgba(34,211,238,0.4)",
+  },
+  sumPlay: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.neonCyan,
+    marginBottom: Spacing.md,
+  },
+  sumPlayTxt: { color: "#0b1220", fontSize: 15, fontWeight: "900" },
+  sumText: { color: Palette.textMuted, fontSize: 15, lineHeight: 28, textAlign: "right" },
 
   quizMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   quizSheet: {
