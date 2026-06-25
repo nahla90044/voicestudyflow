@@ -766,17 +766,14 @@ export default function ReaderScreen() {
                 centerContent
                 showsVerticalScrollIndicator={false}
                 showsHorizontalScrollIndicator={false}
+                alwaysBounceVertical
                 onLayout={(e) => (pdfViewH.current = e.nativeEvent.layout.height)}
                 onContentSizeChange={(_w, h) => (pdfContentH.current = h)}
                 onScrollEndDrag={onPdfSwipeEnd}
               >
                 <Image
                   source={{ uri: pageImg }}
-                  style={
-                    fullText
-                      ? { flex: 1, width: "100%" } // يتّسع للإطار فوق الأزرار
-                      : { width: "100%", aspectRatio: pageImgAspect } // ملء العرض
-                  }
+                  style={{ width: "100%", aspectRatio: pageImgAspect }}
                   resizeMode="contain"
                 />
               </ScrollView>
@@ -1436,8 +1433,8 @@ const styles = StyleSheet.create({
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
-  pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1a1f2e" },
-  pdfImgWrapFull: { paddingTop: 8, paddingBottom: 110 }, // مساحة للأزرار العائمة بالأسفل
+  pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
+  pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { backgroundColor: Palette.bgElevated },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
