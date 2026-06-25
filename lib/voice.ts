@@ -55,6 +55,9 @@ export const VOICE_CATALOG: VoiceOption[] = [
   { id: "sufyan", name: "سفيان · عراقي", voiceId: "9FHjCdVXgA4tYxIYHTcZ", gender: "male" },
   { id: "wisam", name: "وسام · سوري", voiceId: "HRaipzPqzrU15BUS5ypU", gender: "male" },
   { id: "ghaida", name: "غيداء · سورية", voiceId: "rFDdsCQRZCUL8cPOWtnP", gender: "female" },
+  { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male" },
+  { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female" },
+  { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
