@@ -131,6 +131,9 @@ export default function ReaderScreen() {
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefsLoadedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
+  const pdfScrollRef = useRef<ScrollView>(null);
+  const pdfViewH = useRef(0);
+  const pdfContentH = useRef(0);
   const offsetsRef = useRef<number[]>([]);
   const playStartRef = useRef<number | null>(null);
 
@@ -274,6 +277,14 @@ export default function ReaderScreen() {
       scrollRef.current?.scrollTo({ y: Math.max(0, y - 90), animated: true });
     }
   }, [activeSentence, viewMode]);
+
+  // تمرير تلقائي «تيليبرومبتر» لصورة الصفحة في وضع PDF أثناء القراءة
+  useEffect(() => {
+    if (viewMode !== "pdf" || !speaking || activeSentence < 0 || sentences.length === 0) return;
+    const frac = sentences.length > 1 ? activeSentence / (sentences.length - 1) : 0;
+    const scrollable = Math.max(0, pdfContentH.current - pdfViewH.current);
+    pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
+  }, [activeSentence, viewMode, speaking, sentences.length]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -655,6 +666,7 @@ export default function ReaderScreen() {
           <View style={{ flex: 1 }}>
             {pageImg ? (
               <ScrollView
+                ref={pdfScrollRef}
                 style={{ flex: 1 }}
                 contentContainerStyle={styles.pdfImgWrap}
                 maximumZoomScale={6}
@@ -662,6 +674,8 @@ export default function ReaderScreen() {
                 centerContent
                 showsVerticalScrollIndicator={false}
                 showsHorizontalScrollIndicator={false}
+                onLayout={(e) => (pdfViewH.current = e.nativeEvent.layout.height)}
+                onContentSizeChange={(_w, h) => (pdfContentH.current = h)}
               >
                 <Image
                   source={{ uri: pageImg }}
