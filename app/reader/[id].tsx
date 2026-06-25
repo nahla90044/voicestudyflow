@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -13,7 +14,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
 
 import { aiAssist, defineWord, generateFlashcards, type AiAction } from "../../lib/ai";
 import { cachedPageCount, ingestBook, stopIngest } from "../../lib/ingest";
@@ -27,6 +27,7 @@ import {
   toggleBookmark,
   type Highlight,
 } from "../../lib/annotations";
+import { getPageImage } from "../../lib/pageImage";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
@@ -133,24 +134,24 @@ export default function ReaderScreen() {
   const offsetsRef = useRef<number[]>([]);
   const playStartRef = useRef<number | null>(null);
 
-  // رابط موقّت موقّع للعرض في WebView (الحاوية خاصة، ليست عامة)
-  const [pdfUrl, setPdfUrl] = useState("");
+  // صورة الصفحة الحالية (عالية الدقة، قابلة للتكبير، تتابع القراءة)
+  const [pageImg, setPageImg] = useState<string | null>(null);
+  const [pageImgLoading, setPageImgLoading] = useState(false);
   useEffect(() => {
+    if (viewMode !== "pdf" || !pdfPath) return;
     let active = true;
+    setPageImgLoading(true);
     (async () => {
-      if (!pdfPath) {
-        setPdfUrl("");
-        return;
+      const uri = await getPageImage(pdfPath, page).catch(() => null);
+      if (active) {
+        setPageImg(uri);
+        setPageImgLoading(false);
       }
-      const { data } = await supabase.storage
-        .from("pdfs")
-        .createSignedUrl(pdfPath, 60 * 60); // ساعة
-      if (active) setPdfUrl(data?.signedUrl ?? "");
     })();
     return () => {
       active = false;
     };
-  }, [pdfPath]);
+  }, [pdfPath, page, viewMode]);
 
   // تحميل التفضيلات: آخر صفحة + السرعة
   useEffect(() => {
@@ -643,13 +644,35 @@ export default function ReaderScreen() {
               })
             )}
           </ScrollView>
-        ) : pdfUrl ? (
+        ) : (
           <View style={{ flex: 1 }}>
-            <WebView
-              key={`pdf-${page}`}
-              source={{ uri: `${pdfUrl}#page=${page}` }}
-              style={{ flex: 1 }}
-            />
+            {pageImg ? (
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.pdfImgWrap}
+                maximumZoomScale={6}
+                minimumZoomScale={1}
+                centerContent
+                showsVerticalScrollIndicator={false}
+                showsHorizontalScrollIndicator={false}
+              >
+                <Image source={{ uri: pageImg }} style={styles.pdfImg} resizeMode="contain" />
+              </ScrollView>
+            ) : (
+              <View style={styles.empty}>
+                {pageImgLoading ? (
+                  <>
+                    <ActivityIndicator color={Palette.primary} />
+                    <Text style={styles.emptyTextSmall}>جارٍ تجهيز الصفحة…</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="document-outline" size={36} color={Palette.textDim} />
+                    <Text style={styles.emptyTextSmall}>اضغطي تشغيل أو تنقّلي لعرض الصفحة.</Text>
+                  </>
+                )}
+              </View>
+            )}
             {/* شريط علامة مثل Apple Books — اضغطيه لحفظ/إزالة الصفحة */}
             <Pressable onPress={onToggleBookmark} style={styles.ribbon} hitSlop={10}>
               <Ionicons
@@ -658,14 +681,6 @@ export default function ReaderScreen() {
                 color={isBookmarked ? Palette.danger : "rgba(255,255,255,0.6)"}
               />
             </Pressable>
-          </View>
-        ) : (
-          <View style={styles.empty}>
-            <Ionicons name="document-outline" size={36} color={Palette.textDim} />
-            <Text style={styles.emptyText}>لا يوجد رابط PDF</Text>
-            <Text style={styles.emptyTextSmall}>
-              تأكّد أن pdf_path محفوظ في جدول books وأن الملف موجود في Storage: pdfs
-            </Text>
           </View>
         )}
 
@@ -1199,6 +1214,8 @@ const styles = StyleSheet.create({
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
+  pdfImgWrap: { flexGrow: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#1a1f2e" },
+  pdfImg: { width: "100%", height: "100%" },
   textScroll: { backgroundColor: Palette.bgElevated },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
