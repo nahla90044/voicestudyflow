@@ -812,8 +812,8 @@ export default function ReaderScreen() {
             <Pressable onPress={() => setFullText(false)} style={styles.floatBtn} hitSlop={8}>
               <Ionicons name="contract" size={20} color={Palette.text} />
             </Pressable>
-            <Pressable onPress={() => goPage(1)} style={styles.floatBtn} hitSlop={8} disabled={!!totalPages && page >= totalPages}>
-              <Ionicons name="chevron-back" size={22} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
+            <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
+              <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
             <Pressable onPress={togglePlay} style={styles.floatPlay}>
               {busy ? (
@@ -822,8 +822,8 @@ export default function ReaderScreen() {
                 <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
               )}
             </Pressable>
-            <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
-              <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
+            <Pressable onPress={() => goPage(1)} style={styles.floatBtn} hitSlop={8} disabled={!!totalPages && page >= totalPages}>
+              <Ionicons name="chevron-back" size={22} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
             </Pressable>
             <Pressable onPress={cycleSpeed} style={styles.floatBtn} hitSlop={8}>
               <Text style={styles.floatSpeed}>{rate}x</Text>
@@ -1181,7 +1181,7 @@ export default function ReaderScreen() {
 
           <View style={styles.driveControls}>
             <Pressable onPress={() => goPage(-1)} style={styles.driveNav} disabled={page <= 1}>
-              <Ionicons name="play-back" size={36} color={page <= 1 ? Palette.textDim : Palette.text} />
+              <Ionicons name="play-forward" size={36} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
 
             <Pressable onPress={togglePlay} style={styles.drivePlay}>
@@ -1197,7 +1197,7 @@ export default function ReaderScreen() {
               style={styles.driveNav}
               disabled={!!totalPages && page >= totalPages}
             >
-              <Ionicons name="play-forward" size={36} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
+              <Ionicons name="play-back" size={36} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
             </Pressable>
           </View>
 
