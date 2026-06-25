@@ -37,7 +37,9 @@ export default function AddBookScreen() {
   const [minutes, setMinutes] = useState("60");
   const [pageCountManual, setPageCountManual] = useState(""); // اختياري
   const [file, setFile] = useState<any>(null);
-  const [busy, setBusy] = useState(false);
+  // أي زر يحمّل حاليًا (حتى لا يدور الزرّان معًا)
+  const [busyMode, setBusyMode] = useState<null | "save" | "plan">(null);
+  const busy = busyMode !== null;
 
   const canCreatePlan = useMemo(() => {
     const m = parseInt(minutes || "60", 10) || 60;
@@ -108,7 +110,7 @@ export default function AddBookScreen() {
     const dailyMinutes = Math.max(5, parseInt(minutes || "60", 10) || 60);
 
     try {
-      setBusy(true);
+      setBusyMode(createPlanNow ? "plan" : "save");
 
       // معرّف المستخدم الحقيقي (تفرضه RLS على القاعدة والتخزين)
       const userId = await getUserId();
@@ -186,7 +188,7 @@ export default function AddBookScreen() {
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? String(e));
     } finally {
-      setBusy(false);
+      setBusyMode(null);
     }
   }
 
@@ -222,7 +224,7 @@ export default function AddBookScreen() {
 
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>عدد الصفحات (اختياري)</Text>
+            <Text style={styles.label} numberOfLines={1}>عدد الصفحات</Text>
             <TextInput
               value={pageCountManual}
               onChangeText={setPageCountManual}
@@ -235,7 +237,7 @@ export default function AddBookScreen() {
           </View>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>الدقائق اليومية</Text>
+            <Text style={styles.label} numberOfLines={1}>الدقائق اليومية</Text>
             <TextInput
               value={minutes}
               onChangeText={setMinutes}
@@ -250,7 +252,8 @@ export default function AddBookScreen() {
           title="حفظ الكتاب فقط"
           icon="save"
           onPress={() => save(false)}
-          loading={busy}
+          loading={busyMode === "save"}
+          disabled={busy}
         />
 
         <GradientButton
@@ -258,8 +261,8 @@ export default function AddBookScreen() {
           icon="sparkles"
           colors={Gradients.neon}
           onPress={() => save(true)}
-          loading={busy}
-          disabled={!canCreatePlan}
+          loading={busyMode === "plan"}
+          disabled={!canCreatePlan || busy}
         />
 
         <Text style={styles.hint}>
@@ -286,7 +289,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "right",
   },
-  row: { flexDirection: "row", gap: 12 },
+  row: { flexDirection: "row", gap: 12, alignItems: "flex-end" },
   btn: {
     backgroundColor: "rgba(255,255,255,0.08)",
     paddingVertical: 14,
