@@ -53,6 +53,14 @@ export async function cleanupText(text: string): Promise<string> {
   }
 }
 
+/** ينظّف النص ويرمي خطأً إن تعذّر الذكاء (ليعرف المستدعي أنه غير منظَّف فلا يخزّنه). */
+export async function cleanupTextStrict(text: string): Promise<string> {
+  if (!text.trim()) return text;
+  const out = stripPreamble(await aiAssist("cleanup", text));
+  if (!out.trim()) throw new Error("empty cleanup");
+  return out;
+}
+
 /** يُرجع معنى كلمة حسب سياقها في الجملة (قاموس ذكي). */
 export async function defineWord(word: string, context: string): Promise<string> {
   const w = word.trim();

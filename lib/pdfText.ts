@@ -3,8 +3,17 @@
 //  1) إن كان نص الصفحة مخزّنًا → نُرجعه فورًا (سريع، بدون تكلفة).
 //  2) وإلا: نستخرج من الطبقة النصية (pdf-extract-text)، وإن كانت الصفحة
 //     بلا نص حقيقي (كتاب مصوّر) → OCR عبر ocr-page، ثم نخزّن النتيجة.
-import { cleanupText } from "./ai";
+import { cleanupTextStrict } from "./ai";
 import { supabase } from "./supabase";
+
+// يوحّد أحرف العرض العربية المعزولة (ﻣ ﻘ) إلى صورتها القياسية (م ق) ليعيد المحرّك ربطها
+function normalizeArabic(s: string): string {
+  try {
+    return s.normalize("NFKC");
+  } catch {
+    return s;
+  }
+}
 
 export type PageText = {
   page: number;
@@ -78,30 +87,39 @@ export async function extractPdfPageText(
     }
   }
 
+  if (text) text = normalizeArabic(text);
   const hasRealText = text.trim().length >= MIN_REAL_TEXT;
 
   // إن فشل الاستخراج تمامًا (خطأ شبكة) ولا نص → لا نخزّن علامة دائمة، نرمي الخطأ
   if (error && !hasRealText) throw error;
 
-  // 4) صفحة فيها نص حقيقي → نظّفه بالذكاء (يصلح المسافات وأخطاء المسح)
+  // 4) صفحة فيها نص حقيقي → نظّفه بالذكاء (يصلح المسافات وأخطاء المسح وفصل الحروف)
+  let cleaned = false;
   if (hasRealText) {
-    text = await cleanupText(text);
+    try {
+      text = normalizeArabic(await cleanupTextStrict(text));
+      cleaned = true;
+    } catch {
+      cleaned = false; // الذكاء غير متاح (رصيد/شبكة) → نُبقي النص الخام بلا تخزين
+    }
   } else {
-    // صفحة فارغة/غلاف/فهرس (علامة مائية فقط) → نتجاهل نصها
-    text = "";
+    text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
   }
 
-  // 5) خزّن النتيجة (نص نظيف أو علامة «فارغة») حتى لا نعيد المعالجة
-  try {
-    await supabase.from("page_cache").upsert({
-      pdf_path: pdfPath,
-      page: resolvedPage,
-      text,
-      total_pages: totalPages,
-      source: hasRealText ? (usedOcr ? "ocr" : "text") : "empty",
-    });
-  } catch {
-    // التخزين اختياري — لا نفشل القراءة بسببه
+  // 5) خزّن فقط نصًّا منظَّفًا أو علامة «فارغة». النص غير المنظَّف لا يُخزَّن
+  //    حتى يُعاد تنظيفه تلقائيًا عند توفّر الذكاء (بدل تثبيت نص مقطّع).
+  if (cleaned || !hasRealText) {
+    try {
+      await supabase.from("page_cache").upsert({
+        pdf_path: pdfPath,
+        page: resolvedPage,
+        text,
+        total_pages: totalPages,
+        source: hasRealText ? (usedOcr ? "ocr" : "text") : "empty",
+      });
+    } catch {
+      // التخزين اختياري — لا نفشل القراءة بسببه
+    }
   }
 
   return { page: resolvedPage, totalPages, text, ocr: usedOcr };
