@@ -10,11 +10,16 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "io.nahlah.voicestudyflow",
+      "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio"],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "io.nahlah.voicestudyflow",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#5f7bf5",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
