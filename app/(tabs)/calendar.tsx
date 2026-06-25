@@ -18,6 +18,12 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Palette, Radius } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
+import {
+  DEFAULT_SESSION_TYPE,
+  getSessionTypes,
+  SESSION_TYPES,
+  setSessionType,
+} from "../../lib/sessionMeta";
 import { supabase } from "../../lib/supabase";
 import { getUnitForDate } from "../../lib/syllabus";
 
@@ -151,6 +157,33 @@ export default function CalendarScreen() {
   const [unitLoading, setUnitLoading] = useState(false);
   const unitCache = useRef<Map<string, string | null>>(new Map());
 
+  // نوع الجلسة (مذاكرة/قراءة/…)
+  const [sessionTypes, setSessionTypes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    getSessionTypes().then(setSessionTypes);
+  }, []);
+  function chooseSessionType(b: CalendarBlock) {
+    const opts: any[] = SESSION_TYPES.map((t) => ({
+      text: sessionTypes[b.id] === t ? `✓ ${t}` : t,
+      onPress: async () => {
+        await setSessionType(b.id, t);
+        setSessionTypes((p) => ({ ...p, [b.id]: t }));
+      },
+    }));
+    opts.push({
+      text: "نوع آخر…",
+      onPress: () =>
+        Alert.prompt?.("نوع الجلسة", "اكتبي النوع", async (txt?: string) => {
+          if (txt && txt.trim()) {
+            await setSessionType(b.id, txt.trim());
+            setSessionTypes((p) => ({ ...p, [b.id]: txt.trim() }));
+          }
+        }),
+    });
+    opts.push({ text: "إلغاء", style: "cancel" });
+    Alert.alert("نوع الجلسة", "اختاري النشاط", opts);
+  }
+
   // عند فتح جلسة لكتاب له منهج: اعرض وحدة المنهج المقابلة لتاريخها (مع تخزين مؤقت للسرعة)
   useEffect(() => {
     const s = selected as any;
@@ -270,8 +303,7 @@ export default function CalendarScreen() {
         .select(
           `
           *,
-          study_plans:study_plans ( id, user_id, book_id ),
-          book:books ( id, title )
+          study_plans:study_plans ( id, user_id, book_id, book:books ( id, title ) )
         `
         )
         .eq("study_plans.user_id", userId);
@@ -311,8 +343,8 @@ export default function CalendarScreen() {
           r.date ??
           todayISO();
 
-        const bookId = r.book?.id ?? r.book_id ?? r.study_plans?.book_id ?? null;
-        const bookTitle = r.book?.title ?? r.book_title ?? null;
+        const bookId = r.study_plans?.book_id ?? r.study_plans?.book?.id ?? r.book?.id ?? null;
+        const bookTitle = r.study_plans?.book?.title ?? r.book?.title ?? r.book_title ?? null;
         const color = bookId ? hashColor(String(bookId)) : "rgba(46,204,113,0.18)";
 
         const statusRaw = r.status ?? "pending";
@@ -680,6 +712,18 @@ export default function CalendarScreen() {
                     ? selected.bookTitle || "جلسة مذاكرة"
                     : selected.title}
                 </Text>
+
+                {/* نوع الجلسة — قابل للتغيير */}
+                {selected.kind === "session" ? (
+                  <Pressable onPress={() => chooseSessionType(selected)} style={styles.typeChip}>
+                    <Ionicons name="pricetag-outline" size={13} color={Palette.neonCyan} />
+                    <Text style={styles.typeChipTxt}>
+                      {sessionTypes[selected.id] || DEFAULT_SESSION_TYPE}
+                    </Text>
+                    <Ionicons name="chevron-down" size={13} color={Palette.textDim} />
+                  </Pressable>
+                ) : null}
+
                 <Text style={styles.sheetMeta}>
                   {selected.dateISO}
                   {selected.minutesPlanned ? ` · ${selected.minutesPlanned} دقيقة` : ""}
@@ -698,13 +742,13 @@ export default function CalendarScreen() {
                   </View>
                 ) : null}
 
-                {/* الحالة — اختيار واحد واضح */}
+                {/* الحالة — اختيار واحد واضح (أيقونة فوق نص موسّط) */}
                 <Text style={styles.sheetLabel}>الحالة</Text>
                 <View style={styles.statusRow}>
                   {([
-                    { k: "done", label: "✅ تم", on: Palette.success },
-                    { k: "more_time", label: "⏳ يحتاج وقت", on: Palette.warn },
-                    { k: "pending", label: "○ لم تتم", on: Palette.textMuted },
+                    { k: "done", label: "تم", icon: "checkmark-circle", on: Palette.success },
+                    { k: "more_time", label: "يحتاج وقت", icon: "time-outline", on: Palette.warn },
+                    { k: "pending", label: "لم تتم", icon: "ellipse-outline", on: Palette.textMuted },
                   ] as const).map((opt) => {
                     const active = selected.status === opt.k;
                     return (
@@ -716,7 +760,10 @@ export default function CalendarScreen() {
                           active && { backgroundColor: opt.on + "26", borderColor: opt.on },
                         ]}
                       >
-                        <Text style={[styles.statusPillTxt, active && { color: opt.on }]}>{opt.label}</Text>
+                        <Ionicons name={opt.icon} size={22} color={active ? opt.on : Palette.textMuted} />
+                        <Text style={[styles.statusPillTxt, active && { color: opt.on }]} numberOfLines={1}>
+                          {opt.label}
+                        </Text>
                       </Pressable>
                     );
                   })}
@@ -731,11 +778,12 @@ export default function CalendarScreen() {
                 ) : null}
 
                 <View style={styles.sheetFooter}>
-                  <Pressable onPress={() => handleDelete(selected)} hitSlop={6}>
-                    <Text style={styles.sheetDanger}>حذف</Text>
+                  <Pressable onPress={() => setSheetOpen(false)} style={styles.closeBtn}>
+                    <Text style={styles.closeBtnTxt}>إغلاق</Text>
                   </Pressable>
-                  <Pressable onPress={() => setSheetOpen(false)} hitSlop={6}>
-                    <Text style={styles.sheetClose}>إغلاق</Text>
+                  <Pressable onPress={() => handleDelete(selected)} style={styles.deleteBtn} hitSlop={6}>
+                    <Ionicons name="trash-outline" size={15} color={Palette.danger} />
+                    <Text style={styles.sheetDanger}>حذف</Text>
                   </Pressable>
                 </View>
               </>
@@ -1270,18 +1318,35 @@ const styles = StyleSheet.create({
   },
   unitChipTxt: { flex: 1, color: Palette.text, fontSize: 13, fontWeight: "800", textAlign: "center" },
 
-  sheetLabel: { color: Palette.textDim, fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 16, marginBottom: 8 },
-  statusRow: { flexDirection: "row-reverse", gap: 8 },
-  statusPill: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: Radius.md,
+  typeChip: {
+    alignSelf: "center",
+    flexDirection: "row-reverse",
     alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
     backgroundColor: Palette.surface,
     borderWidth: 1,
     borderColor: Palette.glassBorder,
   },
-  statusPillTxt: { color: Palette.textMuted, fontWeight: "800", fontSize: 13 },
+  typeChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "900" },
+
+  sheetLabel: { color: Palette.textDim, fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 16, marginBottom: 8 },
+  statusRow: { flexDirection: "row-reverse", gap: 8 },
+  statusPill: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: Radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  statusPillTxt: { color: Palette.textMuted, fontWeight: "800", fontSize: 12.5, textAlign: "center" },
 
   sheetPrimary: {
     flexDirection: "row-reverse",
@@ -1294,7 +1359,16 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.neonCyan,
   },
   sheetPrimaryTxt: { color: "#0b1220", fontWeight: "900", fontSize: 15 },
-  sheetFooter: { flexDirection: "row-reverse", justifyContent: "space-between", marginTop: 16, paddingHorizontal: 6 },
+  sheetFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: 14 },
+  deleteBtn: { flexDirection: "row-reverse", alignItems: "center", gap: 5, paddingVertical: 8, paddingHorizontal: 6 },
   sheetDanger: { color: Palette.danger, fontWeight: "800", fontSize: 14 },
-  sheetClose: { color: Palette.textMuted, fontWeight: "800", fontSize: 14 },
+  closeBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    borderRadius: Radius.md,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  closeBtnTxt: { color: Palette.text, fontWeight: "800", fontSize: 14 },
 });
