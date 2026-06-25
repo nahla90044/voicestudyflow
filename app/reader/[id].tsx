@@ -99,6 +99,9 @@ export default function ReaderScreen() {
   const [drivingMode, setDrivingMode] = useState(false);
   // وضع ملء الشاشة للقراءة (إخفاء الأزرار وتكبير النص)
   const [fullText, setFullText] = useState(false);
+  // الانتقال لصفحة محددة
+  const [gotoOpen, setGotoOpen] = useState(false);
+  const [gotoValue, setGotoValue] = useState("");
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -382,6 +385,20 @@ export default function ReaderScreen() {
         stop();
       },
     });
+  }
+
+  // الانتقال لصفحة محددة والبدء بالقراءة منها
+  function gotoPage(n: number) {
+    const target = Math.max(1, totalPages ? Math.min(totalPages, n) : n);
+    setGotoOpen(false);
+    stop();
+    resumeIdxRef.current = 0;
+    setPage(target);
+    playingRef.current = true;
+    setSpeaking(true);
+    playStartRef.current = Date.now();
+    recordActivity({});
+    playFromPage(target);
   }
 
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
@@ -844,10 +861,18 @@ export default function ReaderScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.pageInfo}>
-          الصفحة {page}
-          {totalPages ? ` من ${totalPages}` : ""}
-        </Text>
+        <Pressable
+          onPress={() => {
+            setGotoValue(String(page));
+            setGotoOpen(true);
+          }}
+          hitSlop={6}
+        >
+          <Text style={styles.pageInfo}>
+            الصفحة {page}
+            {totalPages ? ` من ${totalPages}` : ""} ⤵︎ انتقال
+          </Text>
+        </Pressable>
 
         {/* تحميل الكتاب كامل */}
         <Pressable onPress={startIngest} style={styles.ingestBtn} disabled={fullyLoaded && !ingesting}>
@@ -1083,6 +1108,44 @@ export default function ReaderScreen() {
             <Text style={styles.driveSpeedTxt}>السرعة {rate}x</Text>
           </Pressable>
         </View>
+      </Modal>
+
+      {/* الانتقال لصفحة محددة */}
+      <Modal visible={gotoOpen} transparent animationType="fade" onRequestClose={() => setGotoOpen(false)}>
+        <Pressable style={styles.dictMask} onPress={() => setGotoOpen(false)}>
+          <Pressable style={styles.dictCard} onPress={() => {}}>
+            <View style={styles.dictHead}>
+              <Text style={styles.dictWord}>الانتقال لصفحة</Text>
+              <Pressable onPress={() => setGotoOpen(false)} hitSlop={8}>
+                <Ionicons name="close" size={20} color={Palette.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={styles.dictHint}>
+              اكتبي رقم الصفحة (١ – {totalPages || "؟"}) ويبدأ يقرأ منها.
+            </Text>
+            <View style={{ flexDirection: "row-reverse", gap: 8, alignItems: "center" }}>
+              <TextInput
+                value={gotoValue}
+                onChangeText={(t) => setGotoValue(t.replace(/[^0-9]/g, ""))}
+                keyboardType="number-pad"
+                placeholder={`${page}`}
+                placeholderTextColor={Palette.placeholder}
+                style={styles.noteInput}
+                textAlign="center"
+                autoFocus
+              />
+              <Pressable
+                onPress={() => {
+                  const n = parseInt(gotoValue || "0", 10);
+                  if (n > 0) gotoPage(n);
+                }}
+                style={styles.noteSave}
+              >
+                <Ionicons name="play" size={18} color="#fff" />
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* قاموس: معنى الكلمة الملموسة */}
