@@ -426,6 +426,20 @@ export default function ReaderScreen() {
     playFromPage(target, 0, true);
   }
 
+  // تمرير على صورة الصفحة ثم رفع الإصبع: إن تجاوزتِ الحافة قليلًا → صفحة واحدة فقط.
+  // يُستدعى مرة واحدة لكل سحبة (دقيق، ما يقفز). مثبّت أثناء القراءة وعند التكبير.
+  function onPdfSwipeEnd(e: { nativeEvent: any }) {
+    if (speaking) return;
+    const ne = e.nativeEvent;
+    if (ne.zoomScale && ne.zoomScale > 1.05) return;
+    const y = ne.contentOffset?.y ?? 0;
+    const viewH = ne.layoutMeasurement?.height ?? 0;
+    const contentH = ne.contentSize?.height ?? 0;
+    const OVER = 55;
+    if (y < -OVER) goPage(-1);
+    else if (viewH > 0 && contentH > 0 && y + viewH > contentH + OVER) goPage(1);
+  }
+
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
   function skipSentence(delta: number) {
     const sents = sentences;
@@ -742,6 +756,7 @@ export default function ReaderScreen() {
                 showsHorizontalScrollIndicator={false}
                 onLayout={(e) => (pdfViewH.current = e.nativeEvent.layout.height)}
                 onContentSizeChange={(_w, h) => (pdfContentH.current = h)}
+                onScrollEndDrag={onPdfSwipeEnd}
               >
                 <Image
                   source={{ uri: pageImg }}
@@ -838,8 +853,8 @@ export default function ReaderScreen() {
         {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
         <View style={styles.controls}>
           <Pressable onPress={() => goPage(-1)} style={styles.navBtn} disabled={page <= 1} hitSlop={6}>
-            <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
-            <Text style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>السابقة</Text>
+            <Ionicons name="chevron-forward" size={20} color={page <= 1 ? Palette.textDim : Palette.text} />
+            <Text style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>الصفحة السابقة</Text>
           </Pressable>
 
           <Pressable onPress={togglePlay} style={styles.playBtn}>
@@ -862,57 +877,75 @@ export default function ReaderScreen() {
               color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text}
             />
             <Text style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
-              التالية
+              الصفحة التالية
             </Text>
           </Pressable>
         </View>
 
-        {/* أدوات مدمجة في صف واحد: مقطع · سرعة · نوم · انتقال · تحميل */}
+        {/* أدوات مدمجة (أيقونة + كلمة توضيحية) */}
         <View style={styles.toolsRow}>
-          <Pressable onPress={() => skipSentence(-1)} style={styles.toolBtn} hitSlop={4}>
-            <Ionicons name="play-skip-forward" size={17} color={Palette.text} />
-          </Pressable>
-          <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
-            <Ionicons name="play-skip-back" size={17} color={Palette.text} />
-          </Pressable>
-          <Pressable onPress={cycleSpeed} style={styles.toolBtn} hitSlop={4}>
-            <Text style={styles.toolTxt}>{rate}x</Text>
-          </Pressable>
-          <Pressable
-            onPress={cycleSleep}
-            style={[styles.toolBtn, sleepMin > 0 && styles.toolBtnActive]}
-            hitSlop={4}
-          >
-            <Ionicons name="moon-outline" size={17} color={sleepMin > 0 ? "#fff" : Palette.text} />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              setGotoValue(String(page));
-              setGotoOpen(true);
-            }}
-            style={styles.toolBtn}
-            hitSlop={4}
-          >
-            <Ionicons name="keypad-outline" size={17} color={Palette.text} />
-          </Pressable>
-          <Pressable
-            onPress={startIngest}
-            style={styles.toolBtn}
-            disabled={fullyLoaded && !ingesting}
-            hitSlop={4}
-          >
-            <Ionicons
-              name={
-                fullyLoaded && !ingesting
-                  ? "checkmark-circle"
-                  : ingesting
-                  ? "stop-circle"
-                  : "cloud-download-outline"
-              }
-              size={18}
-              color={fullyLoaded && !ingesting ? Palette.success : Palette.text}
-            />
-          </Pressable>
+          <View style={styles.tool}>
+            <Pressable onPress={() => skipSentence(-1)} style={styles.toolBtn} hitSlop={4}>
+              <Ionicons name="play-skip-forward" size={17} color={Palette.text} />
+            </Pressable>
+            <Text style={styles.toolCap}>مقطع سابق</Text>
+          </View>
+          <View style={styles.tool}>
+            <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
+              <Ionicons name="play-skip-back" size={17} color={Palette.text} />
+            </Pressable>
+            <Text style={styles.toolCap}>مقطع تالٍ</Text>
+          </View>
+          <View style={styles.tool}>
+            <Pressable onPress={cycleSpeed} style={styles.toolBtn} hitSlop={4}>
+              <Text style={styles.toolTxt}>{rate}x</Text>
+            </Pressable>
+            <Text style={styles.toolCap}>السرعة</Text>
+          </View>
+          <View style={styles.tool}>
+            <Pressable
+              onPress={cycleSleep}
+              style={[styles.toolBtn, sleepMin > 0 && styles.toolBtnActive]}
+              hitSlop={4}
+            >
+              <Ionicons name="moon-outline" size={17} color={sleepMin > 0 ? "#fff" : Palette.text} />
+            </Pressable>
+            <Text style={styles.toolCap}>{sleepMin > 0 ? `${sleepMin}د` : "النوم"}</Text>
+          </View>
+          <View style={styles.tool}>
+            <Pressable
+              onPress={() => {
+                setGotoValue(String(page));
+                setGotoOpen(true);
+              }}
+              style={styles.toolBtn}
+              hitSlop={4}
+            >
+              <Ionicons name="keypad-outline" size={17} color={Palette.text} />
+            </Pressable>
+            <Text style={styles.toolCap}>انتقال</Text>
+          </View>
+          <View style={styles.tool}>
+            <Pressable
+              onPress={startIngest}
+              style={styles.toolBtn}
+              disabled={fullyLoaded && !ingesting}
+              hitSlop={4}
+            >
+              <Ionicons
+                name={
+                  fullyLoaded && !ingesting
+                    ? "checkmark-circle"
+                    : ingesting
+                    ? "stop-circle"
+                    : "cloud-download-outline"
+                }
+                size={18}
+                color={fullyLoaded && !ingesting ? Palette.success : Palette.text}
+              />
+            </Pressable>
+            <Text style={styles.toolCap}>{fullyLoaded ? "محمّل" : "تحميل"}</Text>
+          </View>
         </View>
 
         {/* سطر الحالة: الصفحة (قابل للانتقال) + تقدّم التحميل */}
@@ -1517,7 +1550,7 @@ const styles = StyleSheet.create({
     gap: 2,
     backgroundColor: Palette.surface,
   },
-  navTxt: { color: Palette.text, fontSize: 11, fontWeight: "800" },
+  navTxt: { color: Palette.text, fontSize: 10.5, fontWeight: "800" },
   segRow: { flexDirection: "row-reverse", justifyContent: "center", gap: 10 },
   segBtn: {
     flexDirection: "row-reverse",
@@ -1531,7 +1564,9 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   segTxt: { color: Palette.text, fontWeight: "800", fontSize: 12 },
-  toolsRow: { flexDirection: "row-reverse", justifyContent: "center", gap: 12, marginTop: 2 },
+  toolsRow: { flexDirection: "row-reverse", justifyContent: "center", gap: 8, marginTop: 2 },
+  tool: { alignItems: "center", gap: 4 },
+  toolCap: { color: Palette.textDim, fontSize: 10, fontWeight: "700" },
   toolBtn: {
     width: 46,
     height: 46,
