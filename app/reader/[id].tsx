@@ -98,6 +98,14 @@ export default function ReaderScreen() {
   const [drivingMode, setDrivingMode] = useState(false);
   // وضع ملء الشاشة للقراءة (إخفاء الأزرار وتكبير النص)
   const [fullText, setFullText] = useState(false);
+  // رسالة تأكيد عابرة (toast)
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 2200);
+  }
 
   // تحميل الكتاب كامل (تجهيز كل الصفحات مسبقًا)
   const [ingesting, setIngesting] = useState(false);
@@ -158,6 +166,7 @@ export default function ReaderScreen() {
     return () => {
       playingRef.current = false;
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
       stopSpeaking();
       stopIngest();
     };
@@ -181,7 +190,9 @@ export default function ReaderScreen() {
   const isBookmarked = bookmarks.includes(page);
 
   async function onToggleBookmark() {
+    const was = bookmarks.includes(page);
     setBookmarks(await toggleBookmark(bookId, page));
+    showToast(was ? `أُزيلت علامة الصفحة ${page}` : `🔖 حُفظت الصفحة ${page} في علاماتك`);
   }
 
   // ضغطة مطوّلة على جملة في وضع النص → تظليل/إزالة
@@ -189,8 +200,10 @@ export default function ReaderScreen() {
     const existing = highlights.find((h) => h.page === page && h.text === text);
     if (existing) {
       setHighlights(await removeHighlight(bookId, existing.id));
+      showToast("أُزيل التظليل");
     } else {
       setHighlights(await addHighlight(bookId, { page, text }));
+      showToast("🖍️ تم تظليل المقطع وحفظه في ملاحظاتك");
     }
   }
 
@@ -603,7 +616,11 @@ export default function ReaderScreen() {
             )}
           </ScrollView>
         ) : pdfUrl ? (
-          <WebView source={{ uri: pdfUrl }} style={{ flex: 1 }} />
+          <WebView
+            key={`pdf-${page}`}
+            source={{ uri: `${pdfUrl}#page=${page}` }}
+            style={{ flex: 1 }}
+          />
         ) : (
           <View style={styles.empty}>
             <Ionicons name="document-outline" size={36} color={Palette.textDim} />
@@ -745,6 +762,13 @@ export default function ReaderScreen() {
         ) : null}
       </View>
       )}
+
+      {/* رسالة تأكيد عابرة */}
+      {toast ? (
+        <View style={styles.toast} pointerEvents="none">
+          <Text style={styles.toastTxt}>{toast}</Text>
+        </View>
+      ) : null}
 
       {/* مودال الملاحظات والعلامات */}
       <Modal visible={notesOpen} transparent animationType="slide" onRequestClose={() => setNotesOpen(false)}>
@@ -1197,6 +1221,18 @@ const styles = StyleSheet.create({
   floatBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
   floatPlay: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
   floatSpeed: { color: Palette.text, fontSize: 15, fontWeight: "900" },
+
+  toast: {
+    position: "absolute",
+    top: 70,
+    alignSelf: "center",
+    maxWidth: "88%",
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.primary,
+  },
+  toastTxt: { color: "#fff", fontSize: 14, fontWeight: "800", textAlign: "center" },
 
   viewer: {
     flex: 1,
