@@ -1091,22 +1091,22 @@ export default function ReaderScreen() {
           })}
         </ScrollView>
 
-        {/* أدوات القراءة بتدرّجات ألوان التطبيق (بلا أيقونات) */}
+        {/* أدوات القراءة — أزرار متماثلة بنفس تدرّج ألوان التطبيق (بلا أيقونات) */}
         <View style={styles.aidsRow}>
           <Pressable onPress={toggleTashkeel} style={[styles.aidWrap, tashkeelMode && styles.aidWrapOn]}>
-            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.aidGrad}>
+            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? "النطق مُفعّل" : "نطق دقيق"}</Text>
             </LinearGradient>
           </Pressable>
 
           <Pressable onPress={toggleListenArabic} style={[styles.aidWrap, listenArabic && styles.aidWrapOn]}>
-            <LinearGradient colors={["#22d3ee", "#4f8cff"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? "الترجمة مُفعّلة" : "بالعربية"}</Text>
+            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? "الترجمة مُفعّلة" : "الترجمة"}</Text>
             </LinearGradient>
           </Pressable>
 
           <Pressable onPress={() => setPresentOpen(true)} style={styles.aidWrap}>
-            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.aidGrad}>
+            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>عرض تقديمي</Text>
             </LinearGradient>
           </Pressable>
