@@ -44,14 +44,16 @@ export type VoiceOption = {
   gender: VoiceGender;
 };
 
-// أصوات عربية حقيقية بلهجة بيضاء واضحة (فصحى + خليجي محايد) مضافة لحساب ElevenLabs.
+// أصوات عربية حقيقية: سعودية واضحة + فصحى + خليجي محايد (مضافة لحساب ElevenLabs).
 export const VOICE_CATALOG: VoiceOption[] = [
+  { id: "nasser", name: "ناصر · سعودي", voiceId: "3GnbqfjaW8xI6hRTVx4Y", gender: "male" },
+  { id: "ahmed", name: "أحمد · سعودي", voiceId: "etJo0VNXVmjmd5XDR7lJ", gender: "male" },
+  { id: "heba", name: "هبة · سعودي", voiceId: "E4GutuQ39akNBbiYuhh2", gender: "female" },
   { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female" },
   { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female" },
   { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female" },
   { id: "omar", name: "عمر · فصحى", voiceId: "apsZFlSToM2vmFpwz5jX", gender: "male" },
   { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male" },
-  { id: "abdullah", name: "عبدالله · فصحى", voiceId: "XdoLPWNt7ytn6BtU4FBf", gender: "male" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
