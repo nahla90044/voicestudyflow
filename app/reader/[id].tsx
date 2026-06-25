@@ -720,7 +720,11 @@ export default function ReaderScreen() {
               >
                 <Image
                   source={{ uri: pageImg }}
-                  style={{ width: "100%", aspectRatio: pageImgAspect }}
+                  style={
+                    fullText
+                      ? { height: "100%", aspectRatio: pageImgAspect } // ملء الطول
+                      : { width: "100%", aspectRatio: pageImgAspect } // ملء العرض
+                  }
                   resizeMode="contain"
                 />
               </ScrollView>
@@ -1338,7 +1342,7 @@ const styles = StyleSheet.create({
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
-  pdfImgWrap: { flexGrow: 1, backgroundColor: "#1a1f2e" },
+  pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#1a1f2e" },
   textScroll: { backgroundColor: Palette.bgElevated },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
