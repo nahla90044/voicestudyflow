@@ -616,11 +616,21 @@ export default function ReaderScreen() {
             )}
           </ScrollView>
         ) : pdfUrl ? (
-          <WebView
-            key={`pdf-${page}`}
-            source={{ uri: `${pdfUrl}#page=${page}` }}
-            style={{ flex: 1 }}
-          />
+          <View style={{ flex: 1 }}>
+            <WebView
+              key={`pdf-${page}`}
+              source={{ uri: `${pdfUrl}#page=${page}` }}
+              style={{ flex: 1 }}
+            />
+            {/* شريط علامة مثل Apple Books — اضغطيه لحفظ/إزالة الصفحة */}
+            <Pressable onPress={onToggleBookmark} style={styles.ribbon} hitSlop={10}>
+              <Ionicons
+                name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                size={46}
+                color={isBookmarked ? Palette.danger : "rgba(255,255,255,0.6)"}
+              />
+            </Pressable>
+          </View>
         ) : (
           <View style={styles.empty}>
             <Ionicons name="document-outline" size={36} color={Palette.textDim} />
@@ -1233,6 +1243,19 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.primary,
   },
   toastTxt: { color: "#fff", fontSize: 14, fontWeight: "800", textAlign: "center" },
+
+  ribbon: {
+    position: "absolute",
+    top: -4,
+    right: 18,
+    width: 46,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
 
   viewer: {
     flex: 1,
