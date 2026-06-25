@@ -470,6 +470,7 @@ export default function LibraryScreen() {
         contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 90 }}
         renderItem={({ item }) => {
           const isActive = activeBookId === item.id;
+          const bookFolder = folders.find((f) => f.id === assign[item.id]);
 
           return (
             <Pressable
@@ -527,6 +528,13 @@ export default function LibraryScreen() {
                   {isActive ? (
                     <View style={styles.activeBadge}>
                       <Text style={styles.activeBadgeText}>تحت الإجراء</Text>
+                    </View>
+                  ) : null}
+
+                  {bookFolder ? (
+                    <View style={[styles.folderBadge, { backgroundColor: bookFolder.color + "E6" }]}>
+                      <Ionicons name="folder" size={10} color="#fff" />
+                      <Text style={styles.folderBadgeTxt} numberOfLines={1}>{bookFolder.name}</Text>
                     </View>
                   ) : null}
 
@@ -718,6 +726,19 @@ const styles = StyleSheet.create({
   folderChipTxtActive: { color: Palette.neonBlue },
   folderDot: { width: 9, height: 9, borderRadius: 5 },
   folderAdd: { borderColor: "rgba(79,140,255,0.5)", borderStyle: "dashed" },
+  folderBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "75%",
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+  },
+  folderBadgeTxt: { color: "#fff", fontSize: 10, fontWeight: "900" },
 
   undoBar: {
     position: "absolute",
