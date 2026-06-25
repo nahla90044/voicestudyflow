@@ -27,6 +27,7 @@ import {
   toggleBookmark,
   type Highlight,
 } from "../../lib/annotations";
+import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
@@ -1141,12 +1142,16 @@ export default function ReaderScreen() {
       {/* وضع القيادة: واجهة كبيرة مبسّطة للقراءة بدون نظر */}
       <Modal visible={drivingMode} animationType="slide" onRequestClose={() => setDrivingMode(false)}>
         <View style={styles.driveWrap}>
-          <Pressable onPress={() => setDrivingMode(false)} style={styles.driveClose} hitSlop={10}>
-            <Ionicons name="close" size={28} color={Palette.textMuted} />
-          </Pressable>
+          {/* شريط علوي: خروج واضح */}
+          <View style={styles.driveTop}>
+            <Pressable onPress={() => setDrivingMode(false)} style={styles.driveExit} hitSlop={8}>
+              <Ionicons name="chevron-down" size={18} color={Palette.text} />
+              <Text style={styles.driveExitTxt}>خروج من القيادة</Text>
+            </Pressable>
+          </View>
 
           <View style={styles.driveTextWrap}>
-            <View style={styles.driveCard}>
+            <GlassCard glow={Palette.neonViolet} radius={Radius.xl} style={{ width: "100%" }} contentStyle={styles.driveCardInner}>
               {activeSentence >= 0 && sentences[activeSentence] ? (
                 <Text style={styles.driveSentence}>
                   {(() => {
@@ -1166,7 +1171,7 @@ export default function ReaderScreen() {
               ) : (
                 <Text style={styles.driveHint}>اضغطي تشغيل لبدء القراءة 🎧</Text>
               )}
-            </View>
+            </GlassCard>
           </View>
 
           <Text style={styles.drivePage}>
@@ -1501,21 +1506,25 @@ const styles = StyleSheet.create({
   },
   gotoBtnTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
 
-  driveWrap: { flex: 1, backgroundColor: Palette.bg, padding: Spacing.xl, justifyContent: "center", alignItems: "center" },
-  driveClose: { position: "absolute", top: 54, left: 24, width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
-  driveTextWrap: { flex: 1, justifyContent: "center", alignItems: "center", width: "100%" },
-  driveCard: {
-    width: "100%",
-    backgroundColor: Palette.bgElevated,
-    borderRadius: Radius.xl,
+  driveWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: Spacing.xl, paddingTop: 56, paddingBottom: Spacing.xl, alignItems: "center" },
+  driveTop: { width: "100%", alignItems: "center", marginBottom: 8 },
+  driveExit: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: Palette.border,
-    paddingVertical: 28,
-    paddingHorizontal: 22,
+    borderColor: Palette.glassBorder,
   },
-  driveSentence: { color: Palette.textMuted, fontSize: 23, lineHeight: 42, textAlign: "center", fontWeight: "700" },
+  driveExitTxt: { color: Palette.text, fontSize: 14, fontWeight: "800" },
+  driveTextWrap: { flex: 1, justifyContent: "center", alignItems: "center", width: "100%" },
+  driveCardInner: { paddingVertical: 26, paddingHorizontal: 22 },
+  driveSentence: { color: Palette.textMuted, fontSize: 20, lineHeight: 38, textAlign: "center", fontWeight: "700" },
   driveWordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
-  driveHint: { color: Palette.textDim, fontSize: 18, textAlign: "center", fontWeight: "700" },
+  driveHint: { color: Palette.textDim, fontSize: 17, textAlign: "center", fontWeight: "700" },
   drivePage: { color: Palette.textDim, fontSize: 15, fontWeight: "800", marginTop: 18, marginBottom: 18 },
   driveControls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 36, marginBottom: 24 },
   driveNav: { width: 76, height: 76, borderRadius: 38, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
