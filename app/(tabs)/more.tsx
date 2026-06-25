@@ -20,6 +20,9 @@ import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
+import { THEMES } from "../../constants/themes";
+import { useTheme } from "../../lib/themeContext";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   disableDailyReminder,
   enableDailyReminder,
@@ -47,6 +50,7 @@ const ACC_ID = "kbd-more";
 
 export default function MoreScreen() {
   const router = useRouter();
+  const { themeId, setThemeId } = useTheme();
   const [minPerPage, setMinPerPageState] = useState("1.5");
   const [loading, setLoading] = useState(true);
   const [kbVisible, setKbVisible] = useState(false);
@@ -219,6 +223,39 @@ export default function MoreScreen() {
           color={Palette.neonPink}
           style={{ marginHorizontal: 0 }}
         />
+
+        {/* الثيمات */}
+        <GlassCard contentStyle={styles.cardC} glow={Palette.neonPink}>
+          <Text style={styles.title}>مظهر التطبيق (الثيم)</Text>
+          <Text style={styles.help}>اختاري الهوية اللونية التي تريحك ✨</Text>
+          <View style={styles.themeGrid}>
+            {THEMES.map((t) => {
+              const active = t.id === themeId;
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => setThemeId(t.id)}
+                  style={[styles.themeCell, active && { borderColor: t.accent, borderWidth: 2 }]}
+                >
+                  <LinearGradient
+                    colors={t.bg}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.themeSwatch}
+                  >
+                    <View style={[styles.themeDot, { backgroundColor: t.glow1 }]} />
+                    <View style={[styles.themeDot, { backgroundColor: t.glow2 }]} />
+                    <View style={[styles.themeDot, { backgroundColor: t.accent }]} />
+                  </LinearGradient>
+                  <Text style={[styles.themeName, active && { color: t.accent }]}>
+                    {t.emoji} {t.name}
+                  </Text>
+                  {active ? <Text style={[styles.themeActive, { color: t.accent }]}>✓ مفعّل</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </GlassCard>
 
         {/* الاسم ووضع التركيز */}
         <GlassCard contentStyle={styles.cardC} glow={Palette.neonViolet}>
@@ -450,6 +487,28 @@ const styles = StyleSheet.create({
   },
 
   help: { color: "#9fb3c8", lineHeight: 18, textAlign: "right" },
+  themeGrid: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 10, marginTop: 4 },
+  themeCell: {
+    width: "47%",
+    flexGrow: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    padding: 8,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 6,
+  },
+  themeSwatch: {
+    height: 54,
+    borderRadius: 10,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  themeDot: { width: 12, height: 12, borderRadius: 6 },
+  themeName: { color: "#e6eefc", fontSize: 13, fontWeight: "800", textAlign: "center" },
+  themeActive: { fontSize: 11, fontWeight: "900", textAlign: "center" },
   focusRow: {
     flexDirection: "row-reverse",
     alignItems: "center",

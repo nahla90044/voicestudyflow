@@ -8,6 +8,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AnimatedSplash } from "../components/brand/animated-splash";
 import { Palette } from "../constants/design";
+import { ThemeProvider } from "../lib/themeContext";
 import { ONBOARDING_KEY } from "./onboarding";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -32,6 +33,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
       <SafeAreaProvider>
         <StatusBar style="light" />
         <Stack
@@ -46,6 +48,7 @@ export default function RootLayout() {
         </Stack>
         {booting ? <AnimatedSplash /> : null}
       </SafeAreaProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
