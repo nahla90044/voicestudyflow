@@ -1,6 +1,7 @@
 // app/(tabs)/calendar.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -136,6 +137,7 @@ function hashColor(id: string) {
 }
 
 export default function CalendarScreen() {
+  const router = useRouter();
   const [mode, setMode] = useState<ViewMode>("weekly");
   const [cursorISO, setCursorISO] = useState(todayISO());
 
@@ -146,22 +148,55 @@ export default function CalendarScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<CalendarBlock | null>(null);
   const [unitLabel, setUnitLabel] = useState<string | null>(null); // وحدة المنهج لهذا اليوم
+  const [unitLoading, setUnitLoading] = useState(false);
+  const unitCache = useRef<Map<string, string | null>>(new Map());
 
-  // عند فتح جلسة لكتاب له منهج: اعرض وحدة المنهج المقابلة لتاريخها
+  // عند فتح جلسة لكتاب له منهج: اعرض وحدة المنهج المقابلة لتاريخها (مع تخزين مؤقت للسرعة)
   useEffect(() => {
-    setUnitLabel(null);
     const s = selected as any;
-    if (!s || s.kind !== "session" || !s.bookId) return;
+    if (!s || s.kind !== "session" || !s.bookId) {
+      setUnitLabel(null);
+      setUnitLoading(false);
+      return;
+    }
+    const key = `${s.bookId}|${s.dateISO}`;
+    if (unitCache.current.has(key)) {
+      setUnitLabel(unitCache.current.get(key) ?? null);
+      setUnitLoading(false);
+      return;
+    }
+    setUnitLabel(null);
+    setUnitLoading(true);
     let cancelled = false;
     getUnitForDate(s.bookId, s.dateISO)
       .then((u) => {
-        if (!cancelled && u) setUnitLabel(`${u.index + 1}. ${u.title}`);
+        const label = u ? `${u.index + 1}. ${u.title}` : null;
+        unitCache.current.set(key, label);
+        if (!cancelled) setUnitLabel(label);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setUnitLoading(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [selected]);
+
+  // فتح الكتاب من جلسة الخطة
+  async function openBookFromSession(b: CalendarBlock) {
+    if (!b.bookId) return;
+    setSheetOpen(false);
+    try {
+      const { data } = await supabase.from("books").select("pdf_path,title").eq("id", b.bookId).maybeSingle();
+      if (data?.pdf_path) {
+        router.push({
+          pathname: "/reader/[id]",
+          params: { id: b.bookId, title: data.title ?? b.bookTitle ?? "", pdf_path: data.pdf_path },
+        });
+      }
+    } catch {}
+  }
 
   // تكبير
   const [fullOpen, setFullOpen] = useState(false);
@@ -495,14 +530,6 @@ export default function CalendarScreen() {
           <Text style={styles.sectionTitle}>
             {mode === "daily" ? "جدول اليوم" : mode === "weekly" ? "الجدول الأسبوعي" : "الجدول الشهري"}
           </Text>
-
-          <View style={{ flexDirection: "row-reverse", gap: 10 }}>
-            {/* زر تكبير */}
-            <Pressable onPress={() => setFullOpen(true)} style={styles.zoomBtn}>
-              <Ionicons name="expand" size={15} color={Palette.primary} />
-              <Text style={styles.zoomTxt}>تكبير</Text>
-            </Pressable>
-          </View>
         </View>
 
         {/* محتوى حسب الوضع */}
@@ -647,46 +674,68 @@ export default function CalendarScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             {selected ? (
               <>
-                <Text style={styles.sheetTitle}>{selected.title}</Text>
+                {/* عنوان: اسم الكتاب/المادة بوضوح */}
+                <Text style={styles.sheetTitle} numberOfLines={2}>
+                  {selected.kind === "session"
+                    ? selected.bookTitle || "جلسة مذاكرة"
+                    : selected.title}
+                </Text>
                 <Text style={styles.sheetMeta}>
-                  {selected.dateISO} • {selected.time ?? "—"} • {selected.kind === "event" ? "حدث" : "جلسة خطة"}
+                  {selected.dateISO}
+                  {selected.minutesPlanned ? ` · ${selected.minutesPlanned} دقيقة` : ""}
+                  {selected.kind === "session" && selected.pagesTarget
+                    ? ` · ${selected.pagesDone ?? 0}/${selected.pagesTarget} صفحة`
+                    : ""}
                 </Text>
 
-                {selected.kind === "session" ? (
-                  <Text style={styles.sheetMeta}>
-                    {selected.bookTitle ? `كتاب: ${selected.bookTitle} • ` : ""}
-                    {selected.minutesPlanned ? `${selected.minutesPlanned} د` : ""}
-                    {selected.pagesTarget ? ` • صفحات: ${selected.pagesDone ?? 0}/${selected.pagesTarget}` : ""}
-                  </Text>
-                ) : (
-                  <Text style={styles.sheetMeta}>النوع: {selected.eventType}</Text>
-                )}
-
-                {unitLabel ? (
+                {/* المنهج اليوم */}
+                {selected.kind === "session" && (unitLoading || unitLabel) ? (
                   <View style={styles.unitChip}>
-                    <Ionicons name="reader-outline" size={14} color={Palette.neonViolet} />
-                    <Text style={styles.unitChipTxt} numberOfLines={2}>المنهج اليوم: {unitLabel}</Text>
+                    <Ionicons name="reader-outline" size={15} color={Palette.neonCyan} />
+                    <Text style={styles.unitChipTxt} numberOfLines={2}>
+                      {unitLoading ? "…المنهج اليوم" : `المنهج اليوم: ${unitLabel}`}
+                    </Text>
                   </View>
                 ) : null}
 
-                <View style={styles.sheetActions}>
-                  <Pressable onPress={() => setStatus(selected, "done")} style={[styles.sheetBtn, styles.greenBtn]}>
-                    <Text style={[styles.sheetBtnTxt, { color: "#0b1220" }]}>✅ تم</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setStatus(selected, "pending")} style={[styles.sheetBtn, styles.grayBtn]}>
-                    <Text style={styles.sheetBtnTxt}>↩︎ غير تم</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setStatus(selected, "more_time")} style={[styles.sheetBtn, styles.orangeBtn]}>
-                    <Text style={styles.sheetBtnTxt}>⏳ يحتاج وقت</Text>
-                  </Pressable>
+                {/* الحالة — اختيار واحد واضح */}
+                <Text style={styles.sheetLabel}>الحالة</Text>
+                <View style={styles.statusRow}>
+                  {([
+                    { k: "done", label: "✅ تم", on: Palette.success },
+                    { k: "more_time", label: "⏳ يحتاج وقت", on: Palette.warn },
+                    { k: "pending", label: "○ لم تتم", on: Palette.textMuted },
+                  ] as const).map((opt) => {
+                    const active = selected.status === opt.k;
+                    return (
+                      <Pressable
+                        key={opt.k}
+                        onPress={() => setStatus(selected, opt.k as TaskStatus)}
+                        style={[
+                          styles.statusPill,
+                          active && { backgroundColor: opt.on + "26", borderColor: opt.on },
+                        ]}
+                      >
+                        <Text style={[styles.statusPillTxt, active && { color: opt.on }]}>{opt.label}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
 
-                <View style={{ flexDirection: "row-reverse", gap: 10, marginTop: 10 }}>
-                  <Pressable onPress={() => openActions(selected)} style={[styles.sheetBtn, styles.grayBtn, { flex: 1 }]}>
-                    <Text style={styles.sheetBtnTxt}>⋯ خيارات</Text>
+                {/* أزرار حقيقية */}
+                {selected.kind === "session" && selected.bookId ? (
+                  <Pressable onPress={() => openBookFromSession(selected)} style={styles.sheetPrimary}>
+                    <Ionicons name="book" size={18} color="#0b1220" />
+                    <Text style={styles.sheetPrimaryTxt}>افتح الكتاب واقرأ</Text>
                   </Pressable>
-                  <Pressable onPress={() => setSheetOpen(false)} style={[styles.sheetBtn, styles.grayBtn, { flex: 1 }]}>
-                    <Text style={styles.sheetBtnTxt}>إغلاق</Text>
+                ) : null}
+
+                <View style={styles.sheetFooter}>
+                  <Pressable onPress={() => handleDelete(selected)} hitSlop={6}>
+                    <Text style={styles.sheetDanger}>حذف</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setSheetOpen(false)} hitSlop={6}>
+                    <Text style={styles.sheetClose}>إغلاق</Text>
                   </Pressable>
                 </View>
               </>
@@ -1211,19 +1260,41 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
     alignItems: "center",
     gap: 8,
-    marginTop: 12,
-    paddingVertical: 10,
+    marginTop: 14,
+    paddingVertical: 11,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: "rgba(124,92,255,0.14)",
+    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: "rgba(124,92,255,0.35)",
+    borderColor: Palette.glassBorder,
   },
-  unitChipTxt: { flex: 1, color: "#cdbdff", fontSize: 13, fontWeight: "800", textAlign: "center" },
-  sheetActions: { flexDirection: "row-reverse", gap: 10, marginTop: 14 },
-  sheetBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
-  sheetBtnTxt: { color: "#fff", fontWeight: "900" },
-  greenBtn: { backgroundColor: "#2ecc71", borderColor: "rgba(46,204,113,0.6)" },
-  orangeBtn: { backgroundColor: "rgba(255,165,0,0.18)", borderColor: "rgba(255,165,0,0.35)" },
-  grayBtn: { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" },
+  unitChipTxt: { flex: 1, color: Palette.text, fontSize: 13, fontWeight: "800", textAlign: "center" },
+
+  sheetLabel: { color: Palette.textDim, fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 16, marginBottom: 8 },
+  statusRow: { flexDirection: "row-reverse", gap: 8 },
+  statusPill: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: Radius.md,
+    alignItems: "center",
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  statusPillTxt: { color: Palette.textMuted, fontWeight: "800", fontSize: 13 },
+
+  sheetPrimary: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 14,
+    paddingVertical: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.neonCyan,
+  },
+  sheetPrimaryTxt: { color: "#0b1220", fontWeight: "900", fontSize: 15 },
+  sheetFooter: { flexDirection: "row-reverse", justifyContent: "space-between", marginTop: 16, paddingHorizontal: 6 },
+  sheetDanger: { color: Palette.danger, fontWeight: "800", fontSize: 14 },
+  sheetClose: { color: Palette.textMuted, fontWeight: "800", fontSize: 14 },
 });
