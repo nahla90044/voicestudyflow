@@ -44,6 +44,7 @@ import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { supabase } from "../../lib/supabase";
 import {
   DEFAULT_VOICE_ID,
+  prefetchText,
   speakText,
   stopSpeaking,
   VOICE_CATALOG,
@@ -611,6 +612,10 @@ export default function ReaderScreen() {
 
     const speakCurrent = () => {
       if (!playingRef.current) return;
+      // تجهيز الجملة التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع
+      if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: pickVoice() });
+      // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل أسرع
+      else if (p < total) extractPdfPageText(pdfPath, p + 1).catch(() => {});
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,

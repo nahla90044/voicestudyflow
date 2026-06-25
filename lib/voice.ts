@@ -350,6 +350,23 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
   }
 }
 
+/**
+ * تحضير صوت نص مسبقًا (تخزينه دون تشغيل) لقراءة سلسة بلا تقطيع.
+ * يُستدعى للجملة التالية أثناء قراءة الحالية. آمن للاستدعاء المتكرر (يتخطّى المخزَّن).
+ */
+export async function prefetchText(
+  text: string,
+  opts: { voiceId?: string; gender?: VoiceGender } = {}
+): Promise<void> {
+  try {
+    const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
+    if (!clean) return;
+    await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
+  } catch {
+    // التحضير المسبق اختياري — لا نُزعج القراءة عند فشله
+  }
+}
+
 /* --------- اختيار أفضل صوت جهاز + التفريق ذكر/أنثى --------- */
 
 function guessGender(name = "", id = ""): VoiceGender | null {
