@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
 import { aiAssist, defineWord, generateFlashcards, type AiAction } from "../../lib/ai";
-import { ingestBook, stopIngest } from "../../lib/ingest";
+import { cachedPageCount, ingestBook, stopIngest } from "../../lib/ingest";
 import { addCards } from "../../lib/flashcards";
 import {
   addHighlight,
@@ -111,6 +111,7 @@ export default function ReaderScreen() {
   const [ingesting, setIngesting] = useState(false);
   const [ingestDone, setIngestDone] = useState(0);
   const [ingestTotal, setIngestTotal] = useState(0);
+  const [fullyLoaded, setFullyLoaded] = useState(false); // الكتاب محمّل بالكامل
 
   // علامات + تظليل + ملاحظات
   const [bookmarks, setBookmarks] = useState<number[]>([]);
@@ -186,6 +187,20 @@ export default function ReaderScreen() {
       setHighlights(hl);
     })();
   }, [bookId]);
+
+  // عند معرفة عدد الصفحات: تحقّق إن كان الكتاب محمّلًا بالكامل مسبقًا
+  useEffect(() => {
+    if (!pdfPath || totalPages <= 0) return;
+    let active = true;
+    cachedPageCount(pdfPath)
+      .then((c) => {
+        if (active && c >= totalPages) setFullyLoaded(true);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [pdfPath, totalPages]);
 
   const isBookmarked = bookmarks.includes(page);
 
@@ -356,7 +371,7 @@ export default function ReaderScreen() {
     }
     setStatus("");
     setVoiceWarn("");
-    setViewMode("text"); // أظهر النص ليبان التحديد المتحرك أثناء القراءة
+    // نحترم وضع العرض الحالي: في «نص» يتحرّك التظليل، وفي «PDF» تتابع الصفحات القراءة
     playingRef.current = true;
     setSpeaking(true);
     playStartRef.current = Date.now();
@@ -498,11 +513,24 @@ export default function ReaderScreen() {
     setIngestTotal(total);
     setIngestDone(0);
     setIngesting(true);
-    await ingestBook(pdfPath, total, (d, t) => {
+    const res = await ingestBook(pdfPath, total, (d, t) => {
       setIngestDone(d);
       setIngestTotal(t);
     });
     setIngesting(false);
+
+    // تحقّق فعلي من عدد الصفحات المخزّنة (نص + علامات فارغة)
+    const cached = await cachedPageCount(pdfPath).catch(() => res.succeeded);
+    if (res.stopped) {
+      showToast(`تم الإيقاف — المحمّل ${cached} من ${total} صفحة`);
+    } else if (res.failed === 0 || cached >= total) {
+      setFullyLoaded(true);
+      showToast(`✅ تم تحميل الكتاب كامل (${total} صفحة) — جاهز للقراءة`);
+    } else {
+      showToast(
+        `تم تحميل ${cached} من ${total}. تعذّر ${res.failed} (غالبًا حد خدمة OCR). اضغطي «تحميل» ثانيةً لإكمالها.`
+      );
+    }
   }
 
   function goBack() {
@@ -523,7 +551,7 @@ export default function ReaderScreen() {
           {typeof title === "string" && title.trim() ? title : "الكتاب"}
         </Text>
 
-        <Pressable onPress={() => { setViewMode("text"); setFullText(true); }} style={styles.iconBtn} hitSlop={8}>
+        <Pressable onPress={() => setFullText(true)} style={styles.iconBtn} hitSlop={8}>
           <Ionicons name="expand" size={18} color={Palette.text} />
         </Pressable>
 
@@ -746,15 +774,23 @@ export default function ReaderScreen() {
         </Text>
 
         {/* تحميل الكتاب كامل */}
-        <Pressable onPress={startIngest} style={styles.ingestBtn}>
+        <Pressable onPress={startIngest} style={styles.ingestBtn} disabled={fullyLoaded && !ingesting}>
           <Ionicons
-            name={ingesting ? "stop-circle" : "cloud-download-outline"}
+            name={
+              fullyLoaded && !ingesting
+                ? "checkmark-circle"
+                : ingesting
+                ? "stop-circle"
+                : "cloud-download-outline"
+            }
             size={16}
-            color={Palette.neonCyan}
+            color={fullyLoaded && !ingesting ? Palette.success : Palette.neonCyan}
           />
-          <Text style={styles.ingestTxt}>
+          <Text style={[styles.ingestTxt, fullyLoaded && !ingesting && { color: Palette.success }]}>
             {ingesting
               ? `جارٍ تحميل الكتاب… ${ingestDone}/${ingestTotal} (إيقاف)`
+              : fullyLoaded
+              ? "✅ الكتاب محمّل بالكامل — جاهز للقراءة"
               : "تحميل الكتاب كامل للقراءة بدون انتظار"}
           </Text>
         </Pressable>
