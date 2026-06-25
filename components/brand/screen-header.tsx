@@ -7,6 +7,7 @@ import React from "react";
 import { StyleSheet, Text, View, type ViewStyle } from "react-native";
 
 import { Palette, Radius, Spacing } from "../../constants/design";
+import { AppDrawer } from "./app-drawer";
 import { FadeIn } from "./fade-in";
 
 type Props = {
@@ -15,6 +16,8 @@ type Props = {
   subtitle?: string;
   color?: string;
   style?: ViewStyle;
+  /** إظهار زر القائمة الجانبية (☰) — مفعّل افتراضيًا */
+  menu?: boolean;
 };
 
 export function ScreenHeader({
@@ -23,6 +26,7 @@ export function ScreenHeader({
   subtitle,
   color = Palette.neonViolet,
   style,
+  menu = true,
 }: Props) {
   return (
     <FadeIn>
@@ -54,6 +58,9 @@ export function ScreenHeader({
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.sub}>{subtitle}</Text> : null}
       </View>
+
+      {/* القائمة الجانبية (☰) على اليسار في RTL */}
+      {menu ? <AppDrawer /> : null}
     </View>
     </FadeIn>
   );
