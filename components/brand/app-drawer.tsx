@@ -9,9 +9,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import { BrandMark } from "./logo";
 
-type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; route: "/more" | "/explore"; color: string };
+type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; route: "/more" | "/explore" | "/pomodoro"; color: string };
 
 const ITEMS: Item[] = [
+  { icon: "timer", label: "مؤقّت التركيز", route: "/pomodoro", color: Palette.neonCyan },
   { icon: "settings", label: "الإعدادات", route: "/more", color: Palette.neonViolet },
   { icon: "file-tray-full", label: "الأرشيف", route: "/explore", color: Palette.neonPink },
 ];
