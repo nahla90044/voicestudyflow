@@ -81,3 +81,71 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
 export async function setUnitDone(pdfPath: string, done: boolean[]): Promise<void> {
   await supabase.from("book_syllabus").update({ done }).eq("pdf_path", pdfPath);
 }
+
+export type UnitSchedule = { startISO: string; endISO: string; dayFrom: number; dayTo: number };
+
+/**
+ * يوزّع وحدات المنهج على أيام المذاكرة في خطة الكتاب (توزيعًا متناسبًا)،
+ * فتحصل كل وحدة على مدى تواريخ تُذاكر فيه. يرجع [] إن لم توجد خطة.
+ */
+export async function getUnitSchedule(
+  bookId: string,
+  unitCount: number
+): Promise<UnitSchedule[]> {
+  if (!bookId || unitCount <= 0) return [];
+
+  const { data: plan } = await supabase
+    .from("study_plans")
+    .select("id")
+    .eq("book_id", bookId)
+    .order("start_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!plan?.id) return [];
+
+  const { data: sessions } = await supabase
+    .from("plan_sessions")
+    .select("session_date,kind,pages_target")
+    .eq("plan_id", plan.id)
+    .order("session_date");
+
+  const studyDates = (sessions ?? [])
+    .filter((s: any) => s.kind === "study" && (s.pages_target ?? 0) > 0)
+    .map((s: any) => s.session_date as string);
+
+  const D = studyDates.length;
+  if (D === 0) return [];
+
+  const out: UnitSchedule[] = [];
+  for (let i = 0; i < unitCount; i++) {
+    const lo = Math.min(Math.floor((i * D) / unitCount), D - 1);
+    const hi = Math.max(lo, Math.min(Math.floor(((i + 1) * D) / unitCount) - 1, D - 1));
+    out.push({ startISO: studyDates[lo], endISO: studyDates[hi], dayFrom: lo + 1, dayTo: hi + 1 });
+  }
+  return out;
+}
+
+/** أي وحدة من المنهج تخصّ هذا التاريخ (لعرضها في الجدول). */
+export async function getUnitForDate(
+  bookId: string,
+  dateISO: string
+): Promise<{ index: number; title: string } | null> {
+  if (!bookId || !dateISO) return null;
+  const { data: book } = await supabase
+    .from("books")
+    .select("pdf_path")
+    .eq("id", bookId)
+    .maybeSingle();
+  if (!book?.pdf_path) return null;
+
+  const syl = await getSyllabus(book.pdf_path);
+  if (!syl) return null;
+
+  const sched = await getUnitSchedule(bookId, syl.data.units.length);
+  for (let i = 0; i < sched.length; i++) {
+    if (dateISO >= sched[i].startISO && dateISO <= sched[i].endISO) {
+      return { index: i, title: syl.data.units[i].title };
+    }
+  }
+  return null;
+}

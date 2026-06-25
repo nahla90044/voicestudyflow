@@ -18,6 +18,7 @@ import { ScreenHeader } from "../../components/brand/screen-header";
 import { Palette, Radius } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
+import { getUnitForDate } from "../../lib/syllabus";
 
 type ViewMode = "daily" | "weekly" | "monthly";
 
@@ -144,6 +145,23 @@ export default function CalendarScreen() {
   // ملخص (tap)
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<CalendarBlock | null>(null);
+  const [unitLabel, setUnitLabel] = useState<string | null>(null); // وحدة المنهج لهذا اليوم
+
+  // عند فتح جلسة لكتاب له منهج: اعرض وحدة المنهج المقابلة لتاريخها
+  useEffect(() => {
+    setUnitLabel(null);
+    const s = selected as any;
+    if (!s || s.kind !== "session" || !s.bookId) return;
+    let cancelled = false;
+    getUnitForDate(s.bookId, s.dateISO)
+      .then((u) => {
+        if (!cancelled && u) setUnitLabel(`${u.index + 1}. ${u.title}`);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   // تكبير
   const [fullOpen, setFullOpen] = useState(false);
@@ -643,6 +661,13 @@ export default function CalendarScreen() {
                 ) : (
                   <Text style={styles.sheetMeta}>النوع: {selected.eventType}</Text>
                 )}
+
+                {unitLabel ? (
+                  <View style={styles.unitChip}>
+                    <Ionicons name="reader-outline" size={14} color={Palette.neonViolet} />
+                    <Text style={styles.unitChipTxt} numberOfLines={2}>المنهج اليوم: {unitLabel}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.sheetActions}>
                   <Pressable onPress={() => setStatus(selected, "done")} style={[styles.sheetBtn, styles.greenBtn]}>
@@ -1182,6 +1207,19 @@ const styles = StyleSheet.create({
   sheetTitle: { color: Palette.text, fontWeight: "900", fontSize: 20, textAlign: "center" },
   sheetMeta: { color: Palette.textMuted, textAlign: "center", marginTop: 8, lineHeight: 22, fontSize: 13 },
 
+  unitChip: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(124,92,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(124,92,255,0.35)",
+  },
+  unitChipTxt: { flex: 1, color: "#cdbdff", fontSize: 13, fontWeight: "800", textAlign: "center" },
   sheetActions: { flexDirection: "row-reverse", gap: 10, marginTop: 14 },
   sheetBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: "center", borderWidth: 1 },
   sheetBtnTxt: { color: "#fff", fontWeight: "900" },

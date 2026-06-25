@@ -15,24 +15,49 @@ import { Palette, Radius, Spacing } from "../../constants/design";
 import {
   generateSyllabus,
   getSyllabus,
+  getUnitSchedule,
   setUnitDone,
   type Syllabus,
+  type UnitSchedule,
 } from "../../lib/syllabus";
 
+const AR_MONTHS = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+];
+function fmtISO(iso: string): string {
+  const p = (iso || "").split("-");
+  if (p.length < 3) return iso;
+  return `${Number(p[2])} ${AR_MONTHS[Number(p[1]) - 1] ?? ""}`.trim();
+}
+function fmtRange(s: UnitSchedule): string {
+  return s.startISO === s.endISO ? fmtISO(s.startISO) : `${fmtISO(s.startISO)} – ${fmtISO(s.endISO)}`;
+}
+
 export default function SyllabusScreen() {
-  const { title, pdf_path } = useLocalSearchParams<{
+  const { id, title, pdf_path } = useLocalSearchParams<{
     id?: string;
     title?: string;
     pdf_path?: string;
   }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
+  const bookId = typeof id === "string" ? id : "";
   const bookTitle = typeof title === "string" ? title : "المنهج الدراسي";
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [syl, setSyl] = useState<Syllabus | null>(null);
   const [done, setDone] = useState<boolean[]>([]);
+  const [sched, setSched] = useState<UnitSchedule[]>([]);
   const [err, setErr] = useState("");
+
+  async function loadSchedule(unitCount: number) {
+    try {
+      setSched(await getUnitSchedule(bookId, unitCount));
+    } catch {
+      setSched([]);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -41,6 +66,7 @@ export default function SyllabusScreen() {
         if (r) {
           setSyl(r.data);
           setDone(r.done.length === r.data.units.length ? r.done : new Array(r.data.units.length).fill(false));
+          await loadSchedule(r.data.units.length);
         }
       } finally {
         setLoading(false);
@@ -55,6 +81,7 @@ export default function SyllabusScreen() {
       const data = await generateSyllabus(pdfPath);
       setSyl(data);
       setDone(new Array(data.units.length).fill(false));
+      await loadSchedule(data.units.length);
     } catch (e: any) {
       setErr(e?.message ?? "تعذّر إنشاء المنهج");
     } finally {
@@ -84,6 +111,7 @@ export default function SyllabusScreen() {
         (u, i) => `
         <div class="unit">
           <h3>${i + 1}. ${esc(u.title)}</h3>
+          ${sched[i] ? `<p class="when">📅 ذاكريها: ${esc(fmtRange(sched[i]))}</p>` : ""}
           ${u.topics.length ? `<ul>${u.topics.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
           ${u.outcome ? `<p class="out">🎯 ${esc(u.outcome)}</p>` : ""}
         </div>`
@@ -102,6 +130,7 @@ export default function SyllabusScreen() {
       ul { margin: 6px 0; padding-inline-start: 20px; }
       li { margin: 3px 0; }
       .out { color: #0a7d52; font-size: 13px; margin: 6px 0 0; }
+      .when { color: #0a6ed1; font-size: 12.5px; margin: 2px 0 6px; font-weight: 700; }
       .tips { margin-top: 18px; }
       .box { display:inline-block; width:14px; height:14px; border:1.5px solid #5b3df5; border-radius:4px; margin-inline-start:8px; vertical-align:middle; }
     </style></head><body>
@@ -172,6 +201,11 @@ export default function SyllabusScreen() {
               <View style={styles.progTrack}>
                 <View style={[styles.progFill, { width: `${pct}%` }]} />
               </View>
+              {sched.length === 0 && (
+                <Text style={[styles.noPlanHint, { marginTop: 12 }]}>
+                  💡 أنشئي خطة لهذا الكتاب (زر «حفظ + إنشاء خطة ذكية») لتظهر أيام مذاكرة كل وحدة هنا.
+                </Text>
+              )}
             </GlassCard>
 
             {/* الوحدات (تشيك ليست) */}
@@ -188,6 +222,15 @@ export default function SyllabusScreen() {
                         {i + 1}. {u.title}
                       </Text>
                     </View>
+                    {sched[i] && (
+                      <View style={styles.schedRow}>
+                        <Ionicons name="calendar-outline" size={13} color={Palette.neonCyan} />
+                        <Text style={styles.schedTxt}>
+                          ذاكريها: {fmtRange(sched[i])}{"  ·  "}اليوم {sched[i].dayFrom}
+                          {sched[i].dayTo !== sched[i].dayFrom ? `–${sched[i].dayTo}` : ""}
+                        </Text>
+                      </View>
+                    )}
                     {u.topics.map((t, k) => (
                       <View key={k} style={styles.topicRow}>
                         <Text style={styles.topicDot}>•</Text>
@@ -270,6 +313,21 @@ const styles = StyleSheet.create({
   checkOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
   unitTitle: { flex: 1, color: Palette.text, fontSize: 16, fontWeight: "800", lineHeight: 26 },
   unitTitleDone: { color: Palette.textDim, textDecorationLine: "line-through" },
+  schedRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingStart: 36,
+  },
+  schedTxt: { color: Palette.neonCyan, fontSize: 12.5, fontWeight: "800" },
+  noPlanHint: {
+    color: Palette.textDim,
+    fontSize: 12.5,
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
   topicRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 6, marginTop: 6, paddingStart: 36 },
   topicDot: { color: Palette.neonViolet, fontSize: 15, lineHeight: 22 },
   topicTxt: { flex: 1, color: Palette.textMuted, fontSize: 14, lineHeight: 22 },
