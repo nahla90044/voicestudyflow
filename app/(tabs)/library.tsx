@@ -6,6 +6,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +21,15 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
+import {
+  addFolder,
+  getAssignments,
+  getFolders,
+  removeFolder,
+  renameFolder,
+  setBookFolder,
+  type Folder,
+} from "../../lib/folders";
 import { getPageImage } from "../../lib/pageImage";
 import { supabase } from "../../lib/supabase";
 
@@ -87,8 +97,20 @@ export default function LibraryScreen() {
   const [renameValue, setRenameValue] = useState("");
   const [renameBook, setRenameBook] = useState<BookRow | null>(null);
 
+  // المجلدات
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [assign, setAssign] = useState<Record<string, string>>({});
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+
+  async function loadFolders() {
+    const [f, a] = await Promise.all([getFolders(), getAssignments()]);
+    setFolders(f);
+    setAssign(a);
+  }
+
   useEffect(() => {
     load();
+    loadFolders();
 
     // ✅ Realtime: books + study_plans
     const ch = supabase
@@ -268,6 +290,7 @@ export default function LibraryScreen() {
     if (q) list = list.filter((b) => (b.title || "").toLowerCase().includes(q));
     if (filter === "withPlan") list = list.filter((b) => !!b.plan);
     else if (filter === "noPlan") list = list.filter((b) => !b.plan);
+    if (selectedFolder) list = list.filter((b) => assign[b.id] === selectedFolder);
 
     const sorted = [...list];
     if (sortBy === "title") {
@@ -280,7 +303,64 @@ export default function LibraryScreen() {
       });
     }
     return sorted;
-  }, [rows, query, filter, sortBy]);
+  }, [rows, query, filter, sortBy, selectedFolder, assign]);
+
+  const folderCount = (id: string) => Object.values(assign).filter((v) => v === id).length;
+
+  function createFolder() {
+    Alert.prompt?.("مجلد جديد", "اسم المجلد", async (name?: string) => {
+      if (name && name.trim()) {
+        const f = await addFolder(name);
+        await loadFolders();
+        setSelectedFolder(f.id);
+      }
+    });
+  }
+
+  function editFolder(f: Folder) {
+    Alert.alert(f.name, "خيارات المجلد", [
+      { text: "إلغاء", style: "cancel" },
+      {
+        text: "إعادة تسمية",
+        onPress: () =>
+          Alert.prompt?.("إعادة تسمية", "الاسم الجديد", async (name?: string) => {
+            if (name && name.trim()) {
+              await renameFolder(f.id, name);
+              loadFolders();
+            }
+          }, undefined, f.name),
+      },
+      {
+        text: "حذف المجلد",
+        style: "destructive",
+        onPress: async () => {
+          await removeFolder(f.id);
+          if (selectedFolder === f.id) setSelectedFolder(null);
+          loadFolders();
+        },
+      },
+    ]);
+  }
+
+  function moveBookToFolder(book: BookRow) {
+    const buttons: any[] = folders.map((f) => ({
+      text: assign[book.id] === f.id ? `✓ ${f.name}` : f.name,
+      onPress: async () => {
+        await setBookFolder(book.id, f.id);
+        loadFolders();
+      },
+    }));
+    buttons.push({
+      text: "بدون مجلد",
+      onPress: async () => {
+        await setBookFolder(book.id, null);
+        loadFolders();
+      },
+    });
+    buttons.push({ text: "إنشاء مجلد جديد", onPress: createFolder });
+    buttons.push({ text: "إلغاء", style: "cancel" });
+    Alert.alert("نقل إلى مجلد", book.title, buttons);
+  }
 
   function cycleSort() {
     setSortBy((s) => (s === "new" ? "old" : s === "old" ? "title" : "new"));
@@ -336,6 +416,48 @@ export default function LibraryScreen() {
             <Text style={styles.sortTxt}>{sortLabel}</Text>
           </Pressable>
         </View>
+
+        {/* المجلدات */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.folderRow}
+        >
+          <Pressable
+            onPress={() => setSelectedFolder(null)}
+            style={[styles.folderChip, !selectedFolder && styles.folderChipActive]}
+          >
+            <Text style={[styles.folderChipTxt, !selectedFolder && styles.folderChipTxtActive]}>
+              📚 الكل
+            </Text>
+          </Pressable>
+
+          {folders.map((f) => {
+            const active = selectedFolder === f.id;
+            return (
+              <Pressable
+                key={f.id}
+                onPress={() => setSelectedFolder(f.id)}
+                onLongPress={() => editFolder(f)}
+                style={[
+                  styles.folderChip,
+                  { borderColor: f.color + "66" },
+                  active && { backgroundColor: f.color + "26", borderColor: f.color },
+                ]}
+              >
+                <View style={[styles.folderDot, { backgroundColor: f.color }]} />
+                <Text style={[styles.folderChipTxt, active && { color: f.color }]}>
+                  {f.name} ({folderCount(f.id)})
+                </Text>
+              </Pressable>
+            );
+          })}
+
+          <Pressable onPress={createFolder} style={[styles.folderChip, styles.folderAdd]}>
+            <Ionicons name="add" size={15} color={Palette.neonBlue} />
+            <Text style={[styles.folderChipTxt, { color: Palette.neonBlue }]}>مجلد</Text>
+          </Pressable>
+        </ScrollView>
       </View>
 
       <FlatList
@@ -356,6 +478,9 @@ export default function LibraryScreen() {
               onLongPress={() => {
                 Alert.alert(item.title, "اختر إجراءً", [
                   { text: "إلغاء", style: "cancel" },
+
+                  // 📁 نقل إلى مجلد
+                  { text: "📁 نقل إلى مجلد", onPress: () => moveBookToFolder(item) },
 
                   // 📋 المنهج الدراسي (syllabus)
                   {
@@ -576,6 +701,23 @@ const styles = StyleSheet.create({
     borderColor: "rgba(124,92,255,0.5)",
   },
   syllabusChipTxt: { color: "#cdbdff", fontSize: 12, fontWeight: "800" },
+  folderRow: { flexDirection: "row-reverse", gap: 8, paddingTop: 10, paddingHorizontal: 2 },
+  folderChip: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+  folderChipActive: { backgroundColor: "rgba(79,140,255,0.2)", borderColor: Palette.neonBlue },
+  folderChipTxt: { color: "#c9d4e2", fontSize: 13, fontWeight: "800" },
+  folderChipTxtActive: { color: Palette.neonBlue },
+  folderDot: { width: 9, height: 9, borderRadius: 5 },
+  folderAdd: { borderColor: "rgba(79,140,255,0.5)", borderStyle: "dashed" },
 
   undoBar: {
     position: "absolute",
