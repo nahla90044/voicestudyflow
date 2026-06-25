@@ -48,7 +48,6 @@ export type VoiceOption = {
 export const VOICE_CATALOG: VoiceOption[] = [
   { id: "nasser", name: "ناصر · سعودي", voiceId: "3GnbqfjaW8xI6hRTVx4Y", gender: "male" },
   { id: "ahmed", name: "أحمد · سعودي", voiceId: "etJo0VNXVmjmd5XDR7lJ", gender: "male" },
-  { id: "heba", name: "هبة · سعودي", voiceId: "E4GutuQ39akNBbiYuhh2", gender: "female" },
   { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female" },
   { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female" },
   { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female" },

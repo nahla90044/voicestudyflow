@@ -31,11 +31,14 @@ export async function extractPdfPageText(
       .eq("pdf_path", pdfPath)
       .eq("page", page)
       .maybeSingle();
-    if (data?.text && String(data.text).trim().length >= MIN_REAL_TEXT) {
+    if (data) {
+      // صفحة محفوظة (نص حقيقي أو علامة "فارغة") → أرجعها فورًا
+      const cachedText = String(data.text ?? "");
+      const real = cachedText.trim().length >= MIN_REAL_TEXT && data.source !== "empty";
       return {
         page,
         totalPages: Number(data.total_pages ?? 0),
-        text: String(data.text),
+        text: real ? cachedText : "",
         ocr: data.source === "ocr",
       };
     }
@@ -75,27 +78,31 @@ export async function extractPdfPageText(
     }
   }
 
-  // 4) نظّف النص بالذكاء (يصلح المسافات وأخطاء المسح) قبل التخزين
-  if (text.trim().length >= MIN_REAL_TEXT) {
+  const hasRealText = text.trim().length >= MIN_REAL_TEXT;
+
+  // إن فشل الاستخراج تمامًا (خطأ شبكة) ولا نص → لا نخزّن علامة دائمة، نرمي الخطأ
+  if (error && !hasRealText) throw error;
+
+  // 4) صفحة فيها نص حقيقي → نظّفه بالذكاء (يصلح المسافات وأخطاء المسح)
+  if (hasRealText) {
     text = await cleanupText(text);
+  } else {
+    // صفحة فارغة/غلاف/فهرس (علامة مائية فقط) → نتجاهل نصها
+    text = "";
   }
 
-  // 5) خزّن النتيجة الجيدة للمرات القادمة (نص نظيف)
-  if (text.trim().length >= MIN_REAL_TEXT) {
-    try {
-      await supabase.from("page_cache").upsert({
-        pdf_path: pdfPath,
-        page: resolvedPage,
-        text,
-        total_pages: totalPages,
-        source: usedOcr ? "ocr" : "text",
-      });
-    } catch {
-      // التخزين اختياري — لا نفشل القراءة بسببه
-    }
+  // 5) خزّن النتيجة (نص نظيف أو علامة «فارغة») حتى لا نعيد المعالجة
+  try {
+    await supabase.from("page_cache").upsert({
+      pdf_path: pdfPath,
+      page: resolvedPage,
+      text,
+      total_pages: totalPages,
+      source: hasRealText ? (usedOcr ? "ocr" : "text") : "empty",
+    });
+  } catch {
+    // التخزين اختياري — لا نفشل القراءة بسببه
   }
-
-  if (error && text.trim().length === 0) throw error;
 
   return { page: resolvedPage, totalPages, text, ocr: usedOcr };
 }
