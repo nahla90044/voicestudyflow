@@ -15,7 +15,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { aiAssist, defineWord, generateFlashcards, type AiAction } from "../../lib/ai";
+import { LinearGradient } from "expo-linear-gradient";
+import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
 import { cachedPageCount, ingestBook, stopIngest } from "../../lib/ingest";
 import { addCards } from "../../lib/flashcards";
 import {
@@ -136,6 +137,11 @@ export default function ReaderScreen() {
   const [tashkeelMode, setTashkeelMode] = useState(false);
   const tashkeelRef = useRef(false);
   const tashkeelCacheRef = useRef<Map<number, string>>(new Map());
+  // عرض البريزنتيشن: شرائح مولّدة من الصفحة تتنقّل مع الصوت
+  const [presentOpen, setPresentOpen] = useState(false);
+  const [pageSlides, setPageSlides] = useState<Slide[]>([]);
+  const [slidesLoading, setSlidesLoading] = useState(false);
+  const slidesCacheRef = useRef<Map<number, Slide[]>>(new Map());
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -374,6 +380,43 @@ export default function ReaderScreen() {
       }, next * 60 * 1000);
     }
   }
+
+  // البريزنتيشن: ولّد شرائح الصفحة الحالية عند فتح العرض أو تغيّر الصفحة
+  useEffect(() => {
+    if (!presentOpen || sentences.length === 0) return;
+    const p = page;
+    if (slidesCacheRef.current.has(p)) {
+      setPageSlides(slidesCacheRef.current.get(p)!);
+      return;
+    }
+    let active = true;
+    setSlidesLoading(true);
+    setPageSlides([]);
+    (async () => {
+      try {
+        const sl = await generateSlides(sentences.join(" ").slice(0, 4000));
+        if (!active) return;
+        slidesCacheRef.current.set(p, sl);
+        setPageSlides(sl);
+      } catch {
+        if (active) setPageSlides([]);
+      } finally {
+        if (active) setSlidesLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [presentOpen, page, sentences.length]);
+
+  // الشريحة الحالية تتبع موضع القراءة في الصفحة
+  const slideIdx =
+    pageSlides.length > 0
+      ? Math.min(
+          pageSlides.length - 1,
+          Math.floor((Math.max(0, activeSentence) / Math.max(1, sentences.length)) * pageSlides.length)
+        )
+      : 0;
 
   // وضع التركيز: حمّل الاسم ودرجة المناداة
   useEffect(() => {
@@ -1069,6 +1112,11 @@ export default function ReaderScreen() {
               {listenArabic ? "الترجمة مُفعّلة" : "🌐 بالعربية"}
             </Text>
           </Pressable>
+
+          <Pressable onPress={() => setPresentOpen(true)} style={[styles.aidBtn, styles.presBtn]}>
+            <Ionicons name="easel" size={14} color="#0b1220" />
+            <Text style={[styles.aidTxt, { color: "#0b1220" }]} numberOfLines={1}>🎬 عرض</Text>
+          </Pressable>
         </View>
 
         {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
@@ -1496,9 +1544,87 @@ export default function ReaderScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* عرض البريزنتيشن أثناء القراءة */}
+      <Modal visible={presentOpen} animationType="slide" onRequestClose={() => setPresentOpen(false)}>
+        <View style={styles.presWrap}>
+          {/* شريط علوي */}
+          <View style={styles.presTop}>
+            <Pressable onPress={() => setPresentOpen(false)} style={styles.presExit} hitSlop={8}>
+              <Ionicons name="chevron-down" size={18} color={Palette.text} />
+              <Text style={styles.presExitTxt}>خروج</Text>
+            </Pressable>
+            <Text style={styles.presPage}>صفحة {page}</Text>
+          </View>
+
+          {/* الشريحة */}
+          <View style={styles.presStage}>
+            {slidesLoading ? (
+              <View style={styles.presCenter}>
+                <ActivityIndicator color={Palette.neonCyan} />
+                <Text style={styles.presHint}>جارٍ تجهيز الشرائح…</Text>
+              </View>
+            ) : pageSlides.length === 0 ? (
+              <View style={styles.presCenter}>
+                <Ionicons name="easel-outline" size={48} color={Palette.textDim} />
+                <Text style={styles.presHint}>
+                  شغّلي القراءة لتظهر الشرائح، أو تأكّدي من رصيد الذكاء.
+                </Text>
+              </View>
+            ) : (
+              (() => {
+                const s = pageSlides[slideIdx];
+                const c = MM_PRES_COLORS[slideIdx % MM_PRES_COLORS.length];
+                return (
+                  <View style={[styles.slideCard, { borderColor: c + "66", shadowColor: c }]}>
+                    <LinearGradient
+                      colors={[c + "26", "transparent"]}
+                      start={{ x: 1, y: 0 }}
+                      end={{ x: 0, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <Text style={styles.slideEmoji}>{s.emoji}</Text>
+                    <Text style={[styles.slideTitle, { color: c }]}>{s.title}</Text>
+                    <View style={styles.slideBullets}>
+                      {s.bullets.map((b, bi) => (
+                        <View key={bi} style={styles.slideBulletRow}>
+                          <View style={[styles.slideDot, { backgroundColor: c }]} />
+                          <Text style={styles.slideBulletTxt}>{b}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })()
+            )}
+          </View>
+
+          {/* نقاط الشرائح + تشغيل */}
+          {pageSlides.length > 0 ? (
+            <View style={styles.presDots}>
+              {pageSlides.map((_, di) => (
+                <View
+                  key={di}
+                  style={[styles.presDot, di === slideIdx && styles.presDotOn]}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          <Pressable onPress={togglePlay} style={styles.presPlay}>
+            {busy ? (
+              <ActivityIndicator color="#0b1220" />
+            ) : (
+              <Ionicons name={speaking ? "pause" : "play"} size={30} color="#0b1220" />
+            )}
+          </Pressable>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+const MM_PRES_COLORS = ["#7c5cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d", "#4f8cff"];
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Palette.bg },
@@ -1891,6 +2017,57 @@ const styles = StyleSheet.create({
   aidTxt: { fontSize: 12.5, fontWeight: "800" },
   tashToggle: { backgroundColor: "rgba(124,92,255,0.12)", borderColor: "rgba(124,92,255,0.4)" },
   tashToggleOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
+  presBtn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+
+  presWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: 16, paddingTop: 54, paddingBottom: 24 },
+  presTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  presExit: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  presExitTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
+  presPage: { color: Palette.textDim, fontSize: 13, fontWeight: "800" },
+  presStage: { flex: 1, justifyContent: "center" },
+  presCenter: { alignItems: "center", gap: 12 },
+  presHint: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22, paddingHorizontal: 24 },
+  slideCard: {
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    backgroundColor: Palette.bgElevated,
+    padding: 26,
+    overflow: "hidden",
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+    minHeight: 320,
+    justifyContent: "center",
+  },
+  slideEmoji: { fontSize: 52, textAlign: "center", marginBottom: 10 },
+  slideTitle: { fontSize: 24, fontWeight: "900", textAlign: "center", lineHeight: 36, marginBottom: 18 },
+  slideBullets: { gap: 12 },
+  slideBulletRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 10 },
+  slideDot: { width: 9, height: 9, borderRadius: 5, marginTop: 9 },
+  slideBulletTxt: { flex: 1, color: Palette.text, fontSize: 17, lineHeight: 28, fontWeight: "600", textAlign: "right" },
+  presDots: { flexDirection: "row-reverse", justifyContent: "center", gap: 7, marginVertical: 16 },
+  presDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Palette.surfaceStrong ?? "rgba(255,255,255,0.18)" },
+  presDotOn: { backgroundColor: Palette.neonCyan, width: 22 },
+  presPlay: {
+    alignSelf: "center",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Palette.neonCyan,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   voiceChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,

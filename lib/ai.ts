@@ -12,7 +12,30 @@ export type AiAction =
   | "unitquiz"
   | "translate"
   | "mindmap"
-  | "tashkeel";
+  | "tashkeel"
+  | "slides";
+
+export type Slide = { emoji: string; title: string; bullets: string[] };
+
+/** يولّد شرائح عرض تقديمي من نص (عنوان + نقاط + إيموجي). */
+export async function generateSlides(text: string): Promise<Slide[]> {
+  const raw = await aiAssist("slides", text);
+  const m = raw.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try {
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((s: any) => ({
+        emoji: String(s?.emoji ?? "📌").trim() || "📌",
+        title: String(s?.title ?? "").trim(),
+        bullets: Array.isArray(s?.bullets) ? s.bullets.map((b: any) => String(b).trim()).filter(Boolean) : [],
+      }))
+      .filter((s: Slide) => s.title || s.bullets.length);
+  } catch {
+    return [];
+  }
+}
 
 /** ينظّف نصًا مستخرجًا آليًا (يصلح المسافات وأخطاء OCR) دون تغيير المعنى. */
 // يزيل مقدمات يضيفها الموديل أحيانًا مثل «النص المصحّح:» من بداية النص
