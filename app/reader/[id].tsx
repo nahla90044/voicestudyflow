@@ -412,6 +412,12 @@ export default function ReaderScreen() {
     });
   }
 
+  // يحوّل نص الرقم (عربي ١٢٣ أو إنجليزي 123) إلى عدد
+  function toPageNum(s: string): number {
+    const western = s.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+    return parseInt(western || "0", 10);
+  }
+
   // الانتقال لصفحة محددة. إن كانت القراءة شغّالة تكمل منها، وإلا تنتقل للعرض فقط.
   function gotoPage(n: number) {
     const target = Math.max(1, totalPages ? Math.min(totalPages, n) : n);
@@ -1193,21 +1199,20 @@ export default function ReaderScreen() {
             <Text style={styles.dictHint}>اكتبي رقم الصفحة (١ – {totalPages || "؟"})</Text>
             <TextInput
               value={gotoValue}
-              onChangeText={(t) => setGotoValue(t.replace(/[^0-9]/g, ""))}
-              keyboardType="number-pad"
+              onChangeText={(t) => setGotoValue(t.replace(/[^0-9٠-٩]/g, ""))}
               placeholder={`${page}`}
               placeholderTextColor={Palette.placeholder}
               style={styles.gotoInput}
               textAlign="center"
               autoFocus
               onSubmitEditing={() => {
-                const n = parseInt(gotoValue || "0", 10);
+                const n = toPageNum(gotoValue);
                 if (n > 0) gotoPage(n);
               }}
             />
             <Pressable
               onPress={() => {
-                const n = parseInt(gotoValue || "0", 10);
+                const n = toPageNum(gotoValue);
                 if (n > 0) gotoPage(n);
               }}
               style={styles.gotoBtn}
