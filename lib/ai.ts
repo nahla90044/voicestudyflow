@@ -5,11 +5,16 @@ import { supabase } from "./supabase";
 export type AiAction = "summarize" | "ask" | "quiz" | "flashcards" | "cleanup";
 
 /** ينظّف نصًا مستخرجًا آليًا (يصلح المسافات وأخطاء OCR) دون تغيير المعنى. */
+// يزيل مقدمات يضيفها الموديل أحيانًا مثل «النص المصحّح:» من بداية النص
+function stripPreamble(s: string): string {
+  return s.replace(/^\s*[^\n]*النص[^\n]*مصح[^\n]*\n+/u, "").trim();
+}
+
 export async function cleanupText(text: string): Promise<string> {
   if (!text.trim()) return text;
   try {
-    const out = await aiAssist("cleanup", text);
-    return out.trim() || text;
+    const out = stripPreamble(await aiAssist("cleanup", text));
+    return out || text;
   } catch {
     return text; // عند الفشل نُرجع النص كما هو
   }
