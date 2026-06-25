@@ -48,7 +48,7 @@ import {
   stopSpeaking,
   VOICE_CATALOG,
 } from "../../lib/voice";
-import { Palette, Radius, Spacing } from "../../constants/design";
+import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel, getUserName } from "../../lib/settings";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
@@ -1091,31 +1091,24 @@ export default function ReaderScreen() {
           })}
         </ScrollView>
 
-        {/* أدوات القراءة: النطق الدقيق + الترجمة (مجمّعة) */}
+        {/* أدوات القراءة بتدرّجات ألوان التطبيق (بلا أيقونات) */}
         <View style={styles.aidsRow}>
-          <Pressable
-            onPress={toggleTashkeel}
-            style={[styles.aidBtn, styles.tashToggle, tashkeelMode && styles.tashToggleOn]}
-          >
-            <Ionicons name="sparkles" size={14} color={tashkeelMode ? "#0b1220" : Palette.neonViolet} />
-            <Text style={[styles.aidTxt, { color: tashkeelMode ? "#0b1220" : Palette.neonViolet }]} numberOfLines={1}>
-              {tashkeelMode ? "النطق مُفعّل" : "🕌 نطق دقيق"}
-            </Text>
+          <Pressable onPress={toggleTashkeel} style={[styles.aidWrap, tashkeelMode && styles.aidWrapOn]}>
+            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.aidGrad}>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? "النطق مُفعّل" : "نطق دقيق"}</Text>
+            </LinearGradient>
           </Pressable>
 
-          <Pressable
-            onPress={toggleListenArabic}
-            style={[styles.aidBtn, listenArabic && styles.arToggleOn]}
-          >
-            <Ionicons name="language" size={14} color={listenArabic ? "#0b1220" : Palette.neonBlue} />
-            <Text style={[styles.aidTxt, { color: listenArabic ? "#0b1220" : Palette.neonBlue }]} numberOfLines={1}>
-              {listenArabic ? "الترجمة مُفعّلة" : "🌐 بالعربية"}
-            </Text>
+          <Pressable onPress={toggleListenArabic} style={[styles.aidWrap, listenArabic && styles.aidWrapOn]}>
+            <LinearGradient colors={["#22d3ee", "#4f8cff"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.aidGrad}>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? "الترجمة مُفعّلة" : "بالعربية"}</Text>
+            </LinearGradient>
           </Pressable>
 
-          <Pressable onPress={() => setPresentOpen(true)} style={[styles.aidBtn, styles.presBtn]}>
-            <Ionicons name="easel" size={14} color="#0b1220" />
-            <Text style={[styles.aidTxt, { color: "#0b1220" }]} numberOfLines={1}>🎬 عرض</Text>
+          <Pressable onPress={() => setPresentOpen(true)} style={styles.aidWrap}>
+            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.aidGrad}>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>عرض تقديمي</Text>
+            </LinearGradient>
           </Pressable>
         </View>
 
@@ -2002,22 +1995,16 @@ const styles = StyleSheet.create({
   arToggleOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
   arToggleTxt: { color: Palette.neonBlue, fontSize: 12.5, fontWeight: "800" },
   aidsRow: { flexDirection: "row-reverse", gap: 8, marginTop: 8 },
-  aidBtn: {
+  aidWrap: {
     flex: 1,
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 9,
     borderRadius: Radius.pill,
-    backgroundColor: "rgba(79,140,255,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(79,140,255,0.4)",
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-  aidTxt: { fontSize: 12.5, fontWeight: "800" },
-  tashToggle: { backgroundColor: "rgba(124,92,255,0.12)", borderColor: "rgba(124,92,255,0.4)" },
-  tashToggleOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
-  presBtn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  aidWrapOn: { borderColor: "#fff" }, // حلقة بيضاء تدلّ على التفعيل
+  aidGrad: { paddingVertical: 10, alignItems: "center", justifyContent: "center" },
+  aidGradTxt: { color: "#fff", fontSize: 12.5, fontWeight: "900" },
 
   presWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: 16, paddingTop: 54, paddingBottom: 24 },
   presTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
