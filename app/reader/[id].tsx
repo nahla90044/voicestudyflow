@@ -1146,11 +1146,27 @@ export default function ReaderScreen() {
           </Pressable>
 
           <View style={styles.driveTextWrap}>
-            <Text style={styles.driveSentence}>
-              {activeSentence >= 0 && sentences[activeSentence]
-                ? sentences[activeSentence]
-                : "اضغط تشغيل لبدء القراءة"}
-            </Text>
+            <View style={styles.driveCard}>
+              {activeSentence >= 0 && sentences[activeSentence] ? (
+                <Text style={styles.driveSentence}>
+                  {(() => {
+                    let wc = -1;
+                    return sentences[activeSentence].split(/(\s+)/).map((tok, wi) => {
+                      if (!/\S/.test(tok)) return tok;
+                      wc++;
+                      const spoken = wc === activeWord;
+                      return (
+                        <Text key={wi} style={spoken ? styles.driveWordSpoken : undefined}>
+                          {tok}
+                        </Text>
+                      );
+                    });
+                  })()}
+                </Text>
+              ) : (
+                <Text style={styles.driveHint}>اضغطي تشغيل لبدء القراءة 🎧</Text>
+              )}
+            </View>
           </View>
 
           <Text style={styles.drivePage}>
@@ -1487,9 +1503,20 @@ const styles = StyleSheet.create({
 
   driveWrap: { flex: 1, backgroundColor: Palette.bg, padding: Spacing.xl, justifyContent: "center", alignItems: "center" },
   driveClose: { position: "absolute", top: 54, left: 24, width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
-  driveTextWrap: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 8 },
-  driveSentence: { color: Palette.text, fontSize: 30, lineHeight: 52, textAlign: "center", fontWeight: "800" },
-  drivePage: { color: Palette.textDim, fontSize: 16, fontWeight: "800", marginBottom: 18 },
+  driveTextWrap: { flex: 1, justifyContent: "center", alignItems: "center", width: "100%" },
+  driveCard: {
+    width: "100%",
+    backgroundColor: Palette.bgElevated,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    paddingVertical: 28,
+    paddingHorizontal: 22,
+  },
+  driveSentence: { color: Palette.textMuted, fontSize: 23, lineHeight: 42, textAlign: "center", fontWeight: "700" },
+  driveWordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
+  driveHint: { color: Palette.textDim, fontSize: 18, textAlign: "center", fontWeight: "700" },
+  drivePage: { color: Palette.textDim, fontSize: 15, fontWeight: "800", marginTop: 18, marginBottom: 18 },
   driveControls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 36, marginBottom: 24 },
   driveNav: { width: 76, height: 76, borderRadius: 38, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
   drivePlay: { width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
