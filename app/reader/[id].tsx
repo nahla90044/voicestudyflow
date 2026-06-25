@@ -315,8 +315,9 @@ export default function ReaderScreen() {
     }
   }
 
-  // يقرأ صفحة جملة-بجملة، وعند انتهائها ينتقل تلقائيًا للتالية
-  async function playFromPage(p: number, startIdx = 0) {
+  // يقرأ صفحة جملة-بجملة، وعند انتهائها ينتقل تلقائيًا للتالية.
+  // announce: يذكر رقم الصفحة مرة واحدة (عند بدء القراءة/الانتقال اليدوي فقط)
+  async function playFromPage(p: number, startIdx = 0, announce = false) {
     if (!pdfPath) return;
     setBusy(true);
     setStatus(`جارٍ تحضير نص الصفحة ${p}…`);
@@ -345,7 +346,17 @@ export default function ReaderScreen() {
       setBusy(false);
       setStatus("");
       const start = Math.min(Math.max(0, startIdx), sents.length - 1);
-      playSentence(sents, start, res.page, res.totalPages);
+      if (announce && start === 0) {
+        // أعلن رقم الصفحة مرة واحدة ثم اقرأ المحتوى
+        speakText(`الصفحة رقم ${res.page}.`, {
+          voiceId,
+          rate,
+          onDone: () => playSentence(sents, 0, res.page, res.totalPages),
+          onError: () => playSentence(sents, 0, res.page, res.totalPages),
+        });
+      } else {
+        playSentence(sents, start, res.page, res.totalPages);
+      }
     } catch (e: any) {
       setBusy(false);
       setStatus(`تعذّر تحميل النص: ${e?.message ?? "تحقّقي من الاتصال"}`);
@@ -398,7 +409,7 @@ export default function ReaderScreen() {
     setSpeaking(true);
     playStartRef.current = Date.now();
     recordActivity({});
-    playFromPage(target);
+    playFromPage(target, 0, true);
   }
 
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
@@ -435,7 +446,7 @@ export default function ReaderScreen() {
     setSpeaking(true);
     playStartRef.current = Date.now();
     recordActivity({}); // علّم اليوم نشطًا (السلسلة)
-    playFromPage(page, resumeIdxRef.current);
+    playFromPage(page, resumeIdxRef.current, true);
     resumeIdxRef.current = 0;
   }
 
@@ -451,7 +462,7 @@ export default function ReaderScreen() {
       playingRef.current = true;
       setSpeaking(true);
       playStartRef.current = Date.now();
-      playFromPage(next);
+      playFromPage(next, 0, true);
     } else {
       loadSentences(next);
     }
