@@ -2,7 +2,18 @@
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
 import { supabase } from "./supabase";
 
-export type AiAction = "summarize" | "ask" | "quiz" | "flashcards";
+export type AiAction = "summarize" | "ask" | "quiz" | "flashcards" | "cleanup";
+
+/** ينظّف نصًا مستخرجًا آليًا (يصلح المسافات وأخطاء OCR) دون تغيير المعنى. */
+export async function cleanupText(text: string): Promise<string> {
+  if (!text.trim()) return text;
+  try {
+    const out = await aiAssist("cleanup", text);
+    return out.trim() || text;
+  } catch {
+    return text; // عند الفشل نُرجع النص كما هو
+  }
+}
 
 /** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */
 export async function aiAssist(

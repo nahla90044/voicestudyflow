@@ -3,6 +3,7 @@
 //  1) إن كان نص الصفحة مخزّنًا → نُرجعه فورًا (سريع، بدون تكلفة).
 //  2) وإلا: نستخرج من الطبقة النصية (pdf-extract-text)، وإن كانت الصفحة
 //     بلا نص حقيقي (كتاب مصوّر) → OCR عبر ocr-page، ثم نخزّن النتيجة.
+import { cleanupText } from "./ai";
 import { supabase } from "./supabase";
 
 export type PageText = {
@@ -74,7 +75,12 @@ export async function extractPdfPageText(
     }
   }
 
-  // 4) خزّن النتيجة الجيدة للمرات القادمة
+  // 4) نظّف النص بالذكاء (يصلح المسافات وأخطاء المسح) قبل التخزين
+  if (text.trim().length >= MIN_REAL_TEXT) {
+    text = await cleanupText(text);
+  }
+
+  // 5) خزّن النتيجة الجيدة للمرات القادمة (نص نظيف)
   if (text.trim().length >= MIN_REAL_TEXT) {
     try {
       await supabase.from("page_cache").upsert({

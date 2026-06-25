@@ -28,7 +28,13 @@ const SYSTEM: Record<string, string> = {
     "أنت مساعد دراسي. أنشئ من النص التالي خمسة أسئلة قصيرة لاختبار الفهم، متبوعة بإجاباتها. رقّم الأسئلة، ثم اكتب الإجابات في قسم منفصل بعنوان «الإجابات». بالعربية.",
   flashcards:
     'أنت مساعد دراسي. أنشئ من النص التالي بطاقات مراجعة (سؤال/إجابة) موجزة بالعربية. أعد فقط مصفوفة JSON صالحة بالشكل [{"front":"السؤال","back":"الإجابة"}] دون أي نص إضافي أو علامات تنسيق. من 4 إلى 8 بطاقات.',
+  cleanup:
+    "أنت مصحّح نصوص فقط. النص التالي مستخرَج آليًا من كتاب (PDF أو OCR) وفيه أخطاء: كلمات ملتصقة، مسافات ناقصة أو زائدة، وأحيانًا حروف مقروءة خطأ بسبب المسح الضوئي. أعد كتابة النص نفسه بعد إصلاح المسافات والأخطاء الإملائية الواضحة الناتجة عن المسح فقط، مع الحفاظ على المعنى وترتيب الكلام كما هو. ممنوع تمامًا: الإضافة أو الحذف أو التلخيص أو الشرح أو التعليق أو تغيير الصياغة. أعد النص المصحّح فقط دون أي مقدمة.",
 };
+
+// نموذج وحدود لكل إجراء (التنظيف يستخدم نموذجًا سريعًا لأنه يُستدعى لكل صفحة)
+const MODEL: Record<string, string> = { cleanup: "claude-haiku-4-5-20251001" };
+const MAX_TOKENS: Record<string, number> = { cleanup: 4000 };
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -54,13 +60,17 @@ Deno.serve(async (req: Request) => {
 
     const client = new Anthropic({ apiKey });
 
-    const msg = await client.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 1500,
-      output_config: { effort: "low" },
+    const model = MODEL[action] ?? "claude-opus-4-8";
+    const params: Record<string, unknown> = {
+      model,
+      max_tokens: MAX_TOKENS[action] ?? 1500,
       system: SYSTEM[action],
       messages: [{ role: "user", content: userContent }],
-    });
+    };
+    // effort مدعوم في opus فقط
+    if (model.startsWith("claude-opus")) params.output_config = { effort: "low" };
+
+    const msg = await client.messages.create(params as Parameters<typeof client.messages.create>[0]);
 
     const result = msg.content
       .filter((b) => b.type === "text")
