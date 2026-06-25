@@ -1091,16 +1091,16 @@ export default function ReaderScreen() {
           })}
         </ScrollView>
 
-        {/* أدوات القراءة — أزرار متماثلة بنفس تدرّج ألوان التطبيق (بلا أيقونات) */}
+        {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={styles.aidsRow}>
-          <Pressable onPress={toggleTashkeel} style={[styles.aidWrap, tashkeelMode && styles.aidWrapOn]}>
-            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
+          <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
+            <LinearGradient colors={tashkeelMode ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? "النطق مُفعّل" : "نطق دقيق"}</Text>
             </LinearGradient>
           </Pressable>
 
-          <Pressable onPress={toggleListenArabic} style={[styles.aidWrap, listenArabic && styles.aidWrapOn]}>
-            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
+          <Pressable onPress={toggleListenArabic} style={styles.aidWrap}>
+            <LinearGradient colors={listenArabic ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? "الترجمة مُفعّلة" : "الترجمة"}</Text>
             </LinearGradient>
           </Pressable>
@@ -1999,11 +1999,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: Radius.pill,
     overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "transparent",
   },
-  aidWrapOn: { borderColor: "#fff" }, // حلقة بيضاء تدلّ على التفعيل
-  aidGrad: { paddingVertical: 10, alignItems: "center", justifyContent: "center" },
+  aidGrad: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
   aidGradTxt: { color: "#fff", fontSize: 12.5, fontWeight: "900" },
 
   presWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: 16, paddingTop: 54, paddingBottom: 24 },
