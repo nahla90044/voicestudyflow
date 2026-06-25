@@ -135,6 +135,7 @@ export default function ReaderScreen() {
   const pdfViewH = useRef(0);
   const pdfContentH = useRef(0);
   const offsetsRef = useRef<number[]>([]);
+  const resumeIdxRef = useRef(0); // الجملة التي يبدأ منها التشغيل بعد تخطٍّ يدوي
   const playStartRef = useRef<number | null>(null);
 
   // صورة الصفحة الحالية (عالية الدقة، قابلة للتكبير، تتابع القراءة)
@@ -312,7 +313,7 @@ export default function ReaderScreen() {
   }
 
   // يقرأ صفحة جملة-بجملة، وعند انتهائها ينتقل تلقائيًا للتالية
-  async function playFromPage(p: number) {
+  async function playFromPage(p: number, startIdx = 0) {
     if (!pdfPath) return;
     setBusy(true);
     setStatus(`جارٍ تحضير نص الصفحة ${p}…`);
@@ -340,7 +341,8 @@ export default function ReaderScreen() {
 
       setBusy(false);
       setStatus("");
-      playSentence(sents, 0, res.page, res.totalPages);
+      const start = Math.min(Math.max(0, startIdx), sents.length - 1);
+      playSentence(sents, start, res.page, res.totalPages);
     } catch (e: any) {
       setBusy(false);
       setStatus(`تعذّر تحميل النص: ${e?.message ?? "تحقّقي من الاتصال"}`);
@@ -382,6 +384,27 @@ export default function ReaderScreen() {
     });
   }
 
+  // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
+  function skipSentence(delta: number) {
+    const sents = sentences;
+    if (sents.length === 0) return;
+    const base = activeSentence >= 0 ? activeSentence : 0;
+    const target = base + delta;
+
+    // تجاوز حدود الصفحة → الصفحة المجاورة
+    if (target < 0) return goPage(-1);
+    if (target >= sents.length) return goPage(1);
+
+    stopSpeaking();
+    setActiveWord(-1);
+    setActiveSentence(target);
+    if (playingRef.current) {
+      playSentence(sents, target, page, totalPages || sents.length);
+    } else {
+      resumeIdxRef.current = target; // عند الضغط على تشغيل يبدأ من هنا
+    }
+  }
+
   function togglePlay() {
     if (speaking) {
       stop();
@@ -395,7 +418,8 @@ export default function ReaderScreen() {
     setSpeaking(true);
     playStartRef.current = Date.now();
     recordActivity({}); // علّم اليوم نشطًا (السلسلة)
-    playFromPage(page);
+    playFromPage(page, resumeIdxRef.current);
+    resumeIdxRef.current = 0;
   }
 
   // تنقّل بين الصفحات: يحمّل نص الصفحة الجديدة، ويكمل القراءة إن كانت شغّالة
@@ -404,8 +428,8 @@ export default function ReaderScreen() {
     if (next === page) return;
     const wasPlaying = playingRef.current;
     stop();
+    resumeIdxRef.current = 0;
     setPage(next);
-    setViewMode("text");
     if (wasPlaying) {
       playingRef.current = true;
       setSpeaking(true);
@@ -783,6 +807,18 @@ export default function ReaderScreen() {
             <Text style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
               التالية
             </Text>
+          </Pressable>
+        </View>
+
+        {/* التقدّم/التأخّر بين المقاطع داخل الصفحة */}
+        <View style={styles.segRow}>
+          <Pressable onPress={() => skipSentence(-1)} style={styles.segBtn} hitSlop={6}>
+            <Ionicons name="play-skip-forward" size={15} color={Palette.text} />
+            <Text style={styles.segTxt}>المقطع السابق</Text>
+          </Pressable>
+          <Pressable onPress={() => skipSentence(1)} style={styles.segBtn} hitSlop={6}>
+            <Text style={styles.segTxt}>المقطع التالي</Text>
+            <Ionicons name="play-skip-back" size={15} color={Palette.text} />
           </Pressable>
         </View>
 
@@ -1386,6 +1422,19 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.surface,
   },
   navTxt: { color: Palette.text, fontSize: 11, fontWeight: "800" },
+  segRow: { flexDirection: "row-reverse", justifyContent: "center", gap: 10 },
+  segBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  segTxt: { color: Palette.text, fontWeight: "800", fontSize: 12 },
   playBtn: {
     width: 66,
     height: 66,
