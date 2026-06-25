@@ -46,6 +46,7 @@ export type VoiceOption = {
   voiceId: string; // معرّف ElevenLabs
   gender: VoiceGender;
   rate?: number; // سرعة تشغيل خاصة بالصوت (< 1 = أبطأ وأعمق)
+  lang?: "ar" | "en" | "fr"; // لغة الصوت (افتراضي عربي) — لكتب اللغات
 };
 
 // أصوات عربية حقيقية: سعودية واضحة + فصحى + خليجي محايد (مضافة لحساب ElevenLabs).
@@ -61,6 +62,11 @@ export const VOICE_CATALOG: VoiceOption[] = [
   { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male" },
   { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female" },
   { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female" },
+  // أصوات إنجليزية وفرنسية لكتب اللغات (أصوات ElevenLabs الجاهزة)
+  { id: "rachel", name: "Rachel · English", voiceId: "21m00Tcm4TlvDq8ikWAM", gender: "female", lang: "en" },
+  { id: "adam", name: "Adam · English", voiceId: "pNInz6obpgDQGcFmaJgB", gender: "male", lang: "en" },
+  { id: "charlotte", name: "Charlotte · Français", voiceId: "XB0fDUnXU5powFXDhCwa", gender: "female", lang: "fr" },
+  { id: "antoni", name: "Antoni · Français", voiceId: "ErXwobaYiN019PkySvjV", gender: "male", lang: "fr" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;

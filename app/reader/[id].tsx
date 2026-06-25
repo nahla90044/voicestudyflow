@@ -1201,6 +1201,10 @@ export default function ReaderScreen() {
                 <Ionicons name="albums" size={18} color={Palette.neonPink} />
                 <Text style={styles.aiActionTxt}>بطاقات</Text>
               </Pressable>
+              <Pressable style={styles.aiAction} onPress={() => runAi("translate")} disabled={aiBusy}>
+                <Ionicons name="language" size={18} color={Palette.neonBlue} />
+                <Text style={styles.aiActionTxt}>ترجمة</Text>
+              </Pressable>
             </View>
 
             <View style={styles.aiAskRow}>
@@ -1500,9 +1504,10 @@ const styles = StyleSheet.create({
   },
   aiHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   aiTitle: { color: Palette.text, fontSize: 16, fontWeight: "900" },
-  aiActions: { flexDirection: "row-reverse", gap: 10 },
+  aiActions: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 10, justifyContent: "space-between" },
   aiAction: {
-    flex: 1,
+    width: "47.5%",
+    flexGrow: 1,
     flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "center",
