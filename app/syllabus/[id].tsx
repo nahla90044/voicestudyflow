@@ -15,15 +15,19 @@ import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import {
+  generateMindmap,
   generateSyllabus,
   generateUnitQuiz,
   getSyllabus,
   getUnitSchedule,
   setUnitDone,
+  type MindMap,
   type QuizQ,
   type Syllabus,
   type UnitSchedule,
 } from "../../lib/syllabus";
+
+const MM_COLORS = ["#7c5cff", "#4f8cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d"];
 
 const AR_MONTHS = [
   "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
@@ -63,6 +67,11 @@ export default function SyllabusScreen() {
   const [qPicked, setQPicked] = useState<number | null>(null);
   const [qScore, setQScore] = useState(0);
   const [quizDone, setQuizDone] = useState(false);
+
+  // الخريطة الذهنية
+  const [mmUnit, setMmUnit] = useState<number | null>(null);
+  const [mmLoading, setMmLoading] = useState(false);
+  const [mm, setMm] = useState<MindMap | null>(null);
 
   // الملخّص الصوتي
   const [sumUnit, setSumUnit] = useState<number | null>(null);
@@ -105,6 +114,28 @@ export default function SyllabusScreen() {
       setErr(e?.message ?? "تعذّر إنشاء المنهج");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function startMindmap(i: number) {
+    if (!syl) return;
+    const u = syl.units[i];
+    setMmUnit(i);
+    setMmLoading(true);
+    setMm(null);
+    try {
+      const ctx = `وحدة: ${u.title}. المواضيع: ${u.topics.join("، ")}.${u.outcome ? ` ${u.outcome}` : ""}`;
+      const map = await generateMindmap(ctx);
+      if (!map) {
+        setMmUnit(null);
+        setErr("تعذّر إنشاء الخريطة الذهنية.");
+      } else {
+        setMm(map);
+      }
+    } catch {
+      setMmUnit(null);
+    } finally {
+      setMmLoading(false);
     }
   }
 
@@ -387,6 +418,21 @@ export default function SyllabusScreen() {
                         </Text>
                       </Pressable>
                     </View>
+
+                    <Pressable
+                      onPress={() => startMindmap(i)}
+                      disabled={mmLoading}
+                      style={[styles.quizBtn, styles.mmBtn]}
+                    >
+                      {mmLoading && mmUnit === i ? (
+                        <ActivityIndicator size="small" color="#a3e635" />
+                      ) : (
+                        <Ionicons name="git-network" size={15} color="#a3e635" />
+                      )}
+                      <Text style={[styles.quizBtnTxt, { color: "#bef264" }]}>
+                        {mmLoading && mmUnit === i ? "جارٍ الرسم…" : "🗺️ خريطة ذهنية"}
+                      </Text>
+                    </Pressable>
                   </GlassCard>
                 </Pressable>
               );
@@ -522,6 +568,52 @@ export default function SyllabusScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* مودال الخريطة الذهنية */}
+        <Modal
+          visible={mmUnit !== null && !!mm}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setMmUnit(null)}
+        >
+          <View style={styles.quizMask}>
+            <View style={styles.quizSheet}>
+              <View style={styles.quizHeader}>
+                <Text style={styles.quizHeaderTxt}>🗺️ الخريطة الذهنية</Text>
+                <Pressable onPress={() => setMmUnit(null)} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={Palette.textMuted} />
+                </Pressable>
+              </View>
+
+              <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
+                {/* العقدة المركزية */}
+                <View style={styles.mmCenter}>
+                  <Text style={styles.mmCenterTxt}>{mm?.center}</Text>
+                </View>
+                <View style={styles.mmStem} />
+
+                {/* الفروع */}
+                {mm?.branches.map((b, bi) => {
+                  const c = MM_COLORS[bi % MM_COLORS.length];
+                  return (
+                    <View key={bi} style={[styles.mmBranch2, { borderColor: c + "66" }]}>
+                      <View style={[styles.mmBranchHead, { backgroundColor: c + "22" }]}>
+                        <View style={[styles.mmDot, { backgroundColor: c }]} />
+                        <Text style={[styles.mmBranchLabel, { color: c }]}>{b.label}</Text>
+                      </View>
+                      {b.points.map((p, pi) => (
+                        <View key={pi} style={styles.mmPointRow}>
+                          <Text style={[styles.mmPointDash, { color: c }]}>—</Text>
+                          <Text style={styles.mmPointTxt}>{p}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ScreenBackground>
   );
@@ -621,6 +713,30 @@ const styles = StyleSheet.create({
   },
   sumPlayTxt: { color: "#0b1220", fontSize: 15, fontWeight: "900" },
   sumText: { color: Palette.textMuted, fontSize: 15, lineHeight: 28, textAlign: "right" },
+  mmBtn: { marginTop: 8, backgroundColor: "rgba(163,230,53,0.10)", borderColor: "rgba(163,230,53,0.4)" },
+  mmCenter: {
+    alignSelf: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.neonViolet,
+    maxWidth: "90%",
+  },
+  mmCenterTxt: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center" },
+  mmStem: { alignSelf: "center", width: 2, height: 18, backgroundColor: Palette.glassBorder },
+  mmBranch2: {
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.surface,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  mmBranchHead: { flexDirection: "row-reverse", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  mmDot: { width: 10, height: 10, borderRadius: 5 },
+  mmBranchLabel: { flex: 1, fontSize: 15, fontWeight: "900", textAlign: "right" },
+  mmPointRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 8, paddingHorizontal: 16, paddingVertical: 5 },
+  mmPointDash: { fontSize: 14, fontWeight: "900", lineHeight: 22 },
+  mmPointTxt: { flex: 1, color: Palette.textMuted, fontSize: 14, lineHeight: 22, textAlign: "right" },
 
   quizMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   quizSheet: {

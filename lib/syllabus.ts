@@ -99,6 +99,31 @@ export async function generateUnitQuiz(context: string): Promise<QuizQ[]> {
   }
 }
 
+export type MindBranch = { label: string; points: string[] };
+export type MindMap = { center: string; branches: MindBranch[] };
+
+/** يولّد خريطة ذهنية من محتوى وحدة (بالذكاء). */
+export async function generateMindmap(context: string): Promise<MindMap | null> {
+  const raw = await aiAssist("mindmap", context);
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const obj = JSON.parse(m[0]);
+    const branches: MindBranch[] = Array.isArray(obj.branches)
+      ? obj.branches
+          .map((b: any) => ({
+            label: String(b?.label ?? "").trim(),
+            points: Array.isArray(b?.points) ? b.points.map((p: any) => String(p).trim()).filter(Boolean) : [],
+          }))
+          .filter((b: MindBranch) => b.label)
+      : [];
+    if (branches.length === 0) return null;
+    return { center: String(obj.center ?? "").trim() || "الفكرة المركزية", branches };
+  } catch {
+    return null;
+  }
+}
+
 /** يحدّث حالة إنجاز وحدة. */
 export async function setUnitDone(pdfPath: string, done: boolean[]): Promise<void> {
   await supabase.from("book_syllabus").update({ done }).eq("pdf_path", pdfPath);
