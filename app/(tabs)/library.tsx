@@ -4,12 +4,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
+  Image,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassCard } from "../../components/brand/glass-card";
@@ -18,6 +20,7 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
+import { getPageImage } from "../../lib/pageImage";
 import { supabase } from "../../lib/supabase";
 
 type Book = {
@@ -46,6 +49,25 @@ export default function LibraryScreen() {
 
   const [rows, setRows] = useState<BookRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({}); // id → صورة الغلاف (أول صفحة)
+
+  // يجلب صورة أول صفحة كغلاف لكل كتاب (بالتسلسل تفاديًا للحِمل؛ مع تخزين محلي)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const b of rows) {
+        if (thumbs[b.id] || !b.pdf_path) continue;
+        try {
+          const uri = await getPageImage(b.pdf_path, 1);
+          if (cancelled) return;
+          if (uri) setThumbs((prev) => ({ ...prev, [b.id]: uri }));
+        } catch {}
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ✅ “تحت الإجراء”
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
@@ -363,6 +385,20 @@ export default function LibraryScreen() {
                 style={{ flex: 1 }}
               >
                 <View style={styles.cover}>
+                  {thumbs[item.id] ? (
+                    <>
+                      <Image source={{ uri: thumbs[item.id] }} style={styles.coverImg} resizeMode="cover" />
+                      <LinearGradient
+                        colors={["rgba(8,12,22,0.05)", "rgba(8,12,22,0.92)"]}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    </>
+                  ) : (
+                    <View style={styles.coverPlaceholder}>
+                      <Ionicons name="book" size={34} color="rgba(255,255,255,0.25)" />
+                    </View>
+                  )}
+
                   {isActive ? (
                     <View style={styles.activeBadge}>
                       <Text style={styles.activeBadgeText}>تحت الإجراء</Text>
@@ -509,7 +545,10 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: "flex-end",
     backgroundColor: "rgba(255,255,255,0.05)",
+    overflow: "hidden",
   },
+  coverImg: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  coverPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
   activeBadge: {
     position: "absolute",
     top: 10,
