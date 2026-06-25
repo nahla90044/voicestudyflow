@@ -867,51 +867,55 @@ export default function ReaderScreen() {
           </Pressable>
         </View>
 
-        {/* التقدّم/التأخّر بين المقاطع داخل الصفحة */}
-        <View style={styles.segRow}>
-          <Pressable onPress={() => skipSentence(-1)} style={styles.segBtn} hitSlop={6}>
-            <Ionicons name="play-skip-forward" size={15} color={Palette.text} />
-            <Text style={styles.segTxt}>المقطع السابق</Text>
+        {/* أدوات مدمجة في صف واحد: مقطع · سرعة · نوم · انتقال · تحميل */}
+        <View style={styles.toolsRow}>
+          <Pressable onPress={() => skipSentence(-1)} style={styles.toolBtn} hitSlop={4}>
+            <Ionicons name="play-skip-forward" size={17} color={Palette.text} />
           </Pressable>
-          <Pressable onPress={() => skipSentence(1)} style={styles.segBtn} hitSlop={6}>
-            <Text style={styles.segTxt}>المقطع التالي</Text>
-            <Ionicons name="play-skip-back" size={15} color={Palette.text} />
+          <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
+            <Ionicons name="play-skip-back" size={17} color={Palette.text} />
           </Pressable>
-        </View>
-
-        {/* السرعة + مؤقّت النوم */}
-        <View style={styles.extraRow}>
-          <Pressable onPress={cycleSpeed} style={styles.chip}>
-            <Ionicons name="speedometer-outline" size={16} color={Palette.text} />
-            <Text style={styles.chipTxt}>السرعة {rate}x</Text>
+          <Pressable onPress={cycleSpeed} style={styles.toolBtn} hitSlop={4}>
+            <Text style={styles.toolTxt}>{rate}x</Text>
           </Pressable>
-
           <Pressable
             onPress={cycleSleep}
-            style={[styles.chip, sleepMin > 0 && styles.chipActive]}
+            style={[styles.toolBtn, sleepMin > 0 && styles.toolBtnActive]}
+            hitSlop={4}
           >
-            <Ionicons
-              name="moon-outline"
-              size={16}
-              color={sleepMin > 0 ? "#fff" : Palette.text}
-            />
-            <Text style={[styles.chipTxt, sleepMin > 0 && styles.chipTxtActive]}>
-              {sleepMin > 0 ? `${sleepMin} دقيقة` : "مؤقّت النوم"}
-            </Text>
+            <Ionicons name="moon-outline" size={17} color={sleepMin > 0 ? "#fff" : Palette.text} />
           </Pressable>
-
           <Pressable
             onPress={() => {
               setGotoValue(String(page));
               setGotoOpen(true);
             }}
-            style={styles.chip}
+            style={styles.toolBtn}
+            hitSlop={4}
           >
-            <Ionicons name="keypad-outline" size={16} color={Palette.text} />
-            <Text style={styles.chipTxt}>انتقال لصفحة</Text>
+            <Ionicons name="keypad-outline" size={17} color={Palette.text} />
+          </Pressable>
+          <Pressable
+            onPress={startIngest}
+            style={styles.toolBtn}
+            disabled={fullyLoaded && !ingesting}
+            hitSlop={4}
+          >
+            <Ionicons
+              name={
+                fullyLoaded && !ingesting
+                  ? "checkmark-circle"
+                  : ingesting
+                  ? "stop-circle"
+                  : "cloud-download-outline"
+              }
+              size={18}
+              color={fullyLoaded && !ingesting ? Palette.success : Palette.text}
+            />
           </Pressable>
         </View>
 
+        {/* سطر الحالة: الصفحة (قابل للانتقال) + تقدّم التحميل */}
         <Pressable
           onPress={() => {
             setGotoValue(String(page));
@@ -921,29 +925,8 @@ export default function ReaderScreen() {
         >
           <Text style={styles.pageInfo}>
             الصفحة {page}
-            {totalPages ? ` من ${totalPages}` : ""} ⤵︎ انتقال
-          </Text>
-        </Pressable>
-
-        {/* تحميل الكتاب كامل */}
-        <Pressable onPress={startIngest} style={styles.ingestBtn} disabled={fullyLoaded && !ingesting}>
-          <Ionicons
-            name={
-              fullyLoaded && !ingesting
-                ? "checkmark-circle"
-                : ingesting
-                ? "stop-circle"
-                : "cloud-download-outline"
-            }
-            size={16}
-            color={fullyLoaded && !ingesting ? Palette.success : Palette.neonCyan}
-          />
-          <Text style={[styles.ingestTxt, fullyLoaded && !ingesting && { color: Palette.success }]}>
-            {ingesting
-              ? `جارٍ تحميل الكتاب… ${ingestDone}/${ingestTotal} (إيقاف)`
-              : fullyLoaded
-              ? "✅ الكتاب محمّل بالكامل — جاهز للقراءة"
-              : "تحميل الكتاب كامل للقراءة بدون انتظار"}
+            {totalPages ? ` / ${totalPages}` : ""}
+            {ingesting ? `  ·  تحميل ${ingestDone}/${ingestTotal}` : ""}
           </Text>
         </Pressable>
         {ingesting && ingestTotal > 0 ? (
@@ -953,8 +936,6 @@ export default function ReaderScreen() {
             />
           </View>
         ) : null}
-
-        {status ? <Text style={styles.statusTxt}>{status}</Text> : null}
         {voiceWarn ? (
           <Text style={styles.warnTxt}>⚠️ تعذّر الصوت البشري: {voiceWarn}</Text>
         ) : null}
@@ -1550,6 +1531,19 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   segTxt: { color: Palette.text, fontWeight: "800", fontSize: 12 },
+  toolsRow: { flexDirection: "row-reverse", justifyContent: "center", gap: 12, marginTop: 2 },
+  toolBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  toolBtnActive: { backgroundColor: Palette.accent, borderColor: Palette.accent },
+  toolTxt: { color: Palette.text, fontSize: 14, fontWeight: "900" },
   playBtn: {
     width: 66,
     height: 66,
