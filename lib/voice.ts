@@ -262,10 +262,23 @@ async function synthToFile(text: string, gender: VoiceGender, voiceId?: string):
   return file;
 }
 
+// يزيل المصادر/الإحالات بين قوسين (اسم/كتاب/سنة، أو رقم إحالة) من النص المنطوق فقط
+function stripCitations(text: string): string {
+  return text
+    .replace(/[（(]([^()（）]*)[)）]/g, (m, inner: string) => {
+      const isJustNumber = /^[\s\d٠-٩.,،\-]+$/.test(inner);
+      const hasYear = /[\d٠-٩]{3,4}/.test(inner) || /[\d٠-٩]+\s*(هـ|م)\b/.test(inner);
+      const looksCitation = hasYear && (/[،,]/.test(inner) || /[A-Za-zء-ي]/.test(inner));
+      return isJustNumber || looksCitation ? " " : m;
+    })
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
-  // نحوّل الأرقام إلى كلمات عربية للنطق الصحيح (النص المعروض لا يتغيّر)
-  const clean = numbersToArabicWords(text?.trim() ?? "");
+  // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر)
+  const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
   if (!clean) return;
 
   // أوقف أي صوت شغّال أولاً
