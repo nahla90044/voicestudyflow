@@ -555,19 +555,6 @@ export default function LibraryScreen() {
                     <Text style={styles.metaTxt}>لا توجد خطة</Text>
                   )}
                 </View>
-
-                <Pressable
-                  onPress={() =>
-                    router.push({
-                      pathname: "/syllabus/[id]",
-                      params: { id: item.id, title: item.title, pdf_path: item.pdf_path },
-                    })
-                  }
-                  style={styles.syllabusChip}
-                  hitSlop={6}
-                >
-                  <Text style={styles.syllabusChipTxt}>📋 المنهج الدراسي</Text>
-                </Pressable>
               </GlassCard>
             </Pressable>
           );

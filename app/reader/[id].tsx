@@ -1048,21 +1048,28 @@ export default function ReaderScreen() {
           })}
         </ScrollView>
 
-        {/* النطق الدقيق (تشكيل) لكتب الدين والقانون والفصحى */}
-        <Pressable onPress={toggleTashkeel} style={[styles.arToggle, styles.tashToggle, tashkeelMode && styles.tashToggleOn]}>
-          <Ionicons name="sparkles" size={15} color={tashkeelMode ? "#0b1220" : Palette.neonViolet} />
-          <Text style={[styles.arToggleTxt, { color: tashkeelMode ? "#0b1220" : Palette.neonViolet }]}>
-            {tashkeelMode ? "النطق الدقيق مُفعّل (تشكيل)" : "🕌 نطق دقيق (تشكيل للدين والقانون)"}
-          </Text>
-        </Pressable>
+        {/* أدوات القراءة: النطق الدقيق + الترجمة (مجمّعة) */}
+        <View style={styles.aidsRow}>
+          <Pressable
+            onPress={toggleTashkeel}
+            style={[styles.aidBtn, styles.tashToggle, tashkeelMode && styles.tashToggleOn]}
+          >
+            <Ionicons name="sparkles" size={14} color={tashkeelMode ? "#0b1220" : Palette.neonViolet} />
+            <Text style={[styles.aidTxt, { color: tashkeelMode ? "#0b1220" : Palette.neonViolet }]} numberOfLines={1}>
+              {tashkeelMode ? "النطق مُفعّل" : "🕌 نطق دقيق"}
+            </Text>
+          </Pressable>
 
-        {/* الاستماع بالعربية لكتب اللغات (ترجمة فورية) */}
-        <Pressable onPress={toggleListenArabic} style={[styles.arToggle, listenArabic && styles.arToggleOn]}>
-          <Ionicons name="language" size={15} color={listenArabic ? "#0b1220" : Palette.neonBlue} />
-          <Text style={[styles.arToggleTxt, listenArabic && { color: "#0b1220" }]}>
-            {listenArabic ? "الاستماع بالعربية مُفعّل (ترجمة)" : "🌐 استمع بالعربية (ترجمة الكتاب)"}
-          </Text>
-        </Pressable>
+          <Pressable
+            onPress={toggleListenArabic}
+            style={[styles.aidBtn, listenArabic && styles.arToggleOn]}
+          >
+            <Ionicons name="language" size={14} color={listenArabic ? "#0b1220" : Palette.neonBlue} />
+            <Text style={[styles.aidTxt, { color: listenArabic ? "#0b1220" : Palette.neonBlue }]} numberOfLines={1}>
+              {listenArabic ? "الترجمة مُفعّلة" : "🌐 بالعربية"}
+            </Text>
+          </Pressable>
+        </View>
 
         {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
         <View style={styles.controls}>
@@ -1826,7 +1833,8 @@ const styles = StyleSheet.create({
 
   viewer: {
     flex: 1,
-    marginHorizontal: 14,
+    marginHorizontal: 10,
+    marginTop: 6,
     borderRadius: Radius.lg,
     overflow: "hidden",
     backgroundColor: "#000",
@@ -1843,13 +1851,14 @@ const styles = StyleSheet.create({
   },
 
   player: {
-    margin: 14,
-    padding: Spacing.lg,
+    marginHorizontal: 10,
+    marginVertical: 8,
+    padding: Spacing.md,
     borderRadius: Radius.xl,
     backgroundColor: Palette.bgElevated,
     borderWidth: 1,
     borderColor: Palette.border,
-    gap: 12,
+    gap: 9,
   },
   voiceRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 2 },
   arToggle: {
@@ -1866,7 +1875,21 @@ const styles = StyleSheet.create({
   },
   arToggleOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
   arToggleTxt: { color: Palette.neonBlue, fontSize: 12.5, fontWeight: "800" },
-  tashToggle: { backgroundColor: "rgba(124,92,255,0.12)", borderColor: "rgba(124,92,255,0.4)", marginTop: 8 },
+  aidsRow: { flexDirection: "row-reverse", gap: 8, marginTop: 8 },
+  aidBtn: {
+    flex: 1,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: Radius.pill,
+    backgroundColor: "rgba(79,140,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(79,140,255,0.4)",
+  },
+  aidTxt: { fontSize: 12.5, fontWeight: "800" },
+  tashToggle: { backgroundColor: "rgba(124,92,255,0.12)", borderColor: "rgba(124,92,255,0.4)" },
   tashToggleOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
   voiceChip: {
     paddingVertical: 8,
