@@ -51,13 +51,32 @@ Deno.serve(async (req: Request) => {
 
     // نستخرج عناصر النص مع الفواصل: نضيف مسافة بين كل عنصر حتى لا تلتصق
     // الكلمات (مشكلة شائعة في PDF العربي)، ونحترم نهايات الأسطر.
+    // نقرّر المسافات من مواضع الحروف: حرفان متلاصقان (فراغ ضئيل) يترابطان بلا
+    // مسافة، وفراغ كبير = مسافة/كلمة جديدة — يصلح الملفات التي يخرج فيها كل حرف
+    // عنصرًا منفصلًا (حروف مقطّعة).
     const pg = await pdf.getPage(page);
     const content = await pg.getTextContent();
+    type TItem = { str?: string; hasEOL?: boolean; width?: number; height?: number; transform?: number[] };
     let out = "";
-    for (const item of content.items as Array<{ str?: string; hasEOL?: boolean }>) {
+    let prev: { e: number; f: number; w: number; h: number; eol: boolean } | null = null;
+    for (const item of content.items as TItem[]) {
       const s = item?.str ?? "";
-      if (s) out += s + " ";
-      if (item?.hasEOL) out += "\n";
+      if (!s && !item?.hasEOL) continue;
+      const tr = item?.transform ?? [1, 0, 0, 1, 0, 0];
+      const e = tr[4] ?? 0;
+      const f = tr[5] ?? 0;
+      const w = item?.width ?? 0;
+      const h = item?.height || Math.hypot(tr[1] ?? 0, tr[3] ?? 0) || 12;
+      if (prev) {
+        if (prev.eol) out += "\n";
+        else if (Math.abs(f - prev.f) > h * 0.5) out += "\n";
+        else {
+          const gap = Math.abs(e - prev.e) - prev.w; // الفراغ الأفقي بين الحرفين
+          if (gap > h * 0.32) out += " ";
+        }
+      }
+      out += s;
+      prev = { e, f, w, h, eol: !!item?.hasEOL };
     }
     const pageText = out
       .replace(/[ \t]+/g, " ")

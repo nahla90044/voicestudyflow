@@ -87,39 +87,35 @@ export async function extractPdfPageText(
     }
   }
 
-  if (text) text = normalizeArabic(text);
+  if (text) text = normalizeArabic(text); // أحرف العرض المعزولة → قياسية مترابطة
   const hasRealText = text.trim().length >= MIN_REAL_TEXT;
 
   // إن فشل الاستخراج تمامًا (خطأ شبكة) ولا نص → لا نخزّن علامة دائمة، نرمي الخطأ
   if (error && !hasRealText) throw error;
 
-  // 4) صفحة فيها نص حقيقي → نظّفه بالذكاء (يصلح المسافات وأخطاء المسح وفصل الحروف)
-  let cleaned = false;
+  // 4) صفحة فيها نص حقيقي → نحسّنه بالذكاء إن توفّر (يصلح ما تبقّى من مسافات).
+  //    النص بعد الاستخراج المعتمد على المواضع مقروء أصلًا، فنخزّنه في الحالتين.
   if (hasRealText) {
     try {
       text = normalizeArabic(await cleanupTextStrict(text));
-      cleaned = true;
     } catch {
-      cleaned = false; // الذكاء غير متاح (رصيد/شبكة) → نُبقي النص الخام بلا تخزين
+      // الذكاء غير متاح → نُبقي النص المستخرَج (مقروء) كما هو
     }
   } else {
     text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
   }
 
-  // 5) خزّن فقط نصًّا منظَّفًا أو علامة «فارغة». النص غير المنظَّف لا يُخزَّن
-  //    حتى يُعاد تنظيفه تلقائيًا عند توفّر الذكاء (بدل تثبيت نص مقطّع).
-  if (cleaned || !hasRealText) {
-    try {
-      await supabase.from("page_cache").upsert({
-        pdf_path: pdfPath,
-        page: resolvedPage,
-        text,
-        total_pages: totalPages,
-        source: hasRealText ? (usedOcr ? "ocr" : "text") : "empty",
-      });
-    } catch {
-      // التخزين اختياري — لا نفشل القراءة بسببه
-    }
+  // 5) خزّن النتيجة حتى لا نعيد المعالجة
+  try {
+    await supabase.from("page_cache").upsert({
+      pdf_path: pdfPath,
+      page: resolvedPage,
+      text,
+      total_pages: totalPages,
+      source: hasRealText ? (usedOcr ? "ocr" : "text") : "empty",
+    });
+  } catch {
+    // التخزين اختياري — لا نفشل القراءة بسببه
   }
 
   return { page: resolvedPage, totalPages, text, ocr: usedOcr };
