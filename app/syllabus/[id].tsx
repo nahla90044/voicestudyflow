@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassCard } from "../../components/brand/glass-card";
@@ -14,9 +14,11 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import {
   generateSyllabus,
+  generateUnitQuiz,
   getSyllabus,
   getUnitSchedule,
   setUnitDone,
+  type QuizQ,
   type Syllabus,
   type UnitSchedule,
 } from "../../lib/syllabus";
@@ -50,6 +52,15 @@ export default function SyllabusScreen() {
   const [done, setDone] = useState<boolean[]>([]);
   const [sched, setSched] = useState<UnitSchedule[]>([]);
   const [err, setErr] = useState("");
+
+  // كويز الوحدة
+  const [quizUnit, setQuizUnit] = useState<number | null>(null); // الوحدة قيد الاختبار
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quiz, setQuiz] = useState<QuizQ[]>([]);
+  const [qStep, setQStep] = useState(0);
+  const [qPicked, setQPicked] = useState<number | null>(null);
+  const [qScore, setQScore] = useState(0);
+  const [quizDone, setQuizDone] = useState(false);
 
   async function loadSchedule(unitCount: number) {
     try {
@@ -87,6 +98,52 @@ export default function SyllabusScreen() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function startQuiz(i: number) {
+    if (!syl) return;
+    const u = syl.units[i];
+    setQuizUnit(i);
+    setQuizLoading(true);
+    setQuiz([]);
+    setQStep(0);
+    setQPicked(null);
+    setQScore(0);
+    setQuizDone(false);
+    try {
+      const ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
+      const qs = await generateUnitQuiz(ctx);
+      if (qs.length === 0) {
+        setErr("تعذّر إنشاء الكويز، حاولي مرة أخرى.");
+        setQuizUnit(null);
+      } else {
+        setQuiz(qs);
+      }
+    } catch {
+      setQuizUnit(null);
+    } finally {
+      setQuizLoading(false);
+    }
+  }
+
+  function pickAnswer(opt: number) {
+    if (qPicked !== null) return;
+    setQPicked(opt);
+    if (opt === quiz[qStep].answer) setQScore((s) => s + 1);
+  }
+
+  function nextQuestion() {
+    if (qStep + 1 >= quiz.length) {
+      setQuizDone(true);
+    } else {
+      setQStep((s) => s + 1);
+      setQPicked(null);
+    }
+  }
+
+  function closeQuiz() {
+    setQuizUnit(null);
+    setQuiz([]);
   }
 
   async function toggle(i: number) {
@@ -240,6 +297,21 @@ export default function SyllabusScreen() {
                     {!!u.outcome && (
                       <Text style={styles.outcome}>🎯 {u.outcome}</Text>
                     )}
+
+                    <Pressable
+                      onPress={() => startQuiz(i)}
+                      disabled={quizLoading}
+                      style={styles.quizBtn}
+                    >
+                      {quizLoading && quizUnit === i ? (
+                        <ActivityIndicator size="small" color={Palette.neonViolet} />
+                      ) : (
+                        <Ionicons name="help-circle" size={16} color={Palette.neonViolet} />
+                      )}
+                      <Text style={styles.quizBtnTxt}>
+                        {quizLoading && quizUnit === i ? "جارٍ التحضير…" : "🧠 اختبرني في هذه الوحدة"}
+                      </Text>
+                    </Pressable>
                   </GlassCard>
                 </Pressable>
               );
@@ -268,6 +340,83 @@ export default function SyllabusScreen() {
             <View style={{ height: 24 }} />
           </ScrollView>
         )}
+
+        {/* مودال الكويز */}
+        <Modal
+          visible={quizUnit !== null && quiz.length > 0}
+          transparent
+          animationType="slide"
+          onRequestClose={closeQuiz}
+        >
+          <View style={styles.quizMask}>
+            <View style={styles.quizSheet}>
+              <View style={styles.quizHeader}>
+                <Text style={styles.quizHeaderTxt}>
+                  {quizDone ? "النتيجة" : `سؤال ${qStep + 1} / ${quiz.length}`}
+                </Text>
+                <Pressable onPress={closeQuiz} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={Palette.textMuted} />
+                </Pressable>
+              </View>
+
+              {quizDone ? (
+                <View style={styles.quizResult}>
+                  <Text style={styles.quizScoreBig}>
+                    {qScore} / {quiz.length}
+                  </Text>
+                  <Text style={styles.quizResultMsg}>
+                    {qScore === quiz.length
+                      ? "ممتازة! إتقان كامل 🌟"
+                      : qScore >= Math.ceil(quiz.length / 2)
+                      ? "أداء جيد، راجعي ما فاتك 👏"
+                      : "تحتاج مراجعة هذه الوحدة 📚"}
+                  </Text>
+                  <GradientButton
+                    title="تمام"
+                    icon="checkmark"
+                    onPress={closeQuiz}
+                    style={{ alignSelf: "stretch", marginTop: Spacing.md }}
+                  />
+                </View>
+              ) : quiz[qStep] ? (
+                <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
+                  <Text style={styles.quizQ}>{quiz[qStep].q}</Text>
+                  {quiz[qStep].options.map((opt, oi) => {
+                    const isCorrect = oi === quiz[qStep].answer;
+                    const picked = qPicked === oi;
+                    const reveal = qPicked !== null;
+                    return (
+                      <Pressable
+                        key={oi}
+                        onPress={() => pickAnswer(oi)}
+                        style={[
+                          styles.quizOpt,
+                          reveal && isCorrect && styles.quizOptCorrect,
+                          reveal && picked && !isCorrect && styles.quizOptWrong,
+                        ]}
+                      >
+                        <Text style={styles.quizOptTxt}>{opt}</Text>
+                        {reveal && isCorrect ? (
+                          <Ionicons name="checkmark-circle" size={18} color={Palette.success} />
+                        ) : reveal && picked && !isCorrect ? (
+                          <Ionicons name="close-circle" size={18} color={Palette.danger} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                  {qPicked !== null && (
+                    <GradientButton
+                      title={qStep + 1 >= quiz.length ? "عرض النتيجة" : "السؤال التالي"}
+                      icon="arrow-back"
+                      onPress={nextQuestion}
+                      style={{ marginTop: Spacing.md }}
+                    />
+                  )}
+                </ScrollView>
+              ) : null}
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ScreenBackground>
   );
@@ -335,4 +484,51 @@ const styles = StyleSheet.create({
 
   tipsCard: { padding: Spacing.md },
   tipsTitle: { color: Palette.text, fontSize: 16, fontWeight: "900", marginBottom: 4 },
+
+  quizBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 9,
+    borderRadius: Radius.pill,
+    backgroundColor: "rgba(124,92,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(124,92,255,0.4)",
+  },
+  quizBtnTxt: { color: "#cdbdff", fontSize: 13, fontWeight: "800" },
+
+  quizMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  quizSheet: {
+    backgroundColor: Palette.bgElevated,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    padding: Spacing.lg,
+    maxHeight: "82%",
+  },
+  quizHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.md },
+  quizHeaderTxt: { color: Palette.text, fontSize: 15, fontWeight: "900" },
+  quizQ: { color: Palette.text, fontSize: 18, fontWeight: "900", textAlign: "right", lineHeight: 30, marginBottom: Spacing.md },
+  quizOpt: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    marginBottom: 10,
+  },
+  quizOptCorrect: { backgroundColor: "rgba(46,204,113,0.18)", borderColor: Palette.success },
+  quizOptWrong: { backgroundColor: "rgba(231,76,60,0.16)", borderColor: Palette.danger },
+  quizOptTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "700", textAlign: "right" },
+  quizResult: { alignItems: "center", paddingVertical: Spacing.lg, gap: 8 },
+  quizScoreBig: { color: Palette.neonCyan, fontSize: 44, fontWeight: "900" },
+  quizResultMsg: { color: Palette.textMuted, fontSize: 15, fontWeight: "700", textAlign: "center" },
 });

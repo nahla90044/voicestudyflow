@@ -77,6 +77,28 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
   return syl;
 }
 
+export type QuizQ = { q: string; options: string[]; answer: number };
+
+/** يولّد كويز اختيار من متعدد من محتوى وحدة (بالذكاء). */
+export async function generateUnitQuiz(context: string): Promise<QuizQ[]> {
+  const raw = await aiAssist("unitquiz", context);
+  const m = raw.match(/\[[\s\S]*\]/);
+  if (!m) return [];
+  try {
+    const arr = JSON.parse(m[0]);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((x: any) => ({
+        q: String(x?.q ?? "").trim(),
+        options: Array.isArray(x?.options) ? x.options.map((o: any) => String(o).trim()).filter(Boolean) : [],
+        answer: Number(x?.answer ?? 0),
+      }))
+      .filter((x: QuizQ) => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length);
+  } catch {
+    return [];
+  }
+}
+
 /** يحدّث حالة إنجاز وحدة. */
 export async function setUnitDone(pdfPath: string, done: boolean[]): Promise<void> {
   await supabase.from("book_syllabus").update({ done }).eq("pdf_path", pdfPath);
