@@ -132,6 +132,10 @@ export default function ReaderScreen() {
   const [listenArabic, setListenArabic] = useState(false);
   const listenArabicRef = useRef(false);
   const arTransRef = useRef<Map<number, string>>(new Map());
+  // النطق الدقيق: تشكيل النص قبل القراءة (لكتب الدين والقانون والفصحى)
+  const [tashkeelMode, setTashkeelMode] = useState(false);
+  const tashkeelRef = useRef(false);
+  const tashkeelCacheRef = useRef<Map<number, string>>(new Map());
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -416,6 +420,34 @@ export default function ReaderScreen() {
     }
   }
 
+  // تبديل وضع النطق الدقيق (تشكيل) — يعيد التشغيل من الصفحة الحالية إن كان يقرأ
+  function toggleTashkeel() {
+    const next = !tashkeelMode;
+    setTashkeelMode(next);
+    tashkeelRef.current = next;
+    const wasPlaying = playingRef.current;
+    stop();
+    if (wasPlaying) {
+      playingRef.current = true;
+      setSpeaking(true);
+      playStartRef.current = Date.now();
+      recordActivity({});
+      playFromPage(page, 0, true);
+    }
+  }
+
+  // يشكّل نص الصفحة (مع تخزين مؤقت) لنطق صحيح
+  async function tashkeelPage(p: number, text: string): Promise<string> {
+    if (tashkeelCacheRef.current.has(p)) return tashkeelCacheRef.current.get(p)!;
+    try {
+      const out = (await aiAssist("tashkeel", text)).trim() || text;
+      tashkeelCacheRef.current.set(p, out);
+      return out;
+    } catch {
+      return text;
+    }
+  }
+
   // يترجم نص الصفحة إلى العربية (مع تخزين مؤقت)
   async function translatePageToArabic(p: number, text: string): Promise<string> {
     if (arTransRef.current.has(p)) return arTransRef.current.get(p)!;
@@ -434,7 +466,13 @@ export default function ReaderScreen() {
   async function playFromPage(p: number, startIdx = 0, announce = false) {
     if (!pdfPath) return;
     setBusy(true);
-    setStatus(listenArabicRef.current ? `جارٍ ترجمة الصفحة ${p}…` : `جارٍ تحضير نص الصفحة ${p}…`);
+    setStatus(
+      listenArabicRef.current
+        ? `جارٍ ترجمة الصفحة ${p}…`
+        : tashkeelRef.current
+        ? `جارٍ تشكيل الصفحة ${p}…`
+        : `جارٍ تحضير نص الصفحة ${p}…`
+    );
     try {
       const res = await extractPdfPageText(pdfPath, p);
       if (res.totalPages) setTotalPages(res.totalPages);
@@ -443,6 +481,8 @@ export default function ReaderScreen() {
       let pageText = res.text;
       if (listenArabicRef.current && pageText.trim()) {
         pageText = await translatePageToArabic(res.page, pageText);
+      } else if (tashkeelRef.current && pageText.trim()) {
+        pageText = await tashkeelPage(res.page, pageText);
       }
       if (!playingRef.current) return;
       const sents = dropRepeatHeader(splitSentences(pageText));
@@ -1007,6 +1047,14 @@ export default function ReaderScreen() {
             );
           })}
         </ScrollView>
+
+        {/* النطق الدقيق (تشكيل) لكتب الدين والقانون والفصحى */}
+        <Pressable onPress={toggleTashkeel} style={[styles.arToggle, styles.tashToggle, tashkeelMode && styles.tashToggleOn]}>
+          <Ionicons name="sparkles" size={15} color={tashkeelMode ? "#0b1220" : Palette.neonViolet} />
+          <Text style={[styles.arToggleTxt, { color: tashkeelMode ? "#0b1220" : Palette.neonViolet }]}>
+            {tashkeelMode ? "النطق الدقيق مُفعّل (تشكيل)" : "🕌 نطق دقيق (تشكيل للدين والقانون)"}
+          </Text>
+        </Pressable>
 
         {/* الاستماع بالعربية لكتب اللغات (ترجمة فورية) */}
         <Pressable onPress={toggleListenArabic} style={[styles.arToggle, listenArabic && styles.arToggleOn]}>
@@ -1818,6 +1866,8 @@ const styles = StyleSheet.create({
   },
   arToggleOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
   arToggleTxt: { color: Palette.neonBlue, fontSize: 12.5, fontWeight: "800" },
+  tashToggle: { backgroundColor: "rgba(124,92,255,0.12)", borderColor: "rgba(124,92,255,0.4)", marginTop: 8 },
+  tashToggleOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
   voiceChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
