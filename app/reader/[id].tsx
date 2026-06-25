@@ -1221,6 +1221,7 @@ export default function ReaderScreen() {
             <TextInput
               value={gotoValue}
               onChangeText={(t) => setGotoValue(t.replace(/[^0-9٠-٩]/g, ""))}
+              keyboardType="number-pad"
               placeholder={`${page}`}
               placeholderTextColor={Palette.placeholder}
               style={styles.gotoInput}
