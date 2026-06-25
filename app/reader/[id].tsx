@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -84,6 +85,8 @@ export default function ReaderScreen() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
+  const { height: winH } = useWindowDimensions();
+  const fsImgH = Math.max(320, winH - 120); // ارتفاع الصفحة في ملء الشاشة (أكبر ما يمكن)
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">("ar"); // فلتر لغة الأصوات
   const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
@@ -1029,7 +1032,11 @@ export default function ReaderScreen() {
               >
                 <Image
                   source={{ uri: pageImg }}
-                  style={{ width: "100%", aspectRatio: pageImgAspect }}
+                  style={
+                    fullText
+                      ? { height: fsImgH, width: fsImgH * pageImgAspect } // ملء الارتفاع = أكبر، مع سحب أفقي
+                      : { width: "100%", aspectRatio: pageImgAspect }
+                  }
                   resizeMode="contain"
                 />
               </ScrollView>
