@@ -125,6 +125,7 @@ export default function ReaderScreen() {
   const [bookmarks, setBookmarks] = useState<number[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [makingCards, setMakingCards] = useState(false);
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -263,6 +264,32 @@ export default function ReaderScreen() {
     stop();
     setPage(p);
     if (viewMode === "text") loadSentences(p);
+  }
+
+  // يحوّل المقاطع المظلّلة إلى بطاقات مراجعة (بالذكاء)
+  async function makeCardsFromHighlights() {
+    if (highlights.length === 0 || makingCards) return;
+    setMakingCards(true);
+    try {
+      const text = highlights.map((h) => h.text).join("\n");
+      const cards = await generateFlashcards(text);
+      if (cards.length === 0) {
+        showToast("تعذّر توليد بطاقات من التحديدات");
+        return;
+      }
+      const n = await addCards(
+        cards.map((c) => ({
+          ...c,
+          bookId: typeof id === "string" ? id : undefined,
+          bookTitle: typeof title === "string" ? title : undefined,
+        }))
+      );
+      showToast(`🃏 أُضيفت ${n} بطاقة من تحديداتك`);
+    } catch {
+      showToast("تعذّر توليد البطاقات");
+    } finally {
+      setMakingCards(false);
+    }
   }
 
   function stop() {
@@ -1081,7 +1108,23 @@ export default function ReaderScreen() {
               ) : null}
 
               {highlights.length > 0 ? (
-                <Text style={styles.notesSection}>المقاطع المظلّلة</Text>
+                <>
+                  <Pressable
+                    onPress={makeCardsFromHighlights}
+                    disabled={makingCards}
+                    style={styles.makeCardsBtn}
+                  >
+                    {makingCards ? (
+                      <ActivityIndicator size="small" color="#0b1220" />
+                    ) : (
+                      <Ionicons name="albums" size={16} color="#0b1220" />
+                    )}
+                    <Text style={styles.makeCardsTxt}>
+                      {makingCards ? "جارٍ التوليد…" : "🃏 حوّلي تحديداتي إلى بطاقات"}
+                    </Text>
+                  </Pressable>
+                  <Text style={styles.notesSection}>المقاطع المظلّلة</Text>
+                </>
               ) : null}
               {highlights.map((h) => (
                 <View key={h.id} style={styles.hlCard}>
@@ -1391,6 +1434,16 @@ const styles = StyleSheet.create({
 
   notesHint: { color: Palette.textDim, fontSize: 13, lineHeight: 20, textAlign: "right" },
   notesSection: { color: Palette.textMuted, fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 4 },
+  makeCardsBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.neonCyan,
+  },
+  makeCardsTxt: { color: "#0b1220", fontSize: 14, fontWeight: "900" },
   bmChip: {
     flexDirection: "row-reverse",
     alignItems: "center",

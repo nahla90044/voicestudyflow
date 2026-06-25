@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -11,6 +11,9 @@ import { GlassCard } from "../../components/brand/glass-card";
 import { ReadListenArt } from "../../components/brand/illustrations";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { countDue } from "../../lib/flashcards";
+import { getUserName } from "../../lib/settings";
+import { getStats, type Stats } from "../../lib/stats";
 
 type Feature = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -27,8 +30,46 @@ const FEATURES: Feature[] = [
   { icon: "stats-chart", label: "النشاط", sub: "تقدّمك وسلسلتك", color: Palette.neonPink, route: "/activity" },
 ];
 
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.statItem}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [due, setDue] = useState(0);
+  const [name, setName] = useState("");
+
+  useFocusEffect(
+    useCallback(() => {
+      let on = true;
+      (async () => {
+        const [s, d, n] = await Promise.all([getStats(), countDue(), getUserName()]);
+        if (!on) return;
+        setStats(s);
+        setDue(d);
+        setName(n.trim());
+      })();
+      return () => {
+        on = false;
+      };
+    }, [])
+  );
+
+  const streak = stats?.streak ?? 0;
+  const streakMsg =
+    streak >= 7
+      ? "أسطورة! 🔥"
+      : streak >= 3
+      ? `واصلي يا ${name || "بطلة"}! 💪`
+      : streak >= 1
+      ? "بداية موفّقة ✨"
+      : "ابدئي سلسلتك اليوم 🌱";
 
   return (
     <ScreenBackground>
@@ -44,11 +85,38 @@ export default function HomeScreen() {
 
           {/* الهيرو الزجاجي */}
           <FadeIn delay={0}>
-            <GlassCard radius={Radius.xl} glow={Palette.neonViolet} style={{ marginBottom: Spacing.xl }}>
+            <GlassCard radius={Radius.xl} glow={Palette.neonViolet} style={{ marginBottom: Spacing.lg }}>
               <View style={styles.hero}>
                 <ReadListenArt size={150} />
-                <Text style={styles.title}>VoiceStudyFlow</Text>
+                <Text style={styles.title}>{name ? `أهلًا ${name} 🌷` : "VoiceStudyFlow"}</Text>
                 <Text style={styles.subtitle}>ذاكر بذكاء ✨ اقرأ، اسمع، خطّط، وأنجز</Text>
+              </View>
+            </GlassCard>
+          </FadeIn>
+
+          {/* بطاقة السلسلة (Streak) */}
+          <FadeIn delay={80}>
+            <GlassCard glow={Palette.neonPink} style={{ marginBottom: Spacing.xl }}>
+              <View style={styles.streakWrap}>
+                <View style={styles.streakHead}>
+                  <View style={styles.flameWrap}>
+                    <Text style={styles.flameEmoji}>🔥</Text>
+                    <Text style={styles.flameNum}>{streak}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.streakTitle}>سلسلة {streak} يوم متتالي</Text>
+                    <Text style={styles.streakMsg}>{streakMsg}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.streakStats}>
+                  <Stat value={stats?.totalPages ?? 0} label="صفحة" />
+                  <Stat value={stats?.totalMinutes ?? 0} label="دقيقة" />
+                  <Pressable onPress={() => router.push("/flashcards")} style={styles.statItem}>
+                    <Text style={[styles.statValue, due > 0 && { color: Palette.neonPink }]}>{due}</Text>
+                    <Text style={styles.statLabel}>بطاقة مستحقة</Text>
+                  </Pressable>
+                </View>
               </View>
             </GlassCard>
           </FadeIn>
@@ -159,6 +227,30 @@ const styles = StyleSheet.create({
   statItem: { alignItems: "center", gap: 4 },
   statValue: { color: Palette.text, fontSize: 20, fontWeight: "900" },
   statLabel: { color: Palette.textDim, fontSize: 11, fontWeight: "700" },
+
+  streakWrap: { padding: Spacing.lg, gap: Spacing.lg },
+  streakHead: { flexDirection: "row-reverse", alignItems: "center", gap: 14 },
+  flameWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: "rgba(236,72,153,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(236,72,153,0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  flameEmoji: { fontSize: 22, position: "absolute", top: 6 },
+  flameNum: { color: "#fff", fontSize: 22, fontWeight: "900", marginTop: 14 },
+  streakTitle: { color: Palette.text, fontSize: 17, fontWeight: "900", textAlign: "right" },
+  streakMsg: { color: Palette.neonPink, fontSize: 13, fontWeight: "800", textAlign: "right", marginTop: 3 },
+  streakStats: {
+    flexDirection: "row-reverse",
+    justifyContent: "space-around",
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Palette.glassBorder,
+  },
 
   cta: { borderRadius: Radius.lg, overflow: "hidden", marginBottom: Spacing.xl },
   ctaGrad: {
