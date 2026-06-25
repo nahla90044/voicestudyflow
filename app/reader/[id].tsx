@@ -103,6 +103,8 @@ export default function ReaderScreen() {
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
+  // وضع التحديد (هايلايتر): لمس السطر يحدّده بلون لجمعه للدراسة
+  const [highlightMode, setHighlightMode] = useState(false);
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -706,6 +708,23 @@ export default function ReaderScreen() {
       <View style={[styles.viewer, fullText && styles.viewerFull]}>
         {viewMode === "text" ? (
           <ScrollView ref={scrollRef} style={styles.textScroll} contentContainerStyle={styles.textContent}>
+            {/* شريط الهايلايتر للدراسة */}
+            <View style={styles.hlBar}>
+              <Pressable
+                onPress={() => setHighlightMode((m) => !m)}
+                style={[styles.hlToggle, highlightMode && styles.hlToggleOn]}
+              >
+                <Ionicons name="brush" size={15} color={highlightMode ? "#0b1220" : Palette.text} />
+                <Text style={[styles.hlToggleTxt, highlightMode && { color: "#0b1220" }]}>
+                  {highlightMode ? "وضع التحديد مفعّل — المسي السطر" : "تحديد للدراسة 🖍️"}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setNotesOpen(true)} style={styles.hlToggle}>
+                <Ionicons name="bookmarks-outline" size={15} color={Palette.text} />
+                <Text style={styles.hlToggleTxt}>مقتطفاتي</Text>
+              </Pressable>
+            </View>
+
             {sentences.length === 0 ? (
               <Text style={styles.emptyTextSmall}>
                 {busy ? "جارٍ تحميل النص…" : "لا يوجد نص لعرضه في هذه الصفحة."}
@@ -716,6 +735,7 @@ export default function ReaderScreen() {
                 return (
                   <Pressable
                     key={i}
+                    onPress={() => highlightMode && onSentenceLongPress(s)}
                     onLongPress={() => onSentenceLongPress(s)}
                     delayLongPress={300}
                     onLayout={(e) => {
@@ -739,7 +759,9 @@ export default function ReaderScreen() {
                           return (
                             <Text
                               key={wi}
-                              onPress={() => onWordTap(tok, s)}
+                              onPress={() =>
+                                highlightMode ? onSentenceLongPress(s) : onWordTap(tok, s)
+                              }
                               suppressHighlighting
                               style={isSpoken ? styles.wordSpoken : undefined}
                             >
@@ -1436,6 +1458,20 @@ const styles = StyleSheet.create({
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { backgroundColor: Palette.bgElevated },
+  hlBar: { flexDirection: "row-reverse", justifyContent: "space-between", gap: 8, marginBottom: 10 },
+  hlToggle: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  hlToggleOn: { backgroundColor: Palette.warn, borderColor: Palette.warn },
+  hlToggleTxt: { color: Palette.text, fontSize: 12, fontWeight: "800" },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
   sentenceRowHL: {
