@@ -160,13 +160,19 @@ export default function ReaderScreen() {
   const [pageImg, setPageImg] = useState<string | null>(null);
   const [pageImgAspect, setPageImgAspect] = useState(0.7); // العرض/الارتفاع
   const [pageImgLoading, setPageImgLoading] = useState(false);
+  const pageImgForRef = useRef(0); // الصفحة التي تخصّها الصورة المعروضة حاليًا
   useEffect(() => {
     if (viewMode !== "pdf" || !pdfPath) return;
     let active = true;
+    // امسح صورة الصفحة السابقة فورًا حتى لا يبقى الغلاف القديم ظاهرًا
+    if (pageImgForRef.current !== page) setPageImg(null);
     setPageImgLoading(true);
     (async () => {
-      const uri = await getPageImage(pdfPath, page).catch(() => null);
+      let uri = await getPageImage(pdfPath, page).catch(() => null);
+      // إعادة محاولة واحدة (قد لا تكون الصورة وُلِّدت بعد على الخادم)
+      if (!uri && active) uri = await getPageImage(pdfPath, page).catch(() => null);
       if (!active) return;
+      pageImgForRef.current = page;
       setPageImg(uri);
       setPageImgLoading(false);
       if (uri) {
