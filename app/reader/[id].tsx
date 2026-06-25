@@ -133,6 +133,10 @@ export default function ReaderScreen() {
   const [listenArabic, setListenArabic] = useState(false);
   const listenArabicRef = useRef(false);
   const arTransRef = useRef<Map<number, string>>(new Map());
+  // لوحة الترجمة: اختيار صوت عربي للترجمة في مكان واحد
+  const [translateModal, setTranslateModal] = useState(false);
+  const [translateVoiceId, setTranslateVoiceId] = useState(DEFAULT_VOICE_ID);
+  const translateVoiceIdRef = useRef(DEFAULT_VOICE_ID);
   // النطق الدقيق: تشكيل النص قبل القراءة (لكتب الدين والقانون والفصحى)
   const [tashkeelMode, setTashkeelMode] = useState(false);
   const tashkeelRef = useRef(false);
@@ -440,11 +444,29 @@ export default function ReaderScreen() {
     return out;
   }
 
-  // الصوت المستخدم للقراءة: عند الاستماع بالعربية نفرض صوتًا عربيًا
+  // الصوت المستخدم للقراءة: عند الترجمة نستخدم الصوت العربي المختار في لوحة الترجمة
   function pickVoice(): string {
-    if (!listenArabicRef.current) return voiceId;
-    const v = VOICE_CATALOG.find((x) => x.voiceId === voiceId);
-    return v?.lang && v.lang !== "ar" ? DEFAULT_VOICE_ID : voiceId;
+    return listenArabicRef.current ? translateVoiceIdRef.current : voiceId;
+  }
+
+  // تفعيل/إيقاف الترجمة بصوت عربي مختار (من لوحة الترجمة)
+  function applyTranslate(on: boolean, vId: string) {
+    translateVoiceIdRef.current = vId;
+    setTranslateVoiceId(vId);
+    setTranslateModal(false);
+    if (on === listenArabicRef.current && on) {
+      // مفعّلة أصلًا وغيّرت الصوت فقط → أعد التشغيل بالصوت الجديد
+      if (playingRef.current) {
+        stop();
+        playingRef.current = true;
+        setSpeaking(true);
+        playStartRef.current = Date.now();
+        recordActivity({});
+        playFromPage(page, 0, true);
+      }
+      return;
+    }
+    if (on !== listenArabicRef.current) toggleListenArabic();
   }
 
   // تبديل وضع الاستماع بالعربية (يعيد التشغيل من الصفحة الحالية إن كانت القراءة جارية)
@@ -1099,7 +1121,7 @@ export default function ReaderScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable onPress={toggleListenArabic} style={styles.aidWrap}>
+          <Pressable onPress={() => setTranslateModal(true)} style={styles.aidWrap}>
             <LinearGradient colors={listenArabic ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? "الترجمة مُفعّلة" : "الترجمة"}</Text>
             </LinearGradient>
@@ -1536,6 +1558,59 @@ export default function ReaderScreen() {
             )}
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* لوحة الترجمة: تفعيل + اختيار الصوت العربي في مكان واحد */}
+      <Modal visible={translateModal} transparent animationType="slide" onRequestClose={() => setTranslateModal(false)}>
+        <View style={styles.aiMask}>
+          <View style={styles.aiSheet}>
+            <View style={styles.aiHeader}>
+              <Text style={styles.aiTitle}>🌐 الاستماع بالعربية</Text>
+              <Pressable onPress={() => setTranslateModal(false)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={Palette.textMuted} />
+              </Pressable>
+            </View>
+
+            <Text style={styles.notesHint}>
+              نترجم الكتاب (الإنجليزي/الفرنسي) إلى العربية ونقرؤه بالصوت العربي الذي تختارينه.
+            </Text>
+
+            <Text style={styles.trVoicesLabel}>اختاري الصوت العربي:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.voiceRow}>
+              {VOICE_CATALOG.filter((v) => !v.lang || v.lang === "ar").map((v) => {
+                const sel = v.voiceId === translateVoiceId;
+                return (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => {
+                      setTranslateVoiceId(v.voiceId);
+                      translateVoiceIdRef.current = v.voiceId;
+                    }}
+                    style={[styles.voiceChip, sel && styles.voiceChipActive]}
+                  >
+                    <Text style={[styles.voiceChipTxt, sel && styles.voiceChipTxtActive]}>{v.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Pressable
+              onPress={() => applyTranslate(!listenArabic, translateVoiceId)}
+              style={styles.trApplyWrap}
+            >
+              <LinearGradient
+                colors={listenArabic ? ["#ff5d6c", "#ff8a5c"] : Gradients.success}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.trApply}
+              >
+                <Text style={styles.trApplyTxt}>
+                  {listenArabic ? "إيقاف الترجمة" : "تفعيل والاستماع بالعربية"}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* عرض البريزنتيشن أثناء القراءة */}
@@ -2002,6 +2077,10 @@ const styles = StyleSheet.create({
   },
   aidGrad: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
   aidGradTxt: { color: "#fff", fontSize: 12.5, fontWeight: "900" },
+  trVoicesLabel: { color: Palette.textMuted, fontSize: 13, fontWeight: "800", textAlign: "right", marginTop: 12, marginBottom: 8 },
+  trApplyWrap: { borderRadius: Radius.lg, overflow: "hidden", marginTop: 16 },
+  trApply: { paddingVertical: 15, alignItems: "center", justifyContent: "center" },
+  trApplyTxt: { color: "#0b1220", fontSize: 15, fontWeight: "900" },
 
   presWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: 16, paddingTop: 54, paddingBottom: 24 },
   presTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
