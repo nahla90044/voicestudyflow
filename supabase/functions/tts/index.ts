@@ -55,8 +55,8 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
-          // ثبات أعلى = قراءة هادئة متّزنة بلا عجلة ووضوح أكبر في النطق
-          voice_settings: { stability: 0.72, similarity_boost: 0.8, style: 0.0, use_speaker_boost: true },
+          // نبرة شارحة متفاعلة: ثبات معتدل + أسلوب أعلى ليتغيّر التنغيم كأنه يشرح
+          voice_settings: { stability: 0.42, similarity_boost: 0.85, style: 0.35, use_speaker_boost: true },
         }),
       }
     );

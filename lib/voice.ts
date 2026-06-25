@@ -131,7 +131,7 @@ function disposePlayer() {
 //  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
-const CACHE_DIR_NAME = "tts-cache-v4"; // v4: رجوع للإعداد الأصلي المتوازن
+const CACHE_DIR_NAME = "tts-cache-v5"; // v5: نبرة شارحة متفاعلة (stability 0.42, style 0.35)
 const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
 
 function cacheDir(): Directory {
@@ -243,8 +243,8 @@ async function synthToFile(text: string, gender: VoiceGender, voiceId?: string):
       body: JSON.stringify({
         text,
         model_id: "eleven_multilingual_v2",
-        // ثبات أعلى = قراءة هادئة متّزنة بلا عجلة ووضوح أكبر في النطق
-        voice_settings: { stability: 0.72, similarity_boost: 0.8, style: 0.0, use_speaker_boost: true },
+        // نبرة شارحة متفاعلة: ثبات معتدل + أسلوب أعلى ليتغيّر التنغيم كأنه يشرح
+        voice_settings: { stability: 0.42, similarity_boost: 0.85, style: 0.35, use_speaker_boost: true },
       }),
     });
     if (!res.ok) {
