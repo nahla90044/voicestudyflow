@@ -780,7 +780,11 @@ export default function ReaderScreen() {
                         : styles.sentenceRow
                     }
                   >
-                    <Text style={i === activeSentence ? styles.sentenceActive : styles.sentence}>
+                    <Text
+                      selectable
+                      selectionColor="rgba(124,92,255,0.45)"
+                      style={i === activeSentence ? styles.sentenceActive : styles.sentence}
+                    >
                       {(() => {
                         let wc = -1;
                         return s.split(/(\s+)/).map((tok, wi) => {
