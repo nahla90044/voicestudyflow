@@ -16,12 +16,27 @@ export async function setUserName(name: string): Promise<void> {
   await AsyncStorage.setItem(KEY_USER_NAME, name.trim());
 }
 
-/** وضع التركيز: القارئ يناديكِ باسمكِ بين الحين والآخر. */
-export async function getFocusMode(): Promise<boolean> {
-  return (await AsyncStorage.getItem(KEY_FOCUS_MODE)) === "1";
+/**
+ * درجة وضع التركيز: 0=مطفأ، 1=خفيف، 2=متوسط، 3=كثيف.
+ * تحدّد كل كم جملة يناديكِ القارئ باسمكِ (0 = أبدًا).
+ */
+export type FocusLevel = 0 | 1 | 2 | 3;
+const FOCUS_EVERY: Record<FocusLevel, number> = { 0: 0, 1: 16, 2: 9, 3: 4 };
+
+export async function getFocusLevel(): Promise<FocusLevel> {
+  // توافق مع الإعداد القديم (مفعّل = متوسط)
+  const lvl = await AsyncStorage.getItem(KEY_FOCUS_MODE);
+  if (lvl === null) return 0;
+  const n = Number(lvl);
+  if (n === 0 || n === 1 || n === 2 || n === 3) return n as FocusLevel;
+  return lvl === "1" ? 2 : 0; // القيمة القديمة "1" كانت تعني مفعّل
 }
-export async function setFocusMode(on: boolean): Promise<void> {
-  await AsyncStorage.setItem(KEY_FOCUS_MODE, on ? "1" : "0");
+export async function setFocusLevel(level: FocusLevel): Promise<void> {
+  await AsyncStorage.setItem(KEY_FOCUS_MODE, String(level));
+}
+/** كل كم جملة يُنادى الاسم لهذه الدرجة (0 = لا مناداة). */
+export function focusEvery(level: FocusLevel): number {
+  return FOCUS_EVERY[level] ?? 0;
 }
 
 export async function getMinutesPerPage(): Promise<number> {

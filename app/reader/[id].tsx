@@ -33,8 +33,10 @@ import { extractPdfPageText } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
+  getLastSentence,
   getReadingRate,
   setLastPage,
+  setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
@@ -46,7 +48,7 @@ import {
   VOICE_CATALOG,
 } from "../../lib/voice";
 import { Palette, Radius, Spacing } from "../../constants/design";
-import { getFocusMode, getUserName } from "../../lib/settings";
+import { focusEvery, getFocusLevel, getUserName } from "../../lib/settings";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
 const SLEEP_OPTIONS = [0, 5, 15, 30] as const; // 0 = مطفأ (بالدقائق)
@@ -150,6 +152,7 @@ export default function ReaderScreen() {
   const resumeIdxRef = useRef(0); // الجملة التي يبدأ منها التشغيل بعد تخطٍّ يدوي
   const prevHeaderRef = useRef(""); // بداية الصفحة السابقة (لكشف الترويسة المتكرّرة)
   const focusNameRef = useRef(""); // اسم المستخدم لوضع التركيز (فارغ = مطفأ)
+  const focusEveryRef = useRef(0); // كل كم جملة يُنادى الاسم (0 = أبدًا)
   const focusCountRef = useRef(0); // عدّاد الجُمل لمناداة الاسم دوريًا
   const playStartRef = useRef<number | null>(null);
 
@@ -182,12 +185,14 @@ export default function ReaderScreen() {
   // تحميل التفضيلات: آخر صفحة + السرعة
   useEffect(() => {
     (async () => {
-      const [savedPage, savedRate] = await Promise.all([
+      const [savedPage, savedRate, savedSent] = await Promise.all([
         getLastPage(bookId),
         getReadingRate(),
+        getLastSentence(bookId),
       ]);
       setPage(savedPage);
       setRate(savedRate);
+      resumeIdxRef.current = savedSent; // يستأنف من نفس الجملة بالضبط
       prefsLoadedRef.current = true;
     })();
 
@@ -205,6 +210,13 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (prefsLoadedRef.current && bookId && page >= 1) setLastPage(bookId, page);
   }, [bookId, page]);
+
+  // حفظ آخر جملة مقروءة لاستئناف دقيق (لا نكتب -1 عند الإيقاف)
+  useEffect(() => {
+    if (prefsLoadedRef.current && bookId && activeSentence >= 0) {
+      setLastSentence(bookId, activeSentence);
+    }
+  }, [bookId, activeSentence]);
 
   // تحميل العلامات والتظليلات
   useEffect(() => {
@@ -353,11 +365,12 @@ export default function ReaderScreen() {
     }
   }
 
-  // وضع التركيز: حمّل الاسم إن كان مفعّلًا
+  // وضع التركيز: حمّل الاسم ودرجة المناداة
   useEffect(() => {
     (async () => {
-      const [on, name] = await Promise.all([getFocusMode(), getUserName()]);
-      focusNameRef.current = on ? name.trim() : "";
+      const [level, name] = await Promise.all([getFocusLevel(), getUserName()]);
+      focusEveryRef.current = focusEvery(level);
+      focusNameRef.current = focusEveryRef.current > 0 ? name.trim() : "";
     })();
   }, []);
 
@@ -504,14 +517,15 @@ export default function ReaderScreen() {
     // وضع التركيز: ناديها باسمها كل عدّة جُمل قبل قراءة الجملة
     focusCountRef.current += 1;
     const name = focusNameRef.current;
-    if (name && focusCountRef.current % 7 === 0) {
+    const every = focusEveryRef.current;
+    if (name && every > 0 && focusCountRef.current % every === 0) {
       const phrases = [
         `معكِ يا ${name}؟`,
         `ركّزي معي يا ${name}.`,
         `منتبهة يا ${name}؟`,
         `أحسنتِ يا ${name}، نكمل.`,
       ];
-      const phrase = phrases[Math.floor(focusCountRef.current / 7) % phrases.length];
+      const phrase = phrases[Math.floor(focusCountRef.current / every) % phrases.length];
       speakText(phrase, { voiceId, rate, onDone: speakCurrent, onError: speakCurrent });
     } else {
       speakCurrent();

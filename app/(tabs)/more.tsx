@@ -30,13 +30,21 @@ import {
   sendTestNotification,
 } from "../../lib/notify";
 import {
-  getFocusMode,
+  getFocusLevel,
   getMinutesPerPage,
   getUserName,
-  setFocusMode,
+  setFocusLevel,
   setMinutesPerPage,
   setUserName,
+  type FocusLevel,
 } from "../../lib/settings";
+
+const FOCUS_LABELS: { level: FocusLevel; label: string; hint: string }[] = [
+  { level: 0, label: "مطفأ", hint: "لا مناداة" },
+  { level: 1, label: "خفيف", hint: "نادرًا" },
+  { level: 2, label: "متوسط", hint: "أحيانًا" },
+  { level: 3, label: "كثيف", hint: "كثيرًا" },
+];
 import {
   audioCacheSize,
   clearAudioCache,
@@ -57,7 +65,7 @@ export default function MoreScreen() {
 
   // الاسم ووضع التركيز
   const [userName, setUserNameState] = useState("");
-  const [focus, setFocus] = useState(false);
+  const [focusLevel, setFocusLevelState] = useState<FocusLevel>(0);
 
   // إعدادات الصوت
   const [lang, setLang] = useState<"ar" | "en">("ar");
@@ -96,7 +104,7 @@ export default function MoreScreen() {
         await setUserName(nm);
       }
       setUserNameState(nm);
-      setFocus(await getFocusMode());
+      setFocusLevelState(await getFocusLevel());
       const r = await getReminder();
       setReminderOn(r.enabled);
       setReminderHour(r.hour);
@@ -131,11 +139,10 @@ export default function MoreScreen() {
     Alert.alert("✅", userName.trim() ? `أهلًا ${userName.trim()} 🌷` : "تم");
   }
 
-  async function toggleFocus() {
-    const next = !focus;
-    setFocus(next);
-    await setFocusMode(next);
-    if (next && !userName.trim()) {
+  async function pickFocusLevel(level: FocusLevel) {
+    setFocusLevelState(level);
+    await setFocusLevel(level);
+    if (level > 0 && !userName.trim()) {
       Alert.alert("وضع التركيز", "اكتبي اسمكِ أولًا ليناديكِ القارئ به 🌷");
     }
   }
@@ -272,17 +279,27 @@ export default function MoreScreen() {
             maxLength={20}
           />
 
-          <Pressable onPress={toggleFocus} style={[styles.focusRow, focus && styles.focusRowOn]}>
-            <View style={[styles.switchTrack, focus && styles.switchTrackOn]}>
-              <View style={[styles.switchKnob, focus && styles.switchKnobOn]} />
+          <View style={styles.focusBox}>
+            <Text style={styles.focusTitle}>وضع التركيز 🎯</Text>
+            <Text style={styles.focusSub}>
+              كم مرة يناديكِ القارئ باسمكِ أثناء القراءة: «معك يا {userName.trim() || "..."}؟»
+            </Text>
+            <View style={styles.focusLevels}>
+              {FOCUS_LABELS.map((f) => {
+                const active = focusLevel === f.level;
+                return (
+                  <Pressable
+                    key={f.level}
+                    onPress={() => pickFocusLevel(f.level)}
+                    style={[styles.levelPill, active && styles.levelPillOn]}
+                  >
+                    <Text style={[styles.levelTxt, active && styles.levelTxtOn]}>{f.label}</Text>
+                    <Text style={[styles.levelHint, active && { color: "#0b1220" }]}>{f.hint}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.focusTitle}>وضع التركيز 🎯</Text>
-              <Text style={styles.focusSub}>
-                القارئ يناديكِ باسمكِ بين الحين والآخر: «معك يا {userName.trim() || "..."}؟»
-              </Text>
-            </View>
-          </Pressable>
+          </View>
 
           <GradientButton title="حفظ الاسم" icon="save" onPress={saveName} loading={loading} />
         </GlassCard>
@@ -509,10 +526,7 @@ const styles = StyleSheet.create({
   themeDot: { width: 12, height: 12, borderRadius: 6 },
   themeName: { color: "#e6eefc", fontSize: 13, fontWeight: "800", textAlign: "center" },
   themeActive: { fontSize: 11, fontWeight: "900", textAlign: "center" },
-  focusRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: 12,
+  focusBox: {
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 14,
@@ -521,20 +535,23 @@ const styles = StyleSheet.create({
     borderColor: "rgba(124,92,255,0.30)",
     marginTop: 6,
   },
-  focusRowOn: { backgroundColor: "rgba(124,92,255,0.20)", borderColor: "rgba(124,92,255,0.6)" },
   focusTitle: { color: "#fff", fontWeight: "900", fontSize: 15, textAlign: "right" },
   focusSub: { color: "#b9c6d8", fontSize: 12, textAlign: "right", marginTop: 3, lineHeight: 18 },
-  switchTrack: {
-    width: 46,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    padding: 3,
-    justifyContent: "center",
+  focusLevels: { flexDirection: "row-reverse", gap: 8, marginTop: 12 },
+  levelPill: {
+    flex: 1,
+    alignItems: "center",
+    gap: 2,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
   },
-  switchTrackOn: { backgroundColor: Palette.neonCyan },
-  switchKnob: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff", alignSelf: "flex-start" },
-  switchKnobOn: { alignSelf: "flex-end" },
+  levelPillOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  levelTxt: { color: "#e6eefc", fontSize: 13, fontWeight: "900" },
+  levelTxtOn: { color: "#0b1220" },
+  levelHint: { color: "#8aa0b8", fontSize: 10, fontWeight: "700" },
 
   btn: {
     flex: 1,
