@@ -412,18 +412,23 @@ export default function ReaderScreen() {
     });
   }
 
-  // الانتقال لصفحة محددة والبدء بالقراءة منها
+  // الانتقال لصفحة محددة. إن كانت القراءة شغّالة تكمل منها، وإلا تنتقل للعرض فقط.
   function gotoPage(n: number) {
     const target = Math.max(1, totalPages ? Math.min(totalPages, n) : n);
     setGotoOpen(false);
+    const wasPlaying = playingRef.current;
     stop();
     resumeIdxRef.current = 0;
     setPage(target);
-    playingRef.current = true;
-    setSpeaking(true);
-    playStartRef.current = Date.now();
-    recordActivity({});
-    playFromPage(target, 0, true);
+    if (wasPlaying) {
+      playingRef.current = true;
+      setSpeaking(true);
+      playStartRef.current = Date.now();
+      recordActivity({});
+      playFromPage(target, 0, true);
+    } else {
+      loadSentences(target);
+    }
   }
 
   // تمرير على صورة الصفحة ثم رفع الإصبع: إن تجاوزتِ الحافة قليلًا → صفحة واحدة فقط.
@@ -1177,38 +1182,39 @@ export default function ReaderScreen() {
 
       {/* الانتقال لصفحة محددة */}
       <Modal visible={gotoOpen} transparent animationType="fade" onRequestClose={() => setGotoOpen(false)}>
-        <Pressable style={styles.dictMask} onPress={() => setGotoOpen(false)}>
-          <Pressable style={styles.dictCard} onPress={() => {}}>
+        <Pressable style={styles.gotoMask} onPress={() => setGotoOpen(false)}>
+          <Pressable style={styles.gotoCard} onPress={() => {}}>
             <View style={styles.dictHead}>
               <Text style={styles.dictWord}>الانتقال لصفحة</Text>
               <Pressable onPress={() => setGotoOpen(false)} hitSlop={8}>
-                <Ionicons name="close" size={20} color={Palette.textMuted} />
+                <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
-            <Text style={styles.dictHint}>
-              اكتبي رقم الصفحة (١ – {totalPages || "؟"}) ويبدأ يقرأ منها.
-            </Text>
-            <View style={{ flexDirection: "row-reverse", gap: 8, alignItems: "center" }}>
-              <TextInput
-                value={gotoValue}
-                onChangeText={(t) => setGotoValue(t.replace(/[^0-9]/g, ""))}
-                keyboardType="number-pad"
-                placeholder={`${page}`}
-                placeholderTextColor={Palette.placeholder}
-                style={styles.noteInput}
-                textAlign="center"
-                autoFocus
-              />
-              <Pressable
-                onPress={() => {
-                  const n = parseInt(gotoValue || "0", 10);
-                  if (n > 0) gotoPage(n);
-                }}
-                style={styles.noteSave}
-              >
-                <Ionicons name="play" size={18} color="#fff" />
-              </Pressable>
-            </View>
+            <Text style={styles.dictHint}>اكتبي رقم الصفحة (١ – {totalPages || "؟"})</Text>
+            <TextInput
+              value={gotoValue}
+              onChangeText={(t) => setGotoValue(t.replace(/[^0-9]/g, ""))}
+              keyboardType="number-pad"
+              placeholder={`${page}`}
+              placeholderTextColor={Palette.placeholder}
+              style={styles.gotoInput}
+              textAlign="center"
+              autoFocus
+              onSubmitEditing={() => {
+                const n = parseInt(gotoValue || "0", 10);
+                if (n > 0) gotoPage(n);
+              }}
+            />
+            <Pressable
+              onPress={() => {
+                const n = parseInt(gotoValue || "0", 10);
+                if (n > 0) gotoPage(n);
+              }}
+              style={styles.gotoBtn}
+            >
+              <Ionicons name="arrow-back" size={18} color="#fff" />
+              <Text style={styles.gotoBtnTxt}>انتقال للصفحة</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1443,6 +1449,36 @@ const styles = StyleSheet.create({
   dictWord: { color: Palette.primary, fontSize: 22, fontWeight: "900", textAlign: "right" },
   dictHint: { color: Palette.textDim, fontSize: 14 },
   dictMeaning: { color: Palette.text, fontSize: 17, lineHeight: 28, textAlign: "right" },
+
+  gotoMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 220 },
+  gotoCard: {
+    backgroundColor: Palette.bgElevated,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    padding: Spacing.lg,
+    gap: 14,
+  },
+  gotoInput: {
+    height: 56,
+    borderRadius: Radius.md,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    color: Palette.text,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  gotoBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 50,
+    borderRadius: Radius.md,
+    backgroundColor: Palette.primary,
+  },
+  gotoBtnTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
 
   driveWrap: { flex: 1, backgroundColor: Palette.bg, padding: Spacing.xl, justifyContent: "center", alignItems: "center" },
   driveClose: { position: "absolute", top: 54, left: 24, width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
