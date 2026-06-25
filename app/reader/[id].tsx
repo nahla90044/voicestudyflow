@@ -86,6 +86,7 @@ export default function ReaderScreen() {
   const [totalPages, setTotalPages] = useState(0);
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
   const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">("ar"); // فلتر لغة الأصوات
+  const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
   const [rate, setRate] = useState(1);
   const [sleepMin, setSleepMin] = useState(0);
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
@@ -1087,48 +1088,13 @@ export default function ReaderScreen() {
       {/* لوحة التحكم بالصوت */}
       {!fullText && (
       <View style={styles.player}>
-        {/* فلتر لغة الأصوات */}
-        <View style={styles.langRow}>
-          {([
-            { k: "ar", label: "عربي" },
-            { k: "en", label: "English" },
-            { k: "fr", label: "Français" },
-          ] as const).map((l) => {
-            const on = voiceLang === l.k;
-            return (
-              <Pressable key={l.k} onPress={() => setVoiceLang(l.k)} style={[styles.langChip, on && styles.langChipOn]}>
-                <Text style={[styles.langChipTxt, on && styles.langChipTxtOn]}>{l.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* اختيار صوت القارئ (حسب اللغة المختارة) */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.voiceRow}
-        >
-          {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === voiceLang).map((v) => {
-            const active = v.voiceId === voiceId;
-            return (
-              <Pressable
-                key={v.id}
-                onPress={() => {
-                  // ضغطة أولى: اختيار الصوت — ضغطة على الصوت المختار: ابدأ/أوقف القراءة
-                  if (active) togglePlay();
-                  else setVoiceId(v.voiceId);
-                }}
-                style={[styles.voiceChip, active && styles.voiceChipActive]}
-              >
-                <Text style={[styles.voiceChipTxt, active && styles.voiceChipTxtActive]}>
-                  {v.name}
-                  {active ? (speaking ? " ⏸︎" : " ▶︎") : ""}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {/* زر واحد لاختيار الصوت */}
+        <Pressable onPress={() => setVoiceModal(true)} style={styles.voicePickBtn}>
+          <Ionicons name="chevron-down" size={16} color={Palette.textMuted} />
+          <Text style={styles.voicePickTxt} numberOfLines={1}>
+            الصوت: {VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? "اختاري"}
+          </Text>
+        </Pressable>
 
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={styles.aidsRow}>
@@ -1575,6 +1541,55 @@ export default function ReaderScreen() {
             )}
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* قائمة اختيار الصوت — منظّمة حسب اللغة */}
+      <Modal visible={voiceModal} transparent animationType="slide" onRequestClose={() => setVoiceModal(false)}>
+        <View style={styles.aiMask}>
+          <View style={styles.aiSheet}>
+            <View style={styles.aiHeader}>
+              <Text style={styles.aiTitle}>اختاري الصوت</Text>
+              <Pressable onPress={() => setVoiceModal(false)} hitSlop={8}>
+                <Ionicons name="close" size={22} color={Palette.textMuted} />
+              </Pressable>
+            </View>
+
+            {/* تبويبات اللغة */}
+            <View style={styles.langRow}>
+              {([
+                { k: "ar", label: "عربي" },
+                { k: "en", label: "English" },
+                { k: "fr", label: "Français" },
+              ] as const).map((l) => {
+                const on = voiceLang === l.k;
+                return (
+                  <Pressable key={l.k} onPress={() => setVoiceLang(l.k)} style={[styles.langChip, on && styles.langChipOn]}>
+                    <Text style={[styles.langChipTxt, on && styles.langChipTxtOn]}>{l.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <ScrollView style={{ maxHeight: 320 }} contentContainerStyle={{ gap: 8, paddingTop: 12 }}>
+              {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === voiceLang).map((v) => {
+                const active = v.voiceId === voiceId;
+                return (
+                  <Pressable
+                    key={v.id}
+                    onPress={() => {
+                      setVoiceId(v.voiceId);
+                      setVoiceModal(false);
+                    }}
+                    style={[styles.voiceRowItem, active && styles.voiceRowItemOn]}
+                  >
+                    <Text style={[styles.voiceRowTxt, active && { color: Palette.neonCyan }]}>{v.name}</Text>
+                    {active ? <Ionicons name="checkmark-circle" size={20} color={Palette.neonCyan} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
 
       {/* لوحة الترجمة: تفعيل + اختيار الصوت العربي في مكان واحد */}
@@ -2071,6 +2086,31 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     gap: 9,
   },
+  voicePickBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  voicePickTxt: { flex: 1, color: Palette.text, fontSize: 14, fontWeight: "800", textAlign: "right", marginStart: 8 },
+  voiceRowItem: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderRadius: Radius.md,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  voiceRowItemOn: { borderColor: Palette.neonCyan },
+  voiceRowTxt: { color: Palette.text, fontSize: 15, fontWeight: "800" },
   langRow: { flexDirection: "row-reverse", gap: 8 },
   langChip: {
     paddingVertical: 6,
