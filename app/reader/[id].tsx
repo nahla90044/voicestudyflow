@@ -85,6 +85,7 @@ export default function ReaderScreen() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
+  const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">("ar"); // فلتر لغة الأصوات
   const [rate, setRate] = useState(1);
   const [sleepMin, setSleepMin] = useState(0);
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
@@ -1086,13 +1087,29 @@ export default function ReaderScreen() {
       {/* لوحة التحكم بالصوت */}
       {!fullText && (
       <View style={styles.player}>
-        {/* اختيار صوت القارئ */}
+        {/* فلتر لغة الأصوات */}
+        <View style={styles.langRow}>
+          {([
+            { k: "ar", label: "عربي" },
+            { k: "en", label: "English" },
+            { k: "fr", label: "Français" },
+          ] as const).map((l) => {
+            const on = voiceLang === l.k;
+            return (
+              <Pressable key={l.k} onPress={() => setVoiceLang(l.k)} style={[styles.langChip, on && styles.langChipOn]}>
+                <Text style={[styles.langChipTxt, on && styles.langChipTxtOn]}>{l.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* اختيار صوت القارئ (حسب اللغة المختارة) */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.voiceRow}
         >
-          {VOICE_CATALOG.map((v) => {
+          {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === voiceLang).map((v) => {
             const active = v.voiceId === voiceId;
             return (
               <Pressable
@@ -2054,6 +2071,18 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     gap: 9,
   },
+  langRow: { flexDirection: "row-reverse", gap: 8 },
+  langChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  langChipOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
+  langChipTxt: { color: Palette.textMuted, fontSize: 12.5, fontWeight: "800" },
+  langChipTxtOn: { color: "#fff" },
   voiceRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 2 },
   arToggle: {
     flexDirection: "row-reverse",
