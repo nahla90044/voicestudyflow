@@ -23,8 +23,8 @@ export default function RootLayout() {
         await SplashScreen.hideAsync().catch(() => {});
         if (seen !== "1") router.replace("/onboarding");
       } finally {
-        // نخلي السبلاش المتحرّك يبان شوي للإحساس الاحترافي
-        setTimeout(() => setBooting(false), 700);
+        // سبلاش قصير جدًا فقط (لا نؤخّر فتح التطبيق)
+        setTimeout(() => setBooting(false), 250);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
