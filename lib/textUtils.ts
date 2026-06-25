@@ -9,6 +9,8 @@ function isNoiseLine(s: string): boolean {
   // تذييل رقم الصفحة: «صفحة | 3» أو «صفحة ٣» أو «- 3 -»
   if (/^(صفحة|ص)\s*[|\-–:]?\s*[\d٠-٩]+$/.test(t)) return true;
   if (/^[-–|]*\s*[\d٠-٩]+\s*[-–|]*$/.test(t)) return true; // رقم صفحة معزول
+  // علامة تصنيف على الصفحات (ووترمارك) مثل: Restricted / مقيّد — وحدها أو مع رقم
+  if (/^(restricted|confidential|مقيّ?د|سرّي|مقيد)\s*[|\-–:.]?\s*[\d٠-٩]*$/i.test(t)) return true;
   return false;
 }
 
