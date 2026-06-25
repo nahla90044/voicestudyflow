@@ -46,6 +46,7 @@ import {
   VOICE_CATALOG,
 } from "../../lib/voice";
 import { Palette, Radius, Spacing } from "../../constants/design";
+import { getFocusMode, getUserName } from "../../lib/settings";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2] as const;
 const SLEEP_OPTIONS = [0, 5, 15, 30] as const; // 0 = مطفأ (بالدقائق)
@@ -143,6 +144,8 @@ export default function ReaderScreen() {
   const offsetsRef = useRef<number[]>([]);
   const resumeIdxRef = useRef(0); // الجملة التي يبدأ منها التشغيل بعد تخطٍّ يدوي
   const prevHeaderRef = useRef(""); // بداية الصفحة السابقة (لكشف الترويسة المتكرّرة)
+  const focusNameRef = useRef(""); // اسم المستخدم لوضع التركيز (فارغ = مطفأ)
+  const focusCountRef = useRef(0); // عدّاد الجُمل لمناداة الاسم دوريًا
   const playStartRef = useRef<number | null>(null);
 
   // صورة الصفحة الحالية (عالية الدقة، قابلة للتكبير، تتابع القراءة)
@@ -319,6 +322,14 @@ export default function ReaderScreen() {
     }
   }
 
+  // وضع التركيز: حمّل الاسم إن كان مفعّلًا
+  useEffect(() => {
+    (async () => {
+      const [on, name] = await Promise.all([getFocusMode(), getUserName()]);
+      focusNameRef.current = on ? name.trim() : "";
+    })();
+  }, []);
+
   // يتخطّى الترويسة المتكرّرة (نفس بداية الصفحة السابقة) فتُقرأ مرة واحدة
   function dropRepeatHeader(sents: string[]): string[] {
     if (sents.length === 0) return sents;
@@ -399,20 +410,40 @@ export default function ReaderScreen() {
     setActiveSentence(i);
     setActiveWord(-1);
     setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
-    speakText(sents[i], {
-      voiceId,
-      rate,
-      onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
-      onDone: () => {
-        setActiveWord(-1);
-        playSentence(sents, i + 1, p, total);
-      },
-      onFallback: (reason) => setVoiceWarn(reason),
-      onError: (e) => {
-        setStatus(`تعذّر تشغيل الصوت: ${(e as any)?.message ?? "خطأ"}`);
-        stop();
-      },
-    });
+
+    const speakCurrent = () => {
+      if (!playingRef.current) return;
+      speakText(sents[i], {
+        voiceId,
+        rate,
+        onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
+        onDone: () => {
+          setActiveWord(-1);
+          playSentence(sents, i + 1, p, total);
+        },
+        onFallback: (reason) => setVoiceWarn(reason),
+        onError: (e) => {
+          setStatus(`تعذّر تشغيل الصوت: ${(e as any)?.message ?? "خطأ"}`);
+          stop();
+        },
+      });
+    };
+
+    // وضع التركيز: ناديها باسمها كل عدّة جُمل قبل قراءة الجملة
+    focusCountRef.current += 1;
+    const name = focusNameRef.current;
+    if (name && focusCountRef.current % 7 === 0) {
+      const phrases = [
+        `معكِ يا ${name}؟`,
+        `ركّزي معي يا ${name}.`,
+        `منتبهة يا ${name}؟`,
+        `أحسنتِ يا ${name}، نكمل.`,
+      ];
+      const phrase = phrases[Math.floor(focusCountRef.current / 7) % phrases.length];
+      speakText(phrase, { voiceId, rate, onDone: speakCurrent, onError: speakCurrent });
+    } else {
+      speakCurrent();
+    }
   }
 
   // يحوّل نص الرقم (عربي ١٢٣ أو إنجليزي 123) إلى عدد

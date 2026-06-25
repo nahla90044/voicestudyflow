@@ -26,7 +26,14 @@ import {
   getReminder,
   sendTestNotification,
 } from "../../lib/notify";
-import { getMinutesPerPage, setMinutesPerPage } from "../../lib/settings";
+import {
+  getFocusMode,
+  getMinutesPerPage,
+  getUserName,
+  setFocusMode,
+  setMinutesPerPage,
+  setUserName,
+} from "../../lib/settings";
 import {
   audioCacheSize,
   clearAudioCache,
@@ -43,6 +50,10 @@ export default function MoreScreen() {
   const [minPerPage, setMinPerPageState] = useState("1.5");
   const [loading, setLoading] = useState(true);
   const [kbVisible, setKbVisible] = useState(false);
+
+  // الاسم ووضع التركيز
+  const [userName, setUserNameState] = useState("");
+  const [focus, setFocus] = useState(false);
 
   // إعدادات الصوت
   const [lang, setLang] = useState<"ar" | "en">("ar");
@@ -75,6 +86,13 @@ export default function MoreScreen() {
     (async () => {
       const v = await getMinutesPerPage();
       setMinPerPageState(String(v));
+      let nm = await getUserName();
+      if (!nm) {
+        nm = "نهلة"; // اسمكِ افتراضيًا 🌷
+        await setUserName(nm);
+      }
+      setUserNameState(nm);
+      setFocus(await getFocusMode());
       const r = await getReminder();
       setReminderOn(r.enabled);
       setReminderHour(r.hour);
@@ -101,6 +119,21 @@ export default function MoreScreen() {
     await setMinutesPerPage(v);
     Keyboard.dismiss();
     Alert.alert("✅", "تم حفظ الإعداد");
+  }
+
+  async function saveName() {
+    await setUserName(userName);
+    Keyboard.dismiss();
+    Alert.alert("✅", userName.trim() ? `أهلًا ${userName.trim()} 🌷` : "تم");
+  }
+
+  async function toggleFocus() {
+    const next = !focus;
+    setFocus(next);
+    await setFocusMode(next);
+    if (next && !userName.trim()) {
+      Alert.alert("وضع التركيز", "اكتبي اسمكِ أولًا ليناديكِ القارئ به 🌷");
+    }
   }
 
   async function replayTutorial() {
@@ -187,6 +220,36 @@ export default function MoreScreen() {
           style={{ marginHorizontal: 0 }}
         />
 
+        {/* الاسم ووضع التركيز */}
+        <GlassCard contentStyle={styles.cardC} glow={Palette.neonViolet}>
+          <Text style={styles.title}>اسمك ووضع التركيز</Text>
+          <Text style={styles.label}>اسمك</Text>
+          <TextInput
+            value={userName}
+            onChangeText={setUserNameState}
+            editable={!loading}
+            style={styles.input}
+            placeholder="مثال: نهلة"
+            placeholderTextColor="#8aa0b8"
+            textAlign="right"
+            maxLength={20}
+          />
+
+          <Pressable onPress={toggleFocus} style={[styles.focusRow, focus && styles.focusRowOn]}>
+            <View style={[styles.switchTrack, focus && styles.switchTrackOn]}>
+              <View style={[styles.switchKnob, focus && styles.switchKnobOn]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.focusTitle}>وضع التركيز 🎯</Text>
+              <Text style={styles.focusSub}>
+                القارئ يناديكِ باسمكِ بين الحين والآخر: «معك يا {userName.trim() || "..."}؟»
+              </Text>
+            </View>
+          </Pressable>
+
+          <GradientButton title="حفظ الاسم" icon="save" onPress={saveName} loading={loading} />
+        </GlassCard>
+
         {/* إعدادات الخطة */}
         <GlassCard contentStyle={styles.cardC} glow={Palette.neonBlue}>
           <Text style={styles.title}>إعدادات الخطة</Text>
@@ -247,14 +310,14 @@ export default function MoreScreen() {
               onPress={() => setGender("female")}
               style={[styles.pill, gender === "female" && styles.pillActiveGreen]}
             >
-              <Text style={[styles.pillTxt, gender === "female" && styles.pillTxtActive]}>👩 امرأة</Text>
+              <Text style={[styles.pillTxt, gender === "female" && styles.pillTxtActive]}>امرأة</Text>
             </Pressable>
 
             <Pressable
               onPress={() => setGender("male")}
               style={[styles.pill, gender === "male" && styles.pillActiveGreen]}
             >
-              <Text style={[styles.pillTxt, gender === "male" && styles.pillTxtActive]}>👨 رجل</Text>
+              <Text style={[styles.pillTxt, gender === "male" && styles.pillTxtActive]}>رجل</Text>
             </Pressable>
           </View>
 
@@ -277,8 +340,8 @@ export default function MoreScreen() {
 
           <Text style={styles.help}>
             {isHumanVoiceEnabled()
-              ? "✅ مفعّل: أصوات بشرية طبيعية (ElevenLabs)."
-              : "⚠️ حاليًا صوت الجهاز. أضِف مفتاح ElevenLabs في .env لتفعيل الأصوات البشرية."}
+              ? "✅ مفعّل: أصوات بشرية طبيعية."
+              : "⚠️ حاليًا صوت الجهاز الافتراضي."}
           </Text>
         </GlassCard>
 
@@ -387,6 +450,32 @@ const styles = StyleSheet.create({
   },
 
   help: { color: "#9fb3c8", lineHeight: 18, textAlign: "right" },
+  focusRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(124,92,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(124,92,255,0.30)",
+    marginTop: 6,
+  },
+  focusRowOn: { backgroundColor: "rgba(124,92,255,0.20)", borderColor: "rgba(124,92,255,0.6)" },
+  focusTitle: { color: "#fff", fontWeight: "900", fontSize: 15, textAlign: "right" },
+  focusSub: { color: "#b9c6d8", fontSize: 12, textAlign: "right", marginTop: 3, lineHeight: 18 },
+  switchTrack: {
+    width: 46,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    padding: 3,
+    justifyContent: "center",
+  },
+  switchTrackOn: { backgroundColor: Palette.neonCyan },
+  switchKnob: { width: 22, height: 22, borderRadius: 11, backgroundColor: "#fff", alignSelf: "flex-start" },
+  switchKnobOn: { alignSelf: "flex-end" },
 
   btn: {
     flex: 1,

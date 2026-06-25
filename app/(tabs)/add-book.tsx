@@ -266,7 +266,7 @@ export default function AddBookScreen() {
         />
 
         <Text style={styles.hint}>
-          إذا لم تُدخل عدد الصفحات، يحسبه التطبيق تلقائيًا من ملف PDF (عبر Supabase Function).
+          إذا لم تُدخل عدد الصفحات، يحسبه التطبيق تلقائيًا من ملف PDF.
         </Text>
       </GlassCard>
     </SafeAreaView>
