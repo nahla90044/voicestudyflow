@@ -55,8 +55,8 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           text,
           model_id: "eleven_multilingual_v2",
-          // نبرة شارحة متفاعلة: ثبات معتدل + أسلوب أعلى ليتغيّر التنغيم كأنه يشرح
-          voice_settings: { stability: 0.42, similarity_boost: 0.85, style: 0.35, use_speaker_boost: true },
+          // نبرة شارحة لكن قوية وواضحة: ثبات أعلى قليلًا + أسلوب معتدل
+          voice_settings: { stability: 0.55, similarity_boost: 0.9, style: 0.25, use_speaker_boost: true },
         }),
       }
     );
