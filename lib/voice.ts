@@ -121,7 +121,7 @@ function disposePlayer() {
 //  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
-const CACHE_DIR_NAME = "tts-cache-v3"; // v3: إعدادات صوت أكثر تعبيرًا
+const CACHE_DIR_NAME = "tts-cache-v4"; // v4: رجوع للإعداد الأصلي المتوازن
 const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
 
 function cacheDir(): Directory {
