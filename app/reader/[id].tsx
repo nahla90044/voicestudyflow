@@ -126,6 +126,10 @@ export default function ReaderScreen() {
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [makingCards, setMakingCards] = useState(false);
+  // الاستماع بالعربية: ترجمة الصفحة ثم قراءتها بصوت عربي (لكتب اللغات)
+  const [listenArabic, setListenArabic] = useState(false);
+  const listenArabicRef = useRef(false);
+  const arTransRef = useRef<Map<number, string>>(new Map());
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -370,18 +374,59 @@ export default function ReaderScreen() {
     return out;
   }
 
+  // الصوت المستخدم للقراءة: عند الاستماع بالعربية نفرض صوتًا عربيًا
+  function pickVoice(): string {
+    if (!listenArabicRef.current) return voiceId;
+    const v = VOICE_CATALOG.find((x) => x.voiceId === voiceId);
+    return v?.lang && v.lang !== "ar" ? DEFAULT_VOICE_ID : voiceId;
+  }
+
+  // تبديل وضع الاستماع بالعربية (يعيد التشغيل من الصفحة الحالية إن كانت القراءة جارية)
+  function toggleListenArabic() {
+    const next = !listenArabic;
+    setListenArabic(next);
+    listenArabicRef.current = next;
+    const wasPlaying = playingRef.current;
+    stop();
+    if (wasPlaying) {
+      playingRef.current = true;
+      setSpeaking(true);
+      playStartRef.current = Date.now();
+      recordActivity({});
+      playFromPage(page, 0, true);
+    }
+  }
+
+  // يترجم نص الصفحة إلى العربية (مع تخزين مؤقت)
+  async function translatePageToArabic(p: number, text: string): Promise<string> {
+    if (arTransRef.current.has(p)) return arTransRef.current.get(p)!;
+    try {
+      const ar = (await aiAssist("translate", text)).trim();
+      const out = ar || text;
+      arTransRef.current.set(p, out);
+      return out;
+    } catch {
+      return text;
+    }
+  }
+
   // يقرأ صفحة جملة-بجملة، وعند انتهائها ينتقل تلقائيًا للتالية.
   // announce: يذكر رقم الصفحة مرة واحدة (عند بدء القراءة/الانتقال اليدوي فقط)
   async function playFromPage(p: number, startIdx = 0, announce = false) {
     if (!pdfPath) return;
     setBusy(true);
-    setStatus(`جارٍ تحضير نص الصفحة ${p}…`);
+    setStatus(listenArabicRef.current ? `جارٍ ترجمة الصفحة ${p}…` : `جارٍ تحضير نص الصفحة ${p}…`);
     try {
       const res = await extractPdfPageText(pdfPath, p);
       if (res.totalPages) setTotalPages(res.totalPages);
       setPage(res.page);
 
-      const sents = dropRepeatHeader(splitSentences(res.text));
+      let pageText = res.text;
+      if (listenArabicRef.current && pageText.trim()) {
+        pageText = await translatePageToArabic(res.page, pageText);
+      }
+      if (!playingRef.current) return;
+      const sents = dropRepeatHeader(splitSentences(pageText));
       setSentences(sents);
       offsetsRef.current = [];
 
@@ -404,7 +449,7 @@ export default function ReaderScreen() {
       if (announce && start === 0) {
         // أعلن رقم الصفحة مرة واحدة ثم اقرأ المحتوى
         speakText(`الصفحة رقم ${res.page}.`, {
-          voiceId,
+          voiceId: pickVoice(),
           rate,
           onDone: () => playSentence(sents, 0, res.page, res.totalPages),
           onError: () => playSentence(sents, 0, res.page, res.totalPages),
@@ -441,7 +486,7 @@ export default function ReaderScreen() {
     const speakCurrent = () => {
       if (!playingRef.current) return;
       speakText(sents[i], {
-        voiceId,
+        voiceId: pickVoice(),
         rate,
         onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
         onDone: () => {
@@ -942,6 +987,14 @@ export default function ReaderScreen() {
             );
           })}
         </ScrollView>
+
+        {/* الاستماع بالعربية لكتب اللغات (ترجمة فورية) */}
+        <Pressable onPress={toggleListenArabic} style={[styles.arToggle, listenArabic && styles.arToggleOn]}>
+          <Ionicons name="language" size={15} color={listenArabic ? "#0b1220" : Palette.neonBlue} />
+          <Text style={[styles.arToggleTxt, listenArabic && { color: "#0b1220" }]}>
+            {listenArabic ? "الاستماع بالعربية مُفعّل (ترجمة)" : "🌐 استمع بالعربية (ترجمة الكتاب)"}
+          </Text>
+        </Pressable>
 
         {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
         <View style={styles.controls}>
@@ -1731,6 +1784,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   voiceRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 2 },
+  arToggle: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 10,
+    paddingVertical: 9,
+    borderRadius: Radius.pill,
+    backgroundColor: "rgba(79,140,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(79,140,255,0.4)",
+  },
+  arToggleOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
+  arToggleTxt: { color: Palette.neonBlue, fontSize: 12.5, fontWeight: "800" },
   voiceChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
