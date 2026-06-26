@@ -141,6 +141,12 @@ export default function ReaderScreen() {
   const [ingestDone, setIngestDone] = useState(0);
   const [ingestTotal, setIngestTotal] = useState(0);
   const [fullyLoaded, setFullyLoaded] = useState(false); // الكتاب محمّل بالكامل
+  const fullyLoadedRef = useRef(false);
+  // بوّابة التحميل: صفحتان مجانيتان ثم نشجّع تحميل الكتاب كاملًا (قراءة بلا تقطيع)
+  const sessionPagesRef = useRef<Set<number>>(new Set());
+  const pendingPageRef = useRef<number | null>(null);
+  const gateDismissedRef = useRef(false);
+  const [downloadGate, setDownloadGate] = useState(false);
 
   // علامات + تظليل + ملاحظات
   const [bookmarks, setBookmarks] = useState<number[]>([]);
@@ -670,6 +676,26 @@ export default function ReaderScreen() {
   // announce: يذكر رقم الصفحة مرة واحدة (عند بدء القراءة/الانتقال اليدوي فقط)
   async function playFromPage(p: number, startIdx = 0, announce = false) {
     if (!pdfPath) return;
+
+    // بوّابة التحميل: بعد صفحتين مجانيتين، شجّعي تحميل الكتاب كامل قبل المتابعة
+    const seen = sessionPagesRef.current;
+    if (
+      !gateDismissedRef.current &&
+      !fullyLoadedRef.current &&
+      !getDownloadState()?.running &&
+      !seen.has(p) &&
+      seen.size >= 2
+    ) {
+      pendingPageRef.current = p;
+      playingRef.current = false;
+      setSpeaking(false);
+      setBusy(false);
+      setStatus("");
+      setDownloadGate(true);
+      return;
+    }
+    seen.add(p);
+
     setBusy(true);
     setStatus(
       listenArabicRef.current
@@ -1056,6 +1082,33 @@ export default function ReaderScreen() {
     const bookTitle = typeof title === "string" ? title : "الكتاب";
     await startDownload(pdfPath, bookTitle, total);
     showToast("⬇️ يحمّل في الخلفية — يكمل حتى لو خرجتِ من الكتاب");
+  }
+
+  useEffect(() => {
+    fullyLoadedRef.current = fullyLoaded;
+  }, [fullyLoaded]);
+
+  // إجراءات بوّابة التحميل
+  function gateDownloadNow() {
+    setDownloadGate(false);
+    startIngest(); // يبدأ التحميل بالخلفية
+    const p = pendingPageRef.current;
+    if (p != null) {
+      gateDismissedRef.current = true; // التحميل جارٍ → لا نوقف القراءة بعد الآن
+      playingRef.current = true;
+      setSpeaking(true);
+      playFromPage(p, 0, false);
+    }
+  }
+  function gateContinueWithout() {
+    setDownloadGate(false);
+    gateDismissedRef.current = true; // اختارت المتابعة → لا تكرار للبوّابة هذه الجلسة
+    const p = pendingPageRef.current;
+    if (p != null) {
+      playingRef.current = true;
+      setSpeaking(true);
+      playFromPage(p, 0, false);
+    }
   }
 
   // اعكس حالة المدير العام للتحميل في واجهة هذا الكتاب
@@ -2008,6 +2061,29 @@ export default function ReaderScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      {/* بوّابة التحميل: بعد صفحتين مجانيتين */}
+      <Modal visible={downloadGate} transparent animationType="fade" onRequestClose={() => setDownloadGate(false)}>
+        <View style={styles.gateMask}>
+          <View style={styles.gateCard}>
+            <View style={styles.gateIcon}>
+              <Ionicons name="cloud-download" size={34} color={Palette.neonCyan} />
+            </View>
+            <Text style={styles.gateTitle}>حمّلي الكتاب للاستماع المتواصل</Text>
+            <Text style={styles.gateBody}>
+              سمعتِ صفحتين 👏 — للقراءة بسلاسة بلا تقطيع ولا تشتيت، حمّلي الكتاب كاملًا أولًا.
+              يكمل في الخلفية حتى لو خرجتِ من الكتاب.
+            </Text>
+            <Pressable onPress={gateDownloadNow} style={styles.gatePrimary}>
+              <Ionicons name="cloud-download" size={18} color="#0b1220" />
+              <Text style={styles.gatePrimaryTxt}>حمّل الكتاب الآن</Text>
+            </Pressable>
+            <Pressable onPress={gateContinueWithout} style={styles.gateSecondary} hitSlop={6}>
+              <Text style={styles.gateSecondaryTxt}>أكمل بدون تحميل</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2611,6 +2687,43 @@ const styles = StyleSheet.create({
     borderColor: Palette.bg,
   },
   skipBadgeTxt: { color: "#fff", fontSize: 11, fontWeight: "900" },
+  gateMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.66)", alignItems: "center", justifyContent: "center", padding: 24 },
+  gateCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: Palette.bgElevated,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    padding: 24,
+    alignItems: "center",
+  },
+  gateIcon: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: Palette.neonCyan + "22",
+    borderWidth: 1,
+    borderColor: Palette.neonCyan + "55",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gateTitle: { color: Palette.text, fontSize: 19, fontWeight: "900", textAlign: "center", marginTop: 16 },
+  gateBody: { color: Palette.textMuted, fontSize: 14, lineHeight: 25, textAlign: "center", marginTop: 10 },
+  gatePrimary: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    alignSelf: "stretch",
+    marginTop: 20,
+    paddingVertical: 15,
+    borderRadius: 16,
+    backgroundColor: Palette.neonCyan,
+  },
+  gatePrimaryTxt: { color: "#0b1220", fontSize: 16, fontWeight: "900" },
+  gateSecondary: { marginTop: 14, padding: 6 },
+  gateSecondaryTxt: { color: Palette.textDim, fontSize: 14, fontWeight: "700" },
   toolTxt: { color: Palette.text, fontSize: 11, fontWeight: "900", paddingHorizontal: 2 },
   playBtn: {
     width: 56,
