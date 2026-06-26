@@ -95,6 +95,7 @@ export default function ReaderScreen() {
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
   const [activeWord, setActiveWord] = useState(-1); // الكلمة المقروءة حاليًا داخل الجملة
+  const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة المتصل عبر الصفحة 0..1 (للعدسة)
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
 
@@ -118,7 +119,7 @@ export default function ReaderScreen() {
   const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
   const lensY = useRef(new Animated.Value(0)).current; // إزاحة عمودية لمحتوى العدسة
   const lensX = useRef(new Animated.Value(0)).current; // إزاحة أفقية (متابعة الكلمة)
-  const LENS_SCALE = 1.45; // أقل تكبيرًا ليظهر السطر كاملًا في العدسة
+  const LENS_SCALE = 1.7; // تكبير يكفي ليتنقّل أفقيًا مع الكلمة عبر السطر
   const LENS_H = 140;
   // صناديق إحداثيات الكلمات لهذه الصفحة (للهايلايتر الدقيق)
   const [pageWords, setPageWords] = useState<WordBox[]>([]);
@@ -349,6 +350,7 @@ export default function ReaderScreen() {
     setSpeaking(false);
     setActiveSentence(-1);
     setActiveWord(-1);
+    setReadProgress(0);
 
     // سجّل دقائق الاستماع لهذه الجلسة + حدّث السلسلة
     if (playStartRef.current) {
@@ -464,30 +466,46 @@ export default function ReaderScreen() {
     return ls;
   }, [pageWords]);
 
-  // السطر المقروء حاليًا — تعيين تناسبي مضمون الحركة (تقدّم القراءة ÷ الكلمات → السطر)
-  const lineBox = useMemo<WordBox | null>(() => {
-    if (lines.length === 0 || sentences.length === 0 || activeSentence < 0) return null;
-    let before = 0;
-    for (let k = 0; k < activeSentence && k < sentences.length; k++) {
-      before += (sentences[k].match(/\S+/g) || []).length;
-    }
-    const total = sentences.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
-    const gw = before + Math.max(0, activeWord);
-    const idx = Math.min(lines.length - 1, Math.max(0, Math.round((gw / total) * (lines.length - 1))));
-    const ln = lines[idx];
-    return { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h };
-  }, [activeSentence, activeWord, lines, sentences]);
+  // نقطة القراءة المتصلة — موضع تقريبي للكلمة الحالية عبر التناسب على صناديق الكلمات
+  // (تتحرك يمين→يسار داخل السطر ثم تنزل للسطر التالي — كحركة العين في القراءة)
+  const readPoint = useMemo<{ cx: number; cy: number; idx: number } | null>(() => {
+    if (pageWords.length === 0) return null;
+    const f = Math.min(pageWords.length - 1, Math.max(0, readProgress * (pageWords.length - 1)));
+    const i0 = Math.floor(f);
+    const i1 = Math.min(pageWords.length - 1, i0 + 1);
+    const t = f - i0;
+    const a = pageWords[i0];
+    const b = pageWords[i1];
+    const cx = (a.x + a.w / 2) * (1 - t) + (b.x + b.w / 2) * t;
+    const cy = (a.y + a.h / 2) * (1 - t) + (b.y + b.h / 2) * t;
+    return { cx, cy, idx: Math.round(f) };
+  }, [readProgress, pageWords]);
 
-  // العدسة تتابع السطر المقروء عموديًا (أفقيًا ثابتة في الوسط) — حركة سلسة سطر-سطر
+  // السطر المقروء حاليًا (للهايلايت كامل السطر)
+  const lineBox = useMemo<WordBox | null>(() => {
+    if (!readPoint || lines.length === 0) return null;
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end) ?? null;
+    return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
+  }, [readPoint, lines]);
+
+  // العدسة تتابع نقطة القراءة المتصلة أفقيًا وعموديًا — تنزلق يمين→يسار ثم تنزل
   useEffect(() => {
-    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || !lineBox) return;
+    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || !readPoint) return;
     const imgH = pdfImgW / (pageImgAspect || 0.7);
-    const readY = (lineBox.y + lineBox.h / 2) * imgH;
+    const readY = readPoint.cy * imgH;
+    const readX = readPoint.cx * pdfImgW;
     const minY = Math.min(0, -(imgH * LENS_SCALE - LENS_H));
+    const minX = Math.min(0, pdfImgW - pdfImgW * LENS_SCALE);
     const tY = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
-    Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
-    lensX.setValue(-(pdfImgW * (LENS_SCALE - 1)) / 2); // أفقيًا في الوسط
-  }, [pdfLens, viewMode, pdfImgW, lineBox, pageImgAspect, lensX, lensY]);
+    const tX = Math.min(0, Math.max(minX, pdfImgW / 2 - readX * LENS_SCALE));
+    Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
+    Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
+  }, [pdfLens, viewMode, pdfImgW, readPoint, pageImgAspect, lensX, lensY]);
+
+  // صفحة جديدة → ابدأ تقدّم القراءة من الأعلى (تبدأ العدسة من بداية الصفحة)
+  useEffect(() => {
+    setReadProgress(0);
+  }, [page]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -748,10 +766,18 @@ export default function ReaderScreen() {
         extractPdfPageText(pdfPath, p + 1).catch(() => {});
         if (pdfLens) fetchPageWords(p + 1).catch(() => {});
       }
+      // تقدّم متصل عبر الصفحة (الكلمات قبل هذه الجملة + داخلها) لموضع العدسة
+      let wordsBefore = 0;
+      for (let k = 0; k < i; k++) wordsBefore += (sents[k].match(/\S+/g) || []).length;
+      const curWords = (sents[i].match(/\S+/g) || []).length || 1;
+      const totalWords = sents.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
-        onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
+        onProgress: (frac) => {
+          setActiveWord(wordIndexAtFraction(sents[i], frac));
+          setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
+        },
         onDone: () => {
           setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
