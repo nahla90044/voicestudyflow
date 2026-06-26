@@ -613,10 +613,12 @@ export default function ReaderScreen() {
 
     const speakCurrent = () => {
       if (!playingRef.current) return;
-      // تجهيز الجملة التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع
-      if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: pickVoice() });
+      // تجهيز الجمل التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع — جملتان قدّام
+      const vId = pickVoice();
+      if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: vId });
+      if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
       // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل أسرع
-      else if (p < total) extractPdfPageText(pdfPath, p + 1).catch(() => {});
+      if (i >= sents.length - 2 && p < total) extractPdfPageText(pdfPath, p + 1).catch(() => {});
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
