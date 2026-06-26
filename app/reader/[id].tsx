@@ -113,11 +113,12 @@ export default function ReaderScreen() {
   const [gotoValue, setGotoValue] = useState("");
   // وضع التحديد (هايلايتر): لمس السطر يحدّده بلون لجمعه للدراسة
   const [highlightMode, setHighlightMode] = useState(false);
-  // عدسة القراءة: تكبّر السطر المقروء بحركة وتتحرّك معه
-  const [lensMode, setLensMode] = useState(false);
-  const lensScale = useRef(new Animated.Value(1)).current;
-  // عدسة الـPDF: تكبّر صورة الصفحة في وضع التكبير وتتابع القراءة
+  // عدسة الـPDF: تكبّر منطقة القراءة على صورة الصفحة وتمشي مع القارئ
   const [pdfLens, setPdfLens] = useState(false);
+  const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
+  const lensY = useRef(new Animated.Value(0)).current; // إزاحة محتوى العدسة (يتابع القراءة)
+  const LENS_SCALE = 1.85;
+  const LENS_H = 130;
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -370,12 +371,20 @@ export default function ReaderScreen() {
     pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
   }, [activeSentence, viewMode, speaking, sentences.length]);
 
-  // عدسة القراءة: نبضة تكبير لطيفة عند انتقال السطر المقروء
+  // عدسة الـPDF: حرّك محتوى العدسة ليتابع منطقة القراءة على الصفحة
   useEffect(() => {
-    if (!lensMode || viewMode !== "text" || activeSentence < 0) return;
-    lensScale.setValue(1);
-    Animated.spring(lensScale, { toValue: 1.16, useNativeDriver: true, friction: 6, tension: 90 }).start();
-  }, [activeSentence, lensMode, viewMode, lensScale]);
+    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || sentences.length === 0) return;
+    const imgH = pdfImgW / (pageImgAspect || 0.7);
+    const frac =
+      sentences.length > 1 ? Math.min(1, Math.max(0, activeSentence) / (sentences.length - 1)) : 0;
+    const readY = frac * imgH;
+    Animated.spring(lensY, {
+      toValue: LENS_H / 2 - readY * LENS_SCALE,
+      useNativeDriver: true,
+      friction: 10,
+      tension: 55,
+    }).start();
+  }, [pdfLens, viewMode, pdfImgW, activeSentence, sentences.length, pageImgAspect, lensY]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -1010,13 +1019,6 @@ export default function ReaderScreen() {
                   {highlightMode ? "وضع التحديد مفعّل — المسي السطر" : "تحديد للدراسة 🖍️"}
                 </Text>
               </Pressable>
-              <Pressable
-                onPress={() => setLensMode((m) => !m)}
-                style={[styles.hlToggle, lensMode && styles.hlToggleOn]}
-              >
-                <Ionicons name="search" size={15} color={lensMode ? "#0b1220" : Palette.text} />
-                <Text style={[styles.hlToggleTxt, lensMode && { color: "#0b1220" }]}>عدسة</Text>
-              </Pressable>
               <Pressable onPress={() => setNotesOpen(true)} style={styles.hlToggle}>
                 <Ionicons name="bookmarks-outline" size={15} color={Palette.text} />
                 <Text style={styles.hlToggleTxt}>مقتطفاتي</Text>
@@ -1047,23 +1049,10 @@ export default function ReaderScreen() {
                         : styles.sentenceRow
                     }
                   >
-                    <Animated.View
-                      style={
-                        lensMode && i === activeSentence
-                          ? { transform: [{ scale: lensScale }] }
-                          : undefined
-                      }
-                    >
                     <Text
                       selectable
                       selectionColor="rgba(124,92,255,0.45)"
-                      style={
-                        i === activeSentence
-                          ? lensMode
-                            ? styles.sentenceLens
-                            : styles.sentenceActive
-                          : styles.sentence
-                      }
+                      style={i === activeSentence ? styles.sentenceActive : styles.sentence}
                     >
                       {(() => {
                         let wc = -1;
@@ -1084,7 +1073,6 @@ export default function ReaderScreen() {
                         });
                       })()}
                     </Text>
-                    </Animated.View>
                   </Pressable>
                 );
               })
@@ -1109,11 +1097,9 @@ export default function ReaderScreen() {
               >
                 <Image
                   source={{ uri: pageImg }}
-                  style={{
-                    width: fullText && pdfLens ? "155%" : "100%", // عدسة: تكبير الصفحة لمتابعة القراءة
-                    aspectRatio: pageImgAspect,
-                  }}
+                  style={{ width: "100%", aspectRatio: pageImgAspect }}
                   resizeMode="contain"
+                  onLayout={(e) => setPdfImgW(e.nativeEvent.layout.width)}
                 />
               </ScrollView>
             ) : (
@@ -1131,6 +1117,27 @@ export default function ReaderScreen() {
                 )}
               </View>
             )}
+            {/* عدسة الـPDF: تكبّر منطقة القراءة وتتحرّك معها */}
+            {pdfLens && pageImg && pdfImgW > 0 ? (
+              <View pointerEvents="none" style={styles.lensBand}>
+                <Animated.Image
+                  source={{ uri: pageImg }}
+                  style={{
+                    width: pdfImgW * LENS_SCALE,
+                    height: (pdfImgW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                    transform: [
+                      { translateX: -(pdfImgW * (LENS_SCALE - 1)) / 2 },
+                      { translateY: lensY },
+                    ],
+                  }}
+                  resizeMode="contain"
+                />
+                <View style={styles.lensTag}>
+                  <Ionicons name="search" size={12} color="#0b1220" />
+                </View>
+              </View>
+            ) : null}
+
             {/* شريط علامة مثل Apple Books — اضغطيه لحفظ/إزالة الصفحة */}
             <Pressable onPress={onToggleBookmark} style={styles.ribbon} hitSlop={10}>
               <Ionicons
@@ -2025,7 +2032,6 @@ const styles = StyleSheet.create({
   },
   sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
   sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right" },
-  sentenceLens: { color: Palette.neonCyan, fontSize: 27, lineHeight: 46, textAlign: "right", fontWeight: "800" },
   wordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
@@ -2121,6 +2127,34 @@ const styles = StyleSheet.create({
   },
   floatBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
   floatBtnOn: { backgroundColor: Palette.neonCyan },
+  lensBand: {
+    position: "absolute",
+    top: "24%",
+    left: 0,
+    right: 0,
+    height: 130,
+    borderTopWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: Palette.neonCyan,
+    backgroundColor: "#0b1220",
+    overflow: "hidden",
+    shadowColor: Palette.neonCyan,
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  lensTag: {
+    position: "absolute",
+    top: 6,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Palette.neonCyan,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   floatPlay: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
   floatSpeed: { color: Palette.text, fontSize: 15, fontWeight: "900" },
 
