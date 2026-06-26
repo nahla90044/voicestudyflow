@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
@@ -117,8 +118,11 @@ export default function ReaderScreen() {
   const [gotoValue, setGotoValue] = useState("");
   // وضع التحديد (هايلايتر): لمس السطر يحدّده بلون لجمعه للدراسة
   const [highlightMode, setHighlightMode] = useState(false);
-  // عدسة الـPDF: تكبّر منطقة القراءة على صورة الصفحة وتمشي مع القارئ
-  const [pdfLens, setPdfLens] = useState(false);
+  // ٣ مودات قراءة منفصلة (لا تتداخل فلا تقطيع):
+  //   normal: صوت فقط (أسلس وأجمل) · highlight: تتبّع الكلمة · lens: عدسة مكبّرة
+  const [readMode, setReadMode] = useState<"normal" | "highlight" | "lens">("normal");
+  const readModeRef = useRef(readMode);
+  const lensOn = readMode === "lens";
   const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
   const lensY = useRef(new Animated.Value(0)).current; // إزاحة عمودية لمحتوى العدسة
   const lensX = useRef(new Animated.Value(0)).current; // إزاحة أفقية (متابعة الكلمة)
@@ -420,7 +424,7 @@ export default function ReaderScreen() {
 
   // جلب صناديق كلمات الصفحة الحالية عند تفعيل العدسة
   useEffect(() => {
-    if (!pdfLens || !pdfPath || !pageImg) return;
+    if (!lensOn || !pdfPath || !pageImg) return;
     let active = true;
     fetchPageWords(page).then((ws) => {
       if (active) setPageWords(ws);
@@ -429,7 +433,7 @@ export default function ReaderScreen() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfLens, pdfPath, page, pageImg]);
+  }, [lensOn, pdfPath, page, pageImg]);
 
 
   // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
@@ -481,7 +485,7 @@ export default function ReaderScreen() {
 
   // العدسة تتابع نقطة القراءة المتصلة أفقيًا وعموديًا — تنزلق يمين→يسار ثم تنزل
   useEffect(() => {
-    if (!pdfLens || pdfImgW <= 0 || !readPoint) return;
+    if (!lensOn || pdfImgW <= 0 || !readPoint) return;
     const imgH = pdfImgW / (pageImgAspect || 0.7);
     const readY = readPoint.cy * imgH;
     const readX = readPoint.cx * pdfImgW;
@@ -491,7 +495,7 @@ export default function ReaderScreen() {
     const tX = Math.min(0, Math.max(minX, pdfImgW / 2 - readX * LENS_SCALE));
     Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
     Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
-  }, [pdfLens, pdfImgW, readPoint, pageImgAspect, lensX, lensY]);
+  }, [lensOn, pdfImgW, readPoint, pageImgAspect, lensX, lensY]);
 
   // صفحة جديدة → ابدأ تقدّم القراءة من الأعلى (تبدأ العدسة من بداية الصفحة)
   useEffect(() => {
@@ -782,7 +786,7 @@ export default function ReaderScreen() {
       // قرب نهاية الصفحة: جهّز نص وصناديق الصفحة التالية مسبقًا لتنقّل سلس
       if (i >= sents.length - 2 && p < total) {
         extractPdfPageText(pdfPath, p + 1).catch(() => {});
-        if (pdfLens) fetchPageWords(p + 1).catch(() => {});
+        if (lensOn) fetchPageWords(p + 1).catch(() => {});
       }
       // تقدّم متصل عبر الصفحة (الكلمات قبل هذه الجملة + داخلها) لموضع العدسة
       let wordsBefore = 0;
@@ -793,8 +797,13 @@ export default function ReaderScreen() {
         voiceId: pickVoice(),
         rate,
         onProgress: (frac) => {
+          // المود العادي: لا تحديثات لكل نبضة → قراءة سلسة بلا تقطيع
+          if (readModeRef.current === "normal") return;
           setActiveWord(wordIndexAtFraction(sents[i], frac));
-          setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
+          // تقدّم العدسة المتصل يُحسب فقط في مود العدسة (الأثقل)
+          if (readModeRef.current === "lens") {
+            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
+          }
         },
         onDone: () => {
           setActiveWord(-1);
@@ -1088,6 +1097,22 @@ export default function ReaderScreen() {
     fullyLoadedRef.current = fullyLoaded;
   }, [fullyLoaded]);
 
+  useEffect(() => {
+    readModeRef.current = readMode;
+  }, [readMode]);
+
+  // مود العدسة يسمح بتدوير الجهاز للعرض (landscape)؛ غيره يرجع للوضع الرأسي
+  useEffect(() => {
+    if (lensOn) {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [lensOn]);
+
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
     setDownloadGate(false);
@@ -1233,6 +1258,8 @@ export default function ReaderScreen() {
             ) : (
               sentences.map((s, i) => {
                 const hl = isHighlighted(s);
+                // الهايلايت يظهر فقط في مود الهايلايت — المود العادي بلا تظليل (قراءة صافية)
+                const active = readMode === "highlight" && i === activeSentence;
                 return (
                   <Pressable
                     key={i}
@@ -1242,25 +1269,19 @@ export default function ReaderScreen() {
                     onLayout={(e) => {
                       offsetsRef.current[i] = e.nativeEvent.layout.y;
                     }}
-                    style={
-                      i === activeSentence
-                        ? styles.sentenceRowActive
-                        : hl
-                        ? styles.sentenceRowHL
-                        : styles.sentenceRow
-                    }
+                    style={active ? styles.sentenceRowActive : hl ? styles.sentenceRowHL : styles.sentenceRow}
                   >
                     <Text
                       selectable
                       selectionColor="rgba(124,92,255,0.45)"
-                      style={i === activeSentence ? styles.sentenceActive : styles.sentence}
+                      style={active ? styles.sentenceActive : styles.sentence}
                     >
                       {(() => {
                         let wc = -1;
                         return s.split(/(\s+)/).map((tok, wi) => {
                           if (!/\S/.test(tok)) return tok;
                           wc++;
-                          const isSpoken = i === activeSentence && wc === activeWord;
+                          const isSpoken = active && wc === activeWord;
                           return (
                             <Text
                               key={wi}
@@ -1353,11 +1374,11 @@ export default function ReaderScreen() {
               <Ionicons name="contract" size={20} color={Palette.text} />
             </Pressable>
             <Pressable
-              onPress={() => setPdfLens((v) => !v)}
-              style={[styles.floatBtn, pdfLens && styles.floatBtnOn]}
+              onPress={() => setReadMode("lens")}
+              style={[styles.floatBtn, lensOn && styles.floatBtnOn]}
               hitSlop={8}
             >
-              <Ionicons name="search" size={19} color={pdfLens ? "#0b1220" : Palette.text} />
+              <Ionicons name="search" size={19} color={lensOn ? "#0b1220" : Palette.text} />
             </Pressable>
             <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
               <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
@@ -1389,6 +1410,27 @@ export default function ReaderScreen() {
             الصوت: {VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? "اختاري"}
           </Text>
         </Pressable>
+
+        {/* مود القراءة: عادي / هايلايت / عدسة (منفصلة فلا تتداخل) */}
+        <View style={styles.modeSeg}>
+          {([
+            { k: "normal", label: "عادي", icon: "headset" },
+            { k: "highlight", label: "هايلايت", icon: "color-wand" },
+            { k: "lens", label: "عدسة", icon: "search" },
+          ] as const).map((m) => {
+            const on = readMode === m.k;
+            return (
+              <Pressable
+                key={m.k}
+                onPress={() => setReadMode(m.k)}
+                style={[styles.modeSegBtn, on && styles.modeSegBtnOn]}
+              >
+                <Ionicons name={m.icon} size={15} color={on ? "#0b1220" : Palette.text} />
+                <Text style={[styles.modeSegTxt, on && styles.modeSegTxtOn]}>{m.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={styles.aidsRow}>
@@ -2029,10 +2071,10 @@ export default function ReaderScreen() {
       </Modal>
 
       {/* واجهة العدسة المنفصلة (ملء الشاشة) — لا تؤثّر على العرض العادي */}
-      <Modal visible={pdfLens} animationType="slide" onRequestClose={() => setPdfLens(false)}>
+      <Modal visible={lensOn} animationType="slide" onRequestClose={() => setReadMode("normal")}>
         <View style={styles.lensScreen}>
           <View style={styles.lensHeader}>
-            <Pressable onPress={() => setPdfLens(false)} style={styles.lensClose} hitSlop={8}>
+            <Pressable onPress={() => setReadMode("normal")} style={styles.lensClose} hitSlop={8}>
               <Ionicons name="close" size={24} color={Palette.text} />
             </Pressable>
             <Text style={styles.lensHeaderTxt}>🔍 وضع العدسة — صفحة {page}</Text>
@@ -2575,6 +2617,28 @@ const styles = StyleSheet.create({
   },
   arToggleOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
   arToggleTxt: { color: Palette.neonBlue, fontSize: 12.5, fontWeight: "800" },
+  modeSeg: {
+    flexDirection: "row-reverse",
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: Palette.surface,
+    borderRadius: 14,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  modeSegBtn: {
+    flex: 1,
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  modeSegBtnOn: { backgroundColor: Palette.neonCyan },
+  modeSegTxt: { color: Palette.text, fontSize: 13.5, fontWeight: "900" },
+  modeSegTxtOn: { color: "#0b1220" },
   aidsRow: { flexDirection: "row-reverse", gap: 8, marginTop: 8 },
   aidWrap: {
     flex: 1,
