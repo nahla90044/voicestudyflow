@@ -372,6 +372,14 @@ export default function ReaderScreen() {
     pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
   }, [activeSentence, viewMode, speaking, sentences.length]);
 
+  // عند فتح الكتاب: حمّل نص صفحة الاستئناف فورًا (حتى في وضع PDF) → يجهّز أول
+  // جملة صوتيًا فيبدأ التشغيل سريعًا بلا دوران طويل.
+  useEffect(() => {
+    if (!prefsLoaded || speaking || sentences.length > 0) return;
+    loadSentences(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoaded]);
+
   // جهّز أول جملة مسبقًا عند تحميل نص الصفحة (وهي متوقفة) → زر التشغيل يبدأ فورًا بلا انتظار
   useEffect(() => {
     if (sentences.length === 0 || speaking) return;

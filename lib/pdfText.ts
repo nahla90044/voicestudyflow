@@ -3,8 +3,27 @@
 //  1) إن كان نص الصفحة مخزّنًا → نُرجعه فورًا (سريع، بدون تكلفة).
 //  2) وإلا: نستخرج من الطبقة النصية (pdf-extract-text)، وإن كانت الصفحة
 //     بلا نص حقيقي (كتاب مصوّر) → OCR عبر ocr-page، ثم نخزّن النتيجة.
-import { filterReadingNoise, fixArabicSpacing } from "./ai";
+import { fixArabicSpacing } from "./ai";
 import { supabase } from "./supabase";
+
+// تنقية ضجيج فورية (بلا إنترنت/ذكاء) — أسرع بكثير. تحذف الأسطر غير المحتوى فقط
+// (أرقام صفحات، سلاسل نقاط، علامات مائية، مراجع الصور) دون تغيير أي كلمة.
+function stripNoise(text: string): string {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => {
+      if (!l) return false;
+      if (/^[:\s\-_.|]+$/.test(l)) return false; // رموز فقط
+      if (/restricted|confidential|property and money/i.test(l)) return false;
+      if (/^صورة\s*[\(（]/.test(l)) return false; // مراجع الصور: «صورة (10-1)»
+      if (/^[٠-٩\d\s.\-/]+$/.test(l)) return false; // أرقام فقط (صفحات/تواريخ مفردة)
+      return true;
+    })
+    .map((l) => l.replace(/:{2,}/g, " ").replace(/[ \t]{2,}/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
 
 // إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد المعالجة.
 // v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج.  v4: إصلاح المسافات.
@@ -146,9 +165,8 @@ export async function extractPdfPageText(
   //   2) تنقية الضجيج (أرقام صفحات/ترويسات/إحالات) — حذف فقط.
   // كلتاهما تُرجعان النص الأصلي إن لم يجتز التحقّق.
   if (hasRealText) {
-    // إصلاح خفيف للمسافات إن لزم (للنص السليم الملتصق فقط، بتحقّق صارم) + تنقية الضجيج
-    text = normalizeArabic(await fixArabicSpacing(text));
-    text = normalizeArabic(await filterReadingNoise(text));
+    // إصلاح خفيف للمسافات إن لزم (للنص الملتصق فقط، بتحقّق صارم) + تنقية فورية
+    text = stripNoise(normalizeArabic(await fixArabicSpacing(text)));
   } else {
     text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
   }
