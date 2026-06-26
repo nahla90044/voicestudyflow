@@ -36,6 +36,7 @@ export type SpeakOptions = {
   voiceId?: string; // معرّف صوت محدد من الكتالوج (يتجاوز gender)
   rate?: number;
   pitch?: number;
+  expressive?: boolean; // صوت أدفأ وأكثر تعبيرًا (للعرض التقديمي/السرد)
 } & SpeakCallbacks;
 
 /* ---------------- كتالوج أصوات ElevenLabs العربية ---------------- */
@@ -241,13 +242,16 @@ function base64ToBytes(b64: string): Uint8Array {
 async function synthToFile(
   text: string,
   gender: VoiceGender,
-  voiceId?: string
+  voiceId?: string,
+  expressive?: boolean
 ): Promise<{ file: File; starts: number[] }> {
   const vid = voiceId || VOICE_IDS[gender];
+  // مفتاح تخزين مختلف للإعداد التعبيري (صوت مختلف) عن العادي
+  const cacheKey = vid + (expressive ? "|x" : "");
 
   // 1) موجود في التخزين؟ شغّله مباشرة بدون تكلفة/إنترنت (مع توقيت الحروف إن وُجد)
-  const file = cacheFileFor(text, vid);
-  const timingFile = timingFileFor(text, vid);
+  const file = cacheFileFor(text, cacheKey);
+  const timingFile = timingFileFor(text, cacheKey);
   if (file.exists && (file.size ?? 0) > 0) {
     let starts: number[] = [];
     try {
@@ -259,7 +263,7 @@ async function synthToFile(
   // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
   // لا يوجد مفتاح ElevenLabs داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
   const { data, error } = await supabase.functions.invoke("tts", {
-    body: { text, gender, voiceId: vid },
+    body: { text, gender, voiceId: vid, expressive: !!expressive },
   });
   if (error) throw error;
   const b64 = (data as { audio?: string; error?: string })?.audio;
@@ -326,7 +330,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
   // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
   const vidForWarm = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
-  const expectedUri = cacheFileFor(clean, vidForWarm).uri;
+  const expectedUri = cacheFileFor(clean, vidForWarm + (opts.expressive ? "|x" : "")).uri;
   let adopted: AudioPlayer | null = null;
   if (warmPlayer && warmPlayer.uri === expectedUri) {
     adopted = warmPlayer.player;
@@ -344,7 +348,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const gender = opts.gender ?? "female";
 
     step = "توليد الصوت";
-    const { file, starts } = await synthToFile(clean, gender, opts.voiceId);
+    const { file, starts } = await synthToFile(clean, gender, opts.voiceId, opts.expressive);
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
 
     step = "وضع الصوت";

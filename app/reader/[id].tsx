@@ -73,6 +73,25 @@ function wordIndexAtFraction(sentence: string, frac: number): number {
   return words.length - 1;
 }
 
+// يقسّم الشرائح ذات النقاط الكثيرة على شرائح متتابعة (لئلا يُقصّ المحتوى في شريحة)
+function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
+  const out: Slide[] = [];
+  for (const s of slides) {
+    if (s.bullets.length <= maxBullets) {
+      out.push(s);
+      continue;
+    }
+    for (let i = 0; i < s.bullets.length; i += maxBullets) {
+      out.push({
+        emoji: s.emoji,
+        title: i === 0 ? s.title : `${s.title} (تكملة)`,
+        bullets: s.bullets.slice(i, i + maxBullets),
+      });
+    }
+  }
+  return out;
+}
+
 export default function ReaderScreen() {
   const router = useRouter();
   const { id, title, pdf_path } = useLocalSearchParams<{
@@ -163,6 +182,8 @@ export default function ReaderScreen() {
   const [presNarrating, setPresNarrating] = useState(false);
   const [presSlide, setPresSlide] = useState(0);
   const presNarratingRef = useRef(false);
+  const presUsedRef = useRef(false); // فُتح العرض مرة → جهّز الشرائح مسبقًا للصفحات التالية
+  const [presMusic, setPresMusic] = useState(false); // موسيقى خلفية (مطفأة افتراضيًا — للروايات فقط)
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -431,27 +452,30 @@ export default function ReaderScreen() {
     }
   }
 
-  // البريزنتيشن: ولّد شرائح الصفحة الحالية عند فتح العرض أو تغيّر الصفحة
+  // البريزنتيشن: ولّد شرائح الصفحة. بعد أول فتح للعرض نجهّزها مسبقًا في الخلفية
+  // لكل صفحة (presUsedRef) فتكون فورية. ونقسّم الشرائح الطويلة على شرائح تالية.
   useEffect(() => {
-    if (!presentOpen || sentences.length === 0) return;
+    if ((!presentOpen && !presUsedRef.current) || sentences.length === 0) return;
     const p = page;
     if (slidesCacheRef.current.has(p)) {
       setPageSlides(slidesCacheRef.current.get(p)!);
       return;
     }
     let active = true;
-    setSlidesLoading(true);
-    setPageSlides([]);
+    if (presentOpen) {
+      setSlidesLoading(true);
+      setPageSlides([]);
+    }
     (async () => {
       try {
-        const sl = await generateSlides(sentences.join(" ").slice(0, 4000));
+        const sl = splitLongSlides(await generateSlides(sentences.join(" ").slice(0, 4000)));
         if (!active) return;
         slidesCacheRef.current.set(p, sl);
-        setPageSlides(sl);
+        if (presentOpen) setPageSlides(sl);
       } catch {
-        if (active) setPageSlides([]);
+        if (active && presentOpen) setPageSlides([]);
       } finally {
-        if (active) setSlidesLoading(false);
+        if (active && presentOpen) setSlidesLoading(false);
       }
     })();
     return () => {
@@ -497,6 +521,7 @@ export default function ReaderScreen() {
     speakText(slideSpeech(pageSlides[idx]), {
       voiceId: pickVoice(),
       rate,
+      expressive: true, // صوت أدفأ وأكثر تعبيرًا للعرض التقديمي
       onDone: () => narrateSlidesFrom(idx + 1),
       onError: () => narrateSlidesFrom(idx + 1),
     });
@@ -512,7 +537,7 @@ export default function ReaderScreen() {
       stop(); // أوقف قراءة الصفحة إن كانت تعمل
       presNarratingRef.current = true;
       setPresNarrating(true);
-      startAmbient(); // موسيقى خلفية هادئة أثناء السرد
+      if (presMusic) startAmbient(); // موسيقى خلفية فقط إن فعّلتها (للروايات)
       narrateSlidesFrom(0);
     }
   }
@@ -1312,7 +1337,13 @@ export default function ReaderScreen() {
             </LinearGradient>
           </Pressable>
 
-          <Pressable onPress={() => setPresentOpen(true)} style={styles.aidWrap}>
+          <Pressable
+            onPress={() => {
+              presUsedRef.current = true;
+              setPresentOpen(true);
+            }}
+            style={styles.aidWrap}
+          >
             <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>عرض تقديمي</Text>
             </LinearGradient>
@@ -1873,6 +1904,25 @@ export default function ReaderScreen() {
               <Text style={styles.presExitTxt}>خروج</Text>
             </Pressable>
             <Text style={styles.presPage}>صفحة {page}</Text>
+            {/* زر الموسيقى الخلفية (للروايات/القصص) — مطفأ افتراضيًا */}
+            <Pressable
+              onPress={() => {
+                setPresMusic((m) => {
+                  const next = !m;
+                  if (next && presNarratingRef.current) startAmbient();
+                  else if (!next) stopAmbient();
+                  return next;
+                });
+              }}
+              style={[styles.presMusicBtn, presMusic && styles.presMusicBtnOn]}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={presMusic ? "musical-notes" : "musical-notes-outline"}
+                size={18}
+                color={presMusic ? "#0b1220" : Palette.text}
+              />
+            </Pressable>
           </View>
 
           {/* الشريحة */}
@@ -1906,14 +1956,14 @@ export default function ReaderScreen() {
                     </View>
                     <Text style={[styles.slideTitle, { color: c }]}>{s.title}</Text>
                     <View style={[styles.slideDivider, { backgroundColor: c }]} />
-                    <View style={styles.slideBullets}>
+                    <ScrollView style={styles.slideBulletsScroll} contentContainerStyle={styles.slideBullets}>
                       {s.bullets.map((b, bi) => (
                         <View key={bi} style={styles.slideBulletRow}>
                           <View style={[styles.slideDot, { backgroundColor: c }]} />
                           <Text style={styles.slideBulletTxt}>{b}</Text>
                         </View>
                       ))}
-                    </View>
+                    </ScrollView>
                   </View>
                 );
               })()
@@ -1923,8 +1973,9 @@ export default function ReaderScreen() {
           {/* تنقّل يدوي بين الشرائح: أسهم + نقاط قابلة للضغط */}
           {pageSlides.length > 0 ? (
             <View style={styles.presNav}>
-              <Pressable onPress={() => goSlide(1)} style={styles.presArrow} hitSlop={8} disabled={slideIdx >= pageSlides.length - 1}>
-                <Ionicons name="chevron-back" size={26} color={slideIdx >= pageSlides.length - 1 ? Palette.textDim : Palette.text} />
+              {/* اليمين = السابق (سهم لليمين) */}
+              <Pressable onPress={() => goSlide(-1)} style={styles.presArrow} hitSlop={8} disabled={slideIdx <= 0}>
+                <Ionicons name="chevron-forward" size={26} color={slideIdx <= 0 ? Palette.textDim : Palette.text} />
               </Pressable>
               <View style={styles.presDots}>
                 {pageSlides.map((_, di) => (
@@ -1933,8 +1984,9 @@ export default function ReaderScreen() {
                   </Pressable>
                 ))}
               </View>
-              <Pressable onPress={() => goSlide(-1)} style={styles.presArrow} hitSlop={8} disabled={slideIdx <= 0}>
-                <Ionicons name="chevron-forward" size={26} color={slideIdx <= 0 ? Palette.textDim : Palette.text} />
+              {/* اليسار = التالي (سهم لليسار) */}
+              <Pressable onPress={() => goSlide(1)} style={styles.presArrow} hitSlop={8} disabled={slideIdx >= pageSlides.length - 1}>
+                <Ionicons name="chevron-back" size={26} color={slideIdx >= pageSlides.length - 1 ? Palette.textDim : Palette.text} />
               </Pressable>
             </View>
           ) : null}
@@ -2484,6 +2536,18 @@ const styles = StyleSheet.create({
   },
   presExitTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
   presPage: { color: Palette.textDim, fontSize: 13, fontWeight: "800" },
+  presMusicBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  presMusicBtnOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  slideBulletsScroll: { alignSelf: "stretch", maxHeight: 320, flexGrow: 0 },
   presStage: { flex: 1, justifyContent: "center" },
   presCenter: { alignItems: "center", gap: 12 },
   presHint: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22, paddingHorizontal: 24 },
