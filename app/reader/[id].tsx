@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Modal,
   Pressable,
@@ -112,6 +113,9 @@ export default function ReaderScreen() {
   const [gotoValue, setGotoValue] = useState("");
   // وضع التحديد (هايلايتر): لمس السطر يحدّده بلون لجمعه للدراسة
   const [highlightMode, setHighlightMode] = useState(false);
+  // عدسة القراءة: تكبّر السطر المقروء بحركة وتتحرّك معه
+  const [lensMode, setLensMode] = useState(false);
+  const lensScale = useRef(new Animated.Value(1)).current;
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -363,6 +367,13 @@ export default function ReaderScreen() {
     const scrollable = Math.max(0, pdfContentH.current - pdfViewH.current);
     pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
   }, [activeSentence, viewMode, speaking, sentences.length]);
+
+  // عدسة القراءة: نبضة تكبير لطيفة عند انتقال السطر المقروء
+  useEffect(() => {
+    if (!lensMode || viewMode !== "text" || activeSentence < 0) return;
+    lensScale.setValue(1);
+    Animated.spring(lensScale, { toValue: 1.16, useNativeDriver: true, friction: 6, tension: 90 }).start();
+  }, [activeSentence, lensMode, viewMode, lensScale]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -997,6 +1008,13 @@ export default function ReaderScreen() {
                   {highlightMode ? "وضع التحديد مفعّل — المسي السطر" : "تحديد للدراسة 🖍️"}
                 </Text>
               </Pressable>
+              <Pressable
+                onPress={() => setLensMode((m) => !m)}
+                style={[styles.hlToggle, lensMode && styles.hlToggleOn]}
+              >
+                <Ionicons name="search" size={15} color={lensMode ? "#0b1220" : Palette.text} />
+                <Text style={[styles.hlToggleTxt, lensMode && { color: "#0b1220" }]}>عدسة</Text>
+              </Pressable>
               <Pressable onPress={() => setNotesOpen(true)} style={styles.hlToggle}>
                 <Ionicons name="bookmarks-outline" size={15} color={Palette.text} />
                 <Text style={styles.hlToggleTxt}>مقتطفاتي</Text>
@@ -1027,10 +1045,23 @@ export default function ReaderScreen() {
                         : styles.sentenceRow
                     }
                   >
+                    <Animated.View
+                      style={
+                        lensMode && i === activeSentence
+                          ? { transform: [{ scale: lensScale }] }
+                          : undefined
+                      }
+                    >
                     <Text
                       selectable
                       selectionColor="rgba(124,92,255,0.45)"
-                      style={i === activeSentence ? styles.sentenceActive : styles.sentence}
+                      style={
+                        i === activeSentence
+                          ? lensMode
+                            ? styles.sentenceLens
+                            : styles.sentenceActive
+                          : styles.sentence
+                      }
                     >
                       {(() => {
                         let wc = -1;
@@ -1051,6 +1082,7 @@ export default function ReaderScreen() {
                         });
                       })()}
                     </Text>
+                    </Animated.View>
                   </Pressable>
                 );
               })
@@ -1981,6 +2013,7 @@ const styles = StyleSheet.create({
   },
   sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
   sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right" },
+  sentenceLens: { color: Palette.neonCyan, fontSize: 27, lineHeight: 46, textAlign: "right", fontWeight: "800" },
   wordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
