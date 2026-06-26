@@ -14,7 +14,8 @@ export type AiAction =
   | "mindmap"
   | "tashkeel"
   | "slides"
-  | "filternoise";
+  | "filternoise"
+  | "fixspacing";
 
 export type Slide = { emoji: string; title: string; bullets: string[] };
 
@@ -100,6 +101,43 @@ export async function filterReadingNoise(text: string): Promise<string> {
       if (out.trim() && isSafeFilter(text, out)) return out.trim();
     } catch {
       break; // الذكاء غير متاح → النص الأصلي
+    }
+  }
+  return text; // لم يجتز التحقّق → النص الأصلي حرفيًا
+}
+
+/* -------- إصلاح المسافات (للنص الملتصق) بضمان عدم تغيير أي كلمة -------- */
+// الهيكل الساكن: حروف عربية فقط (بلا تشكيل/تطويل/مسافات/ترقيم) — يُعرّف الكلمات
+function consonantSkeleton(s: string): string {
+  return s
+    .normalize("NFKC")
+    .replace(/[ً-ْٰ]/g, "") // إزالة الحركات والتنوين والسكون والألف الخنجرية
+    .replace(/ـ/g, "") // التطويل
+    .replace(/[^ء-ي0-9٠-٩]/g, ""); // أبقِ الحروف العربية والأرقام فقط
+}
+// هل النص ملتصق (كلمات بلا مسافات كافية)؟
+function looksRunTogether(text: string): boolean {
+  const letters = (text.match(/[ء-ي]/g) || []).length;
+  const spaces = (text.match(/\s/g) || []).length;
+  if (letters < 60) return false; // قصير → لا داعي
+  return spaces / letters < 0.08; // أقل من مسافة لكل ~12 حرفًا = ملتصق
+}
+
+/**
+ * يصلح مسافات النص العربي الملتصق (ومواضع التشكيل) عبر الذكاء، **بضمان صارم**:
+ * يقبل المخرجات فقط إذا كان الهيكل الساكن (الحروف الأصلية وترتيبها) مطابقًا تمامًا
+ * للأصل — أي لم تتغيّر أي كلمة، فقط المسافات/التشكيل. وإلا يُرجع النص كما هو.
+ * يُطبَّق فقط عند اكتشاف نص ملتصق.
+ */
+export async function fixArabicSpacing(text: string): Promise<string> {
+  if (!text.trim() || !looksRunTogether(text)) return text;
+  const skeleton = consonantSkeleton(text);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const out = stripPreamble(await aiAssist("fixspacing", text));
+      if (out.trim() && consonantSkeleton(out) === skeleton) return out.trim();
+    } catch {
+      break;
     }
   }
   return text; // لم يجتز التحقّق → النص الأصلي حرفيًا
