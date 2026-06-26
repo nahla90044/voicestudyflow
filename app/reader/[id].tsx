@@ -2304,7 +2304,7 @@ const styles = StyleSheet.create({
 
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
-  textScroll: { backgroundColor: Palette.bgElevated },
+  textScroll: { flex: 1, backgroundColor: Palette.bgElevated },
   hlBar: { flexDirection: "row-reverse", justifyContent: "space-between", gap: 8, marginBottom: 10 },
   hlToggle: {
     flexDirection: "row-reverse",
@@ -2320,15 +2320,24 @@ const styles = StyleSheet.create({
   hlToggleOn: { backgroundColor: Palette.warn, borderColor: Palette.warn },
   hlToggleTxt: { color: Palette.text, fontSize: 12, fontWeight: "800" },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
-  sentenceRow: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md },
-  sentenceRowHL: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+  // ثبات التخطيط: نفس الحشو والحدود دائمًا (لون الحد فقط يتغيّر) فلا تتزحزح المواضع
+  sentenceRow: {
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     borderRadius: Radius.md,
+    borderRightWidth: 4,
+    borderRightColor: "transparent",
+  },
+  sentenceRowHL: {
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderRightWidth: 4,
+    borderRightColor: "transparent",
     backgroundColor: "rgba(241,196,15,0.14)",
   },
   sentenceRowActive: {
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
     backgroundColor: Palette.primarySoft,
