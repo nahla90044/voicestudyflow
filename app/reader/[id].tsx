@@ -224,8 +224,21 @@ export default function ReaderScreen() {
   const [pageImgLoading, setPageImgLoading] = useState(false);
   const pageImgForRef = useRef(0); // الصفحة التي تخصّها الصورة المعروضة حاليًا
   const imgReqRef = useRef(0); // رقم الطلب — يضمن أن آخر صفحة مطلوبة هي التي تُعرض
+
+  // العدسة المكبّرة (وضع منفصل ملء الشاشة — لا يؤثّر على القراءة العادية)
+  const [lensOpen, setLensOpen] = useState(false);
+  const [pageWords, setPageWords] = useState<WordBox[]>([]); // صناديق كلمات الصفحة
+  const wordsCacheRef = useRef<Map<number, WordBox[]>>(new Map());
+  const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة 0..1 عبر الصفحة
+  const [lensW, setLensW] = useState(0); // عرض نافذة العدسة المقاس
+  const [lensH, setLensH] = useState(0); // ارتفاع نافذة العدسة المقاس
+  const lensX = useRef(new Animated.Value(0)).current;
+  const lensY = useRef(new Animated.Value(0)).current;
+  const LENS_SCALE = 2.0; // تكبير العدسة
+  const lensOpenRef = useRef(false);
   useEffect(() => {
-    if (viewMode !== "pdf" || !pdfPath || !prefsLoaded) return;
+    // نحمّل صورة الصفحة في وضع PDF أو عند فتح العدسة (تحتاج الصورة)
+    if ((viewMode !== "pdf" && !lensOpen) || !pdfPath || !prefsLoaded) return;
     const target = page;
     const myReq = ++imgReqRef.current;
     // امسح صورة الصفحة السابقة فورًا إن اختلفت الصفحة (لا يبقى الغلاف القديم)
@@ -247,7 +260,7 @@ export default function ReaderScreen() {
         );
       }
     })();
-  }, [pdfPath, page, viewMode, prefsLoaded]);
+  }, [pdfPath, page, viewMode, prefsLoaded, lensOpen]);
 
   // تحميل التفضيلات: آخر صفحة + السرعة
   useEffect(() => {
@@ -769,11 +782,22 @@ export default function ReaderScreen() {
       if (i >= sents.length - 2 && p < total) {
         extractPdfPageText(pdfPath, p + 1).catch(() => {});
       }
+      // لموضع العدسة: كم مقطعًا/كلمات قبل هذا المقطع وإجماليها
+      let wordsBefore = 0;
+      for (let k = 0; k < i; k++) wordsBefore += (sents[k].match(/\S+/g) || []).length;
+      const curWords = (sents[i].match(/\S+/g) || []).length || 1;
+      const totalWords = sents.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
-        onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
+        onProgress: (frac) => {
+          setActiveWord(wordIndexAtFraction(sents[i], frac));
+          // تقدّم القراءة المتصل للعدسة (يُحدَّث فقط عند فتحها لتفادي أي عبء)
+          if (lensOpenRef.current) {
+            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
+          }
+        },
         onDone: () => {
           setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
@@ -1070,6 +1094,77 @@ export default function ReaderScreen() {
     fullyLoadedRef.current = fullyLoaded;
   }, [fullyLoaded]);
 
+  /* ---------------- العدسة المكبّرة ---------------- */
+  useEffect(() => {
+    lensOpenRef.current = lensOpen;
+    // وضع العدسة يسمح بتدوير الجهاز للعرض؛ الإغلاق يرجّع الوضع الرأسي
+    if (lensOpen) ScreenOrientation.unlockAsync().catch(() => {});
+    else ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [lensOpen]);
+
+  // صفحة جديدة → ابدأ تقدّم القراءة (والعدسة) من الأعلى
+  useEffect(() => {
+    setReadProgress(0);
+  }, [page]);
+
+  // جلب صناديق كلمات الصفحة عند فتح العدسة (مع تخزين مؤقت)
+  useEffect(() => {
+    if (!lensOpen || !pdfPath) return;
+    const p = page;
+    const cached = wordsCacheRef.current.get(p);
+    if (cached) {
+      setPageWords(cached);
+      return;
+    }
+    let on = true;
+    getPageWords(pdfPath, p).then((ws) => {
+      const clean = ws.filter((w) => {
+        const t = (w.t || "").trim();
+        return t && !/:{3,}/.test(t) && !/restricted|confidential/i.test(t) && !/^[\d٠-٩.\-|]+$/.test(t);
+      });
+      wordsCacheRef.current.set(p, clean);
+      if (on) setPageWords(clean);
+    });
+    return () => {
+      on = false;
+    };
+  }, [lensOpen, pdfPath, page]);
+
+  // نقطة القراءة المتصلة (موضع تقريبي على صناديق الكلمات) — تتحرك يمين→يسار ثم تنزل
+  const readPoint = useMemo<{ cx: number; cy: number } | null>(() => {
+    if (pageWords.length === 0) return null;
+    const f = Math.min(pageWords.length - 1, Math.max(0, readProgress * (pageWords.length - 1)));
+    const i0 = Math.floor(f);
+    const i1 = Math.min(pageWords.length - 1, i0 + 1);
+    const t = f - i0;
+    const a = pageWords[i0];
+    const b = pageWords[i1];
+    return {
+      cx: (a.x + a.w / 2) * (1 - t) + (b.x + b.w / 2) * t,
+      cy: (a.y + a.h / 2) * (1 - t) + (b.y + b.h / 2) * t,
+    };
+  }, [readProgress, pageWords]);
+
+  // العدسة تتابع نقطة القراءة (أفقيًا وعموديًا) بحركة سلسة، مع تثبيت داخل حدود الصورة
+  useEffect(() => {
+    if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
+    const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة
+    const x = readPoint.cx * lensW * LENS_SCALE; // موضع القراءة أفقيًا في الصورة المكبّرة
+    const y = readPoint.cy * imgH * LENS_SCALE; // وعموديًا
+    // نضع نقطة القراءة في الوسط أفقيًا وعند ٣٥٪ من أعلى النافذة
+    let tX = lensW / 2 - x;
+    let tY = lensH * 0.35 - y;
+    const minX = Math.min(0, lensW - lensW * LENS_SCALE);
+    const minY = Math.min(0, lensH - imgH * LENS_SCALE);
+    tX = Math.min(0, Math.max(minX, tX));
+    tY = Math.min(0, Math.max(minY, tY));
+    Animated.timing(lensX, { toValue: tX, duration: 240, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 240, useNativeDriver: true }).start();
+  }, [lensOpen, lensW, lensH, readPoint, pageImgAspect, lensX, lensY]);
+
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
     setDownloadGate(false);
@@ -1142,6 +1237,11 @@ export default function ReaderScreen() {
 
         <Pressable onPress={() => setFullText(true)} style={styles.iconBtn} hitSlop={8}>
           <Ionicons name="expand" size={18} color={Palette.text} />
+        </Pressable>
+
+        {/* العدسة المكبّرة (تكبّر النص وتتابع القراءة) */}
+        <Pressable onPress={() => setLensOpen(true)} style={styles.iconBtn} hitSlop={8}>
+          <Ionicons name="search" size={18} color={Palette.neonViolet} />
         </Pressable>
 
         <Pressable onPress={() => setDrivingMode(true)} style={styles.iconBtn} hitSlop={8}>
@@ -1941,6 +2041,60 @@ export default function ReaderScreen() {
         </View>
       </Modal>
 
+      {/* وضع العدسة المكبّرة (ملء الشاشة، يتابع القراءة، يدعم التدوير) */}
+      <Modal visible={lensOpen} animationType="slide" onRequestClose={() => setLensOpen(false)}>
+        <View style={styles.lensWrap}>
+          <View style={styles.lensTop}>
+            <Pressable onPress={() => setLensOpen(false)} style={styles.lensExit} hitSlop={8}>
+              <Ionicons name="close" size={22} color={Palette.text} />
+              <Text style={styles.lensExitTxt}>إغلاق العدسة</Text>
+            </Pressable>
+            <Text style={styles.lensHint}>🔍 يكبّر ويتابع القراءة · دوّري الجهاز للعرض</Text>
+          </View>
+
+          <View
+            style={styles.lensViewport}
+            onLayout={(e) => {
+              setLensW(e.nativeEvent.layout.width);
+              setLensH(e.nativeEvent.layout.height);
+            }}
+          >
+            {pageImg && lensW > 0 ? (
+              <Animated.View
+                style={{
+                  width: lensW * LENS_SCALE,
+                  height: (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                  transform: [{ translateX: lensX }, { translateY: lensY }],
+                }}
+              >
+                <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+              </Animated.View>
+            ) : (
+              <View style={styles.lensCenter}>
+                <ActivityIndicator color={Palette.neonViolet} />
+                <Text style={styles.lensLoadTxt}>جارٍ تجهيز الصفحة…</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.lensControls}>
+            <Pressable onPress={() => goPage(-1)} style={styles.lensCtlBtn} hitSlop={6} disabled={page <= 1}>
+              <Ionicons name="chevron-forward" size={24} color={page <= 1 ? Palette.textDim : Palette.text} />
+            </Pressable>
+            <Pressable onPress={togglePlay} style={styles.lensPlay}>
+              {busy ? (
+                <ActivityIndicator color="#0b1220" />
+              ) : (
+                <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
+              )}
+            </Pressable>
+            <Pressable onPress={() => goPage(1)} style={styles.lensCtlBtn} hitSlop={6} disabled={!!totalPages && page >= totalPages}>
+              <Ionicons name="chevron-back" size={24} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* عرض البريزنتيشن أثناء القراءة */}
       <Modal
         visible={presentOpen}
@@ -2302,6 +2456,40 @@ const styles = StyleSheet.create({
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 
+  lensWrap: { flex: 1, backgroundColor: Palette.bg },
+  lensTop: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 54,
+    paddingBottom: 10,
+  },
+  lensExit: { flexDirection: "row-reverse", alignItems: "center", gap: 6 },
+  lensExitTxt: { color: Palette.text, fontSize: 14, fontWeight: "800" },
+  lensHint: { color: Palette.textDim, fontSize: 11.5, fontWeight: "700" },
+  lensViewport: { flex: 1, overflow: "hidden", backgroundColor: "#fff", marginHorizontal: 8, borderRadius: 12 },
+  lensCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+  lensLoadTxt: { color: Palette.textDim, fontSize: 13, fontWeight: "700" },
+  lensControls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 26, paddingVertical: 16 },
+  lensCtlBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  lensPlay: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Palette.neonViolet,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { flex: 1, backgroundColor: Palette.bgElevated },
@@ -2798,45 +2986,6 @@ const styles = StyleSheet.create({
     borderColor: Palette.bg,
   },
   skipBadgeTxt: { color: "#fff", fontSize: 11, fontWeight: "900" },
-  lensScreen: { flex: 1, backgroundColor: Palette.bg, paddingTop: 54 },
-  lensHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, marginBottom: 10 },
-  lensClose: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  lensHeaderTxt: { color: Palette.text, fontSize: 16, fontWeight: "900" },
-  lensViewport: {
-    alignSelf: "center",
-    overflow: "hidden",
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: Palette.neonCyan,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  lensControls: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 18,
-    marginTop: 36,
-  },
-  lensCtlBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-  },
-  lensPlay: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2ecc71",
-  },
   gateMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.66)", alignItems: "center", justifyContent: "center", padding: 24 },
   gateCard: {
     width: "100%",
