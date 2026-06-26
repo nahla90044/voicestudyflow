@@ -375,33 +375,34 @@ export default function ReaderScreen() {
     pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
   }, [activeSentence, viewMode, speaking, sentences.length]);
 
-  // جلب صناديق كلمات الصفحة عند تفعيل العدسة (مع تخزين مؤقت)
+  // يجلب صناديق كلمات صفحة (مع تنقية الضجيج وتخزين مؤقت) — يُستخدم للحالية والتالية
+  async function fetchPageWords(p: number): Promise<WordBox[]> {
+    if (wordsCacheRef.current.has(p)) return wordsCacheRef.current.get(p)!;
+    const ws = await getPageWords(pdfPath, p);
+    const clean = ws.filter((w) => {
+      const t = (w.t || "").trim();
+      if (!t) return false;
+      if (/:{3,}/.test(t)) return false;
+      if (/restricted|confidential/i.test(t)) return false;
+      if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
+      if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
+      return true;
+    });
+    wordsCacheRef.current.set(p, clean);
+    return clean;
+  }
+
+  // جلب صناديق كلمات الصفحة الحالية عند تفعيل العدسة
   useEffect(() => {
     if (!pdfLens || !pdfPath || !pageImg) return;
-    const p = page;
-    if (wordsCacheRef.current.has(p)) {
-      setPageWords(wordsCacheRef.current.get(p)!);
-      return;
-    }
     let active = true;
-    getPageWords(pdfPath, p).then((ws) => {
-      if (!active) return;
-      // أزل كلمات الضجيج (الترويسة/التذييل/الأرقام) لتتطابق مع النص المقروء
-      const clean = ws.filter((w) => {
-        const t = (w.t || "").trim();
-        if (!t) return false;
-        if (/:{3,}/.test(t)) return false;
-        if (/restricted|confidential/i.test(t)) return false;
-        if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
-        if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
-        return true;
-      });
-      wordsCacheRef.current.set(p, clean);
-      setPageWords(clean);
+    fetchPageWords(page).then((ws) => {
+      if (active) setPageWords(ws);
     });
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfLens, pdfPath, page, pageImg]);
 
   // محاذاة كلمات النص المقروء مع صناديق الكلمات بالمطابقة النصّية (لا تقدير تناسبي)
@@ -716,9 +717,13 @@ export default function ReaderScreen() {
       // تجهيز الجمل التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع — جملتان قدّام
       const vId = pickVoice();
       if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: vId });
-      if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
-      // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل أسرع
-      if (i >= sents.length - 2 && p < total) extractPdfPageText(pdfPath, p + 1).catch(() => {});
+      // جملة ثانية قدّام فقط إن لم تكن العدسة مفعّلة (تخفيف الحِمل مع العدسة)
+      if (!pdfLens && i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
+      // قرب نهاية الصفحة: جهّز نص وصناديق الصفحة التالية مسبقًا لتنقّل سلس
+      if (i >= sents.length - 2 && p < total) {
+        extractPdfPageText(pdfPath, p + 1).catch(() => {});
+        if (pdfLens) fetchPageWords(p + 1).catch(() => {});
+      }
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
