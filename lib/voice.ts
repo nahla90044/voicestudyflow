@@ -289,10 +289,19 @@ function stripCitations(text: string): string {
     .trim();
 }
 
+// يوضّح علامات التأريخ المختصرة عند نطقها: «1445 هـ» → «1445 هجري»، «2024 م» → «2024 ميلادي»
+// (النص المعروض لا يتغيّر — فقط ما يُنطق). نشترط أن تلي رقمًا وألا تكون جزءًا من كلمة.
+function expandEraMarkers(text: string): string {
+  return text
+    .replace(/([\d٠-٩])\s*هـ(?![ء-ي])/g, "$1 هجري")
+    .replace(/([\d٠-٩])\s*ه(?![ء-ي])/g, "$1 هجري")
+    .replace(/([\d٠-٩])\s*م(?![ء-ي])/g, "$1 ميلادي");
+}
+
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
   // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر)
-  const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
+  const clean = numbersToArabicWords(expandEraMarkers(stripCitations(text?.trim() ?? "")));
   if (!clean) return;
 
   // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
@@ -391,7 +400,7 @@ export async function warmNext(
   text: string,
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
-  const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
+  const clean = numbersToArabicWords(expandEraMarkers(stripCitations(text?.trim() ?? "")));
   if (!clean) return;
   try {
     const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
@@ -415,7 +424,7 @@ export async function prefetchText(
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
   try {
-    const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
+    const clean = numbersToArabicWords(expandEraMarkers(stripCitations(text?.trim() ?? "")));
     if (!clean) return;
     await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
   } catch {

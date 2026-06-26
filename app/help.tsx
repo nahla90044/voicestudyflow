@@ -13,11 +13,11 @@ import { Palette, Radius, Spacing } from "../constants/design";
 type Topic = { icon: keyof typeof Ionicons.glyphMap; color: string; title: string; body: string };
 
 const TOPICS: Topic[] = [
-  { icon: "library", color: Palette.neonViolet, title: "📚 المكتبة", body: "اضغطي كتابًا لفتح منهجه ثم «ابدأ القراءة». الضغط المطوّل يفتح المجلدات والأرشفة وتعديل العنوان." },
-  { icon: "list", color: Palette.neonCyan, title: "📋 المنهج الدراسي", body: "وحدات بقائمة متابعة، ولكل وحدة اختبار وخريطة ذهنية وملخّص صوتي. اطبعي المنهج أو الخريطة متى شئتِ." },
-  { icon: "headset", color: Palette.neonPink, title: "🎧 القراءة الصوتية", body: "القارئ يقرأ ويشرح بصوت طبيعي. تحكّمي بالسرعة (حتى ×0.5)، وتنقّلي بين المقاطع — والضغط المتكرر يسرّع التخطّي (×2 ×3)." },
-  { icon: "search", color: Palette.neonViolet, title: "🔍 العدسة المكبّرة", body: "تكبّر النص المقروء وتتابع الكلمة سطرًا بسطر مع الصوت — مفيدة للتركيز ودقّة المتابعة." },
-  { icon: "language", color: Palette.neonCyan, title: "🗣️ النطق والترجمة", body: "نطق دقيق بالتشكيل، وترجمة فورية، وأصوات عربية وإنجليزية وفرنسية." },
+  { icon: "library", color: Palette.neonViolet, title: "📚 المكتبة", body: "الضغط على الكتاب يفتحه للقراءة. والضغط المطوّل يكشف الخيارات: المجلدات، المنهج الدراسي، إعادة التسمية، الأرشفة، والحذف." },
+  { icon: "hand-left", color: Palette.neonBlue, title: "👆 الضغط المطوّل", body: "في المكتبة، الضغط المطوّل على أي كتاب يفتح قائمة إجراءات إضافية مهمة. مفتاح لاكتشاف ميزات أكثر." },
+  { icon: "list", color: Palette.neonCyan, title: "📋 المنهج الدراسي", body: "وحدات بقائمة متابعة، ولكل وحدة اختبار وخريطة ذهنية وملخّص صوتي. مع إمكانية طباعة المنهج أو الخريطة." },
+  { icon: "headset", color: Palette.neonPink, title: "🎧 القراءة الصوتية", body: "قارئ يقرأ ويشرح بصوت طبيعي. تحكّم بالسرعة (حتى ×0.5)، وتنقّل بين المقاطع — والضغط المتكرر يسرّع التخطّي (×2 ×3)." },
+  { icon: "language", color: Palette.neonCyan, title: "🗣️ النطق والترجمة", body: "نطق دقيق بالتشكيل، وترجمة فورية، وأصوات بعدة لغات." },
   { icon: "sparkles", color: Palette.neonPink, title: "🛠️ أدوات الذكاء", body: "تلخيص الصفحة، الأسئلة، بطاقات المراجعة، الخريطة الذهنية، والعرض التقديمي — كلها بضغطة." },
   { icon: "timer", color: Palette.neonViolet, title: "⏱️ التركيز والمتابعة", body: "مؤقّت تركيز (بومودورو)، سلسلة أيام، ودرجات لوضع التركيز تخفّف المشتّتات أثناء القراءة." },
 ];

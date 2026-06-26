@@ -85,10 +85,27 @@ export default function HomeScreen() {
     streak >= 7
       ? "أسطورة! 🔥"
       : streak >= 3
-      ? `واصلي يا ${name || "بطلة"}! 💪`
+      ? `واصِل يا ${name || "بطل"}! 💪`
       : streak >= 1
       ? "بداية موفّقة ✨"
-      : "ابدئي سلسلتك اليوم 🌱";
+      : "ابدأ سلسلتك اليوم 🌱";
+
+  // كلمة تشجيع تتغيّر يوميًا (مختلفة كل يوم) — باسم المستخدم
+  const who = name || "بطل";
+  const DAILY_CHEERS = [
+    `يومك موفّق يا ${who} 🌟`,
+    `خطوة بسيطة اليوم تصنع فرقًا يا ${who} 💫`,
+    `أنت أقرب لهدفك مما تظن يا ${who} 🚀`,
+    `ركّز قليلًا، تنجز كثيرًا يا ${who} 🎯`,
+    `كل صفحة تقرأها استثمار فيك يا ${who} 📚`,
+    `استمر يا ${who}، العِلم نور 🌿`,
+    `اجعل اليوم أفضل من أمس يا ${who} ✨`,
+    `إنجاز صغير اليوم خير من تأجيل كبير يا ${who} 🌱`,
+    `ثِق بنفسك يا ${who}، تستطيع 💪`,
+    `هدوء + تركيز = إنجاز يا ${who} 🧠`,
+  ];
+  const dayIndex = Math.floor(Date.now() / 86_400_000) % DAILY_CHEERS.length;
+  const dailyCheer = DAILY_CHEERS[dayIndex];
 
   return (
     <ScreenBackground>
@@ -111,6 +128,7 @@ export default function HomeScreen() {
               <View style={styles.hero}>
                 <ReadListenArt size={150} />
                 <Text style={styles.title}>{name ? `أهلًا ${name} 🌷` : "VoiceStudyFlow"}</Text>
+                <Text style={styles.dailyCheer}>{dailyCheer}</Text>
                 <Text style={styles.subtitle}>ذاكر بذكاء ✨ اقرأ، اسمع، خطّط، وأنجز</Text>
               </View>
             </GlassCard>
@@ -208,6 +226,13 @@ const styles = StyleSheet.create({
 
   hero: { alignItems: "center", padding: Spacing.xl },
   title: { color: Palette.text, fontSize: 28, fontWeight: "900", textAlign: "center", marginTop: Spacing.sm },
+  dailyCheer: {
+    color: Palette.neonViolet,
+    fontSize: 14.5,
+    fontWeight: "800",
+    textAlign: "center",
+    marginTop: 8,
+  },
   subtitle: {
     color: Palette.textDim,
     fontSize: 14,
