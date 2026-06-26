@@ -43,15 +43,14 @@ Deno.serve(async (req: Request) => {
 
     const voiceId = body.voiceId || VOICES[body.gender ?? "female"] || VOICES.female;
 
-    // with-timestamps: يرجع الصوت + توقيت بداية كل حرف (لتزامن الهايلايتر بدقة)
     const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
       {
         method: "POST",
         headers: {
           "xi-api-key": apiKey,
           "Content-Type": "application/json",
-          Accept: "application/json",
+          Accept: "audio/mpeg",
         },
         body: JSON.stringify({
           text,
@@ -67,12 +66,8 @@ Deno.serve(async (req: Request) => {
       return json({ error: `ElevenLabs ${res.status}: ${msg}` }, 500);
     }
 
-    const data = await res.json();
-    const audio = data?.audio_base64 ?? "";
-    const al = data?.alignment ?? data?.normalized_alignment ?? {};
-    const starts = al?.character_start_times_seconds ?? [];
-    if (!audio) return json({ error: "No audio in response" }, 500);
-    return json({ audio, starts });
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return json({ audio: bytesToBase64(bytes) });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
   }
