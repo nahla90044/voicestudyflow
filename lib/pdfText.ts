@@ -9,7 +9,7 @@ import { supabase } from "./supabase";
 // إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد المعالجة.
 // v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج.  v4: إصلاح المسافات.
 // v5: استخدام OCR تلقائيًا للكتب ذات طبقة النص المكسورة (أنظف نص).
-const EXTRACT_VER = "-v6";
+const EXTRACT_VER = "-v7";
 
 // طبقة نص «مكسورة»: نسبة كبيرة من أحرف العرض العربية (presentation forms:
 // FB50–FDFF و FE70–FEFF). هذه الكتب تُستخرج بمسافات خاطئة وتشكيل مبعثر،
@@ -110,18 +110,27 @@ export async function extractPdfPageText(
   //       التي تأتي بمسافات خاطئة وتشكيل مبعثر — صورة الصفحة تُقرأ بـOCR أنظف بكثير.
   const brokenLayer = hasBrokenTextLayer(text);
   if (text.trim().length < MIN_REAL_TEXT || brokenLayer) {
-    try {
-      const ocr = await supabase.functions.invoke("ocr-page", {
-        body: { pdfPath, page: resolvedPage },
-      });
-      const ocrText = String(ocr.data?.text ?? "").trim();
-      if (!ocr.error && ocrText.length >= MIN_REAL_TEXT) {
-        text = ocrText; // نص الصورة الفعلي — نظيف ومطابق للمطبوع
-        usedOcr = true;
-        if (ocr.data?.totalPages) totalPages = Number(ocr.data.totalPages);
+    // OCR على صورة الصفحة — مع إعادة محاولة (الخدمة قد تفشل لحظيًا تحت الضغط)
+    for (let attempt = 0; attempt < 3 && !usedOcr; attempt++) {
+      try {
+        const ocr = await supabase.functions.invoke("ocr-page", {
+          body: { pdfPath, page: resolvedPage },
+        });
+        const ocrText = String(ocr.data?.text ?? "").trim();
+        if (!ocr.error && ocrText.length >= MIN_REAL_TEXT) {
+          text = ocrText; // نص الصورة الفعلي — نظيف ومطابق للمطبوع
+          usedOcr = true;
+          if (ocr.data?.totalPages) totalPages = Number(ocr.data.totalPages);
+        }
+      } catch {
+        // فشل لحظي — نعيد المحاولة
       }
-    } catch {
-      // تعذّر OCR → نُبقي نص الطبقة (أفضل المتاح) ونعالجه لاحقًا
+      if (!usedOcr && attempt < 2) await new Promise((r) => setTimeout(r, 1300));
+    }
+    // طبقة مكسورة وتعذّر OCR نهائيًا → لا نقبل النص الفاسد ولا نخزّنه؛ نرمي ليُعاد
+    // لاحقًا (التحميل يعيد المحاولة تلقائيًا حتى ينجح).
+    if (brokenLayer && !usedOcr) {
+      throw new Error("تعذّر تجهيز هذه الصفحة الآن — أعيدي المحاولة، أو اضغطي «تحميل» ليُجهّز الكتاب كاملًا.");
     }
   }
 
@@ -137,9 +146,8 @@ export async function extractPdfPageText(
   //   2) تنقية الضجيج (أرقام صفحات/ترويسات/إحالات) — حذف فقط.
   // كلتاهما تُرجعان النص الأصلي إن لم يجتز التحقّق.
   if (hasRealText) {
-    // إن كانت الطبقة مكسورة وفشل OCR → أصلح المسافات إجباريًا (لئلا تُقرأ طلاسم)
-    const forceFix = brokenLayer && !usedOcr;
-    text = normalizeArabic(await fixArabicSpacing(text, forceFix));
+    // إصلاح خفيف للمسافات إن لزم (للنص السليم الملتصق فقط، بتحقّق صارم) + تنقية الضجيج
+    text = normalizeArabic(await fixArabicSpacing(text));
     text = normalizeArabic(await filterReadingNoise(text));
   } else {
     text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
