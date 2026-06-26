@@ -116,6 +116,8 @@ export default function ReaderScreen() {
   // عدسة القراءة: تكبّر السطر المقروء بحركة وتتحرّك معه
   const [lensMode, setLensMode] = useState(false);
   const lensScale = useRef(new Animated.Value(1)).current;
+  // عدسة الـPDF: تكبّر صورة الصفحة في وضع التكبير وتتابع القراءة
+  const [pdfLens, setPdfLens] = useState(false);
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1107,7 +1109,10 @@ export default function ReaderScreen() {
               >
                 <Image
                   source={{ uri: pageImg }}
-                  style={{ width: "100%", aspectRatio: pageImgAspect }} // تملأ العرض بالضبط — الصفحة كاملة بلا زيادة
+                  style={{
+                    width: fullText && pdfLens ? "155%" : "100%", // عدسة: تكبير الصفحة لمتابعة القراءة
+                    aspectRatio: pageImgAspect,
+                  }}
                   resizeMode="contain"
                 />
               </ScrollView>
@@ -1142,6 +1147,13 @@ export default function ReaderScreen() {
           <View style={styles.floatBar}>
             <Pressable onPress={() => setFullText(false)} style={styles.floatBtn} hitSlop={8}>
               <Ionicons name="contract" size={20} color={Palette.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => setPdfLens((v) => !v)}
+              style={[styles.floatBtn, pdfLens && styles.floatBtnOn]}
+              hitSlop={8}
+            >
+              <Ionicons name="search" size={19} color={pdfLens ? "#0b1220" : Palette.text} />
             </Pressable>
             <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
               <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
@@ -2108,6 +2120,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
   },
   floatBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
+  floatBtnOn: { backgroundColor: Palette.neonCyan },
   floatPlay: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
   floatSpeed: { color: Palette.text, fontSize: 15, fontWeight: "900" },
 
