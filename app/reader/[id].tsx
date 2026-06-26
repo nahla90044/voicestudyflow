@@ -41,6 +41,7 @@ import {
   setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
+import { playTransition, startAmbient, stopAmbient } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { supabase } from "../../lib/supabase";
 import {
@@ -460,9 +461,17 @@ export default function ReaderScreen() {
 
   // الشريحة المعروضة = اختيار المستخدم/السرد (تنقّل يدوي حر)
   const slideIdx = pageSlides.length > 0 ? Math.min(Math.max(0, presSlide), pageSlides.length - 1) : 0;
-  // التنقّل اليدوي بين الشرائح
+  // التنقّل اليدوي بين الشرائح (مع مؤثّر انتقال)
   function goSlide(delta: number) {
-    setPresSlide((s) => Math.min(Math.max(0, s + delta), Math.max(0, pageSlides.length - 1)));
+    setPresSlide((s) => {
+      const next = Math.min(Math.max(0, s + delta), Math.max(0, pageSlides.length - 1));
+      if (next !== s) playTransition();
+      return next;
+    });
+  }
+  function jumpSlide(di: number) {
+    if (di !== presSlide) playTransition();
+    setPresSlide(di);
   }
   // شرائح صفحة جديدة → ابدأ من الأولى
   useEffect(() => {
@@ -474,14 +483,16 @@ export default function ReaderScreen() {
     return `${s.title}. ${s.bullets.join("، ")}.`;
   }
 
-  // سرد العرض شريحة بشريحة بصوت ElevenLabs
+  // سرد العرض شريحة بشريحة بصوت ElevenLabs (مع موسيقى خلفية ومؤثّر انتقال)
   function narrateSlidesFrom(idx: number) {
     if (!presNarratingRef.current) return;
     if (idx >= pageSlides.length) {
       presNarratingRef.current = false;
       setPresNarrating(false);
+      stopAmbient();
       return;
     }
+    if (idx > 0) playTransition(); // انتقال بين الشرائح
     setPresSlide(idx);
     speakText(slideSpeech(pageSlides[idx]), {
       voiceId: pickVoice(),
@@ -496,10 +507,12 @@ export default function ReaderScreen() {
       presNarratingRef.current = false;
       setPresNarrating(false);
       stopSpeaking();
+      stopAmbient();
     } else if (pageSlides.length > 0) {
       stop(); // أوقف قراءة الصفحة إن كانت تعمل
       presNarratingRef.current = true;
       setPresNarrating(true);
+      startAmbient(); // موسيقى خلفية هادئة أثناء السرد
       narrateSlidesFrom(0);
     }
   }
@@ -1838,6 +1851,7 @@ export default function ReaderScreen() {
           presNarratingRef.current = false;
           setPresNarrating(false);
           stopSpeaking();
+          stopAmbient();
           setPresentOpen(false);
         }}
       >
@@ -1847,9 +1861,10 @@ export default function ReaderScreen() {
             <Pressable
               onPress={() => {
                 presNarratingRef.current = false;
-                setPresNarrating(false);
-                stopSpeaking();
-                setPresentOpen(false);
+          setPresNarrating(false);
+          stopSpeaking();
+          stopAmbient();
+          setPresentOpen(false);
               }}
               style={styles.presExit}
               hitSlop={8}
@@ -1913,7 +1928,7 @@ export default function ReaderScreen() {
               </Pressable>
               <View style={styles.presDots}>
                 {pageSlides.map((_, di) => (
-                  <Pressable key={di} onPress={() => setPresSlide(di)} hitSlop={6}>
+                  <Pressable key={di} onPress={() => jumpSlide(di)} hitSlop={6}>
                     <View style={[styles.presDot, di === slideIdx && styles.presDotOn]} />
                   </Pressable>
                 ))}
