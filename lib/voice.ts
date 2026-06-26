@@ -289,6 +289,26 @@ function stripCitations(text: string): string {
     .trim();
 }
 
+// أسماء الحروف العربية للنطق الصحيح في المراجع القانونية (م/٥ → ميم تقسيم خمسة)
+const LETTER_NAMES: Record<string, string> = {
+  أ: "ألف", ا: "ألف", ب: "باء", ت: "تاء", ث: "ثاء", ج: "جيم", ح: "حاء", خ: "خاء",
+  د: "دال", ذ: "ذال", ر: "راء", ز: "زاي", س: "سين", ش: "شين", ص: "صاد", ض: "ضاد",
+  ط: "طاء", ظ: "ظاء", ع: "عين", غ: "غين", ف: "فاء", ق: "قاف", ك: "كاف", ل: "لام",
+  م: "ميم", ن: "نون", ه: "هاء", و: "واو", ي: "ياء", ء: "همزة",
+};
+
+// المراجع القانونية «حرف/رقم» (مرسوم ملكي/قرار): م/٥ → «ميم تقسيم خمسة».
+// ننطق الحرف باسمه الصحيح، و«/» تقسيم، والرقم كما هو (يحوّله محرّك الأرقام لاحقًا).
+function expandLegalRefs(text: string): string {
+  return text.replace(
+    /(^|[^ء-ي])([ء-ي])\s*\/\s*([٠-٩\d]+)/g,
+    (m, pre: string, letter: string, num: string) => {
+      const name = LETTER_NAMES[letter];
+      return name ? `${pre}${name} تقسيم ${num}` : m;
+    }
+  );
+}
+
 // يوضّح علامات التأريخ المختصرة عند نطقها: «1445 هـ» → «1445 هجري»، «2024 م» → «2024 ميلادي»
 // (النص المعروض لا يتغيّر — فقط ما يُنطق). نشترط أن تلي رقمًا وألا تكون جزءًا من كلمة.
 function expandEraMarkers(text: string): string {
@@ -301,7 +321,7 @@ function expandEraMarkers(text: string): string {
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
   // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر)
-  const clean = numbersToArabicWords(expandEraMarkers(stripCitations(text?.trim() ?? "")));
+  const clean = numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(text?.trim() ?? ""))));
   if (!clean) return;
 
   // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
@@ -400,7 +420,7 @@ export async function warmNext(
   text: string,
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
-  const clean = numbersToArabicWords(expandEraMarkers(stripCitations(text?.trim() ?? "")));
+  const clean = numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(text?.trim() ?? ""))));
   if (!clean) return;
   try {
     const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
@@ -424,7 +444,7 @@ export async function prefetchText(
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
   try {
-    const clean = numbersToArabicWords(expandEraMarkers(stripCitations(text?.trim() ?? "")));
+    const clean = numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(text?.trim() ?? ""))));
     if (!clean) return;
     await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
   } catch {
