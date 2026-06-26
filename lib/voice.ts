@@ -131,7 +131,7 @@ function disposePlayer() {
 //  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
-const CACHE_DIR_NAME = "tts-cache-v7"; // v7: رجوع للإعداد الأصلي المتوازن الآمن
+const CACHE_DIR_NAME = "tts-cache-v8"; // v8: مع توقيت الحروف لمزامنة الهايلايتر
 const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
 
 function cacheDir(): Directory {
@@ -152,6 +152,11 @@ function hashKey(s: string): string {
 
 function cacheFileFor(text: string, voiceId: string): File {
   const name = `${hashKey(voiceId)}_${hashKey(voiceId + "|" + text)}.mp3`;
+  return new File(cacheDir(), name);
+}
+// ملف توقيت الحروف (مزامنة الهايلايتر) بجانب ملف الصوت
+function timingFileFor(text: string, voiceId: string): File {
+  const name = `${hashKey(voiceId)}_${hashKey(voiceId + "|" + text)}.json`;
   return new File(cacheDir(), name);
 }
 
@@ -224,15 +229,26 @@ function base64ToBytes(b64: string): Uint8Array {
 }
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
-async function synthToFile(text: string, gender: VoiceGender, voiceId?: string): Promise<File> {
+async function synthToFile(
+  text: string,
+  gender: VoiceGender,
+  voiceId?: string
+): Promise<{ file: File; starts: number[] }> {
   const vid = voiceId || VOICE_IDS[gender];
 
-  // 1) موجود في التخزين؟ شغّله مباشرة بدون تكلفة/إنترنت
+  // 1) موجود في التخزين؟ شغّله مباشرة بدون تكلفة/إنترنت (مع توقيت الحروف إن وُجد)
   const file = cacheFileFor(text, vid);
-  if (file.exists && (file.size ?? 0) > 0) return file;
+  const timingFile = timingFileFor(text, vid);
+  if (file.exists && (file.size ?? 0) > 0) {
+    let starts: number[] = [];
+    try {
+      if (timingFile.exists) starts = JSON.parse(await timingFile.text());
+    } catch {}
+    return { file, starts };
+  }
 
   if (ELEVEN_KEY) {
-    // مسار التطوير المباشر (المفتاح موجود محليًا)
+    // مسار التطوير المباشر (بلا توقيت)
     const res = await fetch(`${ELEVEN_BASE}/${vid}?output_format=mp3_44100_128`, {
       method: "POST",
       headers: {
@@ -243,7 +259,6 @@ async function synthToFile(text: string, gender: VoiceGender, voiceId?: string):
       body: JSON.stringify({
         text,
         model_id: "eleven_multilingual_v2",
-        // الإعداد الأصلي المتوازن الواضح (آمن للعربية)
         voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.0, use_speaker_boost: true },
       }),
     });
@@ -253,10 +268,10 @@ async function synthToFile(text: string, gender: VoiceGender, voiceId?: string):
     }
     file.write(new Uint8Array(await res.arrayBuffer()));
     pruneCache();
-    return file;
+    return { file, starts: [] };
   }
 
-  // مسار الإنتاج: الدالة السحابية (المفتاح سرّي بالسيرفر)
+  // مسار الإنتاج: الدالة السحابية (المفتاح سرّي بالسيرفر) — مع توقيت الحروف
   const { data, error } = await supabase.functions.invoke("tts", {
     body: { text, gender, voiceId: vid },
   });
@@ -264,9 +279,15 @@ async function synthToFile(text: string, gender: VoiceGender, voiceId?: string):
   const b64 = (data as { audio?: string; error?: string })?.audio;
   if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
+  const starts = Array.isArray((data as { starts?: number[] })?.starts)
+    ? ((data as { starts: number[] }).starts as number[])
+    : [];
   file.write(base64ToBytes(b64));
+  try {
+    if (starts.length) timingFile.write(JSON.stringify(starts));
+  } catch {}
   pruneCache();
-  return file;
+  return { file, starts };
 }
 
 // يزيل المصادر/الإحالات بين قوسين (اسم/كتاب/سنة، أو رقم إحالة) من النص المنطوق فقط
@@ -299,7 +320,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const gender = opts.gender ?? "female";
 
     step = "توليد الصوت";
-    const file = await synthToFile(clean, gender, opts.voiceId);
+    const { file, starts } = await synthToFile(clean, gender, opts.voiceId);
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
 
     step = "وضع الصوت";
@@ -328,8 +349,23 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     let finished = false;
     player.addListener("playbackStatusUpdate", (status) => {
-      if (opts.onProgress && status.duration && status.duration > 0) {
-        opts.onProgress(Math.min(1, Math.max(0, status.currentTime / status.duration)));
+      if (opts.onProgress) {
+        let frac = 0;
+        const t = status.currentTime ?? 0;
+        if (starts.length > 1) {
+          // التقدّم الحقيقي = عدد الحروف التي بدأ نطقها ÷ إجمالي الحروف (بحث ثنائي)
+          let lo = 0,
+            hi = starts.length;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (starts[mid] <= t) lo = mid + 1;
+            else hi = mid;
+          }
+          frac = lo / starts.length;
+        } else if (status.duration && status.duration > 0) {
+          frac = t / status.duration;
+        }
+        opts.onProgress(Math.min(1, Math.max(0, frac)));
       }
       if (status.didJustFinish && !finished) {
         finished = true;
