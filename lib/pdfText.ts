@@ -167,7 +167,7 @@ export async function extractPdfPageText(
   // صفحة معظمها «صورة» (غلاف/مخطط): لها تعليق «صورة (X-Y)» ونصّها قليل ومبعثر
   // (مقروء من الزخرفة) → لا نقرأها، نتخطّاها للصفحة التي فيها نص حقيقي.
   const isFigurePage =
-    /صورة\s*[\(（]\s*[\d٠-٩]/.test(text) && text.replace(/\s+/g, " ").trim().length < 320;
+    /صورة\s*[\(（]\s*[\d٠-٩]/.test(text) && text.replace(/\s+/g, " ").trim().length < 500;
 
   if (hasRealText && !isFigurePage) {
     // إصلاح خفيف للمسافات إن لزم (للنص الملتصق فقط، بتحقّق صارم) + تنقية فورية
