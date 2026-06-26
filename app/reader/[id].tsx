@@ -464,18 +464,19 @@ export default function ReaderScreen() {
     return ls;
   }, [pageWords]);
 
-  // صندوق السطر المقروء حاليًا (من المحاذاة النصّية)
+  // السطر المقروء حاليًا — تعيين تناسبي مضمون الحركة (تقدّم القراءة ÷ الكلمات → السطر)
   const lineBox = useMemo<WordBox | null>(() => {
-    if (clean2box.length === 0 || activeSentence < 0 || lines.length === 0) return null;
+    if (lines.length === 0 || sentences.length === 0 || activeSentence < 0) return null;
     let before = 0;
     for (let k = 0; k < activeSentence && k < sentences.length; k++) {
       before += (sentences[k].match(/\S+/g) || []).length;
     }
-    const gi = Math.min(clean2box.length - 1, before + Math.max(0, activeWord));
-    const bi = clean2box[gi];
-    const ln = lines.find((l) => bi >= l.start && bi <= l.end) ?? null;
-    return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
-  }, [activeSentence, activeWord, clean2box, sentences, lines]);
+    const total = sentences.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
+    const gw = before + Math.max(0, activeWord);
+    const idx = Math.min(lines.length - 1, Math.max(0, Math.round((gw / total) * (lines.length - 1))));
+    const ln = lines[idx];
+    return { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h };
+  }, [activeSentence, activeWord, lines, sentences]);
 
   // العدسة تتابع السطر المقروء عموديًا (أفقيًا ثابتة في الوسط) — حركة سلسة سطر-سطر
   useEffect(() => {
