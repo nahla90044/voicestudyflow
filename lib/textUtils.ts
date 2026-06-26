@@ -25,8 +25,25 @@ export function splitSentences(text: string): string[] {
   // نضيف فاصل سطر بعد علامات نهاية الجملة، ونحترم الأسطر الأصلية
   const withBreaks = clean.replace(/([.!?؟…۔؛])\s+/g, "$1\n");
 
-  return withBreaks
+  const parts = withBreaks
     .split("\n")
     .map((s) => s.trim())
     .filter((s) => s && !isNoiseLine(s));
+
+  // نجمع الجُمل القصيرة في مقاطع أطول لقراءة انسيابية: نبرة طبيعية متواصلة
+  // ووقفات أقل بين المقاطع (يقلّ الإحساس «الآلي»). نحترم حدود الجمل.
+  const TARGET = 220; // نطمح لهذا الطول قبل بدء مقطع جديد
+  const MAX = 400; // لا نتجاوزه (لئلا يبطؤ توليد الصوت)
+  const chunks: string[] = [];
+  let cur = "";
+  for (const s of parts) {
+    if (!cur) cur = s;
+    else if (cur.length < TARGET && (cur + " " + s).length <= MAX) cur += " " + s;
+    else {
+      chunks.push(cur);
+      cur = s;
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
 }
