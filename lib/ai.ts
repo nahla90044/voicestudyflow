@@ -129,8 +129,9 @@ function looksRunTogether(text: string): boolean {
  * للأصل — أي لم تتغيّر أي كلمة، فقط المسافات/التشكيل. وإلا يُرجع النص كما هو.
  * يُطبَّق فقط عند اكتشاف نص ملتصق.
  */
-export async function fixArabicSpacing(text: string): Promise<string> {
-  if (!text.trim() || !looksRunTogether(text)) return text;
+export async function fixArabicSpacing(text: string, force = false): Promise<string> {
+  if (!text.trim()) return text;
+  if (!force && !looksRunTogether(text)) return text;
   const skeleton = consonantSkeleton(text);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

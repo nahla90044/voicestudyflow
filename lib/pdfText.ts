@@ -9,7 +9,7 @@ import { supabase } from "./supabase";
 // إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد المعالجة.
 // v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج.  v4: إصلاح المسافات.
 // v5: استخدام OCR تلقائيًا للكتب ذات طبقة النص المكسورة (أنظف نص).
-const EXTRACT_VER = "-v5";
+const EXTRACT_VER = "-v6";
 
 // طبقة نص «مكسورة»: نسبة كبيرة من أحرف العرض العربية (presentation forms:
 // FB50–FDFF و FE70–FEFF). هذه الكتب تُستخرج بمسافات خاطئة وتشكيل مبعثر،
@@ -137,7 +137,9 @@ export async function extractPdfPageText(
   //   2) تنقية الضجيج (أرقام صفحات/ترويسات/إحالات) — حذف فقط.
   // كلتاهما تُرجعان النص الأصلي إن لم يجتز التحقّق.
   if (hasRealText) {
-    text = normalizeArabic(await fixArabicSpacing(text));
+    // إن كانت الطبقة مكسورة وفشل OCR → أصلح المسافات إجباريًا (لئلا تُقرأ طلاسم)
+    const forceFix = brokenLayer && !usedOcr;
+    text = normalizeArabic(await fixArabicSpacing(text, forceFix));
     text = normalizeArabic(await filterReadingNoise(text));
   } else {
     text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
