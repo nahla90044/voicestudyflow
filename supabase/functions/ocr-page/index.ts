@@ -48,47 +48,55 @@ Deno.serve(async (req: Request) => {
 
     const buf = new Uint8Array(await file.arrayBuffer());
 
-    // تحويل الصفحة إلى صورة
+    // تحويل الصفحة إلى صورة بدقة محددة
     const doc = mupdf.Document.openDocument(buf, "application/pdf");
     const totalPages = doc.countPages();
     const p = Math.min(page, totalPages);
     const pg = doc.loadPage(p - 1);
-    const pix = pg.toPixmap(mupdf.Matrix.scale(2, 2), mupdf.ColorSpace.DeviceRGB, false);
-    const png = pix.asPNG() as Uint8Array;
+    const renderB64 = (scale: number): { b64: string; bytes: number } => {
+      const pix = pg.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false);
+      const png = pix.asPNG() as Uint8Array;
+      return { b64: bytesToBase64(png), bytes: png.length };
+    };
 
     const ocrSpaceKey = Deno.env.get("OCR_SPACE_API_KEY");
     const visionKey = Deno.env.get("GOOGLE_VISION_API_KEY");
     if (!ocrSpaceKey && !visionKey) {
-      // وضع اختبار: نتأكد فقط أن التحويل نجح
-      return json({ rendered: true, pngBytes: png.length, page: p, totalPages });
+      const r0 = renderB64(2);
+      return json({ rendered: true, pngBytes: r0.bytes, page: p, totalPages });
     }
 
-    const b64 = bytesToBase64(png);
     let text = "";
 
     if (ocrSpaceKey) {
-      // OCR.space (مجاني، يدعم العربي عبر المحرّك 1)
-      const form = new URLSearchParams();
-      form.set("base64Image", `data:image/png;base64,${b64}`);
-      form.set("language", "ara");
-      form.set("OCREngine", "1");
-      form.set("isOverlayRequired", "false");
-      form.set("scale", "true");
-      const r = await fetch("https://api.ocr.space/parse/image", {
-        method: "POST",
-        headers: {
-          apikey: ocrSpaceKey,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: form.toString(),
-      });
-      const j = await r.json();
-      if (j?.IsErroredOnProcessing) {
-        const msg = Array.isArray(j?.ErrorMessage) ? j.ErrorMessage.join(" ") : String(j?.ErrorMessage ?? "OCR.space error");
-        return json({ error: msg }, 500);
+      const callOcrSpace = async (b64: string, engine: string): Promise<string> => {
+        const form = new URLSearchParams();
+        form.set("base64Image", `data:image/png;base64,${b64}`);
+        form.set("language", "ara");
+        form.set("OCREngine", engine);
+        form.set("isOverlayRequired", "false");
+        form.set("scale", "true");
+        const r = await fetch("https://api.ocr.space/parse/image", {
+          method: "POST",
+          headers: { apikey: ocrSpaceKey, "Content-Type": "application/x-www-form-urlencoded" },
+          body: form.toString(),
+        });
+        const j = await r.json();
+        if (j?.IsErroredOnProcessing) return ""; // فشل (غالبًا حجم/ضغط) → نجرّب دقة أقل
+        return String(j?.ParsedResults?.[0]?.ParsedText ?? "");
+      };
+      // OCR.space المجاني يرفض الصور الكبيرة (>1MB) فيرجع فارغًا — لذا نخفّض الدقة
+      // تدريجيًا حتى ينجح، ثم نجرّب المحرّك 2 كملاذ أخير.
+      for (const scale of [1.5, 1.1, 0.85]) {
+        const { b64, bytes } = renderB64(scale);
+        if (bytes > 1_000_000 && scale > 0.85) continue; // أكبر من حد الخدمة → دقة أقل
+        text = await callOcrSpace(b64, "1");
+        if (text.trim().length >= 40) break;
+        text = await callOcrSpace(b64, "2");
+        if (text.trim().length >= 40) break;
       }
-      text = j?.ParsedResults?.[0]?.ParsedText ?? "";
     } else if (visionKey) {
+      const b64 = renderB64(2).b64;
       // Google Vision (دقة أعلى، يتطلب تفعيل الفوترة)
       const vRes = await fetch(
         `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
