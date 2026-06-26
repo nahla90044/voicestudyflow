@@ -361,7 +361,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
             if (starts[mid] <= t) lo = mid + 1;
             else hi = mid;
           }
-          frac = lo / starts.length;
+          // الحرف المنطوق حاليًا (لا الذي بعده) → بلا سبق عند حدود الكلمات
+          frac = Math.max(0, lo - 1) / starts.length;
         } else if (status.duration && status.duration > 0) {
           frac = t / status.duration;
         }

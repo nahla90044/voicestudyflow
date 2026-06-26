@@ -461,8 +461,9 @@ export default function ReaderScreen() {
     const minX = Math.min(0, pdfImgW - pdfImgW * LENS_SCALE);
     const tY = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
     const tX = Math.min(0, Math.max(minX, pdfImgW / 2 - readX * LENS_SCALE));
-    Animated.spring(lensY, { toValue: tY, useNativeDriver: true, friction: 8, tension: 95 }).start();
-    Animated.spring(lensX, { toValue: tX, useNativeDriver: true, friction: 8, tension: 95 }).start();
+    // حركة بسرعة ثابتة (لا spring نطّاط) فما يصير سباق «قط وفأر»
+    Animated.timing(lensY, { toValue: tY, duration: 130, useNativeDriver: true }).start();
+    Animated.timing(lensX, { toValue: tX, duration: 130, useNativeDriver: true }).start();
   }, [pdfLens, viewMode, pdfImgW, wordBox, pageImgAspect, lensX, lensY]);
 
   function cycleSpeed() {
