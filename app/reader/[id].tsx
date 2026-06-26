@@ -236,6 +236,8 @@ export default function ReaderScreen() {
   const lensY = useRef(new Animated.Value(0)).current;
   const LENS_SCALE = 2.0; // تكبير العدسة
   const lensOpenRef = useRef(false);
+  const pdfFollowRef = useRef(false); // نتتبّع موضع القراءة (للهايلايتر/العدسة) في وضع PDF أو العدسة
+  const [pdfImgW2, setPdfImgW2] = useState(0); // عرض صورة الصفحة المعروضة (لتظليل الكلمة)
   useEffect(() => {
     // نحمّل صورة الصفحة في وضع PDF أو عند فتح العدسة (تحتاج الصورة)
     if ((viewMode !== "pdf" && !lensOpen) || !pdfPath || !prefsLoaded) return;
@@ -793,8 +795,8 @@ export default function ReaderScreen() {
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
         onProgress: (frac) => {
           setActiveWord(wordIndexAtFraction(sents[i], frac));
-          // تقدّم القراءة المتصل للعدسة (يُحدَّث فقط عند فتحها لتفادي أي عبء)
-          if (lensOpenRef.current) {
+          // تقدّم القراءة (لتظليل الكلمة على الـPDF/العدسة) — في وضع PDF أو العدسة فقط
+          if (pdfFollowRef.current) {
             setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
           }
         },
@@ -1105,14 +1107,19 @@ export default function ReaderScreen() {
     };
   }, [lensOpen]);
 
+  // نتتبّع موضع القراءة (لتظليل الكلمة على الـPDF/العدسة) في وضع PDF أو عند فتح العدسة
+  useEffect(() => {
+    pdfFollowRef.current = lensOpen || viewMode === "pdf";
+  }, [lensOpen, viewMode]);
+
   // صفحة جديدة → ابدأ تقدّم القراءة (والعدسة) من الأعلى
   useEffect(() => {
     setReadProgress(0);
   }, [page]);
 
-  // جلب صناديق كلمات الصفحة عند فتح العدسة (مع تخزين مؤقت)
+  // جلب صناديق كلمات الصفحة (للهايلايتر/العدسة) في وضع PDF أو عند فتح العدسة
   useEffect(() => {
-    if (!lensOpen || !pdfPath) return;
+    if ((!lensOpen && viewMode !== "pdf") || !pdfPath) return;
     const p = page;
     const cached = wordsCacheRef.current.get(p);
     if (cached) {
@@ -1131,7 +1138,14 @@ export default function ReaderScreen() {
     return () => {
       on = false;
     };
-  }, [lensOpen, pdfPath, page]);
+  }, [lensOpen, viewMode, pdfPath, page]);
+
+  // صندوق الكلمة المقروءة حاليًا (لتظليلها على صورة الصفحة)
+  const currentWordBox = useMemo<WordBox | null>(() => {
+    if (pageWords.length === 0) return null;
+    const idx = Math.min(pageWords.length - 1, Math.max(0, Math.round(readProgress * (pageWords.length - 1))));
+    return pageWords[idx] ?? null;
+  }, [readProgress, pageWords]);
 
   // نقطة القراءة المتصلة (موضع تقريبي على صناديق الكلمات) — تتحرك يمين→يسار ثم تنزل
   const readPoint = useMemo<{ cx: number; cy: number } | null>(() => {
@@ -1374,11 +1388,28 @@ export default function ReaderScreen() {
                 onContentSizeChange={(_w, h) => (pdfContentH.current = h)}
                 onScrollEndDrag={onPdfSwipeEnd}
               >
-                <Image
-                  source={{ uri: pageImg }}
-                  style={{ width: "100%", aspectRatio: pageImgAspect }}
-                  resizeMode="contain"
-                />
+                <View onLayout={(e) => setPdfImgW2(e.nativeEvent.layout.width)}>
+                  <Image
+                    source={{ uri: pageImg }}
+                    style={{ width: "100%", aspectRatio: pageImgAspect }}
+                    resizeMode="contain"
+                  />
+                  {/* تظليل الكلمة المقروءة على صورة الصفحة */}
+                  {currentWordBox && speaking && pdfImgW2 > 0 ? (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        styles.wordHL,
+                        {
+                          left: currentWordBox.x * pdfImgW2,
+                          top: currentWordBox.y * (pdfImgW2 / (pageImgAspect || 0.7)),
+                          width: currentWordBox.w * pdfImgW2,
+                          height: currentWordBox.h * (pdfImgW2 / (pageImgAspect || 0.7)),
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </View>
               </ScrollView>
             ) : (
               <View style={styles.empty}>
@@ -2068,6 +2099,21 @@ export default function ReaderScreen() {
                 }}
               >
                 <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+                {/* تظليل الكلمة المقروءة داخل العدسة */}
+                {currentWordBox && speaking ? (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.wordHL,
+                      {
+                        left: currentWordBox.x * lensW * LENS_SCALE,
+                        top: currentWordBox.y * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                        width: currentWordBox.w * lensW * LENS_SCALE,
+                        height: currentWordBox.h * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                      },
+                    ]}
+                  />
+                ) : null}
               </Animated.View>
             ) : (
               <View style={styles.lensCenter}>
