@@ -68,7 +68,32 @@ Deno.serve(async (req: Request) => {
 
     let text = "";
 
-    if (ocrSpaceKey) {
+    // 1) Google Vision أولًا (احترافي، أدقّ للعربي، بلا حدود حجم تقريبًا)
+    if (visionKey) {
+      try {
+        const b64 = renderB64(2).b64;
+        const vRes = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requests: [
+              {
+                image: { content: b64 },
+                features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
+                imageContext: { languageHints: ["ar", "en"] },
+              },
+            ],
+          }),
+        });
+        const vJson = await vRes.json();
+        if (vRes.ok) text = String(vJson?.responses?.[0]?.fullTextAnnotation?.text ?? "");
+      } catch {
+        // نتابع للبديل المجاني
+      }
+    }
+
+    // 2) بديل احتياطي: OCR.space المجاني (مع تخفيض الدقة لتجاوز حد الحجم)
+    if (text.trim().length < 40 && ocrSpaceKey) {
       const callOcrSpace = async (b64: string, engine: string): Promise<string> => {
         const form = new URLSearchParams();
         form.set("base64Image", `data:image/png;base64,${b64}`);
@@ -82,44 +107,17 @@ Deno.serve(async (req: Request) => {
           body: form.toString(),
         });
         const j = await r.json();
-        if (j?.IsErroredOnProcessing) return ""; // فشل (غالبًا حجم/ضغط) → نجرّب دقة أقل
+        if (j?.IsErroredOnProcessing) return "";
         return String(j?.ParsedResults?.[0]?.ParsedText ?? "");
       };
-      // OCR.space المجاني يرفض الصور الكبيرة (>1MB) فيرجع فارغًا — لذا نخفّض الدقة
-      // تدريجيًا حتى ينجح، ثم نجرّب المحرّك 2 كملاذ أخير.
       for (const scale of [1.5, 1.1, 0.85]) {
         const { b64, bytes } = renderB64(scale);
-        if (bytes > 1_000_000 && scale > 0.85) continue; // أكبر من حد الخدمة → دقة أقل
+        if (bytes > 1_000_000 && scale > 0.85) continue;
         text = await callOcrSpace(b64, "1");
         if (text.trim().length >= 40) break;
         text = await callOcrSpace(b64, "2");
         if (text.trim().length >= 40) break;
       }
-    } else if (visionKey) {
-      const b64 = renderB64(2).b64;
-      // Google Vision (دقة أعلى، يتطلب تفعيل الفوترة)
-      const vRes = await fetch(
-        `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            requests: [
-              {
-                image: { content: b64 },
-                features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-                imageContext: { languageHints: ["ar", "en"] },
-              },
-            ],
-          }),
-        }
-      );
-      const vJson = await vRes.json();
-      if (!vRes.ok) {
-        const msg = vJson?.error?.message ?? `Vision ${vRes.status}`;
-        return json({ error: msg }, 500);
-      }
-      text = vJson?.responses?.[0]?.fullTextAnnotation?.text ?? "";
     }
 
     return json({ text, page: p, totalPages });
