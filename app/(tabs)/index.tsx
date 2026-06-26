@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
+import { HowToTour } from "../../components/brand/howto-tour";
 import { FadeIn } from "../../components/brand/fade-in";
 import { GlassCard } from "../../components/brand/glass-card";
 import { ReadListenArt } from "../../components/brand/illustrations";
@@ -22,6 +24,8 @@ type Feature = {
   color: string;
   route: "/library" | "/add-book" | "/calendar" | "/activity";
 };
+
+const HOWTO_KEY = "howto-tour-seen-v1";
 
 const FEATURES: Feature[] = [
   { icon: "library", label: "المكتبة", sub: "كل كتبك", color: Palette.neonBlue, route: "/library" },
@@ -44,6 +48,20 @@ export default function HomeScreen() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [due, setDue] = useState(0);
   const [name, setName] = useState("");
+  const [tour, setTour] = useState(false);
+
+  // جولة تعريفية أول مرة فقط (بعد التعريف بالاسم)
+  useEffect(() => {
+    (async () => {
+      const seen = await AsyncStorage.getItem(HOWTO_KEY);
+      if (seen !== "1") setTour(true);
+    })();
+  }, []);
+
+  async function closeTour() {
+    setTour(false);
+    await AsyncStorage.setItem(HOWTO_KEY, "1").catch(() => {});
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -174,6 +192,7 @@ export default function HomeScreen() {
           </FadeIn>
         </ScrollView>
       </SafeAreaView>
+      <HowToTour visible={tour} onClose={closeTour} />
     </ScreenBackground>
   );
 }
