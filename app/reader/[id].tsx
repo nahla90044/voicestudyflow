@@ -161,6 +161,7 @@ export default function ReaderScreen() {
   const playingRef = useRef(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefsLoadedRef = useRef(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false); // اكتمل استرجاع الصفحة المحفوظة
   const scrollRef = useRef<ScrollView>(null);
   const pdfScrollRef = useRef<ScrollView>(null);
   const pdfViewH = useRef(0);
@@ -178,32 +179,31 @@ export default function ReaderScreen() {
   const [pageImgAspect, setPageImgAspect] = useState(0.7); // العرض/الارتفاع
   const [pageImgLoading, setPageImgLoading] = useState(false);
   const pageImgForRef = useRef(0); // الصفحة التي تخصّها الصورة المعروضة حاليًا
+  const imgReqRef = useRef(0); // رقم الطلب — يضمن أن آخر صفحة مطلوبة هي التي تُعرض
   useEffect(() => {
-    if (viewMode !== "pdf" || !pdfPath) return;
-    let active = true;
-    // امسح صورة الصفحة السابقة فورًا حتى لا يبقى الغلاف القديم ظاهرًا
-    if (pageImgForRef.current !== page) setPageImg(null);
+    if (viewMode !== "pdf" || !pdfPath || !prefsLoaded) return;
+    const target = page;
+    const myReq = ++imgReqRef.current;
+    // امسح صورة الصفحة السابقة فورًا إن اختلفت الصفحة (لا يبقى الغلاف القديم)
+    if (pageImgForRef.current !== target) setPageImg(null);
     setPageImgLoading(true);
     (async () => {
-      let uri = await getPageImage(pdfPath, page).catch(() => null);
-      // إعادة محاولة واحدة (قد لا تكون الصورة وُلِّدت بعد على الخادم)
-      if (!uri && active) uri = await getPageImage(pdfPath, page).catch(() => null);
-      if (!active) return;
-      pageImgForRef.current = page;
+      let uri = await getPageImage(pdfPath, target).catch(() => null);
+      // إعادة محاولة (قد لا تكون الصورة وُلِّدت بعد على الخادم)
+      if (!uri && myReq === imgReqRef.current) uri = await getPageImage(pdfPath, target).catch(() => null);
+      if (myReq !== imgReqRef.current) return; // وصل طلب أحدث لصفحة أخرى → تجاهل هذا
+      pageImgForRef.current = target;
       setPageImg(uri);
       setPageImgLoading(false);
       if (uri) {
         Image.getSize(
           uri,
-          (w, h) => active && h > 0 && setPageImgAspect(w / h),
+          (w, h) => myReq === imgReqRef.current && h > 0 && setPageImgAspect(w / h),
           () => {}
         );
       }
     })();
-    return () => {
-      active = false;
-    };
-  }, [pdfPath, page, viewMode]);
+  }, [pdfPath, page, viewMode, prefsLoaded]);
 
   // تحميل التفضيلات: آخر صفحة + السرعة
   useEffect(() => {
@@ -217,6 +217,7 @@ export default function ReaderScreen() {
       setRate(savedRate);
       resumeIdxRef.current = savedSent; // يستأنف من نفس الجملة بالضبط
       prefsLoadedRef.current = true;
+      setPrefsLoaded(true); // الآن page = الصفحة المحفوظة → حمّل صورتها (لا الغلاف)
     })();
 
     return () => {
