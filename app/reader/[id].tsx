@@ -379,8 +379,11 @@ export default function ReaderScreen() {
     const frac =
       sentences.length > 1 ? Math.min(1, Math.max(0, activeSentence) / (sentences.length - 1)) : 0;
     const readY = frac * imgH;
+    // قيّد الإزاحة حتى تملأ الصورة العدسة دائمًا (لا فراغ أسود في الأعلى/الأسفل)
+    const minY = Math.min(0, -(imgH * LENS_SCALE - LENS_H));
+    const target = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
     Animated.spring(lensY, {
-      toValue: LENS_H / 2 - readY * LENS_SCALE,
+      toValue: target,
       useNativeDriver: true,
       friction: 10,
       tension: 55,
@@ -2160,7 +2163,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 2,
     borderBottomWidth: 2,
     borderColor: Palette.neonCyan,
-    backgroundColor: "#0b1220",
+    backgroundColor: "#ffffff",
     overflow: "hidden",
     shadowColor: Palette.neonCyan,
     shadowOpacity: 0.5,
