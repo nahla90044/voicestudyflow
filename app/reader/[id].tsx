@@ -31,7 +31,7 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
-import { extractPdfPageText } from "../../lib/pdfText";
+import { extractPdfPageText, getPageWords, type WordBox } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
@@ -117,9 +117,11 @@ export default function ReaderScreen() {
   const [pdfLens, setPdfLens] = useState(false);
   const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
   const lensY = useRef(new Animated.Value(0)).current; // إزاحة محتوى العدسة (يتابع القراءة)
-  const lineProg = useRef(new Animated.Value(0)).current; // تقدّم القراءة داخل السطر (0→1)
   const LENS_SCALE = 1.85;
   const LENS_H = 130;
+  // صناديق إحداثيات الكلمات لهذه الصفحة (للهايلايتر الدقيق)
+  const [pageWords, setPageWords] = useState<WordBox[]>([]);
+  const wordsCacheRef = useRef<Map<number, WordBox[]>>(new Map());
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -372,23 +374,64 @@ export default function ReaderScreen() {
     pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
   }, [activeSentence, viewMode, speaking, sentences.length]);
 
-  // عدسة الـPDF: حرّك محتوى العدسة ليتابع منطقة القراءة على الصفحة
+  // جلب صناديق كلمات الصفحة عند تفعيل العدسة (مع تخزين مؤقت)
   useEffect(() => {
-    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || sentences.length === 0) return;
+    if (!pdfLens || !pdfPath || !pageImg) return;
+    const p = page;
+    if (wordsCacheRef.current.has(p)) {
+      setPageWords(wordsCacheRef.current.get(p)!);
+      return;
+    }
+    let active = true;
+    getPageWords(pdfPath, p).then((ws) => {
+      if (!active) return;
+      // أزل كلمات الضجيج (الترويسة/التذييل/الأرقام) لتتطابق مع النص المقروء
+      const clean = ws.filter((w) => {
+        const t = (w.t || "").trim();
+        if (!t) return false;
+        if (/:{3,}/.test(t)) return false;
+        if (/restricted|confidential/i.test(t)) return false;
+        if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
+        if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
+        return true;
+      });
+      wordsCacheRef.current.set(p, clean);
+      setPageWords(clean);
+    });
+    return () => {
+      active = false;
+    };
+  }, [pdfLens, pdfPath, page, pageImg]);
+
+  // صندوق الكلمة المقروءة حاليًا (تعيين تناسبي بين تقدّم القراءة وصناديق الكلمات الفعلية)
+  const [wordBox, setWordBox] = useState<WordBox | null>(null);
+  useEffect(() => {
+    if (pageWords.length === 0 || sentences.length === 0 || activeSentence < 0) {
+      setWordBox(null);
+      return;
+    }
+    let before = 0;
+    for (let k = 0; k < activeSentence && k < sentences.length; k++) {
+      before += (sentences[k].match(/\S+/g) || []).length;
+    }
+    const total = sentences.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
+    const gw = before + Math.max(0, activeWord);
+    const idx = Math.min(
+      pageWords.length - 1,
+      Math.max(0, Math.round((gw / total) * (pageWords.length - 1)))
+    );
+    setWordBox(pageWords[idx]);
+  }, [activeSentence, activeWord, pageWords, sentences]);
+
+  // العدسة تتابع موضع الكلمة المقروءة الفعلي (لا تقدير → لا تقف على فراغ)
+  useEffect(() => {
+    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || !wordBox) return;
     const imgH = pdfImgW / (pageImgAspect || 0.7);
-    const frac =
-      sentences.length > 1 ? Math.min(1, Math.max(0, activeSentence) / (sentences.length - 1)) : 0;
-    const readY = frac * imgH;
-    // قيّد الإزاحة حتى تملأ الصورة العدسة دائمًا (لا فراغ أسود في الأعلى/الأسفل)
+    const readY = (wordBox.y + wordBox.h / 2) * imgH;
     const minY = Math.min(0, -(imgH * LENS_SCALE - LENS_H));
     const target = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
-    Animated.spring(lensY, {
-      toValue: target,
-      useNativeDriver: true,
-      friction: 10,
-      tension: 55,
-    }).start();
-  }, [pdfLens, viewMode, pdfImgW, activeSentence, sentences.length, pageImgAspect, lensY]);
+    Animated.spring(lensY, { toValue: target, useNativeDriver: true, friction: 10, tension: 55 }).start();
+  }, [pdfLens, viewMode, pdfImgW, wordBox, pageImgAspect, lensY]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -648,13 +691,9 @@ export default function ReaderScreen() {
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
-        onProgress: (frac) => {
-          setActiveWord(wordIndexAtFraction(sents[i], frac));
-          lineProg.setValue(frac); // تقدّم الهايلايتر داخل السطر في العدسة
-        },
+        onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
         onDone: () => {
           setActiveWord(-1);
-          lineProg.setValue(0);
           playSentence(sents, i + 1, p, total);
         },
         onFallback: (reason) => setVoiceWarn(reason),
@@ -1109,6 +1148,21 @@ export default function ReaderScreen() {
                   resizeMode="contain"
                   onLayout={(e) => setPdfImgW(e.nativeEvent.layout.width)}
                 />
+                {/* هايلايتر دقيق على الكلمة المقروءة فوق صورة الصفحة */}
+                {wordBox && speaking && pdfImgW > 0 ? (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.wordHL,
+                      {
+                        left: wordBox.x * pdfImgW,
+                        top: wordBox.y * (pdfImgW / (pageImgAspect || 0.7)),
+                        width: wordBox.w * pdfImgW,
+                        height: wordBox.h * (pdfImgW / (pageImgAspect || 0.7)),
+                      },
+                    ]}
+                  />
+                ) : null}
               </ScrollView>
             ) : (
               <View style={styles.empty}>
@@ -1125,45 +1179,44 @@ export default function ReaderScreen() {
                 )}
               </View>
             )}
-            {/* عدسة الـPDF: تكبّر منطقة القراءة وتتحرّك معها */}
-            {pdfLens && pageImg && pdfImgW > 0 ? (
-              <View pointerEvents="none" style={styles.lensBand}>
-                <Animated.Image
-                  source={{ uri: pageImg }}
-                  style={{
-                    width: pdfImgW * LENS_SCALE,
-                    height: (pdfImgW / (pageImgAspect || 0.7)) * LENS_SCALE,
-                    transform: [
-                      { translateX: -(pdfImgW * (LENS_SCALE - 1)) / 2 },
-                      { translateY: lensY },
-                    ],
-                  }}
-                  resizeMode="contain"
-                />
-                {/* هايلايتر يتابع الكلمات يمين←يسار على السطر المقروء */}
-                {speaking ? (
-                  <Animated.View
-                    style={[
-                      styles.lensHighlight,
-                      {
-                        width: pdfImgW * 0.24,
-                        transform: [
-                          {
-                            translateX: lineProg.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [pdfImgW - pdfImgW * 0.24, 0], // من اليمين إلى اليسار
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  />
-                ) : null}
-                <View style={styles.lensTag}>
-                  <Ionicons name="search" size={12} color="#0b1220" />
-                </View>
-              </View>
-            ) : null}
+            {/* عدسة الـPDF: تكبّر منطقة القراءة وتتابع الكلمة المقروءة بدقة */}
+            {pdfLens && pageImg && pdfImgW > 0
+              ? (() => {
+                  const imgH = pdfImgW / (pageImgAspect || 0.7);
+                  return (
+                    <View pointerEvents="none" style={styles.lensBand}>
+                      <Animated.View
+                        style={{
+                          width: pdfImgW * LENS_SCALE,
+                          height: imgH * LENS_SCALE,
+                          transform: [
+                            { translateX: -(pdfImgW * (LENS_SCALE - 1)) / 2 },
+                            { translateY: lensY },
+                          ],
+                        }}
+                      >
+                        <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+                        {wordBox && speaking ? (
+                          <View
+                            style={[
+                              styles.wordHL,
+                              {
+                                left: wordBox.x * pdfImgW * LENS_SCALE,
+                                top: wordBox.y * imgH * LENS_SCALE,
+                                width: wordBox.w * pdfImgW * LENS_SCALE,
+                                height: wordBox.h * imgH * LENS_SCALE,
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </Animated.View>
+                      <View style={styles.lensTag}>
+                        <Ionicons name="search" size={12} color="#0b1220" />
+                      </View>
+                    </View>
+                  );
+                })()
+              : null}
 
             {/* شريط علامة مثل Apple Books — اضغطيه لحفظ/إزالة الصفحة */}
             <Pressable onPress={onToggleBookmark} style={styles.ribbon} hitSlop={10}>
@@ -2171,15 +2224,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 8,
   },
-  lensHighlight: {
+  wordHL: {
     position: "absolute",
-    top: 130 / 2 - 28, // مركز العدسة (مكان السطر المقروء)
-    left: 0,
-    height: 56,
-    borderRadius: 8,
-    backgroundColor: "rgba(245,200,66,0.32)", // هايلايتر أصفر شفّاف
+    zIndex: 5,
+    borderRadius: 4,
+    backgroundColor: "rgba(245,200,66,0.38)", // هايلايتر أصفر شفّاف على الكلمة
     borderWidth: 1,
-    borderColor: "rgba(245,200,66,0.6)",
+    borderColor: "rgba(245,200,66,0.75)",
   },
   lensTag: {
     position: "absolute",

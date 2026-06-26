@@ -55,10 +55,41 @@ Deno.serve(async (req: Request) => {
     // مسافة، وفراغ كبير = مسافة/كلمة جديدة — يصلح الملفات التي يخرج فيها كل حرف
     // عنصرًا منفصلًا (حروف مقطّعة).
     const pg = await pdf.getPage(page);
+    const viewport = pg.getViewport({ scale: 1 });
+    const PW = viewport.width || 1;
+    const PH = viewport.height || 1;
     const content = await pg.getTextContent();
     type TItem = { str?: string; hasEOL?: boolean; width?: number; height?: number; transform?: number[] };
+
+    // نبني الكلمات مع صندوق إحداثيات مُطبَّع (0..1) لكل كلمة، بنفس منطق المسافات
+    type Word = { t: string; x: number; y: number; w: number; h: number };
+    const words: Word[] = [];
     let out = "";
     let prev: { e: number; f: number; w: number; h: number; eol: boolean } | null = null;
+    let curStr = "";
+    let curMinX = Infinity, curMaxX = -Infinity, curMinF = Infinity, curMaxTop = -Infinity;
+
+    const flush = () => {
+      if (curStr.trim() && curMinX !== Infinity) {
+        words.push({
+          t: curStr,
+          x: Math.max(0, curMinX / PW),
+          y: Math.max(0, (PH - curMaxTop) / PH),
+          w: Math.max(0, (curMaxX - curMinX) / PW),
+          h: Math.max(0, (curMaxTop - curMinF) / PH),
+        });
+      }
+      curStr = "";
+      curMinX = Infinity; curMaxX = -Infinity; curMinF = Infinity; curMaxTop = -Infinity;
+    };
+    const addGlyph = (s: string, e: number, f: number, w: number, h: number) => {
+      curStr += s;
+      curMinX = Math.min(curMinX, e, e + w);
+      curMaxX = Math.max(curMaxX, e, e + w);
+      curMinF = Math.min(curMinF, f);
+      curMaxTop = Math.max(curMaxTop, f + h);
+    };
+
     for (const item of content.items as TItem[]) {
       const s = item?.str ?? "";
       if (!s && !item?.hasEOL) continue;
@@ -67,17 +98,19 @@ Deno.serve(async (req: Request) => {
       const f = tr[5] ?? 0;
       const w = item?.width ?? 0;
       const h = item?.height || Math.hypot(tr[1] ?? 0, tr[3] ?? 0) || 12;
+      let boundary = false;
       if (prev) {
-        if (prev.eol) out += "\n";
-        else if (Math.abs(f - prev.f) > h * 0.5) out += "\n";
-        else {
-          const gap = Math.abs(e - prev.e) - prev.w; // الفراغ الأفقي بين الحرفين
-          if (gap > h * 0.32) out += " ";
-        }
+        if (prev.eol) { out += "\n"; boundary = true; }
+        else if (Math.abs(f - prev.f) > h * 0.5) { out += "\n"; boundary = true; }
+        else if (Math.abs(e - prev.e) - prev.w > h * 0.32) { out += " "; boundary = true; }
       }
+      if (boundary) flush();
       out += s;
+      addGlyph(s, e, f, w, h);
       prev = { e, f, w, h, eol: !!item?.hasEOL };
     }
+    flush();
+
     const pageText = out
       .replace(/[ \t]+/g, " ")
       .replace(/ *\n */g, "\n")
@@ -86,7 +119,7 @@ Deno.serve(async (req: Request) => {
       .replace(/([(])\s+/g, "$1")
       .trim();
 
-    return json({ page, totalPages, text: pageText });
+    return json({ page, totalPages, text: pageText, words });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
   }

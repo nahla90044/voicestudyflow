@@ -22,6 +22,24 @@ export type PageText = {
   ocr?: boolean;
 };
 
+// صندوق إحداثيات كلمة (مُطبَّع 0..1 نسبةً لأبعاد الصفحة)
+export type WordBox = { t: string; x: number; y: number; w: number; h: number };
+
+/** يجلب صناديق إحداثيات كلمات صفحة (للهايلايتر الدقيق والعدسة). */
+export async function getPageWords(pdfPath: string, page: number): Promise<WordBox[]> {
+  if (!pdfPath) return [];
+  try {
+    const { data, error } = await supabase.functions.invoke("pdf-extract-text", {
+      body: { pdfPath, page },
+    });
+    if (error || data?.error) return [];
+    const ws = (data as { words?: WordBox[] })?.words;
+    return Array.isArray(ws) ? ws : [];
+  } catch {
+    return [];
+  }
+}
+
 // أقل من هذا الطول يعني أن الصفحة بلا نص حقيقي (غالبًا صورة ممسوحة أو علامة مائية)
 const MIN_REAL_TEXT = 40;
 
