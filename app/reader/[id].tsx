@@ -41,7 +41,7 @@ import {
   setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
-import { playTransition, startAmbient, stopAmbient } from "../../lib/sfx";
+import { MUSIC_OPTIONS, startAmbient, stopAmbient } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { supabase } from "../../lib/supabase";
 import {
@@ -184,7 +184,8 @@ export default function ReaderScreen() {
   const [presSlide, setPresSlide] = useState(0);
   const presNarratingRef = useRef(false);
   const presUsedRef = useRef(false); // فُتح العرض مرة → جهّز الشرائح مسبقًا للصفحات التالية
-  const [presMusic, setPresMusic] = useState(false); // موسيقى خلفية (مطفأة افتراضيًا — للروايات فقط)
+  const [presMusicKey, setPresMusicKey] = useState<string | null>(null); // موسيقى مختارة (null = بدون)
+  const [showMusicPicker, setShowMusicPicker] = useState(false);
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -487,16 +488,11 @@ export default function ReaderScreen() {
 
   // الشريحة المعروضة = اختيار المستخدم/السرد (تنقّل يدوي حر)
   const slideIdx = pageSlides.length > 0 ? Math.min(Math.max(0, presSlide), pageSlides.length - 1) : 0;
-  // التنقّل اليدوي بين الشرائح (مع مؤثّر انتقال)
+  // التنقّل اليدوي بين الشرائح (بلا صوت)
   function goSlide(delta: number) {
-    setPresSlide((s) => {
-      const next = Math.min(Math.max(0, s + delta), Math.max(0, pageSlides.length - 1));
-      if (next !== s) playTransition();
-      return next;
-    });
+    setPresSlide((s) => Math.min(Math.max(0, s + delta), Math.max(0, pageSlides.length - 1)));
   }
   function jumpSlide(di: number) {
-    if (di !== presSlide) playTransition();
     setPresSlide(di);
   }
   // شرائح صفحة جديدة → ابدأ من الأولى
@@ -518,7 +514,6 @@ export default function ReaderScreen() {
       stopAmbient();
       return;
     }
-    if (idx > 0) playTransition(); // انتقال بين الشرائح
     setPresSlide(idx);
     speakText(slideSpeech(pageSlides[idx]), {
       voiceId: pickVoice(),
@@ -539,7 +534,7 @@ export default function ReaderScreen() {
       stop(); // أوقف قراءة الصفحة إن كانت تعمل
       presNarratingRef.current = true;
       setPresNarrating(true);
-      if (presMusic) startAmbient(); // موسيقى خلفية فقط إن فعّلتها (للروايات)
+      if (presMusicKey) startAmbient(presMusicKey); // موسيقى مختارة (للروايات)
       narrateSlidesFrom(0);
     }
   }
@@ -1917,26 +1912,53 @@ export default function ReaderScreen() {
               <Text style={styles.presExitTxt}>خروج</Text>
             </Pressable>
             <Text style={styles.presPage}>صفحة {page}</Text>
-            {/* زر الموسيقى الخلفية (للروايات/القصص) — مطفأ افتراضيًا */}
+            {/* زر الموسيقى — يفتح اختيارات هادئة (للروايات/القصص) */}
             <Pressable
-              onPress={() => {
-                setPresMusic((m) => {
-                  const next = !m;
-                  if (next && presNarratingRef.current) startAmbient();
-                  else if (!next) stopAmbient();
-                  return next;
-                });
-              }}
-              style={[styles.presMusicBtn, presMusic && styles.presMusicBtnOn]}
+              onPress={() => setShowMusicPicker((v) => !v)}
+              style={[styles.presMusicBtn, !!presMusicKey && styles.presMusicBtnOn]}
               hitSlop={8}
             >
               <Ionicons
-                name={presMusic ? "musical-notes" : "musical-notes-outline"}
+                name={presMusicKey ? "musical-notes" : "musical-notes-outline"}
                 size={18}
-                color={presMusic ? "#0b1220" : Palette.text}
+                color={presMusicKey ? "#0b1220" : Palette.text}
               />
             </Pressable>
           </View>
+
+          {/* اختيارات الموسيقى الهادئة */}
+          {showMusicPicker ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.musicRow}
+            >
+              <Pressable
+                onPress={() => {
+                  setPresMusicKey(null);
+                  stopAmbient();
+                }}
+                style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
+              >
+                <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>بدون</Text>
+              </Pressable>
+              {MUSIC_OPTIONS.map((m) => {
+                const on = presMusicKey === m.key;
+                return (
+                  <Pressable
+                    key={m.key}
+                    onPress={() => {
+                      setPresMusicKey(m.key);
+                      startAmbient(m.key); // معاينة فورية + تشغيل
+                    }}
+                    style={[styles.musicChip, on && styles.musicChipOn]}
+                  >
+                    <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {m.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
 
           {/* الشريحة */}
           <View style={styles.presStage}>
@@ -2560,6 +2582,18 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   presMusicBtnOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  musicRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 4, paddingVertical: 10 },
+  musicChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  musicChipOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  musicChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
+  musicChipTxtOn: { color: "#0b1220" },
   slideBulletsScroll: { alignSelf: "stretch", maxHeight: 320, flexGrow: 0 },
   presStage: { flex: 1, justifyContent: "center" },
   presCenter: { alignItems: "center", gap: 12 },
