@@ -13,7 +13,8 @@ export type AiAction =
   | "translate"
   | "mindmap"
   | "tashkeel"
-  | "slides";
+  | "slides"
+  | "filternoise";
 
 export type Slide = { emoji: string; title: string; bullets: string[] };
 
@@ -59,6 +60,49 @@ export async function cleanupTextStrict(text: string): Promise<string> {
   const out = stripPreamble(await aiAssist("cleanup", text));
   if (!out.trim()) throw new Error("empty cleanup");
   return out;
+}
+
+/* -------- تنقية نص القراءة من الضجيج (بتحقّق صارم يمنع تغيير أي كلمة) -------- */
+// يوحّد للمقارنة: يزيل التشكيل والمسافات وكل ما ليس حرفًا/رقمًا
+function normForCheck(s: string): string {
+  return s
+    .normalize("NFKC")
+    .replace(/[ً-ْٰـ]/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
+}
+// هل b تتابع جزئي من a؟ (يعني b نتجت من a بحذف فقط — لا إضافة ولا تغيير)
+function isSubsequence(sub: string, full: string): boolean {
+  let i = 0;
+  for (let j = 0; j < full.length && i < sub.length; j++) {
+    if (full[j] === sub[i]) i++;
+  }
+  return i === sub.length;
+}
+// آمن فقط إذا: المخرجات حذفت ضجيجًا (تتابع جزئي من الأصل) ولم تحذف أكثر من اللازم
+function isSafeFilter(original: string, filtered: string): boolean {
+  const a = normForCheck(original);
+  const b = normForCheck(filtered);
+  if (!b) return false;
+  if (b.length < a.length * 0.6) return false; // حُذف محتوى كثير → مرفوض
+  return isSubsequence(b, a);
+}
+
+/**
+ * ينقّي نص الصفحة من الضجيج (أرقام صفحات/ترويسات/إحالات/علامات مائية) عبر الذكاء،
+ * **مع تحقّق صارم مرتين**: لا يَقبل المخرجات إلا إذا كانت حذفًا للضجيج فقط دون
+ * تغيير أو إضافة أي كلمة. وإلا يُرجع النص الأصلي حرفيًا (أمان تام).
+ */
+export async function filterReadingNoise(text: string): Promise<string> {
+  if (!text.trim()) return text;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const out = stripPreamble(await aiAssist("filternoise", text));
+      if (out.trim() && isSafeFilter(text, out)) return out.trim();
+    } catch {
+      break; // الذكاء غير متاح → النص الأصلي
+    }
+  }
+  return text; // لم يجتز التحقّق → النص الأصلي حرفيًا
 }
 
 /** يُرجع معنى كلمة حسب سياقها في الجملة (قاموس ذكي). */
