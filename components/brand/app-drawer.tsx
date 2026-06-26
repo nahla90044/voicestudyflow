@@ -65,7 +65,8 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
             </View>
 
             <View style={{ flex: 1 }} />
-            <Text style={styles.footer}>تصميم: Nahla Bin Shablan</Text>
+            <Text style={styles.footer}>تصميم وتطوير: Nahla</Text>
+            <Text style={styles.footerMail}>Nahlah@Nahlah.io</Text>
           </View>
         </View>
       </Modal>
@@ -119,5 +120,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   itemTxt: { flex: 1, color: Palette.text, fontWeight: "900", fontSize: 16, textAlign: "right" },
-  footer: { color: Palette.textDim, fontSize: 12, textAlign: "center", marginBottom: Spacing.sm },
+  footer: { color: Palette.textDim, fontSize: 12, textAlign: "center", marginBottom: 2 },
+  footerMail: { color: Palette.neonCyan, fontSize: 12, textAlign: "center", marginBottom: Spacing.sm, fontWeight: "700" },
 });

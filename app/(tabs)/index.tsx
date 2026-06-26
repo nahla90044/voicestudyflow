@@ -7,6 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
+import { DownloadIndicator } from "../../components/brand/download-indicator";
 import { HowToTour } from "../../components/brand/howto-tour";
 import { FadeIn } from "../../components/brand/fade-in";
 import { GlassCard } from "../../components/brand/glass-card";
@@ -100,6 +101,9 @@ export default function HomeScreen() {
           <View style={styles.topBar}>
             <AppDrawer />
           </View>
+
+          {/* مؤشّر تحميل كتاب في الخلفية (إن وُجد) */}
+          <DownloadIndicator />
 
           {/* الهيرو الزجاجي */}
           <FadeIn delay={0}>

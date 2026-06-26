@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
@@ -54,6 +54,15 @@ export default function HelpScreen() {
               </View>
             </View>
           ))}
+
+          {/* جهة الاتصال */}
+          <Pressable
+            onPress={() => Linking.openURL("mailto:Nahlah@Nahlah.io").catch(() => {})}
+            style={styles.contact}
+          >
+            <Text style={styles.contactName}>تصميم وتطوير: Nahla</Text>
+            <Text style={styles.contactMail}>للتواصل والملاحظات: Nahlah@Nahlah.io</Text>
+          </Pressable>
         </ScrollView>
       </SafeAreaView>
 
@@ -93,4 +102,7 @@ const styles = StyleSheet.create({
   cardIcon: { width: 42, height: 42, borderRadius: Radius.md, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   cardTitle: { color: Palette.text, fontSize: 16, fontWeight: "900", textAlign: "right" },
   cardBody: { color: Palette.textMuted, fontSize: 13.5, lineHeight: 23, textAlign: "right", marginTop: 4 },
+  contact: { alignItems: "center", marginTop: 18, paddingVertical: 8 },
+  contactName: { color: Palette.text, fontSize: 14, fontWeight: "900" },
+  contactMail: { color: Palette.neonCyan, fontSize: 13, fontWeight: "700", marginTop: 4 },
 });
