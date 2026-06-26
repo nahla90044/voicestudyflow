@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
   activeBadgeText: { color: "#ffffff", fontWeight: "900", fontSize: 11 },
 
   coverTitle: { color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "right" },
-  meta: { padding: 12, gap: 4 },
+  meta: { padding: 12, gap: 4, minHeight: 62, justifyContent: "center" },
   metaTxt: { color: "#c9d4e2", fontSize: 12, textAlign: "right" },
   syllabusChip: {
     marginTop: 8,

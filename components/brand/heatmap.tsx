@@ -43,6 +43,11 @@ export function StudyHeatmap({ days, weeks = 13 }: Props) {
 
   return (
     <View>
+      {/* شرح مبسّط: كل مربّع يوم، ولونه يدلّ على دقائق مذاكرتك فيه */}
+      <Text style={styles.caption}>
+        كل مربّع = يوم خلال آخر ٣ أشهر، ولونه يدلّ على دقائق مذاكرتك فيه (الأخضر الأغمق = وقت أطول).
+      </Text>
+
       <View style={styles.grid}>
         {cols.map((col, ci) => (
           <View key={ci} style={styles.col}>
@@ -63,11 +68,11 @@ export function StudyHeatmap({ days, weeks = 13 }: Props) {
       </View>
 
       <View style={styles.legend}>
-        <Text style={styles.legendTxt}>أقل</Text>
+        <Text style={styles.legendTxt}>دقائق أقل</Text>
         {[0, 9, 19, 39, 50].map((m, i) => (
           <View key={i} style={[styles.cell, { backgroundColor: levelColor(m) }]} />
         ))}
-        <Text style={styles.legendTxt}>أكثر</Text>
+        <Text style={styles.legendTxt}>دقائق أكثر</Text>
       </View>
     </View>
   );
@@ -79,4 +84,5 @@ const styles = StyleSheet.create({
   cell: { width: 13, height: 13, borderRadius: 3 },
   legend: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10, justifyContent: "flex-end" },
   legendTxt: { color: Palette.textDim, fontSize: 11, fontWeight: "700" },
+  caption: { color: Palette.textMuted, fontSize: 12.5, lineHeight: 21, textAlign: "right", marginBottom: 12 },
 });

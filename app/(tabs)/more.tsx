@@ -282,7 +282,7 @@ export default function MoreScreen() {
           <View style={styles.focusBox}>
             <Text style={styles.focusTitle}>وضع التركيز 🎯</Text>
             <Text style={styles.focusSub}>
-              كم مرة يناديكِ القارئ باسمكِ أثناء القراءة: «معك يا {userName.trim() || "..."}؟»
+              كم مرة يناديكِ القارئ باسمكِ أثناء القراءة: «معاي يا {userName.trim() || "..."}؟»
             </Text>
             <View style={styles.focusLevels}>
               {FOCUS_LABELS.map((f) => {

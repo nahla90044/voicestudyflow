@@ -788,9 +788,9 @@ export default function ReaderScreen() {
     const every = focusEveryRef.current;
     if (name && every > 0 && focusCountRef.current % every === 0) {
       const phrases = [
-        `معكِ يا ${name}؟`,
-        `ركّزي معي يا ${name}.`,
-        `منتبهة يا ${name}؟`,
+        `معاي يا ${name}؟`,
+        `فاهمة عليّ يا ${name}؟`,
+        `منتبهة معاي يا ${name}؟`,
         `أحسنتِ يا ${name}، نكمل.`,
       ];
       const phrase = phrases[Math.floor(focusCountRef.current / every) % phrases.length];

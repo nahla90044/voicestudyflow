@@ -204,7 +204,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
 
-  topBar: { flexDirection: "row-reverse", marginBottom: Spacing.md },
+  topBar: { flexDirection: "row-reverse", justifyContent: "flex-end", marginBottom: Spacing.md },
 
   hero: { alignItems: "center", padding: Spacing.xl },
   title: { color: Palette.text, fontSize: 28, fontWeight: "900", textAlign: "center", marginTop: Spacing.sm },
