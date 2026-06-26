@@ -7,9 +7,19 @@ import { filterReadingNoise, fixArabicSpacing } from "./ai";
 import { supabase } from "./supabase";
 
 // إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد المعالجة.
-// v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج بتحقّق صارم.
-// v4: إصلاح مسافات النص الملتصق بضمان الهيكل الساكن (لا يغيّر أي كلمة).
-const EXTRACT_VER = "-v4";
+// v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج.  v4: إصلاح المسافات.
+// v5: استخدام OCR تلقائيًا للكتب ذات طبقة النص المكسورة (أنظف نص).
+const EXTRACT_VER = "-v5";
+
+// طبقة نص «مكسورة»: نسبة كبيرة من أحرف العرض العربية (presentation forms:
+// FB50–FDFF و FE70–FEFF). هذه الكتب تُستخرج بمسافات خاطئة وتشكيل مبعثر،
+// فنفضّل OCR على صورة الصفحة (نص أنظف وأدقّ).
+function hasBrokenTextLayer(raw: string): boolean {
+  if (!raw) return false;
+  const pf = (raw.match(/[\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  const ar = (raw.match(/[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  return ar > 40 && pf / ar > 0.2;
+}
 
 // يوحّد أحرف العرض العربية المعزولة (ﻣ ﻘ) إلى صورتها القياسية (م ق) ليعيد المحرّك ربطها
 function normalizeArabic(s: string): string {
@@ -94,20 +104,24 @@ export async function extractPdfPageText(
     text = String(data?.text ?? "");
   }
 
-  // 3) لا يوجد نص حقيقي → OCR (كتاب مصوّر)
-  if (text.trim().length < MIN_REAL_TEXT) {
+  // 3) متى نلجأ للـOCR؟
+  //   (أ) لا نص حقيقي (كتاب مصوّر)، أو
+  //   (ب) طبقة النص «مكسورة»: تستخدم أشكال العرض العربية (presentation forms)
+  //       التي تأتي بمسافات خاطئة وتشكيل مبعثر — صورة الصفحة تُقرأ بـOCR أنظف بكثير.
+  const brokenLayer = hasBrokenTextLayer(text);
+  if (text.trim().length < MIN_REAL_TEXT || brokenLayer) {
     try {
       const ocr = await supabase.functions.invoke("ocr-page", {
         body: { pdfPath, page: resolvedPage },
       });
       const ocrText = String(ocr.data?.text ?? "").trim();
       if (!ocr.error && ocrText.length >= MIN_REAL_TEXT) {
-        text = ocrText;
+        text = ocrText; // نص الصورة الفعلي — نظيف ومطابق للمطبوع
         usedOcr = true;
         if (ocr.data?.totalPages) totalPages = Number(ocr.data.totalPages);
       }
     } catch {
-      // تجاهل
+      // تعذّر OCR → نُبقي نص الطبقة (أفضل المتاح) ونعالجه لاحقًا
     }
   }
 
