@@ -294,6 +294,41 @@ export default function SyllabusScreen() {
     } catch {}
   }
 
+  // طباعة الخريطة الذهنية كشجرة كاملة مرتّبة (بلا قص أو نقص)
+  async function printMindmap() {
+    if (!mm) return;
+    const esc = (s: string) =>
+      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const branches = mm.branches
+      .map((b, i) => {
+        const c = MM_COLORS[i % MM_COLORS.length];
+        const pts = b.points.map((p) => `<li>${esc(p)}</li>`).join("");
+        return `<div class="br" style="border-color:${c}">
+          <div class="brh" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(b.label)}</div>
+          ${pts ? `<ul>${pts}</ul>` : ""}
+        </div>`;
+      })
+      .join("");
+    const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+      * { font-family: -apple-system, 'SF Arabic', sans-serif; }
+      body { padding: 28px; color: #14233a; }
+      h1 { font-size: 20px; margin: 0 0 14px; text-align:center; }
+      .center { background:#5b3df5; color:#fff; font-weight:800; font-size:17px; text-align:center; padding:14px; border-radius:14px; margin:0 auto 18px; max-width:420px; }
+      .br { border:2px solid; border-radius:12px; padding:10px 14px; margin:0 0 12px; page-break-inside: avoid; }
+      .brh { font-weight:800; font-size:15px; display:flex; align-items:center; gap:8px; }
+      .dot { width:11px; height:11px; border-radius:50%; display:inline-block; }
+      ul { margin:8px 0 0; padding-inline-start:22px; }
+      li { margin:4px 0; font-size:13.5px; }
+    </style></head><body>
+      <h1>🗺️ الخريطة الذهنية — ${esc(bookTitle)}</h1>
+      <div class="center">${esc(mm.center)}</div>
+      ${branches}
+    </body></html>`;
+    try {
+      await Print.printAsync({ html });
+    } catch {}
+  }
+
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -584,9 +619,14 @@ export default function SyllabusScreen() {
             <View style={styles.quizSheet}>
               <View style={styles.quizHeader}>
                 <Text style={styles.quizHeaderTxt}>🗺️ الخريطة الذهنية</Text>
-                <Pressable onPress={() => setMmUnit(null)} hitSlop={8}>
-                  <Ionicons name="close" size={22} color={Palette.textMuted} />
-                </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                  <Pressable onPress={printMindmap} hitSlop={8}>
+                    <Ionicons name="print-outline" size={21} color={Palette.textMuted} />
+                  </Pressable>
+                  <Pressable onPress={() => setMmUnit(null)} hitSlop={8}>
+                    <Ionicons name="close" size={22} color={Palette.textMuted} />
+                  </Pressable>
+                </View>
               </View>
 
               <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
