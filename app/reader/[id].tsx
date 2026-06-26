@@ -691,11 +691,21 @@ export default function ReaderScreen() {
   }
 
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
-  function skipSentence(delta: number) {
+  // تسريع التخطّي: كل ضغطة سريعة بنفس الاتجاه تتخطّى مقاطع أكثر (×1، ×2، ×3…)
+  const skipAccelRef = useRef<{ t: number; dir: number; mult: number }>({ t: 0, dir: 0, mult: 1 });
+  function skipSentence(deltaDir: number) {
     const sents = sentences;
     if (sents.length === 0) return;
+    const dir = deltaDir > 0 ? 1 : -1;
+    const now = Date.now();
+    const a = skipAccelRef.current;
+    a.mult = a.dir === dir && now - a.t < 800 ? Math.min(a.mult + 1, 5) : 1;
+    a.dir = dir;
+    a.t = now;
+    if (a.mult > 1) showToast(`تخطّي ×${a.mult}`);
+
     const base = activeSentence >= 0 ? activeSentence : 0;
-    const target = base + delta;
+    const target = base + dir * a.mult;
 
     // تجاوز حدود الصفحة → الصفحة المجاورة
     if (target < 0) return goPage(-1);
