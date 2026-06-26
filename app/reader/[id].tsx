@@ -425,39 +425,6 @@ export default function ReaderScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfLens, pdfPath, page, pageImg]);
 
-  // محاذاة كلمات النص المقروء مع صناديق الكلمات بالمطابقة النصّية (لا تقدير تناسبي)
-  const clean2box = useMemo<number[]>(() => {
-    if (pageWords.length === 0 || sentences.length === 0) return [];
-    const norm = (s: string) =>
-      s
-        .normalize("NFKC")
-        .replace(/[ؐ-ًؚ-ْٰـ‎‏]/g, "")
-        .replace(/[^\p{L}\p{N}]/gu, "");
-    const cleaned: string[] = [];
-    for (const s of sentences) for (const w of s.match(/\S+/g) || []) cleaned.push(w);
-    const map: number[] = [];
-    let rj = 0;
-    for (let ci = 0; ci < cleaned.length; ci++) {
-      const cw = norm(cleaned[ci]);
-      let found = -1;
-      if (cw) {
-        for (let k = rj; k < Math.min(pageWords.length, rj + 7); k++) {
-          const rw = norm(pageWords[k].t);
-          if (rw && (rw === cw || rw.includes(cw) || cw.includes(rw))) {
-            found = k;
-            break;
-          }
-        }
-      }
-      if (found >= 0) {
-        map.push(found);
-        rj = found + 1;
-      } else {
-        map.push(Math.min(rj, pageWords.length - 1));
-      }
-    }
-    return map;
-  }, [sentences, pageWords]);
 
   // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
   type Line = { x: number; y: number; w: number; h: number; start: number; end: number };

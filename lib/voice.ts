@@ -71,10 +71,8 @@ export const VOICE_CATALOG: VoiceOption[] = [
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
 
-/* ---------------- إعدادات ElevenLabs ---------------- */
-
-const ELEVEN_KEY = process.env.EXPO_PUBLIC_ELEVENLABS_API_KEY;
-const ELEVEN_BASE = "https://api.elevenlabs.io/v1/text-to-speech";
+/* ---------------- إعدادات الصوت ---------------- */
+// لا مفتاح صوت في العميل — التوليد عبر الدالة السحابية «tts» فقط (المفتاح بالسيرفر).
 
 // احتياطي عند غياب voiceId (المسار المباشر فقط)
 const VOICE_IDS: Record<VoiceGender, string> = {
@@ -247,31 +245,8 @@ async function synthToFile(
     return { file, starts };
   }
 
-  if (ELEVEN_KEY) {
-    // مسار التطوير المباشر (بلا توقيت)
-    const res = await fetch(`${ELEVEN_BASE}/${vid}?output_format=mp3_44100_128`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": ELEVEN_KEY,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.0, use_speaker_boost: true },
-      }),
-    });
-    if (!res.ok) {
-      const msg = await res.text().catch(() => "");
-      throw new Error(`ElevenLabs ${res.status}: ${msg}`);
-    }
-    file.write(new Uint8Array(await res.arrayBuffer()));
-    pruneCache();
-    return { file, starts: [] };
-  }
-
-  // مسار الإنتاج: الدالة السحابية (المفتاح سرّي بالسيرفر) — مع توقيت الحروف
+  // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
+  // لا يوجد مفتاح ElevenLabs داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
   const { data, error } = await supabase.functions.invoke("tts", {
     body: { text, gender, voiceId: vid },
   });
