@@ -19,7 +19,6 @@ import {
   generateMindmap,
   generateSyllabus,
   generateUnitQuiz,
-  getBookText,
   getSyllabus,
   getUnitSchedule,
   setUnitDone,
@@ -126,11 +125,10 @@ export default function SyllabusScreen() {
     setMmLoading(true);
     setMm(null);
     try {
-      // نبني الخريطة من نص الكتاب الفعلي (العناوين والتعداد كما هي) لا من الملخّص
-      const bookText = await getBookText(pdfPath);
-      const ctx = bookText.trim()
-        ? `ركّز على قسم «${u.title}» من الكتاب. استخرج عناوينه الرئيسية والتعداد كما وردت تمامًا دون حذف.\n\nنص الكتاب:\n${bookText}`
-        : `القسم: ${u.title}. المواضيع: ${u.topics.join("، ")}.${u.outcome ? ` ${u.outcome}` : ""}`;
+      // محتوى الوحدة المختصر = توليد سريع (الوحدات أصلًا مستخرَجة من الكتاب)
+      const ctx = `الفكرة المركزية: ${u.title}\nالفروع الرئيسية:\n${u.topics
+        .map((t) => "- " + t)
+        .join("\n")}`;
       const map = await generateMindmap(ctx);
       if (!map) {
         setMmUnit(null);
