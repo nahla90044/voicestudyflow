@@ -269,6 +269,7 @@ export default function ReaderScreen() {
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
       if (toastTimer.current) clearTimeout(toastTimer.current);
       stopSpeaking();
+      stopAmbient(); // أوقف موسيقى الخلفية عند مغادرة الكتاب
       // ملاحظة: لا نوقف تحميل الكتاب عند الخروج — يكمل في الخلفية عبر المدير العام
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,8 +522,7 @@ export default function ReaderScreen() {
     if (idx >= pageSlides.length) {
       presNarratingRef.current = false;
       setPresNarrating(false);
-      stopAmbient();
-      return;
+      return; // الموسيقى تستمر في الخلفية (لا نوقفها)
     }
     setPresSlide(idx);
     speakText(slideSpeech(pageSlides[idx]), {
@@ -538,13 +538,11 @@ export default function ReaderScreen() {
     if (presNarrating) {
       presNarratingRef.current = false;
       setPresNarrating(false);
-      stopSpeaking();
-      stopAmbient();
+      stopSpeaking(); // الموسيقى تستمر
     } else if (pageSlides.length > 0) {
       stop(); // أوقف قراءة الصفحة إن كانت تعمل
       presNarratingRef.current = true;
       setPresNarrating(true);
-      if (presMusicKey) startAmbient(presMusicKey); // موسيقى مختارة (للروايات)
       narrateSlidesFrom(0);
     }
   }
@@ -1347,6 +1345,51 @@ export default function ReaderScreen() {
           </Text>
         </Pressable>
 
+        {/* موسيقى خلفية هادئة (للقصص والروايات) — تستمر أثناء القراءة */}
+        <Pressable
+          onPress={() => setShowMusicPicker((v) => !v)}
+          style={[styles.voicePickBtn, !!presMusicKey && { borderColor: Palette.neonCyan }]}
+        >
+          <Ionicons
+            name={presMusicKey ? "musical-notes" : "musical-notes-outline"}
+            size={16}
+            color={presMusicKey ? Palette.neonCyan : Palette.textMuted}
+          />
+          <Text style={styles.voicePickTxt} numberOfLines={1}>
+            {presMusicKey
+              ? `موسيقى: ${MUSIC_OPTIONS.find((m) => m.key === presMusicKey)?.name}`
+              : "موسيقى خلفية 🎵"}
+          </Text>
+        </Pressable>
+        {showMusicPicker ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.musicRow}>
+            <Pressable
+              onPress={() => {
+                setPresMusicKey(null);
+                stopAmbient();
+              }}
+              style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
+            >
+              <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>بدون</Text>
+            </Pressable>
+            {MUSIC_OPTIONS.map((m) => {
+              const on = presMusicKey === m.key;
+              return (
+                <Pressable
+                  key={m.key}
+                  onPress={() => {
+                    setPresMusicKey(m.key);
+                    startAmbient(m.key);
+                  }}
+                  style={[styles.musicChip, on && styles.musicChipOn]}
+                >
+                  <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {m.name}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={styles.aidsRow}>
           <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
@@ -1906,7 +1949,6 @@ export default function ReaderScreen() {
           presNarratingRef.current = false;
           setPresNarrating(false);
           stopSpeaking();
-          stopAmbient();
           setPresentOpen(false);
         }}
       >
@@ -1918,7 +1960,6 @@ export default function ReaderScreen() {
                 presNarratingRef.current = false;
           setPresNarrating(false);
           stopSpeaking();
-          stopAmbient();
           setPresentOpen(false);
               }}
               style={styles.presExit}
