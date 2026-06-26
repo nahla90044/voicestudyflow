@@ -61,7 +61,7 @@ export async function startAmbient(key: string): Promise<void> {
   if (!opt) return;
   if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
   stopAmbient();
-  const f = await getSfxFile(`music-${opt.key}`, opt.prompt, 22);
+  const f = await getSfxFile(`music-${opt.key}`, opt.prompt, 12); // أقصر = رصيد أقل
   if (!f) return;
   try {
     ambientPlayer = createAudioPlayer({ uri: f.uri });

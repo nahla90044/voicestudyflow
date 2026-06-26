@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Modal,
   Pressable,
@@ -16,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
@@ -31,7 +33,7 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
-import { extractPdfPageText } from "../../lib/pdfText";
+import { extractPdfPageText, getPageWords, type WordBox } from "../../lib/pdfText";
 import { splitForReading, splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
@@ -396,15 +398,23 @@ export default function ReaderScreen() {
     if (viewMode !== "text" || activeSentence < 0) return;
     const scrollToActive = () => {
       const y0 = offsetsRef.current[activeSentence];
-      if (typeof y0 === "number") {
-        scrollRef.current?.scrollTo({ y: Math.max(0, y0 - textViewH.current * 0.4), animated: true });
-      }
+      if (typeof y0 !== "number") return;
+      // موضع داخل المقطع حسب الكلمة المنطوقة → تمرير ينزل مع الهايلايت بسلاسة
+      const y1 = offsetsRef.current[activeSentence + 1];
+      const curWords = (sentences[activeSentence]?.match(/\S+/g) || []).length || 1;
+      const within = activeWord >= 0 ? Math.min(1, activeWord / curWords) : 0;
+      const target = typeof y1 === "number" ? y0 + (y1 - y0) * within : y0;
+      const viewH = textViewH.current || 400;
+      // داخل المقطع (مع الكلمة) نمرّر فوريًا بخطوات صغيرة = انسيابي؛ وعند تغيّر
+      // المقطع نمرّر بحركة. (animated مع كل نبضة يتقطّع لأن كل حركة تقطع السابقة)
+      scrollRef.current?.scrollTo({ y: Math.max(0, target - viewH * 0.4), animated: activeWord < 0 });
     };
     scrollToActive();
     // عند العودة للشاشة قد لا تكون المواضع جاهزة بعد → أعد المحاولة بعد التخطيط
     const t = setTimeout(scrollToActive, 250);
     return () => clearTimeout(t);
-  }, [activeSentence, viewMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSentence, activeWord, viewMode]);
 
   // تمرير تلقائي «تيليبرومبتر» لصورة الصفحة في وضع PDF أثناء القراءة
   useEffect(() => {
@@ -772,7 +782,13 @@ export default function ReaderScreen() {
         },
         onFallback: (reason) => setVoiceWarn(reason),
         onError: (e) => {
-          setStatus(`تعذّر تشغيل الصوت: ${(e as any)?.message ?? "خطأ"}`);
+          const msg = (e as any)?.message ?? "خطأ";
+          if (msg === "QUOTA") {
+            setVoiceWarn("");
+            setStatus("⏸️ نفد رصيد الصوت الطبيعي — جدّدي باقة الصوت لمواصلة الاستماع.");
+          } else {
+            setStatus(`تعذّر تشغيل الصوت: ${msg}`);
+          }
           stop();
         },
       });

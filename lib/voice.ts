@@ -267,7 +267,8 @@ async function synthToFile(
   });
   if (error) throw error;
   const b64 = (data as { audio?: string; error?: string })?.audio;
-  if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+  const d = data as { error?: string; quota?: boolean };
+  if (d?.error) throw new Error(d.quota ? `QUOTA: ${d.error}` : d.error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
   const starts = Array.isArray((data as { starts?: number[] })?.starts)
     ? ((data as { starts: number[] }).starts as number[])
@@ -411,9 +412,14 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     step = "التشغيل";
     player.play();
   } catch (e) {
-    // فشل الصوت البشري → بلّغ الخطوة والسبب ثم ارجع لصوت الجهاز ويكمل التسلسل
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
-    console.warn("VSF_TTS_FALLBACK", reason); // يظهر في سجل خادم التطوير
+    console.warn("VSF_TTS_FALLBACK", reason);
+    // نفاد رصيد الصوت الطبيعي → لا نرجع لصوت آلي مفاجئ؛ نبلّغ بوضوح ونتوقّف
+    if (/QUOTA/i.test(reason)) {
+      opts.onError?.(new Error("QUOTA"));
+      return;
+    }
+    // أخطاء أخرى (شبكة مثلًا) → رجوع لصوت الجهاز ليكمل التسلسل
     opts.onFallback?.(reason);
     speakWithDevice(clean, opts);
   }

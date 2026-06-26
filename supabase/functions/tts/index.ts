@@ -68,14 +68,16 @@ Deno.serve(async (req: Request) => {
 
     if (!res.ok) {
       const msg = await res.text().catch(() => "");
-      return json({ error: `ElevenLabs ${res.status}: ${msg}` }, 500);
+      // نُرجع 200 مع تفصيل الخطأ ليصل للعميل (يكشف نفاد الرصيد quota)، لا 500 مبهم
+      const quota = res.status === 401 || res.status === 402 || res.status === 429 || /quota|credit/i.test(msg);
+      return json({ error: `ElevenLabs ${res.status}: ${msg}`, quota }, 200);
     }
 
     const data = await res.json();
     const audio = data?.audio_base64 ?? "";
     const al = data?.alignment ?? data?.normalized_alignment ?? {};
     const starts = al?.character_start_times_seconds ?? [];
-    if (!audio) return json({ error: "No audio in response" }, 500);
+    if (!audio) return json({ error: "No audio in response" }, 200);
     return json({ audio, starts });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
