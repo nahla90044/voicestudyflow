@@ -446,7 +446,7 @@ export default function ReaderScreen() {
     for (let k = 0; k < activeSentence && k < sentences.length; k++) {
       before += (sentences[k].match(/\S+/g) || []).length;
     }
-    const gi = Math.min(clean2box.length - 1, before + Math.max(0, activeWord) + 1);
+    const gi = Math.min(clean2box.length - 1, before + Math.max(0, activeWord));
     const bi = clean2box[gi];
     return pageWords[Math.min(pageWords.length - 1, Math.max(0, bi))] ?? null;
   }, [activeSentence, activeWord, clean2box, sentences, pageWords]);
