@@ -54,3 +54,50 @@ export function splitSentences(text: string): string[] {
   if (cur) chunks.push(cur);
   return chunks;
 }
+
+const UNIT_RE = /(الوحدة|الفصل|الباب|المبحث|المحاضرة|تمهيد|مقدمة)/;
+const headerNorm = (s: string) => s.replace(/[ً-ْـ\s\d٠-٩.،,:|()]/g, "");
+
+/**
+ * تقسيم للقراءة مع معالجة الترويسة المتكرّرة:
+ *  - يحذف أسطر الترويسة (عنوان الكتاب/الوحدة في الرأس) التي رُئيت من قبل (seenHeaders).
+ *  - أول مرة يظهر عنوان وحدة جديد → يُقرأ، ويُضاف «صفحة N» قبله (إعلان الصفحة مرة واحدة).
+ * يُرجع المقاطع + أسطر الترويسة الجديدة (ليضيفها المستدعي إلى seenHeaders).
+ */
+export function splitForReading(
+  text: string,
+  opts: { seenHeaders?: Set<string>; page?: number } = {}
+): { chunks: string[]; headerLines: string[] } {
+  const clean = (text || "").replace(/[ \t]+/g, " ").trim();
+  if (!clean) return { chunks: [], headerLines: [] };
+
+  let lines = clean
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !isNoiseLine(l));
+
+  const seen = opts.seenHeaders ?? new Set<string>();
+  const headerLines: string[] = [];
+  let i = 0;
+  let announce = false;
+  // افحص حتى ٣ أسطر صدرية قصيرة (محتملة الترويسة)
+  while (i < lines.length && i < 3) {
+    const line = lines[i];
+    if (line.length > 80) break; // سطر طويل = محتوى
+    const n = headerNorm(line);
+    if (n.length < 4) break;
+    if (seen.has(n)) {
+      i++; // ترويسة معروفة (متكرّرة) → احذفها
+      continue;
+    }
+    // سطر صدري جديد → يُقرأ أول مرة (نتوقّف هنا فنُبقيه وما بعده)
+    headerLines.push(n);
+    if (UNIT_RE.test(line)) announce = true; // عنوان وحدة جديد → أعلن رقم الصفحة
+    break;
+  }
+
+  lines = lines.slice(i);
+  if (announce && opts.page && lines.length) lines = [`صفحة ${opts.page}.`, ...lines];
+
+  return { chunks: splitSentences(lines.join("\n")), headerLines };
+}

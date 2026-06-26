@@ -32,7 +32,7 @@ import {
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
 import { extractPdfPageText } from "../../lib/pdfText";
-import { splitSentences } from "../../lib/textUtils";
+import { splitForReading, splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
   getLastSentence,
@@ -179,7 +179,10 @@ export default function ReaderScreen() {
   const textContentH = useRef(0);
   const offsetsRef = useRef<number[]>([]);
   const resumeIdxRef = useRef(0); // الجملة التي يبدأ منها التشغيل بعد تخطٍّ يدوي
-  const prevHeaderRef = useRef(""); // بداية الصفحة السابقة (لكشف الترويسة المتكرّرة)
+  // ترويسات رُئيت (عناوين الكتاب/الوحدات) — تُقرأ أول مرة ثم تُحذف من القراءة
+  const seenHeadersRef = useRef<Set<string>>(new Set());
+  // مقاطع كل صفحة بعد المعالجة (تخزين لتطابق العرض والصوت وعدم تكرار المعالجة)
+  const processedRef = useRef<Map<number, string[]>>(new Map());
   const focusNameRef = useRef(""); // اسم المستخدم لوضع التركيز (فارغ = مطفأ)
   const focusEveryRef = useRef(0); // كل كم جملة يُنادى الاسم (0 = أبدًا)
   const focusCountRef = useRef(0); // عدّاد الجُمل لمناداة الاسم دوريًا
@@ -470,16 +473,18 @@ export default function ReaderScreen() {
   }, []);
 
   // يتخطّى الترويسة المتكرّرة (نفس بداية الصفحة السابقة) فتُقرأ مرة واحدة
-  function dropRepeatHeader(sents: string[]): string[] {
-    if (sents.length === 0) return sents;
-    const norm = (s: string) => s.replace(/[ً-ْـ\s\d٠-٩.،,:|]/g, "");
-    const firstNorm = norm(sents[0]);
-    let out = sents;
-    if (firstNorm.length >= 3 && firstNorm === prevHeaderRef.current) {
-      out = sents.slice(1);
-    }
-    prevHeaderRef.current = firstNorm;
-    return out;
+  // يجهّز مقاطع الصفحة للقراءة/العرض (مرة واحدة لكل صفحة) مع معالجة الترويسة المتكرّرة:
+  // عنوان الوحدة ورقم الصفحة يُقرآن أول مرة فقط، ثم يُحذفان من الصفحات التالية للوحدة.
+  function getReadingSentences(pageText: string, p: number): string[] {
+    const cached = processedRef.current.get(p);
+    if (cached) return cached;
+    const { chunks, headerLines } = splitForReading(pageText, {
+      seenHeaders: seenHeadersRef.current,
+      page: p,
+    });
+    headerLines.forEach((h) => seenHeadersRef.current.add(h));
+    processedRef.current.set(p, chunks);
+    return chunks;
   }
 
   // الصوت المستخدم للقراءة: عند الترجمة نستخدم الصوت العربي المختار في لوحة الترجمة
@@ -608,7 +613,11 @@ export default function ReaderScreen() {
         pageText = await tashkeelPage(res.page, pageText);
       }
       if (!playingRef.current) return;
-      const sents = dropRepeatHeader(splitSentences(pageText));
+      // الترجمة/التشكيل تغيّر النص → تقسيم بسيط؛ وإلا معالجة الترويسة (عنوان+صفحة مرة واحدة)
+      const sents =
+        listenArabicRef.current || tashkeelRef.current
+          ? splitSentences(pageText)
+          : getReadingSentences(pageText, res.page);
       setSentences(sents);
       offsetsRef.current = [];
 
@@ -828,7 +837,7 @@ export default function ReaderScreen() {
       const res = await extractPdfPageText(pdfPath, p);
       if (res.totalPages) setTotalPages(res.totalPages);
       setPage(res.page);
-      setSentences(splitSentences(res.text));
+      setSentences(getReadingSentences(res.text, res.page));
       offsetsRef.current = [];
     } catch {
       // تجاهل
