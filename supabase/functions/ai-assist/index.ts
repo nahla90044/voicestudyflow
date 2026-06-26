@@ -50,6 +50,7 @@ const SYSTEM: Record<string, string> = {
 const MODEL: Record<string, string> = {
   cleanup: "claude-haiku-4-5-20251001",
   define: "claude-haiku-4-5-20251001",
+  slides: "claude-haiku-4-5-20251001", // العرض التقديمي: تلخيص بسيط → نموذج سريع
 };
 const MAX_TOKENS: Record<string, number> = { cleanup: 4000, define: 200, syllabus: 3000, unitquiz: 1500, mindmap: 4000, tashkeel: 4000, slides: 1500 };
 

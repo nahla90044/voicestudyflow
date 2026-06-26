@@ -96,6 +96,8 @@ export default function ReaderScreen() {
   const [activeSentence, setActiveSentence] = useState(-1);
   const [activeWord, setActiveWord] = useState(-1); // الكلمة المقروءة حاليًا داخل الجملة
   const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة المتصل عبر الصفحة 0..1 (للعدسة)
+  const [skipMult, setSkipMult] = useState(1); // مضاعف سرعة التخطّي الحالي (×2 ×3…)
+  const [skipDir, setSkipDir] = useState(1); // اتجاه آخر تخطّي (لإظهار الشارة على الزر الصحيح)
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
 
@@ -178,6 +180,8 @@ export default function ReaderScreen() {
   const pdfScrollRef = useRef<ScrollView>(null);
   const pdfViewH = useRef(0);
   const pdfContentH = useRef(0);
+  const textViewH = useRef(0);
+  const textContentH = useRef(0);
   const offsetsRef = useRef<number[]>([]);
   const resumeIdxRef = useRef(0); // الجملة التي يبدأ منها التشغيل بعد تخطٍّ يدوي
   const prevHeaderRef = useRef(""); // بداية الصفحة السابقة (لكشف الترويسة المتكرّرة)
@@ -360,14 +364,27 @@ export default function ReaderScreen() {
     }
   }
 
-  // تمرير تلقائي للجملة المقروءة في وضع النص
+  // تمرير «تيليبرومبتر» متصل وسلس لوضع النص — يتحرّك باستمرار مع تقدّم القراءة
+  // (يُبقي الجملة المقروءة قرب وسط الشاشة بدل القفز جملةً جملة)
   useEffect(() => {
-    if (viewMode !== "text" || activeSentence < 0) return;
-    const y = offsetsRef.current[activeSentence];
-    if (typeof y === "number") {
-      scrollRef.current?.scrollTo({ y: Math.max(0, y - 90), animated: true });
+    if (viewMode !== "text" || !speaking) return;
+    // الموضع المستهدف: بداية الجملة الحالية + جزء داخلها، ناقص ثلث الشاشة لتبقى في الوسط
+    const y0 = offsetsRef.current[activeSentence];
+    const y1 = offsetsRef.current[activeSentence + 1];
+    let target: number;
+    if (typeof y0 === "number") {
+      const within = activeWord >= 0 && sentences[activeSentence]
+        ? Math.min(1, activeWord / Math.max(1, (sentences[activeSentence].match(/\S+/g) || []).length))
+        : 0;
+      const next = typeof y1 === "number" ? y1 : y0 + 60;
+      target = y0 + (next - y0) * within;
+    } else {
+      // احتياط: تناسبي عبر كامل المحتوى
+      const scrollable = Math.max(0, textContentH.current - textViewH.current);
+      target = readProgress * scrollable;
     }
-  }, [activeSentence, viewMode]);
+    scrollRef.current?.scrollTo({ y: Math.max(0, target - textViewH.current * 0.4), animated: true });
+  }, [activeSentence, activeWord, readProgress, viewMode, speaking, sentences]);
 
   // تمرير تلقائي «تيليبرومبتر» لصورة الصفحة في وضع PDF أثناء القراءة
   useEffect(() => {
@@ -506,6 +523,14 @@ export default function ReaderScreen() {
   useEffect(() => {
     setReadProgress(0);
   }, [page]);
+
+  // جهّز أول جملة مسبقًا عند تحميل نص الصفحة (وهي متوقفة) → زر التشغيل يبدأ فورًا بلا انتظار
+  useEffect(() => {
+    if (sentences.length === 0 || speaking) return;
+    const idx = Math.max(0, Math.min(resumeIdxRef.current || 0, sentences.length - 1));
+    prefetchText(sentences[idx], { voiceId: pickVoice() });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentences]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -759,8 +784,7 @@ export default function ReaderScreen() {
       // تجهيز الجمل التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع — جملتان قدّام
       const vId = pickVoice();
       if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: vId });
-      // جملة ثانية قدّام فقط إن لم تكن العدسة مفعّلة (تخفيف الحِمل مع العدسة)
-      if (!pdfLens && i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
+      if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
       // قرب نهاية الصفحة: جهّز نص وصناديق الصفحة التالية مسبقًا لتنقّل سلس
       if (i >= sents.length - 2 && p < total) {
         extractPdfPageText(pdfPath, p + 1).catch(() => {});
@@ -850,6 +874,7 @@ export default function ReaderScreen() {
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
   // تسريع التخطّي: كل ضغطة سريعة بنفس الاتجاه تتخطّى مقاطع أكثر (×1، ×2، ×3…)
   const skipAccelRef = useRef<{ t: number; dir: number; mult: number }>({ t: 0, dir: 0, mult: 1 });
+  const skipBadgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function skipSentence(deltaDir: number) {
     const sents = sentences;
     if (sents.length === 0) return;
@@ -859,7 +884,11 @@ export default function ReaderScreen() {
     a.mult = a.dir === dir && now - a.t < 800 ? Math.min(a.mult + 1, 5) : 1;
     a.dir = dir;
     a.t = now;
-    if (a.mult > 1) showToast(`تخطّي ×${a.mult}`);
+    // أظهر مضاعف السرعة (×2 ×3…) كشارة على الزر، وتختفي بعد توقّف الضغط
+    setSkipMult(a.mult);
+    setSkipDir(dir);
+    if (skipBadgeTimer.current) clearTimeout(skipBadgeTimer.current);
+    skipBadgeTimer.current = setTimeout(() => setSkipMult(1), 900);
 
     const base = activeSentence >= 0 ? activeSentence : 0;
     const target = base + dir * a.mult;
@@ -1140,7 +1169,14 @@ export default function ReaderScreen() {
       {/* العارض: PDF أو نص بتظليل الجملة المقروءة */}
       <View style={[styles.viewer, fullText && styles.viewerFull]}>
         {viewMode === "text" ? (
-          <ScrollView ref={scrollRef} style={styles.textScroll} contentContainerStyle={styles.textContent}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.textScroll}
+            contentContainerStyle={styles.textContent}
+            onLayout={(e) => (textViewH.current = e.nativeEvent.layout.height)}
+            onContentSizeChange={(_w, h) => (textContentH.current = h)}
+            scrollEventThrottle={16}
+          >
             {/* شريط الهايلايتر للدراسة */}
             <View style={styles.hlBar}>
               <Pressable
@@ -1414,12 +1450,22 @@ export default function ReaderScreen() {
           <View style={styles.tool}>
             <Pressable onPress={() => skipSentence(-1)} style={styles.toolBtn} hitSlop={4}>
               <Ionicons name="play-skip-forward" size={17} color={Palette.text} />
+              {skipMult > 1 && skipDir < 0 ? (
+                <View style={styles.skipBadge}>
+                  <Text style={styles.skipBadgeTxt}>×{skipMult}</Text>
+                </View>
+              ) : null}
             </Pressable>
             <Text style={styles.toolCap}>مقطع سابق</Text>
           </View>
           <View style={styles.tool}>
             <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
               <Ionicons name="play-skip-back" size={17} color={Palette.text} />
+              {skipMult > 1 && skipDir > 0 ? (
+                <View style={styles.skipBadge}>
+                  <Text style={styles.skipBadgeTxt}>×{skipMult}</Text>
+                </View>
+              ) : null}
             </Pressable>
             <Text style={styles.toolCap}>مقطع تالٍ</Text>
           </View>
@@ -2571,6 +2617,21 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   toolBtnActive: { backgroundColor: Palette.accent, borderColor: Palette.accent },
+  skipBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    backgroundColor: Palette.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: Palette.bg,
+  },
+  skipBadgeTxt: { color: "#fff", fontSize: 11, fontWeight: "900" },
   toolTxt: { color: Palette.text, fontSize: 11, fontWeight: "900", paddingHorizontal: 2 },
   playBtn: {
     width: 56,
