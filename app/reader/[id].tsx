@@ -117,6 +117,7 @@ export default function ReaderScreen() {
   const [pdfLens, setPdfLens] = useState(false);
   const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
   const lensY = useRef(new Animated.Value(0)).current; // إزاحة محتوى العدسة (يتابع القراءة)
+  const lineProg = useRef(new Animated.Value(0)).current; // تقدّم القراءة داخل السطر (0→1)
   const LENS_SCALE = 1.85;
   const LENS_H = 130;
   // رسالة تأكيد عابرة (toast)
@@ -644,9 +645,13 @@ export default function ReaderScreen() {
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
-        onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
+        onProgress: (frac) => {
+          setActiveWord(wordIndexAtFraction(sents[i], frac));
+          lineProg.setValue(frac); // تقدّم الهايلايتر داخل السطر في العدسة
+        },
         onDone: () => {
           setActiveWord(-1);
+          lineProg.setValue(0);
           playSentence(sents, i + 1, p, total);
         },
         onFallback: (reason) => setVoiceWarn(reason),
@@ -1132,6 +1137,25 @@ export default function ReaderScreen() {
                   }}
                   resizeMode="contain"
                 />
+                {/* هايلايتر يتابع الكلمات يمين←يسار على السطر المقروء */}
+                {speaking ? (
+                  <Animated.View
+                    style={[
+                      styles.lensHighlight,
+                      {
+                        width: pdfImgW * 0.24,
+                        transform: [
+                          {
+                            translateX: lineProg.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [pdfImgW - pdfImgW * 0.24, 0], // من اليمين إلى اليسار
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                ) : null}
                 <View style={styles.lensTag}>
                   <Ionicons name="search" size={12} color="#0b1220" />
                 </View>
@@ -2143,6 +2167,16 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 0 },
     elevation: 8,
+  },
+  lensHighlight: {
+    position: "absolute",
+    top: 130 / 2 - 28, // مركز العدسة (مكان السطر المقروء)
+    left: 0,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: "rgba(245,200,66,0.32)", // هايلايتر أصفر شفّاف
+    borderWidth: 1,
+    borderColor: "rgba(245,200,66,0.6)",
   },
   lensTag: {
     position: "absolute",
