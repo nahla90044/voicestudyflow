@@ -28,7 +28,7 @@ function stripNoise(text: string): string {
 // إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد المعالجة.
 // v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج.  v4: إصلاح المسافات.
 // v5: استخدام OCR تلقائيًا للكتب ذات طبقة النص المكسورة (أنظف نص).
-const EXTRACT_VER = "-v8";
+const EXTRACT_VER = "-v9";
 
 // طبقة نص «مكسورة»: نسبة كبيرة من أحرف العرض العربية (presentation forms:
 // FB50–FDFF و FE70–FEFF). هذه الكتب تُستخرج بمسافات خاطئة وتشكيل مبعثر،
@@ -164,11 +164,16 @@ export async function extractPdfPageText(
   //   1) إصلاح المسافات إن كان النص ملتصقًا (يحافظ على الهيكل الساكن).
   //   2) تنقية الضجيج (أرقام صفحات/ترويسات/إحالات) — حذف فقط.
   // كلتاهما تُرجعان النص الأصلي إن لم يجتز التحقّق.
-  if (hasRealText) {
+  // صفحة معظمها «صورة» (غلاف/مخطط): لها تعليق «صورة (X-Y)» ونصّها قليل ومبعثر
+  // (مقروء من الزخرفة) → لا نقرأها، نتخطّاها للصفحة التي فيها نص حقيقي.
+  const isFigurePage =
+    /صورة\s*[\(（]\s*[\d٠-٩]/.test(text) && text.replace(/\s+/g, " ").trim().length < 320;
+
+  if (hasRealText && !isFigurePage) {
     // إصلاح خفيف للمسافات إن لزم (للنص الملتصق فقط، بتحقّق صارم) + تنقية فورية
     text = stripNoise(normalizeArabic(await fixArabicSpacing(text)));
   } else {
-    text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
+    text = ""; // صفحة فارغة/غلاف/صورة فقط → تُتخطّى عند القراءة
   }
 
   // خزّن النتيجة (بعلامة الإصدار الحالي) حتى لا نعيد المعالجة
@@ -178,7 +183,7 @@ export async function extractPdfPageText(
       page: resolvedPage,
       text,
       total_pages: totalPages,
-      source: (hasRealText ? (usedOcr ? "ocr" : "text") : "empty") + EXTRACT_VER,
+      source: (text.trim().length >= MIN_REAL_TEXT ? (usedOcr ? "ocr" : "text") : "empty") + EXTRACT_VER,
     });
   } catch {
     // التخزين اختياري — لا نفشل القراءة بسببه
