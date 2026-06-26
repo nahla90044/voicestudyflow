@@ -158,6 +158,10 @@ export default function ReaderScreen() {
   const [pageSlides, setPageSlides] = useState<Slide[]>([]);
   const [slidesLoading, setSlidesLoading] = useState(false);
   const slidesCacheRef = useRef<Map<number, Slide[]>>(new Map());
+  // سرد العرض التقديمي بصوت ElevenLabs (شريحة بشريحة)
+  const [presNarrating, setPresNarrating] = useState(false);
+  const [presSlide, setPresSlide] = useState(0);
+  const presNarratingRef = useRef(false);
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
   // مساعد الذكاء الاصطناعي
@@ -454,14 +458,50 @@ export default function ReaderScreen() {
     };
   }, [presentOpen, page, sentences.length]);
 
-  // الشريحة الحالية تتبع موضع القراءة في الصفحة
-  const slideIdx =
+  // الشريحة الحالية تتبع موضع القراءة في الصفحة (إلا أثناء سرد العرض → تتبع السرد)
+  const autoSlideIdx =
     pageSlides.length > 0
       ? Math.min(
           pageSlides.length - 1,
           Math.floor((Math.max(0, activeSentence) / Math.max(1, sentences.length)) * pageSlides.length)
         )
       : 0;
+  const slideIdx = presNarrating ? Math.min(presSlide, Math.max(0, pageSlides.length - 1)) : autoSlideIdx;
+
+  // نصّ الشريحة للسرد الصوتي: العنوان ثم النقاط
+  function slideSpeech(s: Slide): string {
+    return `${s.title}. ${s.bullets.join("، ")}.`;
+  }
+
+  // سرد العرض شريحة بشريحة بصوت ElevenLabs
+  function narrateSlidesFrom(idx: number) {
+    if (!presNarratingRef.current) return;
+    if (idx >= pageSlides.length) {
+      presNarratingRef.current = false;
+      setPresNarrating(false);
+      return;
+    }
+    setPresSlide(idx);
+    speakText(slideSpeech(pageSlides[idx]), {
+      voiceId: pickVoice(),
+      rate,
+      onDone: () => narrateSlidesFrom(idx + 1),
+      onError: () => narrateSlidesFrom(idx + 1),
+    });
+  }
+
+  function togglePresentNarrate() {
+    if (presNarrating) {
+      presNarratingRef.current = false;
+      setPresNarrating(false);
+      stopSpeaking();
+    } else if (pageSlides.length > 0) {
+      stop(); // أوقف قراءة الصفحة إن كانت تعمل
+      presNarratingRef.current = true;
+      setPresNarrating(true);
+      narrateSlidesFrom(0);
+    }
+  }
 
   // وضع التركيز: حمّل الاسم ودرجة المناداة
   useEffect(() => {
@@ -1790,11 +1830,29 @@ export default function ReaderScreen() {
       </Modal>
 
       {/* عرض البريزنتيشن أثناء القراءة */}
-      <Modal visible={presentOpen} animationType="slide" onRequestClose={() => setPresentOpen(false)}>
+      <Modal
+        visible={presentOpen}
+        animationType="slide"
+        onRequestClose={() => {
+          presNarratingRef.current = false;
+          setPresNarrating(false);
+          stopSpeaking();
+          setPresentOpen(false);
+        }}
+      >
         <View style={styles.presWrap}>
           {/* شريط علوي */}
           <View style={styles.presTop}>
-            <Pressable onPress={() => setPresentOpen(false)} style={styles.presExit} hitSlop={8}>
+            <Pressable
+              onPress={() => {
+                presNarratingRef.current = false;
+                setPresNarrating(false);
+                stopSpeaking();
+                setPresentOpen(false);
+              }}
+              style={styles.presExit}
+              hitSlop={8}
+            >
               <Ionicons name="chevron-down" size={18} color={Palette.text} />
               <Text style={styles.presExitTxt}>خروج</Text>
             </Pressable>
@@ -1858,13 +1916,18 @@ export default function ReaderScreen() {
             </View>
           ) : null}
 
-          <Pressable onPress={togglePlay} style={styles.presPlay}>
-            {busy ? (
+          <Pressable onPress={togglePresentNarrate} style={styles.presPlay}>
+            {busy && presNarrating ? (
               <ActivityIndicator color="#0b1220" />
             ) : (
-              <Ionicons name={speaking ? "pause" : "play"} size={30} color="#0b1220" />
+              <Ionicons name={presNarrating ? "pause" : "play"} size={30} color="#0b1220" />
             )}
           </Pressable>
+          {pageSlides.length > 0 ? (
+            <Text style={styles.presNarrateHint}>
+              {presNarrating ? "يسرد العرض بالصوت…" : "اضغط للاستماع إلى العرض شريحة بشريحة 🎧"}
+            </Text>
+          ) : null}
         </View>
       </Modal>
 
@@ -2450,6 +2513,13 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.neonCyan,
     alignItems: "center",
     justifyContent: "center",
+  },
+  presNarrateHint: {
+    color: Palette.textDim,
+    fontSize: 12.5,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 8,
   },
   voiceChip: {
     paddingVertical: 8,
