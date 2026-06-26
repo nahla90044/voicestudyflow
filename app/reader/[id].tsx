@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Image,
   Modal,
   Pressable,
@@ -17,7 +16,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
-import * as ScreenOrientation from "expo-screen-orientation";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
@@ -33,7 +31,7 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
-import { extractPdfPageText, getPageWords, type WordBox } from "../../lib/pdfText";
+import { extractPdfPageText } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
@@ -96,8 +94,6 @@ export default function ReaderScreen() {
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
-  const [activeWord, setActiveWord] = useState(-1); // الكلمة المقروءة حاليًا داخل الجملة
-  const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة المتصل عبر الصفحة 0..1 (للعدسة)
   const [skipMult, setSkipMult] = useState(1); // مضاعف سرعة التخطّي الحالي (×2 ×3…)
   const [skipDir, setSkipDir] = useState(1); // اتجاه آخر تخطّي (لإظهار الشارة على الزر الصحيح)
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
@@ -116,21 +112,8 @@ export default function ReaderScreen() {
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
-  // وضع التحديد (هايلايتر): لمس السطر يحدّده بلون لجمعه للدراسة
+  // وضع التحديد (للدراسة): لمس السطر يحدّده بلون لجمعه للمقتطفات
   const [highlightMode, setHighlightMode] = useState(false);
-  // ٣ مودات قراءة منفصلة (لا تتداخل فلا تقطيع):
-  //   normal: صوت فقط (أسلس وأجمل) · highlight: تتبّع الكلمة · lens: عدسة مكبّرة
-  const [readMode, setReadMode] = useState<"normal" | "highlight" | "lens">("normal");
-  const readModeRef = useRef(readMode);
-  const lensOn = readMode === "lens";
-  const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
-  const lensY = useRef(new Animated.Value(0)).current; // إزاحة عمودية لمحتوى العدسة
-  const lensX = useRef(new Animated.Value(0)).current; // إزاحة أفقية (متابعة الكلمة)
-  const LENS_SCALE = 1.7; // تكبير يكفي ليتنقّل أفقيًا مع الكلمة عبر السطر
-  const LENS_H = 360; // ارتفاع نافذة العدسة (واجهة ملء الشاشة)
-  // صناديق إحداثيات الكلمات لهذه الصفحة (للهايلايتر الدقيق)
-  const [pageWords, setPageWords] = useState<WordBox[]>([]);
-  const wordsCacheRef = useRef<Map<number, WordBox[]>>(new Map());
   // رسالة تأكيد عابرة (toast)
   const [toast, setToast] = useState("");
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -364,8 +347,6 @@ export default function ReaderScreen() {
     stopSpeaking();
     setSpeaking(false);
     setActiveSentence(-1);
-    setActiveWord(-1);
-    setReadProgress(0);
 
     // سجّل دقائق الاستماع لهذه الجلسة + حدّث السلسلة
     if (playStartRef.current) {
@@ -375,27 +356,13 @@ export default function ReaderScreen() {
     }
   }
 
-  // تمرير «تيليبرومبتر» متصل وسلس لوضع النص — يتحرّك باستمرار مع تقدّم القراءة
-  // (يُبقي الجملة المقروءة قرب وسط الشاشة بدل القفز جملةً جملة)
+  // تمرير تلقائي لوضع النص — يُبقي الجملة الجاري قراءتها قرب وسط الشاشة
   useEffect(() => {
-    if (viewMode !== "text" || !speaking) return;
-    // الموضع المستهدف: بداية الجملة الحالية + جزء داخلها، ناقص ثلث الشاشة لتبقى في الوسط
+    if (viewMode !== "text" || !speaking || activeSentence < 0) return;
     const y0 = offsetsRef.current[activeSentence];
-    const y1 = offsetsRef.current[activeSentence + 1];
-    let target: number;
-    if (typeof y0 === "number") {
-      const within = activeWord >= 0 && sentences[activeSentence]
-        ? Math.min(1, activeWord / Math.max(1, (sentences[activeSentence].match(/\S+/g) || []).length))
-        : 0;
-      const next = typeof y1 === "number" ? y1 : y0 + 60;
-      target = y0 + (next - y0) * within;
-    } else {
-      // احتياط: تناسبي عبر كامل المحتوى
-      const scrollable = Math.max(0, textContentH.current - textViewH.current);
-      target = readProgress * scrollable;
-    }
-    scrollRef.current?.scrollTo({ y: Math.max(0, target - textViewH.current * 0.4), animated: true });
-  }, [activeSentence, activeWord, readProgress, viewMode, speaking, sentences]);
+    if (typeof y0 !== "number") return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y0 - textViewH.current * 0.4), animated: true });
+  }, [activeSentence, viewMode, speaking]);
 
   // تمرير تلقائي «تيليبرومبتر» لصورة الصفحة في وضع PDF أثناء القراءة
   useEffect(() => {
@@ -404,103 +371,6 @@ export default function ReaderScreen() {
     const scrollable = Math.max(0, pdfContentH.current - pdfViewH.current);
     pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
   }, [activeSentence, viewMode, speaking, sentences.length]);
-
-  // يجلب صناديق كلمات صفحة (مع تنقية الضجيج وتخزين مؤقت) — يُستخدم للحالية والتالية
-  async function fetchPageWords(p: number): Promise<WordBox[]> {
-    if (wordsCacheRef.current.has(p)) return wordsCacheRef.current.get(p)!;
-    const ws = await getPageWords(pdfPath, p);
-    const clean = ws.filter((w) => {
-      const t = (w.t || "").trim();
-      if (!t) return false;
-      if (/:{3,}/.test(t)) return false;
-      if (/restricted|confidential/i.test(t)) return false;
-      if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
-      if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
-      return true;
-    });
-    wordsCacheRef.current.set(p, clean);
-    return clean;
-  }
-
-  // جلب صناديق كلمات الصفحة الحالية عند تفعيل العدسة
-  useEffect(() => {
-    if (!lensOn || !pdfPath || !pageImg) return;
-    let active = true;
-    fetchPageWords(page).then((ws) => {
-      if (active) setPageWords(ws);
-    });
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lensOn, pdfPath, page, pageImg]);
-
-
-  // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
-  type Line = { x: number; y: number; w: number; h: number; start: number; end: number };
-  const lines = useMemo<Line[]>(() => {
-    const ls: Line[] = [];
-    let cur: { minX: number; maxX: number; minY: number; maxY: number; start: number; end: number; cy: number } | null = null;
-    const push = () => {
-      if (cur) ls.push({ x: cur.minX, y: cur.minY, w: cur.maxX - cur.minX, h: cur.maxY - cur.minY, start: cur.start, end: cur.end });
-    };
-    pageWords.forEach((w, idx) => {
-      const cy = w.y + w.h / 2;
-      if (cur && Math.abs(cy - cur.cy) < w.h * 0.9) {
-        cur.minX = Math.min(cur.minX, w.x);
-        cur.maxX = Math.max(cur.maxX, w.x + w.w);
-        cur.minY = Math.min(cur.minY, w.y);
-        cur.maxY = Math.max(cur.maxY, w.y + w.h);
-        cur.end = idx;
-      } else {
-        push();
-        cur = { minX: w.x, maxX: w.x + w.w, minY: w.y, maxY: w.y + w.h, start: idx, end: idx, cy };
-      }
-    });
-    push();
-    return ls;
-  }, [pageWords]);
-
-  // نقطة القراءة المتصلة — موضع تقريبي للكلمة الحالية عبر التناسب على صناديق الكلمات
-  // (تتحرك يمين→يسار داخل السطر ثم تنزل للسطر التالي — كحركة العين في القراءة)
-  const readPoint = useMemo<{ cx: number; cy: number; idx: number } | null>(() => {
-    if (pageWords.length === 0) return null;
-    const f = Math.min(pageWords.length - 1, Math.max(0, readProgress * (pageWords.length - 1)));
-    const i0 = Math.floor(f);
-    const i1 = Math.min(pageWords.length - 1, i0 + 1);
-    const t = f - i0;
-    const a = pageWords[i0];
-    const b = pageWords[i1];
-    const cx = (a.x + a.w / 2) * (1 - t) + (b.x + b.w / 2) * t;
-    const cy = (a.y + a.h / 2) * (1 - t) + (b.y + b.h / 2) * t;
-    return { cx, cy, idx: Math.round(f) };
-  }, [readProgress, pageWords]);
-
-  // السطر المقروء حاليًا (للهايلايت كامل السطر)
-  const lineBox = useMemo<WordBox | null>(() => {
-    if (!readPoint || lines.length === 0) return null;
-    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end) ?? null;
-    return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
-  }, [readPoint, lines]);
-
-  // العدسة تتابع نقطة القراءة المتصلة أفقيًا وعموديًا — تنزلق يمين→يسار ثم تنزل
-  useEffect(() => {
-    if (!lensOn || pdfImgW <= 0 || !readPoint) return;
-    const imgH = pdfImgW / (pageImgAspect || 0.7);
-    const readY = readPoint.cy * imgH;
-    const readX = readPoint.cx * pdfImgW;
-    const minY = Math.min(0, -(imgH * LENS_SCALE - LENS_H));
-    const minX = Math.min(0, pdfImgW - pdfImgW * LENS_SCALE);
-    const tY = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
-    const tX = Math.min(0, Math.max(minX, pdfImgW / 2 - readX * LENS_SCALE));
-    Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
-    Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
-  }, [lensOn, pdfImgW, readPoint, pageImgAspect, lensX, lensY]);
-
-  // صفحة جديدة → ابدأ تقدّم القراءة من الأعلى (تبدأ العدسة من بداية الصفحة)
-  useEffect(() => {
-    setReadProgress(0);
-  }, [page]);
 
   // جهّز أول جملة مسبقًا عند تحميل نص الصفحة (وهي متوقفة) → زر التشغيل يبدأ فورًا بلا انتظار
   useEffect(() => {
@@ -774,7 +644,6 @@ export default function ReaderScreen() {
     }
 
     setActiveSentence(i);
-    setActiveWord(-1);
     setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
 
     const speakCurrent = () => {
@@ -783,30 +652,16 @@ export default function ReaderScreen() {
       const vId = pickVoice();
       if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: vId });
       if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
-      // قرب نهاية الصفحة: جهّز نص وصناديق الصفحة التالية مسبقًا لتنقّل سلس
+      // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل سلس
       if (i >= sents.length - 2 && p < total) {
         extractPdfPageText(pdfPath, p + 1).catch(() => {});
-        if (lensOn) fetchPageWords(p + 1).catch(() => {});
       }
-      // تقدّم متصل عبر الصفحة (الكلمات قبل هذه الجملة + داخلها) لموضع العدسة
-      let wordsBefore = 0;
-      for (let k = 0; k < i; k++) wordsBefore += (sents[k].match(/\S+/g) || []).length;
-      const curWords = (sents[i].match(/\S+/g) || []).length || 1;
-      const totalWords = sents.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
-        onProgress: (frac) => {
-          // المود العادي: لا تحديثات لكل نبضة → قراءة سلسة بلا تقطيع
-          if (readModeRef.current === "normal") return;
-          setActiveWord(wordIndexAtFraction(sents[i], frac));
-          // تقدّم العدسة المتصل يُحسب فقط في مود العدسة (الأثقل)
-          if (readModeRef.current === "lens") {
-            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
-          }
-        },
+        // قراءة بسيطة سلسة: لا تتبّع لكل نبضة (شيلنا الهايلايتر والعدسة)
+        onProgress: undefined,
         onDone: () => {
-          setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
         },
         onFallback: (reason) => setVoiceWarn(reason),
@@ -901,7 +756,6 @@ export default function ReaderScreen() {
     if (target >= sents.length) return goPage(1);
 
     stopSpeaking();
-    setActiveWord(-1);
     setActiveSentence(target);
     if (playingRef.current) {
       playSentence(sents, target, page, totalPages || sents.length);
@@ -1030,7 +884,6 @@ export default function ReaderScreen() {
   function readFromSentence(i: number) {
     stop();
     setActiveSentence(i);
-    setActiveWord(-1);
     playingRef.current = true;
     setSpeaking(true);
     playStartRef.current = Date.now();
@@ -1096,22 +949,6 @@ export default function ReaderScreen() {
   useEffect(() => {
     fullyLoadedRef.current = fullyLoaded;
   }, [fullyLoaded]);
-
-  useEffect(() => {
-    readModeRef.current = readMode;
-  }, [readMode]);
-
-  // مود العدسة يسمح بتدوير الجهاز للعرض (landscape)؛ غيره يرجع للوضع الرأسي
-  useEffect(() => {
-    if (lensOn) {
-      ScreenOrientation.unlockAsync().catch(() => {});
-    } else {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-    }
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-    };
-  }, [lensOn]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -1258,8 +1095,8 @@ export default function ReaderScreen() {
             ) : (
               sentences.map((s, i) => {
                 const hl = isHighlighted(s);
-                // الهايلايت يظهر فقط في مود الهايلايت — المود العادي بلا تظليل (قراءة صافية)
-                const active = readMode === "highlight" && i === activeSentence;
+                // تظليل خفيف للجملة الجاري قراءتها فقط (بلا تتبّع كلمة — قراءة بسيطة)
+                const active = i === activeSentence;
                 return (
                   <Pressable
                     key={i}
@@ -1276,24 +1113,15 @@ export default function ReaderScreen() {
                       selectionColor="rgba(124,92,255,0.45)"
                       style={active ? styles.sentenceActive : styles.sentence}
                     >
-                      {(() => {
-                        let wc = -1;
-                        return s.split(/(\s+)/).map((tok, wi) => {
-                          if (!/\S/.test(tok)) return tok;
-                          wc++;
-                          const isSpoken = active && wc === activeWord;
-                          return (
-                            <Text
-                              key={wi}
-                              onPress={() => onWordPress(i, tok, s)}
-                              suppressHighlighting
-                              style={isSpoken ? styles.wordSpoken : undefined}
-                            >
-                              {tok}
-                            </Text>
-                          );
-                        });
-                      })()}
+                      {s.split(/(\s+)/).map((tok, wi) =>
+                        !/\S/.test(tok) ? (
+                          tok
+                        ) : (
+                          <Text key={wi} onPress={() => onWordPress(i, tok, s)} suppressHighlighting>
+                            {tok}
+                          </Text>
+                        )
+                      )}
                     </Text>
                   </Pressable>
                 );
@@ -1321,23 +1149,7 @@ export default function ReaderScreen() {
                   source={{ uri: pageImg }}
                   style={{ width: "100%", aspectRatio: pageImgAspect }}
                   resizeMode="contain"
-                  onLayout={(e) => setPdfImgW(e.nativeEvent.layout.width)}
                 />
-                {/* هايلايتر دقيق على الكلمة المقروءة فوق صورة الصفحة */}
-                {lineBox && speaking && pdfImgW > 0 ? (
-                  <View
-                    pointerEvents="none"
-                    style={[
-                      styles.wordHL,
-                      {
-                        left: lineBox.x * pdfImgW,
-                        top: lineBox.y * (pdfImgW / (pageImgAspect || 0.7)),
-                        width: lineBox.w * pdfImgW,
-                        height: lineBox.h * (pdfImgW / (pageImgAspect || 0.7)),
-                      },
-                    ]}
-                  />
-                ) : null}
               </ScrollView>
             ) : (
               <View style={styles.empty}>
@@ -1373,13 +1185,6 @@ export default function ReaderScreen() {
             <Pressable onPress={() => setFullText(false)} style={styles.floatBtn} hitSlop={8}>
               <Ionicons name="contract" size={20} color={Palette.text} />
             </Pressable>
-            <Pressable
-              onPress={() => setReadMode("lens")}
-              style={[styles.floatBtn, lensOn && styles.floatBtnOn]}
-              hitSlop={8}
-            >
-              <Ionicons name="search" size={19} color={lensOn ? "#0b1220" : Palette.text} />
-            </Pressable>
             <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
               <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
@@ -1410,27 +1215,6 @@ export default function ReaderScreen() {
             الصوت: {VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? "اختاري"}
           </Text>
         </Pressable>
-
-        {/* مود القراءة: عادي / هايلايت / عدسة (منفصلة فلا تتداخل) */}
-        <View style={styles.modeSeg}>
-          {([
-            { k: "normal", label: "عادي", icon: "headset" },
-            { k: "highlight", label: "هايلايت", icon: "color-wand" },
-            { k: "lens", label: "عدسة", icon: "search" },
-          ] as const).map((m) => {
-            const on = readMode === m.k;
-            return (
-              <Pressable
-                key={m.k}
-                onPress={() => setReadMode(m.k)}
-                style={[styles.modeSegBtn, on && styles.modeSegBtnOn]}
-              >
-                <Ionicons name={m.icon} size={15} color={on ? "#0b1220" : Palette.text} />
-                <Text style={[styles.modeSegTxt, on && styles.modeSegTxtOn]}>{m.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
 
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={styles.aidsRow}>
@@ -1774,21 +1558,7 @@ export default function ReaderScreen() {
           <View style={styles.driveTextWrap}>
             <GlassCard glow={Palette.neonViolet} radius={Radius.xl} style={{ width: "100%" }} contentStyle={styles.driveCardInner}>
               {activeSentence >= 0 && sentences[activeSentence] ? (
-                <Text style={styles.driveSentence}>
-                  {(() => {
-                    let wc = -1;
-                    return sentences[activeSentence].split(/(\s+)/).map((tok, wi) => {
-                      if (!/\S/.test(tok)) return tok;
-                      wc++;
-                      const spoken = wc === activeWord;
-                      return (
-                        <Text key={wi} style={spoken ? styles.driveWordSpoken : undefined}>
-                          {tok}
-                        </Text>
-                      );
-                    });
-                  })()}
-                </Text>
+                <Text style={styles.driveSentence}>{sentences[activeSentence]}</Text>
               ) : (
                 <Text style={styles.driveHint}>اضغطي تشغيل لبدء القراءة 🎧</Text>
               )}
@@ -2067,75 +1837,6 @@ export default function ReaderScreen() {
               <Ionicons name={speaking ? "pause" : "play"} size={30} color="#0b1220" />
             )}
           </Pressable>
-        </View>
-      </Modal>
-
-      {/* واجهة العدسة المنفصلة (ملء الشاشة) — لا تؤثّر على العرض العادي */}
-      <Modal visible={lensOn} animationType="slide" onRequestClose={() => setReadMode("normal")}>
-        <View style={styles.lensScreen}>
-          <View style={styles.lensHeader}>
-            <Pressable onPress={() => setReadMode("normal")} style={styles.lensClose} hitSlop={8}>
-              <Ionicons name="close" size={24} color={Palette.text} />
-            </Pressable>
-            <Text style={styles.lensHeaderTxt}>🔍 وضع العدسة — صفحة {page}</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          <View style={[styles.lensViewport, { width: pdfImgW || "100%", height: LENS_H }]}>
-            {pageImg && pdfImgW > 0 ? (
-              (() => {
-                const imgH = pdfImgW / (pageImgAspect || 0.7);
-                return (
-                  <Animated.View
-                    style={{
-                      width: pdfImgW * LENS_SCALE,
-                      height: imgH * LENS_SCALE,
-                      transform: [{ translateX: lensX }, { translateY: lensY }],
-                    }}
-                  >
-                    <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-                    {lineBox && speaking ? (
-                      <View
-                        style={[
-                          styles.wordHL,
-                          {
-                            left: lineBox.x * pdfImgW * LENS_SCALE,
-                            top: lineBox.y * imgH * LENS_SCALE,
-                            width: lineBox.w * pdfImgW * LENS_SCALE,
-                            height: lineBox.h * imgH * LENS_SCALE,
-                          },
-                        ]}
-                      />
-                    ) : null}
-                  </Animated.View>
-                );
-              })()
-            ) : (
-              <Text style={styles.emptyTextSmall}>اضغطي تشغيل لعرض الصفحة في العدسة.</Text>
-            )}
-          </View>
-
-          <View style={styles.lensControls}>
-            <Pressable onPress={() => skipSentence(-1)} style={styles.lensCtlBtn} hitSlop={6}>
-              <Ionicons name="play-skip-forward" size={20} color={Palette.text} />
-            </Pressable>
-            <Pressable onPress={() => goPage(-1)} style={styles.lensCtlBtn} hitSlop={6} disabled={page <= 1}>
-              <Ionicons name="chevron-forward" size={24} color={page <= 1 ? Palette.textDim : Palette.text} />
-            </Pressable>
-            <Pressable onPress={togglePlay} style={styles.lensPlay}>
-              {busy ? (
-                <ActivityIndicator color="#0b1220" />
-              ) : (
-                <Ionicons name={speaking ? "pause" : "play"} size={30} color="#0b1220" />
-              )}
-            </Pressable>
-            <Pressable onPress={() => goPage(1)} style={styles.lensCtlBtn} hitSlop={6} disabled={!!totalPages && page >= totalPages}>
-              <Ionicons name="chevron-back" size={24} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
-            </Pressable>
-            <Pressable onPress={() => skipSentence(1)} style={styles.lensCtlBtn} hitSlop={6}>
-              <Ionicons name="play-skip-back" size={20} color={Palette.text} />
-            </Pressable>
-          </View>
         </View>
       </Modal>
 
