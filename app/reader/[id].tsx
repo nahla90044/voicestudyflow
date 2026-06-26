@@ -115,6 +115,7 @@ export default function ReaderScreen() {
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
   const [sentences, setSentences] = useState<string[]>([]);
   const [activeSentence, setActiveSentence] = useState(-1);
+  const [activeWord, setActiveWord] = useState(-1); // الكلمة المنطوقة داخل المقطع (كاراوكي)
   const [skipMult, setSkipMult] = useState(1); // مضاعف سرعة التخطّي الحالي (×2 ×3…)
   const [skipDir, setSkipDir] = useState(1); // اتجاه آخر تخطّي (لإظهار الشارة على الزر الصحيح)
   const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
@@ -377,6 +378,7 @@ export default function ReaderScreen() {
     stopSpeaking();
     setSpeaking(false);
     setActiveSentence(-1);
+    setActiveWord(-1);
 
     // سجّل دقائق الاستماع لهذه الجلسة + حدّث السلسلة
     if (playStartRef.current) {
@@ -750,6 +752,7 @@ export default function ReaderScreen() {
     }
 
     setActiveSentence(i);
+    setActiveWord(-1);
     setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
 
     const speakCurrent = () => {
@@ -766,9 +769,10 @@ export default function ReaderScreen() {
       speakText(sents[i], {
         voiceId: pickVoice(),
         rate,
-        // قراءة بسيطة سلسة: لا تتبّع لكل نبضة (شيلنا الهايلايتر والعدسة)
-        onProgress: undefined,
+        // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
+        onProgress: (frac) => setActiveWord(wordIndexAtFraction(sents[i], frac)),
         onDone: () => {
+          setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
         },
         onFallback: (reason) => setVoiceWarn(reason),
@@ -1202,7 +1206,6 @@ export default function ReaderScreen() {
             ) : (
               sentences.map((s, i) => {
                 const hl = isHighlighted(s);
-                // تظليل خفيف للجملة الجاري قراءتها فقط (بلا تتبّع كلمة — قراءة بسيطة)
                 const active = i === activeSentence;
                 return (
                   <Pressable
@@ -1220,15 +1223,25 @@ export default function ReaderScreen() {
                       selectionColor="rgba(124,92,255,0.45)"
                       style={active ? styles.sentenceActive : styles.sentence}
                     >
-                      {s.split(/(\s+)/).map((tok, wi) =>
-                        !/\S/.test(tok) ? (
-                          tok
-                        ) : (
-                          <Text key={wi} onPress={() => onWordPress(i, tok, s)} suppressHighlighting>
-                            {tok}
-                          </Text>
-                        )
-                      )}
+                      {(() => {
+                        let wc = -1;
+                        return s.split(/(\s+)/).map((tok, wi) => {
+                          if (!/\S/.test(tok)) return tok;
+                          wc++;
+                          // الكلمة المنطوقة الآن (في المقطع الجاري) تتلوّن (كاراوكي)
+                          const spoken = active && wc === activeWord;
+                          return (
+                            <Text
+                              key={wi}
+                              onPress={() => onWordPress(i, tok, s)}
+                              suppressHighlighting
+                              style={spoken ? styles.wordSpoken : undefined}
+                            >
+                              {tok}
+                            </Text>
+                          );
+                        });
+                      })()}
                     </Text>
                   </Pressable>
                 );
@@ -2245,7 +2258,7 @@ const styles = StyleSheet.create({
   },
   sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
   sentenceActive: { color: Palette.text, fontSize: 22, lineHeight: 42, textAlign: "right", fontWeight: "700" },
-  wordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
+  wordSpoken: { color: "#0b1220", backgroundColor: Palette.neonCyan, fontWeight: "900" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   ingestTxt: { color: Palette.neonCyan, fontSize: 12, fontWeight: "800" },
