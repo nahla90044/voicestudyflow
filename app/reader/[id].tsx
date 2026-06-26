@@ -1279,11 +1279,6 @@ export default function ReaderScreen() {
           <Ionicons name="expand" size={18} color={Palette.text} />
         </Pressable>
 
-        {/* العدسة المكبّرة (تكبّر النص وتتابع القراءة) */}
-        <Pressable onPress={() => setLensOpen(true)} style={styles.iconBtn} hitSlop={8}>
-          <Ionicons name="search" size={18} color={Palette.neonViolet} />
-        </Pressable>
-
         <Pressable onPress={() => setDrivingMode(true)} style={styles.iconBtn} hitSlop={8}>
           <Ionicons name="car-sport" size={18} color={Palette.neonCyan} />
         </Pressable>
@@ -1372,25 +1367,27 @@ export default function ReaderScreen() {
                       selectionColor="rgba(124,92,255,0.45)"
                       style={active ? styles.sentenceActive : styles.sentence}
                     >
-                      {(() => {
-                        let wc = -1;
-                        return s.split(/(\s+)/).map((tok, wi) => {
-                          if (!/\S/.test(tok)) return tok;
-                          wc++;
-                          // الكلمة المنطوقة الآن (في المقطع الجاري) تتلوّن (كاراوكي)
-                          const spoken = active && wc === activeWord;
-                          return (
-                            <Text
-                              key={wi}
-                              onPress={() => onWordPress(i, tok, s)}
-                              suppressHighlighting
-                              style={spoken ? styles.wordSpoken : undefined}
-                            >
-                              {tok}
-                            </Text>
-                          );
-                        });
-                      })()}
+                      {/* فقط المقطع الجاري يُقسَّم كلمات للكاراوكي؛ الباقي نص عادي = أخفّ بكثير */}
+                      {active
+                        ? (() => {
+                            let wc = -1;
+                            return s.split(/(\s+)/).map((tok, wi) => {
+                              if (!/\S/.test(tok)) return tok;
+                              wc++;
+                              const spoken = wc === activeWord;
+                              return (
+                                <Text
+                                  key={wi}
+                                  onPress={() => onWordPress(i, tok, s)}
+                                  suppressHighlighting
+                                  style={spoken ? styles.wordSpoken : undefined}
+                                >
+                                  {tok}
+                                </Text>
+                              );
+                            });
+                          })()
+                        : s}
                     </Text>
                   </Pressable>
                 );
@@ -1471,6 +1468,11 @@ export default function ReaderScreen() {
             <Pressable onPress={() => setFullText(false)} style={styles.floatBtn} hitSlop={8}>
               <Ionicons name="contract" size={20} color={Palette.text} />
             </Pressable>
+            {viewMode === "pdf" && (
+              <Pressable onPress={() => setLensOpen(true)} style={styles.floatBtn} hitSlop={8}>
+                <Ionicons name="search" size={20} color={Palette.neonViolet} />
+              </Pressable>
+            )}
             <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
               <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>

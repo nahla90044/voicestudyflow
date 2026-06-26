@@ -359,7 +359,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "إنشاء المشغّل";
     // المشغّل المُحمّل مسبقًا (warm) إن توفّر → تشغيل فوري بلا فجوة، وإلا ننشئ واحدًا
-    const player = adopted ?? createAudioPlayer({ uri: file.uri }, { updateInterval: 80 });
+    const player = adopted ?? createAudioPlayer({ uri: file.uri }, { updateInterval: 120 });
     currentPlayer = player;
     // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. الأصوات ذات السرعة
     // الخاصة (< 1) نلغي تصحيح طبقة الصوت لها فتصير أعمق مع البطء.
@@ -442,7 +442,7 @@ export async function warmNext(
     const { file } = await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
     if (warmPlayer?.uri === file.uri) return;
     disposeWarm(); // أزل أي مشغّل تالٍ قديم
-    warmPlayer = { uri: file.uri, player: createAudioPlayer({ uri: file.uri }, { updateInterval: 80 }) };
+    warmPlayer = { uri: file.uri, player: createAudioPlayer({ uri: file.uri }, { updateInterval: 120 }) };
   } catch {
     // غير حرج — التشغيل العادي يكفي
   }
