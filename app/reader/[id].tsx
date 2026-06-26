@@ -31,6 +31,7 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
+import { getWikipediaImage } from "../../lib/images";
 import { extractPdfPageText, getPageWords, type WordBox } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
@@ -159,6 +160,7 @@ export default function ReaderScreen() {
   const [presentOpen, setPresentOpen] = useState(false);
   const [pageSlides, setPageSlides] = useState<Slide[]>([]);
   const [slidesLoading, setSlidesLoading] = useState(false);
+  const [slideImages, setSlideImages] = useState<Record<number, string | null>>({}); // صور ويكيبيديا للشرائح
   const slidesCacheRef = useRef<Map<number, Slide[]>>(new Map());
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
@@ -506,6 +508,13 @@ export default function ReaderScreen() {
         if (!active) return;
         slidesCacheRef.current.set(p, sl);
         setPageSlides(sl);
+        setSlideImages({});
+        // اجلب صورة معبّرة من ويكيبيديا لكل شريحة (بالتوازي)
+        sl.forEach((s, idx) => {
+          getWikipediaImage(s.title).then((img) => {
+            if (active && img) setSlideImages((prev) => ({ ...prev, [idx]: img }));
+          });
+        });
       } catch {
         if (active) setPageSlides([]);
       } finally {
@@ -1888,7 +1897,15 @@ export default function ReaderScreen() {
                       end={{ x: 0, y: 1 }}
                       style={StyleSheet.absoluteFill}
                     />
-                    <Text style={styles.slideEmoji}>{s.emoji}</Text>
+                    {slideImages[slideIdx] ? (
+                      <Image
+                        source={{ uri: slideImages[slideIdx] as string }}
+                        style={[styles.slideImg, { borderColor: c + "55" }]}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.slideEmoji}>{s.emoji}</Text>
+                    )}
                     <Text style={[styles.slideTitle, { color: c }]}>{s.title}</Text>
                     <View style={styles.slideBullets}>
                       {s.bullets.map((b, bi) => (
@@ -2426,6 +2443,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   slideEmoji: { fontSize: 52, textAlign: "center", marginBottom: 10 },
+  slideImg: { width: "100%", height: 150, borderRadius: 14, marginBottom: 14, borderWidth: 1 },
   slideTitle: { fontSize: 24, fontWeight: "900", textAlign: "center", lineHeight: 36, marginBottom: 18 },
   slideBullets: { gap: 12 },
   slideBulletRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 10 },
