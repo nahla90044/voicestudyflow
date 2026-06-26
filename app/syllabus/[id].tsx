@@ -9,6 +9,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassCard } from "../../components/brand/glass-card";
+import { BuzanMindMap } from "../../components/brand/mindmap";
 import { aiAssist } from "../../lib/ai";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../../lib/voice";
 import { GradientButton } from "../../components/brand/gradient-button";
@@ -591,7 +592,22 @@ export default function SyllabusScreen() {
               </View>
 
               <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
-                {/* العقدة المركزية */}
+                {/* خريطة شعاعية (توني بوزان) — قابلة للتكبير بإصبعين */}
+                {mm ? (
+                  <ScrollView
+                    maximumZoomScale={3}
+                    minimumZoomScale={1}
+                    showsHorizontalScrollIndicator={false}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.mmCanvas}
+                    style={styles.mmCanvasWrap}
+                  >
+                    <BuzanMindMap map={mm} size={320} />
+                  </ScrollView>
+                ) : null}
+                <Text style={styles.mmHint}>كبّري بإصبعين للتفاصيل · أو اقرئيها كقائمة بالأسفل</Text>
+
+                {/* العقدة المركزية (قائمة) */}
                 <View style={styles.mmCenter}>
                   <Text style={styles.mmCenterTxt}>{mm?.center}</Text>
                 </View>
@@ -719,6 +735,15 @@ const styles = StyleSheet.create({
   sumPlayTxt: { color: "#0b1220", fontSize: 15, fontWeight: "900" },
   sumText: { color: Palette.textMuted, fontSize: 15, lineHeight: 28, textAlign: "right" },
   mmBtn: { marginTop: 8, backgroundColor: "rgba(163,230,53,0.10)", borderColor: "rgba(163,230,53,0.4)" },
+  mmCanvasWrap: {
+    backgroundColor: "#0b1220",
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    maxHeight: 340,
+  },
+  mmCanvas: { alignItems: "center", justifyContent: "center", padding: 8 },
+  mmHint: { color: Palette.textDim, fontSize: 11.5, textAlign: "center", marginTop: 8, marginBottom: 12 },
   mmCenter: {
     alignSelf: "center",
     paddingVertical: 14,
