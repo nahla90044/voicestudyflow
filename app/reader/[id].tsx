@@ -18,7 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
-import { cachedPageCount, ingestBook, stopIngest } from "../../lib/ingest";
+import { cachedPageCount } from "../../lib/ingest";
+import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
 import { addCards } from "../../lib/flashcards";
 import {
   addHighlight,
@@ -241,7 +242,7 @@ export default function ReaderScreen() {
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
       if (toastTimer.current) clearTimeout(toastTimer.current);
       stopSpeaking();
-      stopIngest();
+      // ملاحظة: لا نوقف تحميل الكتاب عند الخروج — يكمل في الخلفية عبر المدير العام
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1068,11 +1069,11 @@ export default function ReaderScreen() {
     }
   }
 
-  // تحميل/تجهيز الكتاب كامل مسبقًا حتى يُقرأ بسلاسة
+  // تحميل/تجهيز الكتاب كامل في الخلفية — يستمر حتى لو خرجتِ من الكتاب
   async function startIngest() {
     if (ingesting) {
-      stopIngest();
-      setIngesting(false);
+      stopDownload();
+      showToast("أُوقف التحميل");
       return;
     }
     let total = totalPages;
@@ -1085,32 +1086,43 @@ export default function ReaderScreen() {
       setStatus("تعذّر معرفة عدد الصفحات.");
       return;
     }
-    setIngestTotal(total);
-    setIngestDone(0);
-    setIngesting(true);
-    const res = await ingestBook(pdfPath, total, (d, t) => {
-      setIngestDone(d);
-      setIngestTotal(t);
-    });
-    setIngesting(false);
-
-    // تحقّق فعلي من عدد الصفحات المخزّنة (نص + علامات فارغة)
-    const cached = await cachedPageCount(pdfPath).catch(() => res.succeeded);
-    if (res.stopped) {
-      showToast(`تم الإيقاف — المحمّل ${cached} من ${total} صفحة`);
-    } else if (res.failed === 0 || cached >= total) {
-      setFullyLoaded(true);
-      showToast(`✅ تم تحميل الكتاب كامل (${total} صفحة) — جاهز للقراءة`);
-    } else {
-      showToast(
-        `تم تحميل ${cached} من ${total}. تعذّر ${res.failed} (غالبًا حد خدمة OCR). اضغطي «تحميل» ثانيةً لإكمالها.`
-      );
-    }
+    const bookTitle = typeof title === "string" ? title : "الكتاب";
+    await startDownload(pdfPath, bookTitle, total);
+    showToast("⬇️ يحمّل في الخلفية — يكمل حتى لو خرجتِ من الكتاب");
   }
+
+  // اعكس حالة المدير العام للتحميل في واجهة هذا الكتاب
+  useEffect(() => {
+    const unsub = subscribeDownload((s) => {
+      if (s && s.pdfPath === pdfPath) {
+        setIngesting(s.running);
+        setIngestDone(s.done);
+        setIngestTotal(s.total);
+        if (!s.running && s.total > 0 && s.done >= s.total && s.failed === 0) setFullyLoaded(true);
+      } else {
+        setIngesting(false);
+      }
+    });
+    return unsub;
+  }, [pdfPath]);
+
+  // عند الفتح: إن كان الكتاب مخزّنًا بالكامل مسبقًا → علّمه «محمّل»
+  useEffect(() => {
+    if (!pdfPath || !totalPages) return;
+    let on = true;
+    cachedPageCount(pdfPath)
+      .then((c) => {
+        if (on && c >= totalPages) setFullyLoaded(true);
+      })
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [pdfPath, totalPages]);
 
   function goBack() {
     stop();
-    stopIngest();
+    // التحميل يكمل في الخلفية — لا نوقفه عند الرجوع
     router.back();
   }
 
