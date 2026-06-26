@@ -118,8 +118,8 @@ export default function ReaderScreen() {
   const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
   const lensY = useRef(new Animated.Value(0)).current; // إزاحة عمودية لمحتوى العدسة
   const lensX = useRef(new Animated.Value(0)).current; // إزاحة أفقية (متابعة الكلمة)
-  const LENS_SCALE = 1.85;
-  const LENS_H = 130;
+  const LENS_SCALE = 1.45; // أقل تكبيرًا ليظهر السطر كاملًا في العدسة
+  const LENS_H = 140;
   // صناديق إحداثيات الكلمات لهذه الصفحة (للهايلايتر الدقيق)
   const [pageWords, setPageWords] = useState<WordBox[]>([]);
   const wordsCacheRef = useRef<Map<number, WordBox[]>>(new Map());
@@ -439,32 +439,54 @@ export default function ReaderScreen() {
     return map;
   }, [sentences, pageWords]);
 
-  // صندوق الكلمة المقروءة حاليًا — يُحسب فورًا من المحاذاة النصّية (مع تقدّم بسيط)
-  const wordBox = useMemo<WordBox | null>(() => {
-    if (clean2box.length === 0 || activeSentence < 0) return null;
+  // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
+  type Line = { x: number; y: number; w: number; h: number; start: number; end: number };
+  const lines = useMemo<Line[]>(() => {
+    const ls: Line[] = [];
+    let cur: { minX: number; maxX: number; minY: number; maxY: number; start: number; end: number; cy: number } | null = null;
+    const push = () => {
+      if (cur) ls.push({ x: cur.minX, y: cur.minY, w: cur.maxX - cur.minX, h: cur.maxY - cur.minY, start: cur.start, end: cur.end });
+    };
+    pageWords.forEach((w, idx) => {
+      const cy = w.y + w.h / 2;
+      if (cur && Math.abs(cy - cur.cy) < w.h * 0.9) {
+        cur.minX = Math.min(cur.minX, w.x);
+        cur.maxX = Math.max(cur.maxX, w.x + w.w);
+        cur.minY = Math.min(cur.minY, w.y);
+        cur.maxY = Math.max(cur.maxY, w.y + w.h);
+        cur.end = idx;
+      } else {
+        push();
+        cur = { minX: w.x, maxX: w.x + w.w, minY: w.y, maxY: w.y + w.h, start: idx, end: idx, cy };
+      }
+    });
+    push();
+    return ls;
+  }, [pageWords]);
+
+  // صندوق السطر المقروء حاليًا (من المحاذاة النصّية)
+  const lineBox = useMemo<WordBox | null>(() => {
+    if (clean2box.length === 0 || activeSentence < 0 || lines.length === 0) return null;
     let before = 0;
     for (let k = 0; k < activeSentence && k < sentences.length; k++) {
       before += (sentences[k].match(/\S+/g) || []).length;
     }
     const gi = Math.min(clean2box.length - 1, before + Math.max(0, activeWord));
     const bi = clean2box[gi];
-    return pageWords[Math.min(pageWords.length - 1, Math.max(0, bi))] ?? null;
-  }, [activeSentence, activeWord, clean2box, sentences, pageWords]);
+    const ln = lines.find((l) => bi >= l.start && bi <= l.end) ?? null;
+    return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
+  }, [activeSentence, activeWord, clean2box, sentences, lines]);
 
-  // العدسة تتابع موضع الكلمة الفعلي أفقيًا وعموديًا → الكلمة المقروءة دائمًا ظاهرة بالكامل
+  // العدسة تتابع السطر المقروء عموديًا (أفقيًا ثابتة في الوسط) — حركة سلسة سطر-سطر
   useEffect(() => {
-    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || !wordBox) return;
+    if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || !lineBox) return;
     const imgH = pdfImgW / (pageImgAspect || 0.7);
-    const readY = (wordBox.y + wordBox.h / 2) * imgH;
-    const readX = (wordBox.x + wordBox.w / 2) * pdfImgW;
+    const readY = (lineBox.y + lineBox.h / 2) * imgH;
     const minY = Math.min(0, -(imgH * LENS_SCALE - LENS_H));
-    const minX = Math.min(0, pdfImgW - pdfImgW * LENS_SCALE);
     const tY = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
-    const tX = Math.min(0, Math.max(minX, pdfImgW / 2 - readX * LENS_SCALE));
-    // حركة بسرعة ثابتة (لا spring نطّاط) فما يصير سباق «قط وفأر»
-    Animated.timing(lensY, { toValue: tY, duration: 130, useNativeDriver: true }).start();
-    Animated.timing(lensX, { toValue: tX, duration: 130, useNativeDriver: true }).start();
-  }, [pdfLens, viewMode, pdfImgW, wordBox, pageImgAspect, lensX, lensY]);
+    Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
+    lensX.setValue(-(pdfImgW * (LENS_SCALE - 1)) / 2); // أفقيًا في الوسط
+  }, [pdfLens, viewMode, pdfImgW, lineBox, pageImgAspect, lensX, lensY]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -1186,16 +1208,16 @@ export default function ReaderScreen() {
                   onLayout={(e) => setPdfImgW(e.nativeEvent.layout.width)}
                 />
                 {/* هايلايتر دقيق على الكلمة المقروءة فوق صورة الصفحة */}
-                {wordBox && speaking && pdfImgW > 0 ? (
+                {lineBox && speaking && pdfImgW > 0 ? (
                   <View
                     pointerEvents="none"
                     style={[
                       styles.wordHL,
                       {
-                        left: wordBox.x * pdfImgW,
-                        top: wordBox.y * (pdfImgW / (pageImgAspect || 0.7)),
-                        width: wordBox.w * pdfImgW,
-                        height: wordBox.h * (pdfImgW / (pageImgAspect || 0.7)),
+                        left: lineBox.x * pdfImgW,
+                        top: lineBox.y * (pdfImgW / (pageImgAspect || 0.7)),
+                        width: lineBox.w * pdfImgW,
+                        height: lineBox.h * (pdfImgW / (pageImgAspect || 0.7)),
                       },
                     ]}
                   />
@@ -1230,15 +1252,15 @@ export default function ReaderScreen() {
                         }}
                       >
                         <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-                        {wordBox && speaking ? (
+                        {lineBox && speaking ? (
                           <View
                             style={[
                               styles.wordHL,
                               {
-                                left: wordBox.x * pdfImgW * LENS_SCALE,
-                                top: wordBox.y * imgH * LENS_SCALE,
-                                width: wordBox.w * pdfImgW * LENS_SCALE,
-                                height: wordBox.h * imgH * LENS_SCALE,
+                                left: lineBox.x * pdfImgW * LENS_SCALE,
+                                top: lineBox.y * imgH * LENS_SCALE,
+                                width: lineBox.w * pdfImgW * LENS_SCALE,
+                                height: lineBox.h * imgH * LENS_SCALE,
                               },
                             ]}
                           />
@@ -2249,7 +2271,7 @@ const styles = StyleSheet.create({
     top: "24%",
     left: 0,
     right: 0,
-    height: 130,
+    height: 140,
     borderTopWidth: 2,
     borderBottomWidth: 2,
     borderColor: Palette.neonCyan,
