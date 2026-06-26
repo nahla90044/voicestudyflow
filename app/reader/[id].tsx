@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -116,7 +116,8 @@ export default function ReaderScreen() {
   // عدسة الـPDF: تكبّر منطقة القراءة على صورة الصفحة وتمشي مع القارئ
   const [pdfLens, setPdfLens] = useState(false);
   const [pdfImgW, setPdfImgW] = useState(0); // عرض صورة الصفحة المعروضة (للعدسة)
-  const lensY = useRef(new Animated.Value(0)).current; // إزاحة محتوى العدسة (يتابع القراءة)
+  const lensY = useRef(new Animated.Value(0)).current; // إزاحة عمودية لمحتوى العدسة
+  const lensX = useRef(new Animated.Value(0)).current; // إزاحة أفقية (متابعة الكلمة)
   const LENS_SCALE = 1.85;
   const LENS_H = 130;
   // صناديق إحداثيات الكلمات لهذه الصفحة (للهايلايتر الدقيق)
@@ -403,13 +404,9 @@ export default function ReaderScreen() {
     };
   }, [pdfLens, pdfPath, page, pageImg]);
 
-  // صندوق الكلمة المقروءة حاليًا (تعيين تناسبي بين تقدّم القراءة وصناديق الكلمات الفعلية)
-  const [wordBox, setWordBox] = useState<WordBox | null>(null);
-  useEffect(() => {
-    if (pageWords.length === 0 || sentences.length === 0 || activeSentence < 0) {
-      setWordBox(null);
-      return;
-    }
+  // صندوق الكلمة المقروءة حاليًا — يُحسب فورًا (بلا تأخير إطار) مع تقدّم بسيط لمواكبة الصوت
+  const wordBox = useMemo<WordBox | null>(() => {
+    if (pageWords.length === 0 || sentences.length === 0 || activeSentence < 0) return null;
     let before = 0;
     for (let k = 0; k < activeSentence && k < sentences.length; k++) {
       before += (sentences[k].match(/\S+/g) || []).length;
@@ -418,20 +415,24 @@ export default function ReaderScreen() {
     const gw = before + Math.max(0, activeWord);
     const idx = Math.min(
       pageWords.length - 1,
-      Math.max(0, Math.round((gw / total) * (pageWords.length - 1)))
+      Math.max(0, Math.round((gw / total) * (pageWords.length - 1)) + 1) // +1 لتعويض تأخّر الصوت
     );
-    setWordBox(pageWords[idx]);
+    return pageWords[idx];
   }, [activeSentence, activeWord, pageWords, sentences]);
 
-  // العدسة تتابع موضع الكلمة المقروءة الفعلي (لا تقدير → لا تقف على فراغ)
+  // العدسة تتابع موضع الكلمة الفعلي أفقيًا وعموديًا → الكلمة المقروءة دائمًا ظاهرة بالكامل
   useEffect(() => {
     if (!pdfLens || viewMode !== "pdf" || pdfImgW <= 0 || !wordBox) return;
     const imgH = pdfImgW / (pageImgAspect || 0.7);
     const readY = (wordBox.y + wordBox.h / 2) * imgH;
+    const readX = (wordBox.x + wordBox.w / 2) * pdfImgW;
     const minY = Math.min(0, -(imgH * LENS_SCALE - LENS_H));
-    const target = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
-    Animated.spring(lensY, { toValue: target, useNativeDriver: true, friction: 10, tension: 55 }).start();
-  }, [pdfLens, viewMode, pdfImgW, wordBox, pageImgAspect, lensY]);
+    const minX = Math.min(0, pdfImgW - pdfImgW * LENS_SCALE);
+    const tY = Math.min(0, Math.max(minY, LENS_H / 2 - readY * LENS_SCALE));
+    const tX = Math.min(0, Math.max(minX, pdfImgW / 2 - readX * LENS_SCALE));
+    Animated.spring(lensY, { toValue: tY, useNativeDriver: true, friction: 8, tension: 95 }).start();
+    Animated.spring(lensX, { toValue: tX, useNativeDriver: true, friction: 8, tension: 95 }).start();
+  }, [pdfLens, viewMode, pdfImgW, wordBox, pageImgAspect, lensX, lensY]);
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -1189,10 +1190,7 @@ export default function ReaderScreen() {
                         style={{
                           width: pdfImgW * LENS_SCALE,
                           height: imgH * LENS_SCALE,
-                          transform: [
-                            { translateX: -(pdfImgW * (LENS_SCALE - 1)) / 2 },
-                            { translateY: lensY },
-                          ],
+                          transform: [{ translateX: lensX }, { translateY: lensY }],
                         }}
                       >
                         <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
