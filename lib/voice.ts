@@ -85,6 +85,17 @@ const VOICE_IDS: Record<VoiceGender, string> = {
 let currentPlayer: AudioPlayer | null = null;
 let currentFileUri: string | null = null;
 let audioModeReady = false;
+// مشغّل المقطع التالي مُحمّل مسبقًا (لتشغيل متواصل بلا فجوة بين المقاطع)
+let warmPlayer: { uri: string; player: AudioPlayer } | null = null;
+
+function disposeWarm() {
+  if (warmPlayer) {
+    try {
+      warmPlayer.player.remove();
+    } catch {}
+    warmPlayer = null;
+  }
+}
 
 async function ensureAudioMode() {
   if (audioModeReady) return;
@@ -284,8 +295,17 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
   const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
   if (!clean) return;
 
-  // أوقف أي صوت شغّال أولاً
-  await stopSpeaking();
+  // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
+  const vidForWarm = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
+  const expectedUri = cacheFileFor(clean, vidForWarm).uri;
+  let adopted: AudioPlayer | null = null;
+  if (warmPlayer && warmPlayer.uri === expectedUri) {
+    adopted = warmPlayer.player;
+    warmPlayer = null; // تبنّيناه فلا يُحذف مع الإيقاف
+  }
+
+  // أوقف المقطع الحالي فقط (نُبقي المشغّل التالي المُحمّل مسبقًا لنتبنّاه)
+  stopCurrentOnly();
   const myToken = playToken; // بصمة هذا التشغيل بعد الإيقاف
 
   opts.onStart?.();
@@ -304,7 +324,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     currentFileUri = file.uri;
 
     step = "إنشاء المشغّل";
-    const player = createAudioPlayer({ uri: file.uri }, { updateInterval: 80 }); // تتبّع الكلمة
+    // المشغّل المُحمّل مسبقًا (warm) إن توفّر → تشغيل فوري بلا فجوة، وإلا ننشئ واحدًا
+    const player = adopted ?? createAudioPlayer({ uri: file.uri }, { updateInterval: 80 });
     currentPlayer = player;
     // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. الأصوات ذات السرعة
     // الخاصة (< 1) نلغي تصحيح طبقة الصوت لها فتصير أعمق مع البطء.
@@ -359,6 +380,29 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     console.warn("VSF_TTS_FALLBACK", reason); // يظهر في سجل خادم التطوير
     opts.onFallback?.(reason);
     speakWithDevice(clean, opts);
+  }
+}
+
+/**
+ * يُحمّل مشغّل المقطع التالي مسبقًا (صوت + مشغّل جاهز) ليبدأ **فورًا بلا فجوة**
+ * عند انتهاء المقطع الحالي. يُستدعى للمقطع التالي لحظة بدء الحالي.
+ */
+export async function warmNext(
+  text: string,
+  opts: { voiceId?: string; gender?: VoiceGender } = {}
+): Promise<void> {
+  const clean = numbersToArabicWords(stripCitations(text?.trim() ?? ""));
+  if (!clean) return;
+  try {
+    const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
+    const uri = cacheFileFor(clean, vid).uri;
+    if (warmPlayer?.uri === uri) return; // محمّل بالفعل
+    const { file } = await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
+    if (warmPlayer?.uri === file.uri) return;
+    disposeWarm(); // أزل أي مشغّل تالٍ قديم
+    warmPlayer = { uri: file.uri, player: createAudioPlayer({ uri: file.uri }, { updateInterval: 80 }) };
+  } catch {
+    // غير حرج — التشغيل العادي يكفي
   }
 }
 
@@ -428,8 +472,14 @@ async function speakWithDevice(text: string, opts: SpeakOptions) {
 }
 
 /** إيقاف الصوت (السحابي وصوت الجهاز معاً). */
-export async function stopSpeaking(): Promise<void> {
+// يوقف المقطع الحالي فقط (يُبقي المشغّل التالي المُحمّل مسبقًا للتشغيل المتواصل)
+function stopCurrentOnly(): void {
   playToken++; // يُبطل أي صوت قيد التحضير حتى لا يشتغل بعد الإيقاف
   Speech.stop();
   disposePlayer();
+}
+
+export async function stopSpeaking(): Promise<void> {
+  stopCurrentOnly();
+  disposeWarm(); // إيقاف كامل (المستخدم) → نتخلّص من المشغّل التالي أيضًا
 }

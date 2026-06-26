@@ -49,6 +49,7 @@ import {
   speakText,
   stopSpeaking,
   VOICE_CATALOG,
+  warmNext,
 } from "../../lib/voice";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel, getUserName } from "../../lib/settings";
@@ -658,7 +659,8 @@ export default function ReaderScreen() {
       if (!playingRef.current) return;
       // تجهيز الجمل التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع — جملتان قدّام
       const vId = pickVoice();
-      if (i + 1 < sents.length) prefetchText(sents[i + 1], { voiceId: vId });
+      // المقطع التالي: نحمّل مشغّله مسبقًا (warm) ليبدأ فورًا بلا فجوة بين المقاطع
+      if (i + 1 < sents.length) warmNext(sents[i + 1], { voiceId: vId });
       if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
       // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل سلس
       if (i >= sents.length - 2 && p < total) {
