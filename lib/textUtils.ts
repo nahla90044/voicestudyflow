@@ -22,21 +22,28 @@ export function splitSentences(text: string): string[] {
   const clean = (text || "").replace(/[ \t]+/g, " ").trim();
   if (!clean) return [];
 
-  // نضيف فاصل سطر بعد علامات نهاية الجملة، ونحترم الأسطر الأصلية
-  const withBreaks = clean.replace(/([.!?؟…۔؛])\s+/g, "$1\n");
+  // 1) أزل سطور الضجيج (لكل سطر على حدة)
+  const lines = clean
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !isNoiseLine(l));
 
-  const parts = withBreaks
+  // 2) ادمج كسر السطر داخل الفقرة: نصل الأسطر في نصّ متّصل ثم نقسّم عند نهايات
+  //    الجمل فقط — فلا يُقطع مقطعٌ في منتصف جملة/فقرة (هذا سبب عدم الانسيابية).
+  const joined = lines.join(" ").replace(/\s{2,}/g, " ").trim();
+  const sentences = joined
+    .replace(/([.!?؟…۔؛])\s+/g, "$1\n")
     .split("\n")
     .map((s) => s.trim())
-    .filter((s) => s && !isNoiseLine(s));
+    .filter(Boolean);
 
-  // نجمع الجُمل القصيرة في مقاطع أطول لقراءة انسيابية: نبرة طبيعية متواصلة
-  // ووقفات أقل بين المقاطع (يقلّ الإحساس «الآلي»). نحترم حدود الجمل.
-  const TARGET = 220; // نطمح لهذا الطول قبل بدء مقطع جديد
-  const MAX = 400; // لا نتجاوزه (لئلا يبطؤ توليد الصوت)
+  // 3) اجمع الجُمل في مقاطع أطول — وحدود المقاطع تقع **عند نهايات الجمل فقط**
+  //    (نبرة طبيعية متواصلة بلا قطع داخل الجملة).
+  const TARGET = 240; // نطمح لهذا الطول قبل بدء مقطع جديد
+  const MAX = 450; // لا نتجاوزه (لئلا يبطؤ توليد الصوت)
   const chunks: string[] = [];
   let cur = "";
-  for (const s of parts) {
+  for (const s of sentences) {
     if (!cur) cur = s;
     else if (cur.length < TARGET && (cur + " " + s).length <= MAX) cur += " " + s;
     else {

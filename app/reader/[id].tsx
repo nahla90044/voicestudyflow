@@ -358,12 +358,21 @@ export default function ReaderScreen() {
   }
 
   // تمرير تلقائي لوضع النص — يُبقي الجملة الجاري قراءتها قرب وسط الشاشة
+  // تمرير «تيليبرومبتر» يُبقي المقطع المقروء واضحًا في الوسط — حتى عند العودة لشاشة
+  // النص (متوقفة) يقفز إليه فورًا فلا تضيع وين القراءة.
   useEffect(() => {
-    if (viewMode !== "text" || !speaking || activeSentence < 0) return;
-    const y0 = offsetsRef.current[activeSentence];
-    if (typeof y0 !== "number") return;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y0 - textViewH.current * 0.4), animated: true });
-  }, [activeSentence, viewMode, speaking]);
+    if (viewMode !== "text" || activeSentence < 0) return;
+    const scrollToActive = () => {
+      const y0 = offsetsRef.current[activeSentence];
+      if (typeof y0 === "number") {
+        scrollRef.current?.scrollTo({ y: Math.max(0, y0 - textViewH.current * 0.4), animated: true });
+      }
+    };
+    scrollToActive();
+    // عند العودة للشاشة قد لا تكون المواضع جاهزة بعد → أعد المحاولة بعد التخطيط
+    const t = setTimeout(scrollToActive, 250);
+    return () => clearTimeout(t);
+  }, [activeSentence, viewMode]);
 
   // تمرير تلقائي «تيليبرومبتر» لصورة الصفحة في وضع PDF أثناء القراءة
   useEffect(() => {
@@ -2080,13 +2089,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(241,196,15,0.14)",
   },
   sentenceRowActive: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: Radius.md,
     backgroundColor: Palette.primarySoft,
+    borderRightWidth: 4,
+    borderRightColor: Palette.neonCyan,
   },
   sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
-  sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right" },
+  sentenceActive: { color: Palette.text, fontSize: 22, lineHeight: 42, textAlign: "right", fontWeight: "700" },
   wordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
