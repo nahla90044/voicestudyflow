@@ -404,21 +404,51 @@ export default function ReaderScreen() {
     };
   }, [pdfLens, pdfPath, page, pageImg]);
 
-  // صندوق الكلمة المقروءة حاليًا — يُحسب فورًا (بلا تأخير إطار) مع تقدّم بسيط لمواكبة الصوت
+  // محاذاة كلمات النص المقروء مع صناديق الكلمات بالمطابقة النصّية (لا تقدير تناسبي)
+  const clean2box = useMemo<number[]>(() => {
+    if (pageWords.length === 0 || sentences.length === 0) return [];
+    const norm = (s: string) =>
+      s
+        .normalize("NFKC")
+        .replace(/[ؐ-ًؚ-ْٰـ‎‏]/g, "")
+        .replace(/[^\p{L}\p{N}]/gu, "");
+    const cleaned: string[] = [];
+    for (const s of sentences) for (const w of s.match(/\S+/g) || []) cleaned.push(w);
+    const map: number[] = [];
+    let rj = 0;
+    for (let ci = 0; ci < cleaned.length; ci++) {
+      const cw = norm(cleaned[ci]);
+      let found = -1;
+      if (cw) {
+        for (let k = rj; k < Math.min(pageWords.length, rj + 7); k++) {
+          const rw = norm(pageWords[k].t);
+          if (rw && (rw === cw || rw.includes(cw) || cw.includes(rw))) {
+            found = k;
+            break;
+          }
+        }
+      }
+      if (found >= 0) {
+        map.push(found);
+        rj = found + 1;
+      } else {
+        map.push(Math.min(rj, pageWords.length - 1));
+      }
+    }
+    return map;
+  }, [sentences, pageWords]);
+
+  // صندوق الكلمة المقروءة حاليًا — يُحسب فورًا من المحاذاة النصّية (مع تقدّم بسيط)
   const wordBox = useMemo<WordBox | null>(() => {
-    if (pageWords.length === 0 || sentences.length === 0 || activeSentence < 0) return null;
+    if (clean2box.length === 0 || activeSentence < 0) return null;
     let before = 0;
     for (let k = 0; k < activeSentence && k < sentences.length; k++) {
       before += (sentences[k].match(/\S+/g) || []).length;
     }
-    const total = sentences.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
-    const gw = before + Math.max(0, activeWord);
-    const idx = Math.min(
-      pageWords.length - 1,
-      Math.max(0, Math.round((gw / total) * (pageWords.length - 1)) + 1) // +1 لتعويض تأخّر الصوت
-    );
-    return pageWords[idx];
-  }, [activeSentence, activeWord, pageWords, sentences]);
+    const gi = Math.min(clean2box.length - 1, before + Math.max(0, activeWord) + 1);
+    const bi = clean2box[gi];
+    return pageWords[Math.min(pageWords.length - 1, Math.max(0, bi))] ?? null;
+  }, [activeSentence, activeWord, clean2box, sentences, pageWords]);
 
   // العدسة تتابع موضع الكلمة الفعلي أفقيًا وعموديًا → الكلمة المقروءة دائمًا ظاهرة بالكامل
   useEffect(() => {
