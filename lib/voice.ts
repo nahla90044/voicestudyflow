@@ -374,6 +374,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     let finished = false;
     player.addListener("playbackStatusUpdate", (status) => {
+      // مشغّل قديم استُبدل (بدأ تشغيل أحدث) → تجاهله تمامًا حتى لا يتراكب ويتسارع
+      if (myToken !== playToken) return;
       if (opts.onProgress) {
         let frac = 0;
         const t = status.currentTime ?? 0;
@@ -396,8 +398,9 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
       if (status.didJustFinish && !finished) {
         finished = true;
         opts.onProgress?.(1);
-        opts.onDone?.();
-        disposePlayer();
+        opts.onDone?.(); // قد يبدأ المقطع التالي (يتبنّى المشغّل المُحمّل مسبقًا)
+        // نظّف هذا المشغّل فقط إن لم يُستبدل بمقطع جديد (لئلا نوقف التالي)
+        if (currentPlayer === player) disposePlayer();
       }
     });
 
