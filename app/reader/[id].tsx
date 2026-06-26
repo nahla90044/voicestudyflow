@@ -466,7 +466,7 @@ export default function ReaderScreen() {
         setSpeaking(true);
         playStartRef.current = Date.now();
         recordActivity({});
-        playFromPage(page, 0, true);
+        playFromPage(page, Math.max(0, activeSentence), false); // يكمل من نفس الموضع
       }
       return;
     }
@@ -485,7 +485,7 @@ export default function ReaderScreen() {
       setSpeaking(true);
       playStartRef.current = Date.now();
       recordActivity({});
-      playFromPage(page, 0, true);
+      playFromPage(page, Math.max(0, activeSentence), false); // يكمل من نفس الموضع
     }
   }
 
@@ -501,7 +501,7 @@ export default function ReaderScreen() {
       setSpeaking(true);
       playStartRef.current = Date.now();
       recordActivity({});
-      playFromPage(page, 0, true);
+      playFromPage(page, Math.max(0, activeSentence), false); // يكمل من نفس الموضع
     }
   }
 
@@ -713,6 +713,8 @@ export default function ReaderScreen() {
 
   function togglePlay() {
     if (speaking) {
+      // احفظ الموضع الحالي عند الإيقاف ليُستأنف من نفس الجملة (لا من البداية)
+      resumeIdxRef.current = Math.max(0, activeSentence);
       stop();
       setStatus("");
       return;
@@ -724,7 +726,7 @@ export default function ReaderScreen() {
     setSpeaking(true);
     playStartRef.current = Date.now();
     recordActivity({}); // علّم اليوم نشطًا (السلسلة)
-    playFromPage(page, resumeIdxRef.current, true);
+    playFromPage(page, resumeIdxRef.current, false); // يكمل من موضعه دون إعادة إعلان الصفحة
     resumeIdxRef.current = 0;
   }
 
@@ -825,6 +827,34 @@ export default function ReaderScreen() {
   }
 
   // لمس كلمة → عرض معناها حسب سياقها
+  // يبدأ القراءة من جملة محددة في الصفحة الحالية
+  function readFromSentence(i: number) {
+    stop();
+    setActiveSentence(i);
+    setActiveWord(-1);
+    playingRef.current = true;
+    setSpeaking(true);
+    playStartRef.current = Date.now();
+    recordActivity({});
+    playSentence(sentences, i, page, totalPages || sentences.length);
+  }
+
+  // كلمة: ضغطة = معنى/تحديد، ضغطتان سريعتان = اقرأ من هنا
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function onWordPress(i: number, tok: string, s: string) {
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+      readFromSentence(i); // ضغطتان → القراءة من هذه الجملة
+      return;
+    }
+    tapTimerRef.current = setTimeout(() => {
+      tapTimerRef.current = null;
+      if (highlightMode) onSentenceLongPress(s);
+      else onWordTap(tok, s); // ضغطة واحدة → المعنى
+    }, 280);
+  }
+
   async function onWordTap(rawWord: string, context: string) {
     const word = rawWord.replace(/[^\p{L}\p{M}]/gu, "").trim();
     if (!word) return;
@@ -999,9 +1029,7 @@ export default function ReaderScreen() {
                           return (
                             <Text
                               key={wi}
-                              onPress={() =>
-                                highlightMode ? onSentenceLongPress(s) : onWordTap(tok, s)
-                              }
+                              onPress={() => onWordPress(i, tok, s)}
                               suppressHighlighting
                               style={isSpoken ? styles.wordSpoken : undefined}
                             >
@@ -1171,7 +1199,7 @@ export default function ReaderScreen() {
           </View>
           <View style={styles.tool}>
             <Pressable onPress={cycleSpeed} style={styles.toolBtn} hitSlop={4}>
-              <Text style={styles.toolTxt}>{rate}x</Text>
+              <Text style={styles.toolTxt} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{rate}x</Text>
             </Pressable>
             <Text style={styles.toolCap}>السرعة</Text>
           </View>
@@ -1939,8 +1967,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Palette.primarySoft,
   },
-  sentence: { color: Palette.textMuted, fontSize: 21, lineHeight: 40, textAlign: "right" },
-  sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right", fontWeight: "700" },
+  sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
+  sentenceActive: { color: Palette.text, fontSize: 21, lineHeight: 40, textAlign: "right" },
   wordSpoken: { color: Palette.neonCyan, fontWeight: "900" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
@@ -2258,7 +2286,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   toolBtnActive: { backgroundColor: Palette.accent, borderColor: Palette.accent },
-  toolTxt: { color: Palette.text, fontSize: 13, fontWeight: "900" },
+  toolTxt: { color: Palette.text, fontSize: 11, fontWeight: "900", paddingHorizontal: 2 },
   playBtn: {
     width: 56,
     height: 56,
