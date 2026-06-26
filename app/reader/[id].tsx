@@ -458,15 +458,16 @@ export default function ReaderScreen() {
     };
   }, [presentOpen, page, sentences.length]);
 
-  // الشريحة الحالية تتبع موضع القراءة في الصفحة (إلا أثناء سرد العرض → تتبع السرد)
-  const autoSlideIdx =
-    pageSlides.length > 0
-      ? Math.min(
-          pageSlides.length - 1,
-          Math.floor((Math.max(0, activeSentence) / Math.max(1, sentences.length)) * pageSlides.length)
-        )
-      : 0;
-  const slideIdx = presNarrating ? Math.min(presSlide, Math.max(0, pageSlides.length - 1)) : autoSlideIdx;
+  // الشريحة المعروضة = اختيار المستخدم/السرد (تنقّل يدوي حر)
+  const slideIdx = pageSlides.length > 0 ? Math.min(Math.max(0, presSlide), pageSlides.length - 1) : 0;
+  // التنقّل اليدوي بين الشرائح
+  function goSlide(delta: number) {
+    setPresSlide((s) => Math.min(Math.max(0, s + delta), Math.max(0, pageSlides.length - 1)));
+  }
+  // شرائح صفحة جديدة → ابدأ من الأولى
+  useEffect(() => {
+    setPresSlide(0);
+  }, [pageSlides]);
 
   // نصّ الشريحة للسرد الصوتي: العنوان ثم النقاط
   function slideSpeech(s: Slide): string {
@@ -1904,15 +1905,22 @@ export default function ReaderScreen() {
             )}
           </View>
 
-          {/* نقاط الشرائح + تشغيل */}
+          {/* تنقّل يدوي بين الشرائح: أسهم + نقاط قابلة للضغط */}
           {pageSlides.length > 0 ? (
-            <View style={styles.presDots}>
-              {pageSlides.map((_, di) => (
-                <View
-                  key={di}
-                  style={[styles.presDot, di === slideIdx && styles.presDotOn]}
-                />
-              ))}
+            <View style={styles.presNav}>
+              <Pressable onPress={() => goSlide(1)} style={styles.presArrow} hitSlop={8} disabled={slideIdx >= pageSlides.length - 1}>
+                <Ionicons name="chevron-back" size={26} color={slideIdx >= pageSlides.length - 1 ? Palette.textDim : Palette.text} />
+              </Pressable>
+              <View style={styles.presDots}>
+                {pageSlides.map((_, di) => (
+                  <Pressable key={di} onPress={() => setPresSlide(di)} hitSlop={6}>
+                    <View style={[styles.presDot, di === slideIdx && styles.presDotOn]} />
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable onPress={() => goSlide(-1)} style={styles.presArrow} hitSlop={8} disabled={slideIdx <= 0}>
+                <Ionicons name="chevron-forward" size={26} color={slideIdx <= 0 ? Palette.textDim : Palette.text} />
+              </Pressable>
             </View>
           ) : null}
 
@@ -2502,7 +2510,18 @@ const styles = StyleSheet.create({
   },
   slideDot: { width: 9, height: 9, borderRadius: 5, marginTop: 9 },
   slideBulletTxt: { flex: 1, color: Palette.text, fontSize: 16.5, lineHeight: 27, fontWeight: "600", textAlign: "right" },
-  presDots: { flexDirection: "row-reverse", justifyContent: "center", gap: 7, marginVertical: 16 },
+  presNav: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 14, marginVertical: 14 },
+  presArrow: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  presDots: { flexDirection: "row-reverse", justifyContent: "center", gap: 7 },
   presDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Palette.surfaceStrong ?? "rgba(255,255,255,0.18)" },
   presDotOn: { backgroundColor: Palette.neonCyan, width: 22 },
   presPlay: {
