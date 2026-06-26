@@ -96,10 +96,42 @@ export async function linkEmail(email: string, password: string) {
   if (error) throw error;
 }
 
+/** إنشاء حساب جديد ببريد/كلمة مرور. مع تأكيد البريد، لا تُفتح جلسة حتى التأكيد. */
+export async function signUpEmail(email: string, password: string): Promise<{ needsConfirm: boolean }> {
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return { needsConfirm: !data.session }; // لا جلسة = ينتظر تأكيد البريد
+}
+
 /** تسجيل دخول بحساب موجود (على جهاز آخر مثلًا). */
 export async function signInWithEmail(email: string, password: string) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
+  cachedUserId = null; // أعد حساب المعرّف بعد الدخول
+}
+
+/** هل المستخدم الحالي لديه حساب حقيقي (بريد مؤكَّد)؟ */
+export async function hasEmailAccount(): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return !!user?.email && !!(user.email_confirmed_at ?? (user as User & { confirmed_at?: string }).confirmed_at);
+}
+
+/** يطالب ببيانات «معرّف الجهاز» القديمة وينقلها للحساب الحالي (مرّة بعد أول دخول). */
+export async function claimDeviceData(): Promise<{ books: number } | null> {
+  const deviceId = await AsyncStorage.getItem(DEVICE_KEY);
+  if (!deviceId) return null;
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) return null;
+  const { data, error } = await supabase.functions.invoke("claim-data", {
+    body: { deviceId, accessToken: token },
+  });
+  if (error || (data as { error?: string })?.error) return null;
+  return { books: (data as { moved?: { books?: number } })?.moved?.books ?? 0 };
 }
 
 /** تسجيل الخروج (يعود الحساب مجهولًا عند أول استخدام لاحق). */
