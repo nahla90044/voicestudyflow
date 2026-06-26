@@ -274,9 +274,9 @@ export default function LibraryScreen() {
   function onPressBook(item: BookRow) {
     setActiveBookId(item.id);
 
-    // المنهج الدراسي أولًا (خارج الكتاب) — ومنه زر «ابدأ القراءة» للدخول للقارئ
+    // الدخول للكتاب مباشرة. المنهج يُفتح من الضغط المطوّل → «📋 المنهج الدراسي».
     router.push({
-      pathname: "/syllabus/[id]",
+      pathname: "/reader/[id]",
       params: {
         id: item.id,
         title: item.title,
