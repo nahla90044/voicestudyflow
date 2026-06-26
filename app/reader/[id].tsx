@@ -31,7 +31,6 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
-import { getWikipediaImage } from "../../lib/images";
 import { extractPdfPageText, getPageWords, type WordBox } from "../../lib/pdfText";
 import { splitSentences } from "../../lib/textUtils";
 import {
@@ -160,7 +159,6 @@ export default function ReaderScreen() {
   const [presentOpen, setPresentOpen] = useState(false);
   const [pageSlides, setPageSlides] = useState<Slide[]>([]);
   const [slidesLoading, setSlidesLoading] = useState(false);
-  const [slideImages, setSlideImages] = useState<Record<number, string | null>>({}); // صور ويكيبيديا للشرائح
   const slidesCacheRef = useRef<Map<number, Slide[]>>(new Map());
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
@@ -508,13 +506,6 @@ export default function ReaderScreen() {
         if (!active) return;
         slidesCacheRef.current.set(p, sl);
         setPageSlides(sl);
-        setSlideImages({});
-        // اجلب صورة معبّرة من ويكيبيديا لكل شريحة (بالتوازي)
-        sl.forEach((s, idx) => {
-          getWikipediaImage(s.title).then((img) => {
-            if (active && img) setSlideImages((prev) => ({ ...prev, [idx]: img }));
-          });
-        });
       } catch {
         if (active) setPageSlides([]);
       } finally {
@@ -1897,16 +1888,11 @@ export default function ReaderScreen() {
                       end={{ x: 0, y: 1 }}
                       style={StyleSheet.absoluteFill}
                     />
-                    {slideImages[slideIdx] ? (
-                      <Image
-                        source={{ uri: slideImages[slideIdx] as string }}
-                        style={[styles.slideImg, { borderColor: c + "55" }]}
-                        resizeMode="cover"
-                      />
-                    ) : (
+                    <View style={[styles.slideBadge, { backgroundColor: c + "22", borderColor: c + "66" }]}>
                       <Text style={styles.slideEmoji}>{s.emoji}</Text>
-                    )}
+                    </View>
                     <Text style={[styles.slideTitle, { color: c }]}>{s.title}</Text>
+                    <View style={[styles.slideDivider, { backgroundColor: c }]} />
                     <View style={styles.slideBullets}>
                       {s.bullets.map((b, bi) => (
                         <View key={bi} style={styles.slideBulletRow}>
@@ -2442,13 +2428,31 @@ const styles = StyleSheet.create({
     minHeight: 320,
     justifyContent: "center",
   },
-  slideEmoji: { fontSize: 52, textAlign: "center", marginBottom: 10 },
-  slideImg: { width: "100%", height: 150, borderRadius: 14, marginBottom: 14, borderWidth: 1 },
-  slideTitle: { fontSize: 24, fontWeight: "900", textAlign: "center", lineHeight: 36, marginBottom: 18 },
-  slideBullets: { gap: 12 },
-  slideBulletRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 10 },
+  slideBadge: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  slideEmoji: { fontSize: 46, textAlign: "center" },
+  slideTitle: { fontSize: 24, fontWeight: "900", textAlign: "center", lineHeight: 36, marginBottom: 12 },
+  slideDivider: { width: 54, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 18 },
+  slideBullets: { gap: 10 },
+  slideBulletRow: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+  },
   slideDot: { width: 9, height: 9, borderRadius: 5, marginTop: 9 },
-  slideBulletTxt: { flex: 1, color: Palette.text, fontSize: 17, lineHeight: 28, fontWeight: "600", textAlign: "right" },
+  slideBulletTxt: { flex: 1, color: Palette.text, fontSize: 16.5, lineHeight: 27, fontWeight: "600", textAlign: "right" },
   presDots: { flexDirection: "row-reverse", justifyContent: "center", gap: 7, marginVertical: 16 },
   presDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Palette.surfaceStrong ?? "rgba(255,255,255,0.18)" },
   presDotOn: { backgroundColor: Palette.neonCyan, width: 22 },
