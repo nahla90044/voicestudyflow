@@ -3,8 +3,11 @@
 //  1) إن كان نص الصفحة مخزّنًا → نُرجعه فورًا (سريع، بدون تكلفة).
 //  2) وإلا: نستخرج من الطبقة النصية (pdf-extract-text)، وإن كانت الصفحة
 //     بلا نص حقيقي (كتاب مصوّر) → OCR عبر ocr-page، ثم نخزّن النتيجة.
-import { cleanupTextStrict } from "./ai";
 import { supabase } from "./supabase";
+
+// إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد الاستخراج حرفيًا.
+// v2: إزالة خطوة «التنظيف» بالذكاء نهائيًا (أمانة النص الكاملة).
+const EXTRACT_VER = "-v2";
 
 // يوحّد أحرف العرض العربية المعزولة (ﻣ ﻘ) إلى صورتها القياسية (م ق) ليعيد المحرّك ربطها
 function normalizeArabic(s: string): string {
@@ -50,7 +53,9 @@ export async function extractPdfPageText(
 ): Promise<PageText> {
   if (!pdfPath) return { page: 1, totalPages: 0, text: "" };
 
-  // 1) مخزّن مسبقًا؟ أرجعه فورًا
+  // 1) مخزّن مسبقًا (بالإصدار الحالي فقط)؟ أرجعه فورًا
+  //    الإصدارات القديمة (التي مرّت على «تنظيف» بالذكاء) نتجاهلها ونعيد الاستخراج
+  //    حرفيًا حفاظًا على أمانة النص.
   try {
     const { data } = await supabase
       .from("page_cache")
@@ -58,15 +63,14 @@ export async function extractPdfPageText(
       .eq("pdf_path", pdfPath)
       .eq("page", page)
       .maybeSingle();
-    if (data) {
-      // صفحة محفوظة (نص حقيقي أو علامة "فارغة") → أرجعها فورًا
+    if (data && typeof data.source === "string" && data.source.endsWith(EXTRACT_VER)) {
       const cachedText = String(data.text ?? "");
-      const real = cachedText.trim().length >= MIN_REAL_TEXT && data.source !== "empty";
+      const real = cachedText.trim().length >= MIN_REAL_TEXT && !data.source.startsWith("empty");
       return {
         page,
         totalPages: Number(data.total_pages ?? 0),
         text: real ? cachedText : "",
-        ocr: data.source === "ocr",
+        ocr: data.source.startsWith("ocr"),
       };
     }
   } catch {
@@ -105,32 +109,24 @@ export async function extractPdfPageText(
     }
   }
 
-  if (text) text = normalizeArabic(text); // أحرف العرض المعزولة → قياسية مترابطة
+  // أمانة النص: نُطبّع أحرف العرض المعزولة فقط (NFKC) — بلا أي تمرير على الذكاء.
+  // لا إضافة ولا حذف ولا تغيير لأي كلمة. نقرأ ما في الكتاب حرفيًا.
+  if (text) text = normalizeArabic(text);
   const hasRealText = text.trim().length >= MIN_REAL_TEXT;
 
   // إن فشل الاستخراج تمامًا (خطأ شبكة) ولا نص → لا نخزّن علامة دائمة، نرمي الخطأ
   if (error && !hasRealText) throw error;
 
-  // 4) صفحة فيها نص حقيقي → نحسّنه بالذكاء إن توفّر (يصلح ما تبقّى من مسافات).
-  //    النص بعد الاستخراج المعتمد على المواضع مقروء أصلًا، فنخزّنه في الحالتين.
-  if (hasRealText) {
-    try {
-      text = normalizeArabic(await cleanupTextStrict(text));
-    } catch {
-      // الذكاء غير متاح → نُبقي النص المستخرَج (مقروء) كما هو
-    }
-  } else {
-    text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
-  }
+  if (!hasRealText) text = ""; // صفحة فارغة/غلاف/علامة مائية فقط
 
-  // 5) خزّن النتيجة حتى لا نعيد المعالجة
+  // خزّن النتيجة (بعلامة الإصدار الحالي) حتى لا نعيد المعالجة
   try {
     await supabase.from("page_cache").upsert({
       pdf_path: pdfPath,
       page: resolvedPage,
       text,
       total_pages: totalPages,
-      source: hasRealText ? (usedOcr ? "ocr" : "text") : "empty",
+      source: (hasRealText ? (usedOcr ? "ocr" : "text") : "empty") + EXTRACT_VER,
     });
   } catch {
     // التخزين اختياري — لا نفشل القراءة بسببه
