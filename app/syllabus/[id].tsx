@@ -118,6 +118,14 @@ export default function SyllabusScreen() {
     }
   }
 
+  // الدخول للقارئ (الكتاب نفسه) من شاشة المنهج
+  function startReading() {
+    router.push({
+      pathname: "/reader/[id]",
+      params: { id: bookId, title: bookTitle, pdf_path: pdfPath },
+    });
+  }
+
   async function startMindmap(i: number) {
     if (!syl) return;
     const u = syl.units[i];
@@ -369,6 +377,10 @@ export default function SyllabusScreen() {
               loading={busy}
               style={{ marginTop: Spacing.lg, alignSelf: "stretch" }}
             />
+            <Pressable onPress={startReading} style={styles.readNowBtn}>
+              <Ionicons name="book" size={18} color={Palette.text} />
+              <Text style={styles.readNowTxt}>ابدأ القراءة الآن 📖</Text>
+            </Pressable>
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -392,6 +404,12 @@ export default function SyllabusScreen() {
                 </Text>
               )}
             </GlassCard>
+
+            {/* زر الدخول للقراءة — بارز فوق الوحدات */}
+            <Pressable onPress={startReading} style={styles.readNowBtn}>
+              <Ionicons name="book" size={18} color={Palette.text} />
+              <Text style={styles.readNowTxt}>ابدأ القراءة 📖</Text>
+            </Pressable>
 
             {/* الوحدات (تشيك ليست) */}
             {syl.units.map((u, i) => {
@@ -692,6 +710,21 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.xl, gap: 8 },
   emptyTitle: { color: Palette.text, fontSize: 19, fontWeight: "900", textAlign: "center", marginTop: 10 },
   emptySub: { color: Palette.textMuted, fontSize: 14, lineHeight: 24, textAlign: "center" },
+  readNowBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    alignSelf: "stretch",
+    marginTop: 12,
+    marginBottom: 6,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: Palette.surface,
+    borderWidth: 1.5,
+    borderColor: Palette.neonCyan + "88",
+  },
+  readNowTxt: { color: Palette.text, fontSize: 16, fontWeight: "900" },
   err: { color: Palette.warn, fontSize: 13, textAlign: "center", marginTop: 8, fontWeight: "700" },
 
   scroll: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl, gap: 12 },
