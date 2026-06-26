@@ -234,7 +234,7 @@ export default function ReaderScreen() {
   const [lensH, setLensH] = useState(0); // ارتفاع نافذة العدسة المقاس
   const lensX = useRef(new Animated.Value(0)).current;
   const lensY = useRef(new Animated.Value(0)).current;
-  const LENS_SCALE = 2.0; // تكبير العدسة
+  const LENS_SCALE = 1.7; // تكبير العدسة (ألطف زي النسخة الأصلية)
   const lensOpenRef = useRef(false);
   const pdfFollowRef = useRef(false); // نتتبّع موضع القراءة (للهايلايتر/العدسة) في وضع PDF أو العدسة
   const [pdfImgW2, setPdfImgW2] = useState(0); // عرض صورة الصفحة المعروضة (لتظليل الكلمة)
@@ -1140,15 +1140,33 @@ export default function ReaderScreen() {
     };
   }, [lensOpen, viewMode, pdfPath, page]);
 
-  // صندوق الكلمة المقروءة حاليًا (لتظليلها على صورة الصفحة)
-  const currentWordBox = useMemo<WordBox | null>(() => {
-    if (pageWords.length === 0) return null;
-    const idx = Math.min(pageWords.length - 1, Math.max(0, Math.round(readProgress * (pageWords.length - 1))));
-    return pageWords[idx] ?? null;
-  }, [readProgress, pageWords]);
+  // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
+  type Line = { x: number; y: number; w: number; h: number; start: number; end: number };
+  const lines = useMemo<Line[]>(() => {
+    const ls: Line[] = [];
+    let cur: { minX: number; maxX: number; minY: number; maxY: number; start: number; end: number; cy: number } | null = null;
+    const push = () => {
+      if (cur) ls.push({ x: cur.minX, y: cur.minY, w: cur.maxX - cur.minX, h: cur.maxY - cur.minY, start: cur.start, end: cur.end });
+    };
+    pageWords.forEach((w, idx) => {
+      const cy = w.y + w.h / 2;
+      if (cur && Math.abs(cy - cur.cy) < w.h * 0.9) {
+        cur.minX = Math.min(cur.minX, w.x);
+        cur.maxX = Math.max(cur.maxX, w.x + w.w);
+        cur.minY = Math.min(cur.minY, w.y);
+        cur.maxY = Math.max(cur.maxY, w.y + w.h);
+        cur.end = idx;
+      } else {
+        push();
+        cur = { minX: w.x, maxX: w.x + w.w, minY: w.y, maxY: w.y + w.h, start: idx, end: idx, cy };
+      }
+    });
+    push();
+    return ls;
+  }, [pageWords]);
 
-  // نقطة القراءة المتصلة (موضع تقريبي على صناديق الكلمات) — تتحرك يمين→يسار ثم تنزل
-  const readPoint = useMemo<{ cx: number; cy: number } | null>(() => {
+  // نقطة القراءة المتصلة — تتحرك يمين→يسار داخل السطر ثم تنزل (كحركة العين)
+  const readPoint = useMemo<{ cx: number; cy: number; idx: number } | null>(() => {
     if (pageWords.length === 0) return null;
     const f = Math.min(pageWords.length - 1, Math.max(0, readProgress * (pageWords.length - 1)));
     const i0 = Math.floor(f);
@@ -1159,8 +1177,16 @@ export default function ReaderScreen() {
     return {
       cx: (a.x + a.w / 2) * (1 - t) + (b.x + b.w / 2) * t,
       cy: (a.y + a.h / 2) * (1 - t) + (b.y + b.h / 2) * t,
+      idx: Math.round(f),
     };
   }, [readProgress, pageWords]);
+
+  // السطر المقروء حاليًا — نظلّل السطر كامل (أنعم وأدق من كلمة مفردة)
+  const lineBox = useMemo<WordBox | null>(() => {
+    if (!readPoint || lines.length === 0) return null;
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end) ?? null;
+    return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
+  }, [readPoint, lines]);
 
   // العدسة تتابع نقطة القراءة (أفقيًا وعموديًا) بحركة سلسة، مع تثبيت داخل حدود الصورة
   useEffect(() => {
@@ -1395,16 +1421,16 @@ export default function ReaderScreen() {
                     resizeMode="contain"
                   />
                   {/* تظليل الكلمة المقروءة على صورة الصفحة */}
-                  {currentWordBox && speaking && pdfImgW2 > 0 ? (
+                  {lineBox && speaking && pdfImgW2 > 0 ? (
                     <View
                       pointerEvents="none"
                       style={[
                         styles.wordHL,
                         {
-                          left: currentWordBox.x * pdfImgW2,
-                          top: currentWordBox.y * (pdfImgW2 / (pageImgAspect || 0.7)),
-                          width: currentWordBox.w * pdfImgW2,
-                          height: currentWordBox.h * (pdfImgW2 / (pageImgAspect || 0.7)),
+                          left: lineBox.x * pdfImgW2,
+                          top: lineBox.y * (pdfImgW2 / (pageImgAspect || 0.7)),
+                          width: lineBox.w * pdfImgW2,
+                          height: lineBox.h * (pdfImgW2 / (pageImgAspect || 0.7)),
                         },
                       ]}
                     />
@@ -2100,16 +2126,16 @@ export default function ReaderScreen() {
               >
                 <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
                 {/* تظليل الكلمة المقروءة داخل العدسة */}
-                {currentWordBox && speaking ? (
+                {lineBox && speaking ? (
                   <View
                     pointerEvents="none"
                     style={[
                       styles.wordHL,
                       {
-                        left: currentWordBox.x * lensW * LENS_SCALE,
-                        top: currentWordBox.y * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
-                        width: currentWordBox.w * lensW * LENS_SCALE,
-                        height: currentWordBox.h * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                        left: lineBox.x * lensW * LENS_SCALE,
+                        top: lineBox.y * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                        width: lineBox.w * lensW * LENS_SCALE,
+                        height: lineBox.h * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
                       },
                     ]}
                   />
