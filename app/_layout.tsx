@@ -8,6 +8,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AnimatedSplash } from "../components/brand/animated-splash";
 import { Palette } from "../constants/design";
+import { getSession } from "../lib/auth";
 import { resumePendingDownload } from "../lib/downloadManager";
 import { ThemeProvider } from "../lib/themeContext";
 import { ONBOARDING_KEY } from "./onboarding";
@@ -22,8 +23,15 @@ export default function RootLayout() {
     (async () => {
       try {
         const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
+        // التسجيل إلزامي: لازم حساب ببريد مؤكّد قبل الدخول للتطبيق
+        const session = await getSession().catch(() => null);
+        const authed = !!session?.user?.email;
         await SplashScreen.hideAsync().catch(() => {});
-        if (seen !== "1") router.replace("/onboarding");
+        if (!authed) {
+          router.replace("/auth"); // الصفحة الأولى بعد السبلاش = التسجيل/الدخول
+        } else if (seen !== "1") {
+          router.replace("/onboarding");
+        }
         // أكمل أي تحميل كتاب لم يكتمل (يستأنف تلقائيًا حتى لو سُكِّر التطبيق سابقًا)
         resumePendingDownload();
       } finally {
@@ -46,6 +54,7 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="reader/[id]" />
         </Stack>

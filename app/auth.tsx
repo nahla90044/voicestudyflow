@@ -1,6 +1,7 @@
 // app/auth.tsx
 // شاشة الحساب: إنشاء حساب جديد (ببريد + كلمة مرور وتأكيد بالبريد) أو تسجيل دخول.
 // بعد أول دخول مؤكَّد تُرحَّل بيانات الجهاز القديمة تلقائيًا إلى الحساب.
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -11,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
 import { claimDeviceData, signInWithEmail, signUpEmail } from "../lib/auth";
+import { ONBOARDING_KEY } from "./onboarding";
 
 type Mode = "signup" | "login";
 
@@ -24,11 +26,10 @@ export default function AuthScreen() {
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
 
   async function finishLogin() {
-    const res = await claimDeviceData().catch(() => null);
-    router.replace("/");
-    if (res && res.books > 0) {
-      // ترحيل ناجح — لا نزعجها برسالة، البيانات ظهرت في حسابها
-    }
+    await claimDeviceData().catch(() => null);
+    // أول دخول: نعرض الجولة التعريفية، وإلا ندخل التطبيق مباشرة
+    const seen = await AsyncStorage.getItem(ONBOARDING_KEY).catch(() => null);
+    router.replace(seen === "1" ? "/" : "/onboarding");
   }
 
   async function onSubmit() {
