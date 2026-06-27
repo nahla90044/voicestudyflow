@@ -793,10 +793,12 @@ export default function ReaderScreen() {
         rate,
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
         onProgress: (frac) => {
-          setActiveWord(wordIndexAtFraction(sents[i], frac));
+          // تأخير بسيط: نخلّي الهايلايت/العدسة يتبعان الصوت لا يسبقانه (أبطأ شوي)
+          const lf = frac >= 0.995 ? 1 : Math.max(0, frac - 0.05);
+          setActiveWord(wordIndexAtFraction(sents[i], lf));
           // تقدّم القراءة (لتظليل الكلمة على الـPDF/العدسة) — في وضع PDF أو العدسة فقط
           if (pdfFollowRef.current) {
-            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
+            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + lf * curWords) / totalWords)));
           }
         },
         onDone: () => {
@@ -1186,18 +1188,20 @@ export default function ReaderScreen() {
     return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
   }, [readPoint, lines]);
 
-  // الشريط المكبّر يتابع نقطة القراءة — ينزلق يمين→يسار داخل السطر ثم ينزل (الوزنية الأصلية)
+  // الشريط المكبّر يتابع نقطة القراءة — يجتاز السطر كامل يمين→يسار ثم ينزل
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
-    const readX = readPoint.cx * lensW;
     const readY = readPoint.cy * imgH;
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
+    // أفقيًا: ربط خطّي مضمون — يمين السطر (cx=1) يُظهر يمين الصورة، ويساره (cx=0) يُظهر يسارها
+    // فتقطع العدسة السطر كامل من أوله لآخره بدل ما تعلق على اليمين
+    const tX = minX * readPoint.cx;
+    // عموديًا: نُبقي السطر المقروء في وسط الشريط
     const tY = Math.min(0, Math.max(minY, lensH / 2 - readY * LENS_SCALE));
-    const tX = Math.min(0, Math.max(minX, lensW / 2 - readX * LENS_SCALE));
-    Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
-    Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
+    Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
   }, [lensOpen, lensW, lensH, readPoint, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
