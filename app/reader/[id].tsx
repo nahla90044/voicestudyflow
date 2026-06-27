@@ -1195,11 +1195,15 @@ export default function ReaderScreen() {
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
     // السطر الحالي وموضعنا داخله (0 = أوله يمين، 1 = آخره يسار)
     const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const lineFrac = ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
-    const f = Math.min(1, Math.max(0, lineFrac));
-    // أفقيًا: نسوق العدسة بنسبة التقدّم داخل السطر نفسه — اجتياز مضمون يمين→يسار
-    // (لا نعتمد على إحداثي الكلمة لأن صناديق OCR قد لا تصل لأقصى اليسار)
-    const tX = minX * (1 - f);
+    const f =
+      ln && ln.end > ln.start ? Math.min(1, Math.max(0, (readPoint.idx - ln.start) / (ln.end - ln.start))) : 0;
+    // امتداد النص الفعلي للسطر (نتجاهل هوامش الصفحة الكبيرة يمينًا/يسارًا)
+    const R = ln ? ln.x + ln.w : 1; // يمين النص
+    const L = ln ? ln.x : 0; // يسار النص
+    const nx = R - f * (R - L); // موضع القراءة داخل النص (ينتقل يمين→يسار)
+    // أفقيًا: نُنقّل الكلمة المقروءة عبر الشريط من ٨٨٪ يمين إلى ١٢٪ يسار (حركة واضحة كاملة)
+    const screenX = lensW * (0.88 - 0.76 * f);
+    const tX = Math.min(0, Math.max(minX, screenX - nx * lensW * LENS_SCALE));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
     const lineCY = ln ? ln.y + ln.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
