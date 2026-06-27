@@ -1210,17 +1210,19 @@ export default function ReaderScreen() {
     const minY = Math.min(0, -(imgH * lensScale - lensH));
     const minX = Math.min(0, lensW - lensW * lensScale);
     const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    const colL = textCol.L;
-    const colR = textCol.R;
-    const colW = colR - colL;
-    // a = الحافة اليسرى للنافذة، محصورة داخل عمود النص فلا تُظهر هامشًا فاضيًا
+    // امتداد السطر الحالي الفعلي (حوافه الحقيقية) — نحصر العدسة عليه فلا يبقى فراغ
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
+    const lineL = ln ? ln.x : textCol.L;
+    const lineR = ln ? ln.x + ln.w : textCol.R;
+    const lineW = lineR - lineL;
+    // a = الحافة اليسرى للنافذة، محصورة على حافتي السطر فلا تُظهر هامشًا فاضيًا
     let a: number;
-    if (colW <= win) {
-      a = colL - (win - colW) / 2; // العمود يسع كاملًا → ثبّته بالوسط
+    if (lineW <= win) {
+      a = lineL - (win - lineW) / 2; // السطر يسع كاملًا → اعرضه في الوسط (متوازن)
     } else {
-      // نُوسّط نقطة القراءة الحقيقية ونحصرها بين طرفي العمود (تصل اليمين واليسار)
-      const cx = readPoint.cx;
-      a = Math.min(colR - win, Math.max(colL, cx - win / 2));
+      // نُوسّط نقطة القراءة الحقيقية ونحصرها بين طرفي السطر (تصل اليمين واليسار)
+      const cx = Math.min(lineR, Math.max(lineL, readPoint.cx));
+      a = Math.min(lineR - win, Math.max(lineL, cx - win / 2));
     }
     const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط (ينزل مع القراءة)
@@ -1228,7 +1230,7 @@ export default function ReaderScreen() {
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
     Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
