@@ -1209,10 +1209,10 @@ export default function ReaderScreen() {
     return w ? { t: "", x: w.x, y: w.y, w: w.w, h: w.h } : null;
   }, [readPoint, pageWords]);
 
-  const lensScale = 1.7; // تكبير كبير وواضح (مثل قبل)
+  const lensScale = 1.9; // تكبير كبير (أكبر شوي من قبل)
 
-  // الشريط: يتبع نقطة القراءة أفقيًا فيتحرّك يمين→يسار مع القراءة، محصورًا داخل
-  // عمود النص فبلا هامش فاضي إطلاقًا (مؤكّد بصريًا)، ويتابع السطر عموديًا (ينزل).
+  // الشريط يمشي على السطر **كامل** يمين→يسار بتقدّم مضمون (idx يمرّ على كل صناديق
+  // السطر فالتقدّم 0→1 أكيد)، محصورًا داخل عمود النص (بلا هامش)، ثم ينزل للسطر التالي.
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7);
@@ -1222,17 +1222,23 @@ export default function ReaderScreen() {
     const colL = textCol.L;
     const colR = textCol.R;
     const colW = colR - colL;
-    // a = حافة النافذة اليسرى، محصورة داخل عمود النص (بلا هامش)، مركّزة على القراءة
-    const a =
-      colW <= win
-        ? colL - (win - colW) / 2
-        : Math.min(colR - win, Math.max(colL, readPoint.cx - win / 2));
+    // تقدّم القراءة داخل السطر الحالي (مضمون 0→1) + دفعة بسيطة ليكمل لليسار دائمًا
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
+    const fRaw = ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
+    const f = Math.min(1, Math.max(0, fRaw * 1.08));
+    let a: number;
+    if (colW <= win) {
+      a = colL - (win - colW) / 2; // العمود يسع كاملًا
+    } else {
+      // f=0 يعرض يمين العمود، f=1 يعرض يساره → اجتياز السطر كامل يمين→يسار
+      a = (colR - win) * (1 - f) + colL * f;
+    }
     const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
-    Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
-    Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
+    Animated.timing(lensX, { toValue: tX, duration: 240, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 240, useNativeDriver: true }).start();
+  }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
