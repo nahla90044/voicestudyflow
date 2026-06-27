@@ -497,6 +497,7 @@ export default function MoreScreen() {
             {"\n"}
             المستخدم مسؤول عن المحتوى الذي يرفعه، ولا يتحمل التطبيق مسؤولية رفع مواد محمية بحقوق ملكية فكرية.
           </Text>
+          <Text style={styles.madeIn}>صنع في الرياض 💚</Text>
         </GlassCard>
       </ScrollView>
 
@@ -550,6 +551,7 @@ const styles = StyleSheet.create({
   },
 
   help: { color: "#9fb3c8", lineHeight: 18, textAlign: "right" },
+  madeIn: { color: "#c9d4e2", fontSize: 13, fontWeight: "800", textAlign: "center", marginTop: 10 },
   themeGrid: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 10, marginTop: 4 },
   themeCell: {
     width: "47%",

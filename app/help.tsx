@@ -62,6 +62,7 @@ export default function HelpScreen() {
           >
             <Text style={styles.contactName}>تصميم وتطوير: Nahla</Text>
             <Text style={styles.contactMail}>للتواصل والملاحظات: Nahlah@Nahlah.io</Text>
+            <Text style={styles.madeIn}>صنع في الرياض 💚</Text>
           </Pressable>
         </ScrollView>
       </SafeAreaView>
@@ -105,4 +106,5 @@ const styles = StyleSheet.create({
   contact: { alignItems: "center", marginTop: 18, paddingVertical: 8 },
   contactName: { color: Palette.text, fontSize: 14, fontWeight: "900" },
   contactMail: { color: Palette.neonCyan, fontSize: 13, fontWeight: "700", marginTop: 4 },
+  madeIn: { color: Palette.textMuted, fontSize: 13, fontWeight: "800", marginTop: 8 },
 });
