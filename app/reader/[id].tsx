@@ -1222,10 +1222,12 @@ export default function ReaderScreen() {
     const colL = textCol.L;
     const colR = textCol.R;
     const colW = colR - colL;
-    // تقدّم القراءة داخل السطر الحالي (مضمون 0→1) + دفعة بسيطة ليكمل لليسار دائمًا
+    // تقدّم القراءة داخل السطر الحالي (مضمون 0→1)
     const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
     const fRaw = ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
-    const f = Math.min(1, Math.max(0, fRaw * 1.08));
+    // نُكمل الاجتياز لأقصى اليسار عند ٨٥٪ من السطر ونثبت هناك آخر ١٥٪ — فيصل اليسار
+    // دائمًا رغم تأخّر الأنيميشن، بدل ما يقصّر عنه بكلمة-كلمتين.
+    const f = Math.min(1, Math.max(0, fRaw / 0.85));
     let a: number;
     if (colW <= win) {
       a = colL - (win - colW) / 2; // العمود يسع كاملًا
@@ -1236,8 +1238,8 @@ export default function ReaderScreen() {
     const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
-    Animated.timing(lensX, { toValue: tX, duration: 240, useNativeDriver: true }).start();
-    Animated.timing(lensY, { toValue: tY, duration: 240, useNativeDriver: true }).start();
+    Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
   }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
