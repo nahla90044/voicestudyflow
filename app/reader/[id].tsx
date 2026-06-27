@@ -1200,22 +1200,29 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, R) };
   }, [pageWords]);
 
-  // تكبير العدسة يُلائم عرض عمود النص تلقائيًا: السطر **كامل** يبان داخل الشريط
-  // بلا قصّ يسار ولا هامش أيمن فاضي. للأعمدة الضيقة نكبّر أكثر (بحدّ أقصى ١.٧×)
-  const lensScale = useMemo<number>(() => {
-    const colW = Math.max(0.25, textCol.R - textCol.L);
-    return Math.min(1.7, Math.max(1.05, 0.99 / colW));
-  }, [textCol]);
+  const lensScale = 1.7; // تكبير كبير وواضح
 
-  // الشريط المكبّر: يُركّز عمود النص أفقيًا (السطر كامل ظاهر) ويتابع القراءة عموديًا (ينزل)
+  // الشريط المكبّر: يتبع **نقطة القراءة الحقيقية** أفقيًا، محصورًا داخل عمود النص
+  // (يتحرك مع القراءة، يصل الطرفين، وبلا أي هامش فاضي) + يتابع السطر عموديًا
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
     const minY = Math.min(0, -(imgH * lensScale - lensH));
     const minX = Math.min(0, lensW - lensW * lensScale);
-    // أفقيًا: نُثبّت مركز عمود النص في وسط الشريط — كل السطر يظهر بلا قصّ ولا هامش
-    const colC = (textCol.L + textCol.R) / 2;
-    const tX = Math.min(0, Math.max(minX, lensW / 2 - colC * lensScale * lensW));
+    const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
+    const colL = textCol.L;
+    const colR = textCol.R;
+    const colW = colR - colL;
+    // a = الحافة اليسرى للنافذة، محصورة داخل عمود النص فلا تُظهر هامشًا فاضيًا
+    let a: number;
+    if (colW <= win) {
+      a = colL - (win - colW) / 2; // العمود يسع كاملًا → ثبّته بالوسط
+    } else {
+      // نُوسّط نقطة القراءة الحقيقية ونحصرها بين طرفي العمود (تصل اليمين واليسار)
+      const cx = readPoint.cx;
+      a = Math.min(colR - win, Math.max(colL, cx - win / 2));
+    }
+    const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط (ينزل مع القراءة)
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
