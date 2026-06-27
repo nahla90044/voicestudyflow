@@ -1,4 +1,5 @@
 // app/(tabs)/more.tsx
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -38,6 +39,7 @@ import {
   setUserName,
   type FocusLevel,
 } from "../../lib/settings";
+import { getCurrentPlan, planByKey, type PlanKey } from "../../lib/subscription";
 
 const FOCUS_LABELS: { level: FocusLevel; label: string; hint: string }[] = [
   { level: 0, label: "مطفأ", hint: "لا مناداة" },
@@ -66,6 +68,12 @@ export default function MoreScreen() {
   // الاسم ووضع التركيز
   const [userName, setUserNameState] = useState("");
   const [focusLevel, setFocusLevelState] = useState<FocusLevel>(0);
+
+  // الخطة الحالية
+  const [planKey, setPlanKey] = useState<PlanKey>("free");
+  useEffect(() => {
+    getCurrentPlan().then(setPlanKey);
+  }, []);
 
   // إعدادات الصوت
   const [lang, setLang] = useState<"ar" | "en">("ar");
@@ -230,6 +238,27 @@ export default function MoreScreen() {
           color={Palette.neonPink}
           style={{ marginHorizontal: 0 }}
         />
+
+        {/* الاشتراك / الترقية */}
+        <Pressable onPress={() => router.push("/paywall" as never)}>
+          <LinearGradient
+            colors={Gradients.neonViolet}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.upCard}
+          >
+            <View style={styles.upIcon}>
+              <Ionicons name="sparkles" size={20} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.upTitle}>خطتك: {planByKey(planKey).name}</Text>
+              <Text style={styles.upSub}>
+                {planKey === "free" ? "اشتركي لرفع المزيد من الكتب" : "إدارة الاشتراك والترقية"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-back" size={20} color="#fff" />
+          </LinearGradient>
+        </Pressable>
 
         {/* الثيمات */}
         <GlassCard contentStyle={styles.cardC} glow={Palette.neonPink}>
@@ -491,6 +520,23 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.16)",
   },
   timeChipTxt: { color: "#fff", fontWeight: "900" },
+  upCard: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+    borderRadius: 18,
+  },
+  upIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  upTitle: { color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "right" },
+  upSub: { color: "rgba(255,255,255,0.85)", fontWeight: "700", fontSize: 12.5, textAlign: "right", marginTop: 2 },
   title: { color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "right" },
   label: { color: "#c9d4e2", fontWeight: "900", textAlign: "right" },
 
