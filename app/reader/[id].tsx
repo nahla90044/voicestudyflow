@@ -231,6 +231,7 @@ export default function ReaderScreen() {
   const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة 0..1 عبر الصفحة
   const [lensW, setLensW] = useState(0); // عرض نافذة العدسة المقاس
   const [lensH, setLensH] = useState(0); // ارتفاع نافذة العدسة المقاس
+  const [lensDbg, setLensDbg] = useState(""); // أرقام تشخيص مؤقتة (تظهر داخل العدسة)
   const lensX = useRef(new Animated.Value(0)).current;
   const lensY = useRef(new Animated.Value(0)).current;
   const lensOpenRef = useRef(false);
@@ -1223,6 +1224,10 @@ export default function ReaderScreen() {
       a = Math.min(colR - win, Math.max(colL, readPoint.cx - win / 2));
     }
     const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
+    // أرقام تشخيص مؤقتة (لأرى السلوك الحقيقي على الجهاز)
+    setLensDbg(
+      `N${pageWords.length} col${colL.toFixed(2)}-${colR.toFixed(2)} cx${readPoint.cx.toFixed(2)} a${a.toFixed(2)} w${win.toFixed(2)} cy${readPoint.cy.toFixed(2)}`
+    );
     // عموديًا: نُبقي السطر المقروء في وسط الشريط (ينزل مع القراءة)
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
@@ -1512,6 +1517,12 @@ export default function ReaderScreen() {
                   <Pressable onPress={() => setLensOpen(false)} style={styles.lensCloseBtn} hitSlop={8}>
                     <Ionicons name="close" size={18} color="#fff" />
                   </Pressable>
+                  {/* تشخيص مؤقت — أرقام السلوك الحقيقي */}
+                  {lensDbg ? (
+                    <View pointerEvents="none" style={styles.lensDbgBox}>
+                      <Text style={styles.lensDbgTxt}>{lensDbg}</Text>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             ) : null}
@@ -2564,6 +2575,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
+  lensDbgBox: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    right: 4,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    zIndex: 10,
+  },
+  lensDbgTxt: { color: "#5ef38c", fontSize: 11, fontWeight: "700", textAlign: "center" },
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { flex: 1, backgroundColor: Palette.bgElevated },
