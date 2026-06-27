@@ -59,19 +59,43 @@ export type PageText = {
 // صندوق إحداثيات كلمة (مُطبَّع 0..1 نسبةً لأبعاد الصفحة)
 export type WordBox = { t: string; x: number; y: number; w: number; h: number };
 
-/** يجلب صناديق إحداثيات كلمات صفحة (للهايلايتر الدقيق والعدسة). */
+/** يجلب صناديق إحداثيات كلمات صفحة (للهايلايتر الدقيق والعدسة).
+ *  المصدر الأدقّ: مربّعات Google Vision للكتب الممسوحة؛ نرجع لطبقة الـPDF فقط
+ *  إن كانت غنية (كتب نصية أصلية). مربّعات طبقة الـPDF غير موثوقة في المصوّر. */
 export async function getPageWords(pdfPath: string, page: number): Promise<WordBox[]> {
   if (!pdfPath) return [];
+
+  // 1) جرّب طبقة نص الـPDF (سريعة، دقيقة فقط للكتب النصية الأصلية)
+  let layerWords: WordBox[] = [];
   try {
     const { data, error } = await supabase.functions.invoke("pdf-extract-text", {
       body: { pdfPath, page },
     });
-    if (error || data?.error) return [];
-    const ws = (data as { words?: WordBox[] })?.words;
-    return Array.isArray(ws) ? ws : [];
+    if (!error && !data?.error) {
+      const ws = (data as { words?: WordBox[] })?.words;
+      if (Array.isArray(ws)) layerWords = ws;
+    }
   } catch {
-    return [];
+    // نتابع لـVision
   }
+
+  // طبقة غنية بما يكفي → كتاب نصي أصلي، مربّعاته موثوقة
+  if (layerWords.length >= 12) return layerWords;
+
+  // 2) كتاب مصوّر (سكان): خذ المربّعات الدقيقة من Google Vision
+  try {
+    const { data, error } = await supabase.functions.invoke("ocr-page", {
+      body: { pdfPath, page },
+    });
+    if (!error) {
+      const vw = (data as { words?: WordBox[] })?.words;
+      if (Array.isArray(vw) && vw.length) return vw;
+    }
+  } catch {
+    // لا شيء — نرجّع ما توفّر
+  }
+
+  return layerWords;
 }
 
 // أقل من هذا الطول يعني أن الصفحة بلا نص حقيقي (غالبًا صورة ممسوحة أو علامة مائية)

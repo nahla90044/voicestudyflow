@@ -29,6 +29,36 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
+type WordBox = { t: string; x: number; y: number; w: number; h: number };
+
+// نستخرج مربّع كل كلمة من نتيجة Vision (إحداثيات مطبّعة 0..1 بالنسبة لأبعاد الصفحة)
+function extractWords(vJson: any): WordBox[] {
+  const fta = vJson?.responses?.[0]?.fullTextAnnotation;
+  const page0 = fta?.pages?.[0];
+  const W = Number(page0?.width) || 0;
+  const H = Number(page0?.height) || 0;
+  if (!page0 || !W || !H) return [];
+  const out: WordBox[] = [];
+  for (const block of page0.blocks ?? []) {
+    for (const para of block.paragraphs ?? []) {
+      for (const word of para.words ?? []) {
+        const t = (word.symbols ?? []).map((s: any) => s.text ?? "").join("");
+        if (!t.trim()) continue;
+        const vs = word.boundingBox?.vertices ?? [];
+        if (vs.length < 2) continue;
+        const xs = vs.map((v: any) => Number(v.x) || 0);
+        const ys = vs.map((v: any) => Number(v.y) || 0);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        out.push({ t, x: minX / W, y: minY / H, w: (maxX - minX) / W, h: (maxY - minY) / H });
+      }
+    }
+  }
+  return out;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -67,6 +97,7 @@ Deno.serve(async (req: Request) => {
     }
 
     let text = "";
+    let words: WordBox[] = [];
 
     // 1) Google Vision أولًا (احترافي، أدقّ للعربي، بلا حدود حجم تقريبًا)
     if (visionKey) {
@@ -86,7 +117,11 @@ Deno.serve(async (req: Request) => {
           }),
         });
         const vJson = await vRes.json();
-        if (vRes.ok) text = String(vJson?.responses?.[0]?.fullTextAnnotation?.text ?? "");
+        if (vRes.ok) {
+          text = String(vJson?.responses?.[0]?.fullTextAnnotation?.text ?? "");
+          // مربّعات الكلمات الدقيقة (للعدسة/الهايلايت) — من نفس الطلب بلا تكلفة إضافية
+          words = extractWords(vJson);
+        }
       } catch {
         // نتابع للبديل المجاني
       }
@@ -120,7 +155,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return json({ text, page: p, totalPages });
+    return json({ text, words, page: p, totalPages });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
   }
