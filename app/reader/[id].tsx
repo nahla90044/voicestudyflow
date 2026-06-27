@@ -1188,28 +1188,47 @@ export default function ReaderScreen() {
     return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
   }, [readPoint, lines]);
 
-  // الشريط المكبّر يتابع نقطة القراءة — حركة مستمرة مع هوامش (الكلمة تنتقل بسلاسة
-  // من يمين الشريط إلى يساره عبر السطر كامل، بدل ما تثبت بالوسط)
+  // عمود النص الفعلي للصفحة (أقصى يمين/يسار للكلمات) — لحصر العدسة داخله
+  // فلا تعرض هوامش الصفحة الفاضية إطلاقًا
+  const textCol = useMemo<{ L: number; R: number }>(() => {
+    if (pageWords.length === 0) return { L: 0, R: 1 };
+    let L = 1,
+      R = 0;
+    for (const w of pageWords) {
+      if (w.x < L) L = w.x;
+      if (w.x + w.w > R) R = w.x + w.w;
+    }
+    return { L: Math.max(0, L), R: Math.min(1, R) };
+  }, [pageWords]);
+
+  // الشريط المكبّر يتابع نقطة القراءة داخل عمود النص فقط — يجتاح العمود كامل
+  // يمين→يسار بسلاسة بلا أي هامش فاضي
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
-    // السطر الحالي وامتداد نصّه الفعلي (نتجاهل هوامش الصفحة)
-    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const R = ln ? ln.x + ln.w : 1; // يمين نص السطر
-    const L = ln ? ln.x : 0; // يسار نص السطر
-    const cx = Math.min(R, Math.max(L, readPoint.cx)); // موضع القراءة داخل السطر
-    const within = R > L ? (R - cx) / (R - L) : 0; // 0 يمين → 1 يسار
-    // هوامش ١٥٪ على الطرفين لسلاسة الانتقال: الكلمة من ٨٥٪ يمين إلى ١٥٪ يسار
-    const screenX = lensW * (0.85 - 0.7 * within);
-    const tX = Math.min(0, Math.max(minX, screenX - cx * lensW * LENS_SCALE));
+    const win = 1 / LENS_SCALE; // عرض النافذة المرئية (بنسبة عرض الصفحة)
+    const colL = textCol.L;
+    const colR = textCol.R;
+    const colW = colR - colL;
+    // a = الحافة اليسرى للنافذة المرئية (بنسبة الصفحة) — نُبقيها داخل عمود النص
+    let a: number;
+    if (colW <= win) {
+      a = colL - (win - colW) / 2; // العمود يسع داخل النافذة → ثبّته في الوسط
+    } else {
+      const cx = Math.min(colR, Math.max(colL, readPoint.cx)); // موضع القراءة داخل العمود
+      const within = (colR - cx) / colW; // 0 يمين → 1 يسار
+      const aMax = colR - win; // يُظهر يمين العمود عند يمين الشريط (بلا هامش)
+      a = aMax - within * (aMax - colL); // ينزلق حتى يُظهر يسار العمود عند يسار الشريط
+    }
+    const tX = Math.min(0, Math.max(minX, -a * LENS_SCALE * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
-    const lineCY = ln ? ln.y + ln.h / 2 : readPoint.cy;
+    const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
     Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, lines, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
