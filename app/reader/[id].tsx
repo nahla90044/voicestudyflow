@@ -1201,6 +1201,20 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, R) };
   }, [pageWords]);
 
+  // اتجاه القراءة من محتوى الصفحة: عربي = يمين→يسار، لاتيني (إنجليزي/فرنسي) = يسار→يمين
+  const pageRTL = useMemo<boolean>(() => {
+    let ar = 0,
+      la = 0;
+    for (const w of pageWords) {
+      for (let k = 0; k < (w.t || "").length; k++) {
+        const c = w.t.charCodeAt(k);
+        if (c >= 0x600 && c <= 0x6ff) ar++;
+        else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) la++;
+      }
+    }
+    return ar >= la; // العربي أو الغالب → RTL
+  }, [pageWords]);
+
   // الشريط المكبّر يتابع نقطة القراءة داخل عمود النص فقط — يجتاح العمود كامل
   // يمين→يسار بسلاسة بلا أي هامش فاضي
   useEffect(() => {
@@ -1218,9 +1232,16 @@ export default function ReaderScreen() {
       a = colL - (win - colW) / 2; // العمود يسع داخل النافذة → ثبّته في الوسط
     } else {
       const cx = Math.min(colR, Math.max(colL, readPoint.cx)); // موضع القراءة داخل العمود
-      const within = (colR - cx) / colW; // 0 يمين → 1 يسار
-      const aMax = colR - win; // يُظهر يمين العمود عند يمين الشريط (بلا هامش)
-      a = aMax - within * (aMax - colL); // ينزلق حتى يُظهر يسار العمود عند يسار الشريط
+      const aMax = colR - win; // أقصى انزلاق يُظهر يمين العمود عند يمين الشريط
+      if (pageRTL) {
+        // عربي: نبدأ من يمين العمود (a=aMax) وننزلق حتى يساره (a=colL)
+        const within = (colR - cx) / colW; // 0 يمين → 1 يسار
+        a = aMax - within * (aMax - colL);
+      } else {
+        // إنجليزي/فرنسي: نبدأ من يسار العمود (a=colL) وننزلق حتى يمينه (a=aMax)
+        const within = (cx - colL) / colW; // 0 يسار → 1 يمين
+        a = colL + within * (aMax - colL);
+      }
     }
     const tX = Math.min(0, Math.max(minX, -a * LENS_SCALE * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
@@ -1228,7 +1249,7 @@ export default function ReaderScreen() {
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
     Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, pageRTL, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
