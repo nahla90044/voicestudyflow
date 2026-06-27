@@ -1215,38 +1215,38 @@ export default function ReaderScreen() {
     return ar >= la; // العربي أو الغالب → RTL
   }, [pageWords]);
 
-  // الشريط المكبّر يسوق العدسة على **السطر الحالي نفسه** (الهايلايت مضبوط) ويجتاحه
-  // كامل بتقدّم مضمون داخله — فيصل لآخر السطر دائمًا بلا هامش فاضي
+  // الشريط المكبّر: نطاق ثابت = عمود نص الصفحة (نعومة بلا نطّ بين الأسطر)،
+  // وسوقُه بتقدّم القراءة داخل السطر (مضمون 0→1) مع دفعة بسيطة ليصل للأخير دائمًا
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
     const win = 1 / LENS_SCALE; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    // السطر الحالي وامتداده الفعلي (من الهايلايت المضبوط)
+    const colL = textCol.L;
+    const colR = textCol.R;
+    const colW = colR - colL;
+    // تقدّم القراءة داخل السطر الحالي (idx يمرّ على كل صناديق السطر → 0→1)
     const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const lineL = ln ? ln.x : textCol.L;
-    const lineR = ln ? ln.x + ln.w : textCol.R;
-    const lineW = lineR - lineL;
-    // تقدّم القراءة داخل السطر (idx متزايد يمرّ على كل الصناديق → مضمون 0→1)
-    const f =
-      ln && ln.end > ln.start ? Math.min(1, Math.max(0, (readPoint.idx - ln.start) / (ln.end - ln.start))) : 0;
-    // a = الحافة اليسرى للنافذة المرئية (بنسبة الصفحة)
+    const fRaw =
+      ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
+    // دفعة ١٢٪ ليصل لطرف العمود قُبيل نهاية السطر (يعوّض تأخّر الأنيميشن) فيكمل دائمًا
+    const f = Math.min(1, Math.max(0, fRaw * 1.12));
+    // a = الحافة اليسرى للنافذة داخل عمود الصفحة الثابت
     let a: number;
-    if (lineW <= win) {
-      a = lineL - (win - lineW) / 2; // السطر يسع داخل النافذة → اعرضه كامل
+    if (colW <= win) {
+      a = colL - (win - colW) / 2; // العمود يسع داخل النافذة → ثبّته بالوسط
     } else {
-      const aLeft = lineL; // نافذة تُظهر يسار السطر عند يسار الشريط
-      const aRight = lineR - win; // نافذة تُظهر يمين السطر عند يمين الشريط
-      // عربي: من يمين السطر (f=0) إلى يساره (f=1). لاتيني: العكس
-      a = pageRTL ? aRight - f * (aRight - aLeft) : aLeft + f * (aRight - aLeft);
+      const aMax = colR - win; // نافذة تُظهر يمين العمود عند يمين الشريط
+      // عربي: من يمين العمود (f=0) إلى يساره (f=1). لاتيني: العكس
+      a = pageRTL ? aMax - f * (aMax - colL) : colL + f * (aMax - colL);
     }
     const tX = Math.min(0, Math.max(minX, -a * LENS_SCALE * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
-    Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
-    Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
   }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, pageRTL, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
