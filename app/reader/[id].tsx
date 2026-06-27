@@ -793,12 +793,11 @@ export default function ReaderScreen() {
         rate,
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
         onProgress: (frac) => {
-          // تأخير بسيط: نخلّي الهايلايت/العدسة يتبعان الصوت لا يسبقانه (أبطأ شوي)
-          const lf = frac >= 0.995 ? 1 : Math.max(0, frac - 0.05);
-          setActiveWord(wordIndexAtFraction(sents[i], lf));
+          // frac الآن دقيق (من توقيت الحروف الحقيقي بعد محاذاته بالنص المعروض)
+          setActiveWord(wordIndexAtFraction(sents[i], frac));
           // تقدّم القراءة (لتظليل الكلمة على الـPDF/العدسة) — في وضع PDF أو العدسة فقط
           if (pdfFollowRef.current) {
-            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + lf * curWords) / totalWords)));
+            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
           }
         },
         onDone: () => {

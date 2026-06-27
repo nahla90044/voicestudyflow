@@ -323,6 +323,78 @@ function expandEraMarkers(text: string): string {
     .replace(/([\d٠-٩])\s*م(?![ء-ي])/g, "$1 ميلادي");
 }
 
+/**
+ * محاذاة النص المنطوق (clean) مع النص المعروض (orig): تُرجع دالة تحوّل موضع الحرف
+ * المنطوق → نسبة موضعه الصحيحة في النص المعروض. هكذا يبقى الهايلايت/العدسة مطابقين
+ * للكلمة المعروضة حتى لو نُطقت الأرقام كلمات («2009»→«ألفين وتسعة») أو حُذفت استشهادات.
+ */
+function makeSpokenToOrigFrac(orig: string, clean: string): (cleanCharIdx: number) => number {
+  const tok = (s: string) => {
+    const t: { s: number; e: number; w: string }[] = [];
+    const re = /\S+/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s))) t.push({ s: m.index, e: m.index + m[0].length, w: m[0] });
+    return t;
+  };
+  // تطبيع للمطابقة: نحذف التشكيل والتطويل وكل ما ليس حرفًا/رقمًا (آمن على Hermes)
+  const norm = (w: string) =>
+    w
+      .replace(/[\u064B-\u0652\u0670\u0640]/g, "")
+      .replace(/[^0-9A-Za-z\u0621-\u064A\u0660-\u0669\u066E-\u06D3\u06F0-\u06F9]/g, "");
+  const O = tok(orig);
+  const C = tok(clean);
+  const oLen = Math.max(1, orig.length);
+  const cLen = Math.max(1, clean.length);
+  if (O.length === 0 || C.length === 0) return (ci) => Math.min(1, Math.max(0, ci / cLen));
+
+  // لكل كلمة منطوقة: رقم الكلمة المقابلة في النص الأصلي (محاذاة جشعة مع نظرة أمامية)
+  const c2o = new Array<number>(C.length);
+  let oi = 0;
+  for (let ci = 0; ci < C.length; ci++) {
+    const cn = norm(C[ci].w);
+    if (oi < O.length && cn && norm(O[oi].w) === cn) {
+      c2o[ci] = oi;
+      oi++;
+      continue;
+    }
+    // الأصل فيه كلمات زائدة (استشهاد محذوف من المنطوق) → ابحث أمامًا قليلًا
+    let found = -1;
+    for (let k = 1; k <= 5 && oi + k < O.length; k++) {
+      if (cn && norm(O[oi + k].w) === cn) {
+        found = oi + k;
+        break;
+      }
+    }
+    if (found >= 0) {
+      c2o[ci] = found;
+      oi = found + 1;
+      continue;
+    }
+    // المنطوق فيه كلمات زائدة (رقم توسّع لعدة كلمات) → اربطها بالكلمة الأصلية الحالية
+    c2o[ci] = Math.min(oi, O.length - 1);
+  }
+
+  return (cleanCharIdx: number): number => {
+    if (cleanCharIdx >= C[C.length - 1].e) return 1;
+    // آخر كلمة منطوقة بدايتها ≤ موضع الحرف
+    let lo = 0,
+      hi = C.length - 1,
+      wi = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (C[mid].s <= cleanCharIdx) {
+        wi = mid;
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    const cw = C[wi];
+    const within = cw.e > cw.s ? Math.min(1, Math.max(0, (cleanCharIdx - cw.s) / (cw.e - cw.s))) : 0;
+    const ow = O[c2o[wi]] ?? O[O.length - 1];
+    const origPos = ow.s + within * (ow.e - ow.s);
+    return Math.min(1, Math.max(0, origPos / oLen));
+  };
+}
+
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
   // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر)
@@ -377,6 +449,9 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
       }
     }
 
+    // دالة تحوّل موضع الحرف المنطوق → نسبة موضعه في النص المعروض (تُبنى مرة)
+    const toOrigFrac = makeSpokenToOrigFrac(text ?? "", clean);
+
     let finished = false;
     player.addListener("playbackStatusUpdate", (status) => {
       // مشغّل قديم استُبدل (بدأ تشغيل أحدث) → تجاهله تمامًا حتى لا يتراكب ويتسارع
@@ -385,7 +460,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
         let frac = 0;
         const t = status.currentTime ?? 0;
         if (starts.length > 1) {
-          // التقدّم الحقيقي = عدد الحروف التي بدأ نطقها ÷ إجمالي الحروف (بحث ثنائي)
+          // موضع الحرف المنطوق الآن (بحث ثنائي على توقيت الحروف الحقيقي)
           let lo = 0,
             hi = starts.length;
           while (lo < hi) {
@@ -393,8 +468,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
             if (starts[mid] <= t) lo = mid + 1;
             else hi = mid;
           }
-          // الحرف المنطوق حاليًا (لا الذي بعده) → بلا سبق عند حدود الكلمات
-          frac = Math.max(0, lo - 1) / starts.length;
+          // حوّله لموضعه الصحيح في النص المعروض (يعالج توسعة الأرقام/حذف الاستشهادات)
+          frac = toOrigFrac(Math.max(0, lo - 1));
         } else if (status.duration && status.duration > 0) {
           frac = t / status.duration;
         }
