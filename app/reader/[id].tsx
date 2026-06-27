@@ -1191,17 +1191,21 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
-    const readY = readPoint.cy * imgH;
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
-    // أفقيًا: ربط خطّي مضمون — يمين السطر (cx=1) يُظهر يمين الصورة، ويساره (cx=0) يُظهر يسارها
-    // فتقطع العدسة السطر كامل من أوله لآخره بدل ما تعلق على اليمين
-    const tX = minX * readPoint.cx;
+    // السطر الحالي وموضعنا داخله (0 = أوله يمين، 1 = آخره يسار)
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
+    const lineFrac = ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
+    const f = Math.min(1, Math.max(0, lineFrac));
+    // أفقيًا: نسوق العدسة بنسبة التقدّم داخل السطر نفسه — اجتياز مضمون يمين→يسار
+    // (لا نعتمد على إحداثي الكلمة لأن صناديق OCR قد لا تصل لأقصى اليسار)
+    const tX = minX * (1 - f);
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
-    const tY = Math.min(0, Math.max(minY, lensH / 2 - readY * LENS_SCALE));
+    const lineCY = ln ? ln.y + ln.h / 2 : readPoint.cy;
+    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
     Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, lines, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
