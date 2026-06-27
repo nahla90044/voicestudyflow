@@ -233,7 +233,6 @@ export default function ReaderScreen() {
   const [lensH, setLensH] = useState(0); // ارتفاع نافذة العدسة المقاس
   const lensX = useRef(new Animated.Value(0)).current;
   const lensY = useRef(new Animated.Value(0)).current;
-  const LENS_SCALE = 1.7; // تكبير العدسة (ألطف زي النسخة الأصلية)
   const lensOpenRef = useRef(false);
   const pdfFollowRef = useRef(false); // نتتبّع موضع القراءة (للهايلايتر/العدسة) في وضع PDF أو العدسة
   const [pdfImgW2, setPdfImgW2] = useState(0); // عرض صورة الصفحة المعروضة (لتظليل الكلمة)
@@ -1201,53 +1200,28 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, R) };
   }, [pageWords]);
 
-  // اتجاه القراءة من محتوى الصفحة: عربي = يمين→يسار، لاتيني (إنجليزي/فرنسي) = يسار→يمين
-  const pageRTL = useMemo<boolean>(() => {
-    let ar = 0,
-      la = 0;
-    for (const w of pageWords) {
-      for (let k = 0; k < (w.t || "").length; k++) {
-        const c = w.t.charCodeAt(k);
-        if (c >= 0x600 && c <= 0x6ff) ar++;
-        else if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) la++;
-      }
-    }
-    return ar >= la; // العربي أو الغالب → RTL
-  }, [pageWords]);
+  // تكبير العدسة يُلائم عرض عمود النص تلقائيًا: السطر **كامل** يبان داخل الشريط
+  // بلا قصّ يسار ولا هامش أيمن فاضي. للأعمدة الضيقة نكبّر أكثر (بحدّ أقصى ١.٧×)
+  const lensScale = useMemo<number>(() => {
+    const colW = Math.max(0.25, textCol.R - textCol.L);
+    return Math.min(1.7, Math.max(1.05, 0.99 / colW));
+  }, [textCol]);
 
-  // الشريط المكبّر: نطاق ثابت = عمود نص الصفحة (نعومة بلا نطّ بين الأسطر)،
-  // وسوقُه بتقدّم القراءة داخل السطر (مضمون 0→1) مع دفعة بسيطة ليصل للأخير دائمًا
+  // الشريط المكبّر: يُركّز عمود النص أفقيًا (السطر كامل ظاهر) ويتابع القراءة عموديًا (ينزل)
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
-    const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
-    const minX = Math.min(0, lensW - lensW * LENS_SCALE);
-    const win = 1 / LENS_SCALE; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    const colL = textCol.L;
-    const colR = textCol.R;
-    const colW = colR - colL;
-    // تقدّم القراءة داخل السطر الحالي (idx يمرّ على كل صناديق السطر → 0→1)
-    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const fRaw =
-      ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
-    // دفعة ١٢٪ ليصل لطرف العمود قُبيل نهاية السطر (يعوّض تأخّر الأنيميشن) فيكمل دائمًا
-    const f = Math.min(1, Math.max(0, fRaw * 1.12));
-    // a = الحافة اليسرى للنافذة داخل عمود الصفحة الثابت
-    let a: number;
-    if (colW <= win) {
-      a = colL - (win - colW) / 2; // العمود يسع داخل النافذة → ثبّته بالوسط
-    } else {
-      const aMax = colR - win; // نافذة تُظهر يمين العمود عند يمين الشريط
-      // عربي: من يمين العمود (f=0) إلى يساره (f=1). لاتيني: العكس
-      a = pageRTL ? aMax - f * (aMax - colL) : colL + f * (aMax - colL);
-    }
-    const tX = Math.min(0, Math.max(minX, -a * LENS_SCALE * lensW));
-    // عموديًا: نُبقي السطر المقروء في وسط الشريط
+    const minY = Math.min(0, -(imgH * lensScale - lensH));
+    const minX = Math.min(0, lensW - lensW * lensScale);
+    // أفقيًا: نُثبّت مركز عمود النص في وسط الشريط — كل السطر يظهر بلا قصّ ولا هامش
+    const colC = (textCol.L + textCol.R) / 2;
+    const tX = Math.min(0, Math.max(minX, lensW / 2 - colC * lensScale * lensW));
+    // عموديًا: نُبقي السطر المقروء في وسط الشريط (ينزل مع القراءة)
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
-    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
+    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
     Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, pageRTL, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -1506,8 +1480,8 @@ export default function ReaderScreen() {
                   {lensW > 0 ? (
                     <Animated.View
                       style={{
-                        width: lensW * LENS_SCALE,
-                        height: (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                        width: lensW * lensScale,
+                        height: (lensW / (pageImgAspect || 0.7)) * lensScale,
                         transform: [{ translateX: lensX }, { translateY: lensY }],
                       }}
                     >
@@ -1518,10 +1492,10 @@ export default function ReaderScreen() {
                           style={[
                             styles.wordHL,
                             {
-                              left: lineBox.x * lensW * LENS_SCALE,
-                              top: lineBox.y * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
-                              width: lineBox.w * lensW * LENS_SCALE,
-                              height: lineBox.h * (lensW / (pageImgAspect || 0.7)) * LENS_SCALE,
+                              left: lineBox.x * lensW * lensScale,
+                              top: lineBox.y * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                              width: lineBox.w * lensW * lensScale,
+                              height: lineBox.h * (lensW / (pageImgAspect || 0.7)) * lensScale,
                             },
                           ]}
                         />
