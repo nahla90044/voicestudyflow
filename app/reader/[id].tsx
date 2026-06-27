@@ -231,8 +231,6 @@ export default function ReaderScreen() {
   const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة 0..1 عبر الصفحة
   const [lensW, setLensW] = useState(0); // عرض نافذة العدسة المقاس
   const [lensH, setLensH] = useState(0); // ارتفاع نافذة العدسة المقاس
-  const lensScrollRef = useRef<ScrollView>(null); // تمرير نص العدسة
-  const lensOffsetsRef = useRef<number[]>([]); // مواضع جُمل العدسة (للتمركز)
   const lensX = useRef(new Animated.Value(0)).current;
   const lensY = useRef(new Animated.Value(0)).current;
   const lensOpenRef = useRef(false);
@@ -719,7 +717,6 @@ export default function ReaderScreen() {
           : getReadingSentences(pageText, res.page);
       setSentences(sents);
       offsetsRef.current = [];
-      lensOffsetsRef.current = [];
 
       if (!playingRef.current) return; // أُوقف أثناء التحميل
 
@@ -959,7 +956,6 @@ export default function ReaderScreen() {
       setPage(res.page);
       setSentences(getReadingSentences(res.text, res.page));
       offsetsRef.current = [];
-      lensOffsetsRef.current = [];
     } catch {
       // تجاهل
     } finally {
@@ -1206,19 +1202,34 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, Math.max(L + 0.2, R)) };
   }, [lines]);
 
-  // العدسة (نصّية): نُمرّر نص العدسة ليبقى المقطع المقروء في وسط الشريط — تزامن دقيق
-  // بلا صور ولا إحداثيات ولا هوامش. يتحرّك بسلاسة مع القراءة دائمًا.
+  // الكلمة المقروءة حاليًا (صندوقها) — لتظليل متحرّك يمين→يسار عبر السطر الظاهر
+  const wordBox = useMemo<WordBox | null>(() => {
+    if (!readPoint || pageWords.length === 0) return null;
+    const w = pageWords[Math.min(pageWords.length - 1, Math.max(0, readPoint.idx))];
+    return w ? { t: "", x: w.x, y: w.y, w: w.w, h: w.h } : null;
+  }, [readPoint, pageWords]);
+
+  // التكبير يُلائم **عمود النص كاملًا** فيظهر السطر كله (صفر هامش، صفر قصّ).
+  // الأعمدة الضيقة تتكبّر أكثر (حتى ١.٨٥×).
+  const lensScale = useMemo<number>(() => {
+    const colW = Math.max(0.3, textCol.R - textCol.L);
+    return Math.min(1.85, Math.max(1.2, 0.99 / colW));
+  }, [textCol]);
+
+  // الشريط: يُثبّت عمود النص أفقيًا (السطر كامل ظاهر) ويتابع القراءة عموديًا (ينزل).
+  // الحركة يمين←يسار تجي من تظليل الكلمة المتحرّك عبر السطر، فلا حاجة لانزلاق أفقي.
   useEffect(() => {
-    if (!lensOpen || activeSentence < 0) return;
-    const center = () => {
-      const y = lensOffsetsRef.current[activeSentence];
-      if (typeof y !== "number") return;
-      lensScrollRef.current?.scrollTo({ y: Math.max(0, y - (lensH || 300) * 0.34), animated: true });
-    };
-    center();
-    const t = setTimeout(center, 180); // بعد ضبط القياسات
-    return () => clearTimeout(t);
-  }, [lensOpen, activeSentence, lensH]);
+    if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
+    const imgH = lensW / (pageImgAspect || 0.7);
+    const minY = Math.min(0, -(imgH * lensScale - lensH));
+    const minX = Math.min(0, lensW - lensW * lensScale);
+    const colC = (textCol.L + textCol.R) / 2; // مركز عمود النص
+    const tX = Math.min(0, Math.max(minX, lensW / 2 - colC * lensScale * lensW));
+    const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
+    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
+    Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
+  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -1464,9 +1475,8 @@ export default function ReaderScreen() {
                 )}
               </View>
             )}
-            {/* العدسة (نصّية): شريط يعرض النص كبيرًا وواضحًا مع تظليل الكلمة المقروءة —
-                تزامن دقيق بلا صور ولا هوامش ولا أخطاء إحداثيات */}
-            {lensOpen ? (
+            {/* العدسة: شريط مكبّر عائم وسط الصفحة يتابع القراءة (الصفحة تبان فوقه وتحته) */}
+            {lensOpen && pageImg ? (
               <View pointerEvents="box-none" style={styles.lensBandWrap}>
                 <View
                   style={styles.lensBand}
@@ -1475,48 +1485,47 @@ export default function ReaderScreen() {
                     setLensH(e.nativeEvent.layout.height);
                   }}
                 >
-                  {sentences.length > 0 ? (
-                    <ScrollView
-                      ref={lensScrollRef}
-                      style={{ flex: 1, alignSelf: "stretch" }}
-                      showsVerticalScrollIndicator={false}
-                      contentContainerStyle={styles.lensTextContent}
+                  {lensW > 0 ? (
+                    <Animated.View
+                      style={{
+                        width: lensW * lensScale,
+                        height: (lensW / (pageImgAspect || 0.7)) * lensScale,
+                        transform: [{ translateX: lensX }, { translateY: lensY }],
+                      }}
                     >
-                      {sentences.map((s, i) => {
-                        const active = i === activeSentence;
-                        return (
-                          <Text
-                            key={i}
-                            onLayout={(e) => {
-                              lensOffsetsRef.current[i] = e.nativeEvent.layout.y;
-                            }}
-                            style={active ? styles.lensSentActive : styles.lensSent}
-                          >
-                            {active
-                              ? (() => {
-                                  let wc = -1;
-                                  return s.split(/(\s+)/).map((tok, wi) => {
-                                    if (!/\S/.test(tok)) return tok;
-                                    wc++;
-                                    const spoken = wc === activeWord;
-                                    return (
-                                      <Text key={wi} style={spoken ? styles.lensWordSpoken : undefined}>
-                                        {tok}
-                                      </Text>
-                                    );
-                                  });
-                                })()
-                              : s}
-                          </Text>
-                        );
-                      })}
-                    </ScrollView>
-                  ) : (
-                    <View style={styles.lensCenter}>
-                      <ActivityIndicator color={Palette.neonViolet} />
-                      <Text style={styles.lensHint}>جارٍ تجهيز النص…</Text>
-                    </View>
-                  )}
+                      <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+                      {/* تظليل السطر (خفيف) */}
+                      {lineBox && speaking ? (
+                        <View
+                          pointerEvents="none"
+                          style={[
+                            styles.lensLineHL,
+                            {
+                              left: lineBox.x * lensW * lensScale,
+                              top: lineBox.y * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                              width: lineBox.w * lensW * lensScale,
+                              height: lineBox.h * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                      {/* تظليل الكلمة المقروءة — يتحرّك يمين→يسار عبر السطر الظاهر */}
+                      {wordBox && speaking ? (
+                        <View
+                          pointerEvents="none"
+                          style={[
+                            styles.wordHL,
+                            {
+                              left: wordBox.x * lensW * lensScale,
+                              top: wordBox.y * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                              width: wordBox.w * lensW * lensScale,
+                              height: wordBox.h * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                    </Animated.View>
+                  ) : null}
                   <Pressable onPress={() => setLensOpen(false)} style={styles.lensCloseBtn} hitSlop={8}>
                     <Ionicons name="close" size={18} color="#fff" />
                   </Pressable>
@@ -2560,26 +2569,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
-  lensTextContent: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 160, gap: 6 },
-  lensSent: {
-    fontSize: 21,
-    lineHeight: 40,
-    color: "#5b6675",
-    textAlign: "right",
-    writingDirection: "rtl",
-    fontWeight: "600",
-  },
-  lensSentActive: {
-    fontSize: 27,
-    lineHeight: 50,
-    color: "#0b1220",
-    textAlign: "right",
-    writingDirection: "rtl",
-    fontWeight: "800",
-  },
-  lensWordSpoken: { backgroundColor: "rgba(245,200,66,0.6)", color: "#0b1220" },
-  lensCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
-  lensHint: { color: Palette.textDim, fontSize: 13, fontWeight: "700" },
   lensCloseBtn: {
     position: "absolute",
     top: 8,
@@ -2592,18 +2581,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 10,
   },
-  lensDbgBox: {
+  lensLineHL: {
     position: "absolute",
-    bottom: 4,
-    left: 4,
-    right: 4,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    zIndex: 10,
+    borderRadius: 4,
+    backgroundColor: "rgba(124,92,255,0.14)", // تظليل السطر خفيف
   },
-  lensDbgTxt: { color: "#5ef38c", fontSize: 11, fontWeight: "700", textAlign: "center" },
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { flex: 1, backgroundColor: Palette.bgElevated },
