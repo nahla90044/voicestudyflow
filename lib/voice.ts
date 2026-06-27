@@ -323,6 +323,26 @@ function expandEraMarkers(text: string): string {
     .replace(/([\d٠-٩])\s*م(?![ء-ي])/g, "$1 ميلادي");
 }
 
+// تنظيف النص للنطق مع **حماية آيات القرآن الكريم**: أي نص بين القوسين المزخرفين
+// ﴿ ﴾ يُقرأ حرفيًا بتشكيله كاملًا بلا أي تحويل (أرقام/إحالات/مصادر)، حتى لا يُخطئ
+// القارئ في كلام الله. باقي النص يمرّ بالتنظيف المعتاد.
+function cleanForSpeech(text: string): string {
+  const src = text?.trim() ?? "";
+  if (!src) return "";
+  return src
+    .split(/([﴾﴿][^﴾﴿]*[﴾﴿])/) // نفصل الآيات المزخرفة كمقاطع مستقلة
+    .map((seg) => {
+      if (/^[﴾﴿][^﴾﴿]*[﴾﴿]$/.test(seg)) {
+        return seg.slice(1, -1).trim(); // آية: انزع القوسين فقط وأبقِ النص بتشكيله
+      }
+      return numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(seg))));
+    })
+    .filter((s) => s.length > 0)
+    .join(" ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /**
  * محاذاة النص المنطوق (clean) مع النص المعروض (orig): تُرجع دالة تحوّل موضع الحرف
  * المنطوق → نسبة موضعه الصحيحة في النص المعروض. هكذا يبقى الهايلايت/العدسة مطابقين
@@ -398,7 +418,7 @@ function makeSpokenToOrigFrac(orig: string, clean: string): (cleanCharIdx: numbe
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
   // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر)
-  const clean = numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(text?.trim() ?? ""))));
+  const clean = cleanForSpeech(text);
   if (!clean) return;
 
   // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
@@ -513,7 +533,7 @@ export async function warmNext(
   text: string,
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
-  const clean = numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(text?.trim() ?? ""))));
+  const clean = cleanForSpeech(text);
   if (!clean) return;
   try {
     const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
@@ -537,7 +557,7 @@ export async function prefetchText(
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
   try {
-    const clean = numbersToArabicWords(expandEraMarkers(expandLegalRefs(stripCitations(text?.trim() ?? ""))));
+    const clean = cleanForSpeech(text);
     if (!clean) return;
     await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
   } catch {
