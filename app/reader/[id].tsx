@@ -1188,20 +1188,28 @@ export default function ReaderScreen() {
     return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
   }, [readPoint, lines]);
 
-  // الشريط المكبّر يتابع نقطة القراءة — تمركز بسيط على الكلمة (النسخة الأصلية)
+  // الشريط المكبّر يتابع نقطة القراءة — حركة مستمرة مع هوامش (الكلمة تنتقل بسلاسة
+  // من يمين الشريط إلى يساره عبر السطر كامل، بدل ما تثبت بالوسط)
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
-    const readX = readPoint.cx * lensW;
-    const readY = readPoint.cy * imgH;
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
-    // نضع نقطة القراءة في وسط الشريط أفقيًا وعموديًا (تمركز)
-    const tX = Math.min(0, Math.max(minX, lensW / 2 - readX * LENS_SCALE));
-    const tY = Math.min(0, Math.max(minY, lensH / 2 - readY * LENS_SCALE));
-    Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
-    Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, pageImgAspect, lensX, lensY]);
+    // السطر الحالي وامتداد نصّه الفعلي (نتجاهل هوامش الصفحة)
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
+    const R = ln ? ln.x + ln.w : 1; // يمين نص السطر
+    const L = ln ? ln.x : 0; // يسار نص السطر
+    const cx = Math.min(R, Math.max(L, readPoint.cx)); // موضع القراءة داخل السطر
+    const within = R > L ? (R - cx) / (R - L) : 0; // 0 يمين → 1 يسار
+    // هوامش ١٥٪ على الطرفين لسلاسة الانتقال: الكلمة من ٨٥٪ يمين إلى ١٥٪ يسار
+    const screenX = lensW * (0.85 - 0.7 * within);
+    const tX = Math.min(0, Math.max(minX, screenX - cx * lensW * LENS_SCALE));
+    // عموديًا: نُبقي السطر المقروء في وسط الشريط
+    const lineCY = ln ? ln.y + ln.h / 2 : readPoint.cy;
+    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
+    Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
+  }, [lensOpen, lensW, lensH, readPoint, lines, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
