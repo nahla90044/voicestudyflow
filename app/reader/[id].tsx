@@ -1189,17 +1189,19 @@ export default function ReaderScreen() {
   }, [readPoint, lines]);
 
   // عمود النص الفعلي للصفحة (أقصى يمين/يسار للكلمات) — لحصر العدسة داخله
-  // فلا تعرض هوامش الصفحة الفاضية إطلاقًا
+  // فلا تعرض هوامش الصفحة الفاضية إطلاقًا.
+  // مقاوم للشواذ: نأخذ مئوية حواف **الأسطر** (لا حواف الكلمات) فيتجاهل العناصر
+  // الشاردة كالترويسات/الزخارف على الطرفين (مثبَّت ببيانات حقيقية).
   const textCol = useMemo<{ L: number; R: number }>(() => {
-    if (pageWords.length === 0) return { L: 0, R: 1 };
-    let L = 1,
-      R = 0;
-    for (const w of pageWords) {
-      if (w.x < L) L = w.x;
-      if (w.x + w.w > R) R = w.x + w.w;
-    }
-    return { L: Math.max(0, L), R: Math.min(1, R) };
-  }, [pageWords]);
+    if (lines.length === 0) return { L: 0, R: 1 };
+    const pct = (arr: number[], p: number): number => {
+      const s = [...arr].sort((a, b) => a - b);
+      return s[Math.min(s.length - 1, Math.max(0, Math.round(p * (s.length - 1))))];
+    };
+    const L = pct(lines.map((l) => l.x), 0.1);
+    const R = pct(lines.map((l) => l.x + l.w), 0.9);
+    return { L: Math.max(0, L), R: Math.min(1, Math.max(L + 0.2, R)) };
+  }, [lines]);
 
   const lensScale = 1.7; // تكبير كبير وواضح
 
