@@ -1123,7 +1123,12 @@ export default function ReaderScreen() {
     getPageWords(pdfPath, p).then((ws) => {
       const clean = ws.filter((w) => {
         const t = (w.t || "").trim();
-        return t && !/:{3,}/.test(t) && !/restricted|confidential/i.test(t) && !/^[\d٠-٩.\-|]+$/.test(t);
+        if (!t) return false;
+        if (/:{3,}/.test(t)) return false;
+        if (/restricted|confidential/i.test(t)) return false;
+        if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
+        if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
+        return true;
       });
       wordsCacheRef.current.set(p, clean);
       if (on) setPageWords(clean);
