@@ -231,7 +231,8 @@ export default function ReaderScreen() {
   const [readProgress, setReadProgress] = useState(0); // تقدّم القراءة 0..1 عبر الصفحة
   const [lensW, setLensW] = useState(0); // عرض نافذة العدسة المقاس
   const [lensH, setLensH] = useState(0); // ارتفاع نافذة العدسة المقاس
-  const [lensDbg, setLensDbg] = useState(""); // أرقام تشخيص مؤقتة (تظهر داخل العدسة)
+  const lensScrollRef = useRef<ScrollView>(null); // تمرير نص العدسة
+  const lensOffsetsRef = useRef<number[]>([]); // مواضع جُمل العدسة (للتمركز)
   const lensX = useRef(new Animated.Value(0)).current;
   const lensY = useRef(new Animated.Value(0)).current;
   const lensOpenRef = useRef(false);
@@ -718,6 +719,7 @@ export default function ReaderScreen() {
           : getReadingSentences(pageText, res.page);
       setSentences(sents);
       offsetsRef.current = [];
+      lensOffsetsRef.current = [];
 
       if (!playingRef.current) return; // أُوقف أثناء التحميل
 
@@ -957,6 +959,7 @@ export default function ReaderScreen() {
       setPage(res.page);
       setSentences(getReadingSentences(res.text, res.page));
       offsetsRef.current = [];
+      lensOffsetsRef.current = [];
     } catch {
       // تجاهل
     } finally {
@@ -1203,39 +1206,19 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, Math.max(L + 0.2, R)) };
   }, [lines]);
 
-  const lensScale = 1.7; // تكبير كبير وواضح
-
-  // الشريط المكبّر: يتبع **نقطة القراءة الحقيقية** أفقيًا، محصورًا داخل عمود النص
-  // (يتحرك مع القراءة، يصل الطرفين، وبلا أي هامش فاضي) + يتابع السطر عموديًا
+  // العدسة (نصّية): نُمرّر نص العدسة ليبقى المقطع المقروء في وسط الشريط — تزامن دقيق
+  // بلا صور ولا إحداثيات ولا هوامش. يتحرّك بسلاسة مع القراءة دائمًا.
   useEffect(() => {
-    if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
-    const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
-    const minY = Math.min(0, -(imgH * lensScale - lensH));
-    const minX = Math.min(0, lensW - lensW * lensScale);
-    const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    // a = الحافة اليسرى للنافذة، **محصورة دائمًا داخل عمود نص الصفحة** فلا تُظهر
-    // أي هامش فاضي إطلاقًا (مثبَّت بمحاكاة بيانات الصفحة الحقيقية = صفر هامش)،
-    // ومركّزة على نقطة القراءة فتتحرك معها يمينًا ويسارًا.
-    const colL = textCol.L;
-    const colR = textCol.R;
-    const colW = colR - colL;
-    let a: number;
-    if (colW <= win) {
-      a = colL - (win - colW) / 2; // العمود كله يسع داخل النافذة → توسيط
-    } else {
-      a = Math.min(colR - win, Math.max(colL, readPoint.cx - win / 2));
-    }
-    const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
-    // أرقام تشخيص مؤقتة (لأرى السلوك الحقيقي على الجهاز)
-    setLensDbg(
-      `N${pageWords.length} col${colL.toFixed(2)}-${colR.toFixed(2)} cx${readPoint.cx.toFixed(2)} a${a.toFixed(2)} w${win.toFixed(2)} cy${readPoint.cy.toFixed(2)}`
-    );
-    // عموديًا: نُبقي السطر المقروء في وسط الشريط (ينزل مع القراءة)
-    const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
-    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
-    Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
-    Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
+    if (!lensOpen || activeSentence < 0) return;
+    const center = () => {
+      const y = lensOffsetsRef.current[activeSentence];
+      if (typeof y !== "number") return;
+      lensScrollRef.current?.scrollTo({ y: Math.max(0, y - (lensH || 300) * 0.34), animated: true });
+    };
+    center();
+    const t = setTimeout(center, 180); // بعد ضبط القياسات
+    return () => clearTimeout(t);
+  }, [lensOpen, activeSentence, lensH]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -1481,8 +1464,9 @@ export default function ReaderScreen() {
                 )}
               </View>
             )}
-            {/* العدسة: شريط مكبّر عائم وسط الصفحة يتابع القراءة (الصفحة تبان فوقه وتحته) */}
-            {lensOpen && pageImg ? (
+            {/* العدسة (نصّية): شريط يعرض النص كبيرًا وواضحًا مع تظليل الكلمة المقروءة —
+                تزامن دقيق بلا صور ولا هوامش ولا أخطاء إحداثيات */}
+            {lensOpen ? (
               <View pointerEvents="box-none" style={styles.lensBandWrap}>
                 <View
                   style={styles.lensBand}
@@ -1491,40 +1475,51 @@ export default function ReaderScreen() {
                     setLensH(e.nativeEvent.layout.height);
                   }}
                 >
-                  {lensW > 0 ? (
-                    <Animated.View
-                      style={{
-                        width: lensW * lensScale,
-                        height: (lensW / (pageImgAspect || 0.7)) * lensScale,
-                        transform: [{ translateX: lensX }, { translateY: lensY }],
-                      }}
+                  {sentences.length > 0 ? (
+                    <ScrollView
+                      ref={lensScrollRef}
+                      style={{ flex: 1, alignSelf: "stretch" }}
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.lensTextContent}
                     >
-                      <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-                      {lineBox && speaking ? (
-                        <View
-                          pointerEvents="none"
-                          style={[
-                            styles.wordHL,
-                            {
-                              left: lineBox.x * lensW * lensScale,
-                              top: lineBox.y * (lensW / (pageImgAspect || 0.7)) * lensScale,
-                              width: lineBox.w * lensW * lensScale,
-                              height: lineBox.h * (lensW / (pageImgAspect || 0.7)) * lensScale,
-                            },
-                          ]}
-                        />
-                      ) : null}
-                    </Animated.View>
-                  ) : null}
+                      {sentences.map((s, i) => {
+                        const active = i === activeSentence;
+                        return (
+                          <Text
+                            key={i}
+                            onLayout={(e) => {
+                              lensOffsetsRef.current[i] = e.nativeEvent.layout.y;
+                            }}
+                            style={active ? styles.lensSentActive : styles.lensSent}
+                          >
+                            {active
+                              ? (() => {
+                                  let wc = -1;
+                                  return s.split(/(\s+)/).map((tok, wi) => {
+                                    if (!/\S/.test(tok)) return tok;
+                                    wc++;
+                                    const spoken = wc === activeWord;
+                                    return (
+                                      <Text key={wi} style={spoken ? styles.lensWordSpoken : undefined}>
+                                        {tok}
+                                      </Text>
+                                    );
+                                  });
+                                })()
+                              : s}
+                          </Text>
+                        );
+                      })}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.lensCenter}>
+                      <ActivityIndicator color={Palette.neonViolet} />
+                      <Text style={styles.lensHint}>جارٍ تجهيز النص…</Text>
+                    </View>
+                  )}
                   <Pressable onPress={() => setLensOpen(false)} style={styles.lensCloseBtn} hitSlop={8}>
                     <Ionicons name="close" size={18} color="#fff" />
                   </Pressable>
-                  {/* تشخيص مؤقت — أرقام السلوك الحقيقي */}
-                  {lensDbg ? (
-                    <View pointerEvents="none" style={styles.lensDbgBox}>
-                      <Text style={styles.lensDbgTxt}>{lensDbg}</Text>
-                    </View>
-                  ) : null}
                 </View>
               </View>
             ) : null}
@@ -2565,6 +2560,26 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
+  lensTextContent: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 160, gap: 6 },
+  lensSent: {
+    fontSize: 21,
+    lineHeight: 40,
+    color: "#5b6675",
+    textAlign: "right",
+    writingDirection: "rtl",
+    fontWeight: "600",
+  },
+  lensSentActive: {
+    fontSize: 27,
+    lineHeight: 50,
+    color: "#0b1220",
+    textAlign: "right",
+    writingDirection: "rtl",
+    fontWeight: "800",
+  },
+  lensWordSpoken: { backgroundColor: "rgba(245,200,66,0.6)", color: "#0b1220" },
+  lensCenter: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+  lensHint: { color: Palette.textDim, fontSize: 13, fontWeight: "700" },
   lensCloseBtn: {
     position: "absolute",
     top: 8,
