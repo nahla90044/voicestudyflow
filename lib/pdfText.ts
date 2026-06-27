@@ -60,42 +60,39 @@ export type PageText = {
 export type WordBox = { t: string; x: number; y: number; w: number; h: number };
 
 /** يجلب صناديق إحداثيات كلمات صفحة (للهايلايتر الدقيق والعدسة).
- *  المصدر الأدقّ: مربّعات Google Vision للكتب الممسوحة؛ نرجع لطبقة الـPDF فقط
- *  إن كانت غنية (كتب نصية أصلية). مربّعات طبقة الـPDF غير موثوقة في المصوّر. */
+ *  نفضّل مربّعات Google Vision دائمًا لأنها الأدقّ (تتعامل مع RTL والكتب المصوّرة).
+ *  طبقة نص الـPDF غير موثوقة: كثير من الكتب المصوّرة فيها طبقة «خربانة» بمواقع غلط
+ *  لكنها غنية بالعدد، فلا نقدر نميّزها بالعدد — لذلك Vision أولًا. */
 export async function getPageWords(pdfPath: string, page: number): Promise<WordBox[]> {
   if (!pdfPath) return [];
 
-  // 1) جرّب طبقة نص الـPDF (سريعة، دقيقة فقط للكتب النصية الأصلية)
-  let layerWords: WordBox[] = [];
-  try {
-    const { data, error } = await supabase.functions.invoke("pdf-extract-text", {
-      body: { pdfPath, page },
-    });
-    if (!error && !data?.error) {
-      const ws = (data as { words?: WordBox[] })?.words;
-      if (Array.isArray(ws)) layerWords = ws;
-    }
-  } catch {
-    // نتابع لـVision
-  }
-
-  // طبقة غنية بما يكفي → كتاب نصي أصلي، مربّعاته موثوقة
-  if (layerWords.length >= 12) return layerWords;
-
-  // 2) كتاب مصوّر (سكان): خذ المربّعات الدقيقة من Google Vision
+  // 1) Google Vision أولًا — مواقع دقيقة بترتيب القراءة الصحيح
   try {
     const { data, error } = await supabase.functions.invoke("ocr-page", {
       body: { pdfPath, page },
     });
     if (!error) {
       const vw = (data as { words?: WordBox[] })?.words;
-      if (Array.isArray(vw) && vw.length) return vw;
+      if (Array.isArray(vw) && vw.length >= 8) return vw;
     }
   } catch {
-    // لا شيء — نرجّع ما توفّر
+    // نرجع لطبقة الـPDF
   }
 
-  return layerWords;
+  // 2) احتياط: طبقة نص الـPDF (للكتب النصية الأصلية أو إن تعذّر Vision)
+  try {
+    const { data, error } = await supabase.functions.invoke("pdf-extract-text", {
+      body: { pdfPath, page },
+    });
+    if (!error && !data?.error) {
+      const ws = (data as { words?: WordBox[] })?.words;
+      if (Array.isArray(ws)) return ws;
+    }
+  } catch {
+    // لا شيء
+  }
+
+  return [];
 }
 
 // أقل من هذا الطول يعني أن الصفحة بلا نص حقيقي (غالبًا صورة ممسوحة أو علامة مائية)
