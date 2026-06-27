@@ -1193,17 +1193,16 @@ export default function ReaderScreen() {
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
-    // السطر الحالي وموضعنا داخله (0 = أوله يمين، 1 = آخره يسار)
+    // السطر الحالي وامتداد نصّه الفعلي (نتجاهل هوامش الصفحة الكبيرة يمينًا/يسارًا)
     const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const f =
-      ln && ln.end > ln.start ? Math.min(1, Math.max(0, (readPoint.idx - ln.start) / (ln.end - ln.start))) : 0;
-    // امتداد النص الفعلي للسطر (نتجاهل هوامش الصفحة الكبيرة يمينًا/يسارًا)
-    const R = ln ? ln.x + ln.w : 1; // يمين النص
-    const L = ln ? ln.x : 0; // يسار النص
-    const nx = R - f * (R - L); // موضع القراءة داخل النص (ينتقل يمين→يسار)
-    // أفقيًا: نُنقّل الكلمة المقروءة عبر الشريط من ٨٨٪ يمين إلى ١٢٪ يسار (حركة واضحة كاملة)
-    const screenX = lensW * (0.88 - 0.76 * f);
-    const tX = Math.min(0, Math.max(minX, screenX - nx * lensW * LENS_SCALE));
+    const R = ln ? ln.x + ln.w : 1; // يمين نص السطر
+    const L = ln ? ln.x : 0; // يسار نص السطر
+    // موضع القراءة الحقيقي مقيَّدًا داخل نص السطر، ونسبته داخله (0 يمين → 1 يسار)
+    const cx = Math.min(R, Math.max(L, readPoint.cx));
+    const within = R > L ? (R - cx) / (R - L) : 0;
+    // أفقيًا: حركة مستمرة بلا توقف بالمنتصف — نضع الكلمة من ٨٥٪ يمين إلى ١٥٪ يسار
+    const screenX = lensW * (0.85 - 0.7 * within);
+    const tX = Math.min(0, Math.max(minX, screenX - cx * lensW * LENS_SCALE));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
     const lineCY = ln ? ln.y + ln.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
