@@ -457,23 +457,28 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
       // مشغّل قديم استُبدل (بدأ تشغيل أحدث) → تجاهله تمامًا حتى لا يتراكب ويتسارع
       if (myToken !== playToken) return;
       if (opts.onProgress) {
-        let frac = 0;
-        const t = status.currentTime ?? 0;
-        if (starts.length > 1) {
-          // موضع الحرف المنطوق الآن (بحث ثنائي على توقيت الحروف الحقيقي)
-          let lo = 0,
-            hi = starts.length;
-          while (lo < hi) {
-            const mid = (lo + hi) >> 1;
-            if (starts[mid] <= t) lo = mid + 1;
-            else hi = mid;
+        // محسوب داخل try: أي خطأ في حساب الهايلايت يجب ألا يكسر التشغيل أبدًا
+        try {
+          let frac = 0;
+          const t = status.currentTime ?? 0;
+          if (starts.length > 1) {
+            // موضع الحرف المنطوق الآن (بحث ثنائي على توقيت الحروف الحقيقي)
+            let lo = 0,
+              hi = starts.length;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if (starts[mid] <= t) lo = mid + 1;
+              else hi = mid;
+            }
+            // حوّله لموضعه الصحيح في النص المعروض (يعالج توسعة الأرقام/حذف الاستشهادات)
+            frac = toOrigFrac(Math.max(0, lo - 1));
+          } else if (status.duration && status.duration > 0) {
+            frac = t / status.duration;
           }
-          // حوّله لموضعه الصحيح في النص المعروض (يعالج توسعة الأرقام/حذف الاستشهادات)
-          frac = toOrigFrac(Math.max(0, lo - 1));
-        } else if (status.duration && status.duration > 0) {
-          frac = t / status.duration;
+          opts.onProgress(Math.min(1, Math.max(0, frac)));
+        } catch {
+          // تجاهل — الصوت أهم من الهايلايت
         }
-        opts.onProgress(Math.min(1, Math.max(0, frac)));
       }
       if (status.didJustFinish && !finished) {
         finished = true;
