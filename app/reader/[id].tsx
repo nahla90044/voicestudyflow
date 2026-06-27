@@ -1209,26 +1209,29 @@ export default function ReaderScreen() {
     return w ? { t: "", x: w.x, y: w.y, w: w.w, h: w.h } : null;
   }, [readPoint, pageWords]);
 
-  // التكبير يُلائم **عمود النص كاملًا** فيظهر السطر كله (صفر هامش، صفر قصّ).
-  // الأعمدة الضيقة تتكبّر أكثر (حتى ١.٨٥×).
-  const lensScale = useMemo<number>(() => {
-    const colW = Math.max(0.3, textCol.R - textCol.L);
-    return Math.min(1.85, Math.max(1.2, 0.99 / colW));
-  }, [textCol]);
+  const lensScale = 1.7; // تكبير كبير وواضح (مثل قبل)
 
-  // الشريط: يُثبّت عمود النص أفقيًا (السطر كامل ظاهر) ويتابع القراءة عموديًا (ينزل).
-  // الحركة يمين←يسار تجي من تظليل الكلمة المتحرّك عبر السطر، فلا حاجة لانزلاق أفقي.
+  // الشريط: يتبع نقطة القراءة أفقيًا فيتحرّك يمين→يسار مع القراءة، محصورًا داخل
+  // عمود النص فبلا هامش فاضي إطلاقًا (مؤكّد بصريًا)، ويتابع السطر عموديًا (ينزل).
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7);
     const minY = Math.min(0, -(imgH * lensScale - lensH));
     const minX = Math.min(0, lensW - lensW * lensScale);
-    const colC = (textCol.L + textCol.R) / 2; // مركز عمود النص
-    const tX = Math.min(0, Math.max(minX, lensW / 2 - colC * lensScale * lensW));
+    const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
+    const colL = textCol.L;
+    const colR = textCol.R;
+    const colW = colR - colL;
+    // a = حافة النافذة اليسرى، محصورة داخل عمود النص (بلا هامش)، مركّزة على القراءة
+    const a =
+      colW <= win
+        ? colL - (win - colW) / 2
+        : Math.min(colR - win, Math.max(colL, readPoint.cx - win / 2));
+    const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
-    Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
-    Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
   }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
