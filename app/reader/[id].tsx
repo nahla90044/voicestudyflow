@@ -1215,33 +1215,31 @@ export default function ReaderScreen() {
     return ar >= la; // العربي أو الغالب → RTL
   }, [pageWords]);
 
-  // الشريط المكبّر يتابع نقطة القراءة داخل عمود النص فقط — يجتاح العمود كامل
-  // يمين→يسار بسلاسة بلا أي هامش فاضي
+  // الشريط المكبّر يسوق العدسة على **السطر الحالي نفسه** (الهايلايت مضبوط) ويجتاحه
+  // كامل بتقدّم مضمون داخله — فيصل لآخر السطر دائمًا بلا هامش فاضي
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7); // ارتفاع الصورة غير المكبّرة (بعرض الشريط)
     const minY = Math.min(0, -(imgH * LENS_SCALE - lensH));
     const minX = Math.min(0, lensW - lensW * LENS_SCALE);
     const win = 1 / LENS_SCALE; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    const colL = textCol.L;
-    const colR = textCol.R;
-    const colW = colR - colL;
-    // a = الحافة اليسرى للنافذة المرئية (بنسبة الصفحة) — نُبقيها داخل عمود النص
+    // السطر الحالي وامتداده الفعلي (من الهايلايت المضبوط)
+    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
+    const lineL = ln ? ln.x : textCol.L;
+    const lineR = ln ? ln.x + ln.w : textCol.R;
+    const lineW = lineR - lineL;
+    // تقدّم القراءة داخل السطر (idx متزايد يمرّ على كل الصناديق → مضمون 0→1)
+    const f =
+      ln && ln.end > ln.start ? Math.min(1, Math.max(0, (readPoint.idx - ln.start) / (ln.end - ln.start))) : 0;
+    // a = الحافة اليسرى للنافذة المرئية (بنسبة الصفحة)
     let a: number;
-    if (colW <= win) {
-      a = colL - (win - colW) / 2; // العمود يسع داخل النافذة → ثبّته في الوسط
+    if (lineW <= win) {
+      a = lineL - (win - lineW) / 2; // السطر يسع داخل النافذة → اعرضه كامل
     } else {
-      const cx = Math.min(colR, Math.max(colL, readPoint.cx)); // موضع القراءة داخل العمود
-      const aMax = colR - win; // أقصى انزلاق يُظهر يمين العمود عند يمين الشريط
-      if (pageRTL) {
-        // عربي: نبدأ من يمين العمود (a=aMax) وننزلق حتى يساره (a=colL)
-        const within = (colR - cx) / colW; // 0 يمين → 1 يسار
-        a = aMax - within * (aMax - colL);
-      } else {
-        // إنجليزي/فرنسي: نبدأ من يسار العمود (a=colL) وننزلق حتى يمينه (a=aMax)
-        const within = (cx - colL) / colW; // 0 يسار → 1 يمين
-        a = colL + within * (aMax - colL);
-      }
+      const aLeft = lineL; // نافذة تُظهر يسار السطر عند يسار الشريط
+      const aRight = lineR - win; // نافذة تُظهر يمين السطر عند يمين الشريط
+      // عربي: من يمين السطر (f=0) إلى يساره (f=1). لاتيني: العكس
+      a = pageRTL ? aRight - f * (aRight - aLeft) : aLeft + f * (aRight - aLeft);
     }
     const tX = Math.min(0, Math.max(minX, -a * LENS_SCALE * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط
@@ -1249,7 +1247,7 @@ export default function ReaderScreen() {
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * LENS_SCALE));
     Animated.timing(lensX, { toValue: tX, duration: 220, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 220, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, pageRTL, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, pageRTL, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
