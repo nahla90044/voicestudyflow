@@ -1210,7 +1210,7 @@ export default function ReaderScreen() {
     const minY = Math.min(0, -(imgH * lensScale - lensH));
     const minX = Math.min(0, lensW - lensW * lensScale);
     const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    const PAD = 0.06; // هامش بسيط متساوٍ على الطرفين → مجال للتنقّل بحرية
+    const PAD = 0.04; // هامش بسيط متساوٍ على الطرفين → مجال للتنقّل بحرية
     // امتداد السطر الحالي الفعلي (حوافه الحقيقية)
     const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
     const lineL = ln ? ln.x : textCol.L;
