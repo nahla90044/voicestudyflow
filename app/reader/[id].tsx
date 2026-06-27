@@ -1210,20 +1210,17 @@ export default function ReaderScreen() {
     const minY = Math.min(0, -(imgH * lensScale - lensH));
     const minX = Math.min(0, lensW - lensW * lensScale);
     const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    const PAD = 0.04; // هامش بسيط متساوٍ على الطرفين → مجال للتنقّل بحرية
-    // امتداد السطر الحالي الفعلي (حوافه الحقيقية)
-    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const lineL = ln ? ln.x : textCol.L;
-    const lineR = ln ? ln.x + ln.w : textCol.R;
-    const lineW = lineR - lineL;
-    // a = الحافة اليسرى للنافذة. نُحيط السطر بهامش متساوٍ على الجهتين:
-    // أول السطر يبدأ بهامش يمين بسيط، وآخره ينتهي بهامش يسار مساوٍ، وبينهما تتنقّل بحرية
+    // a = الحافة اليسرى للنافذة، **محصورة دائمًا داخل عمود نص الصفحة** فلا تُظهر
+    // أي هامش فاضي إطلاقًا (مثبَّت بمحاكاة بيانات الصفحة الحقيقية = صفر هامش)،
+    // ومركّزة على نقطة القراءة فتتحرك معها يمينًا ويسارًا.
+    const colL = textCol.L;
+    const colR = textCol.R;
+    const colW = colR - colL;
     let a: number;
-    if (lineW + 2 * PAD <= win) {
-      a = lineL - (win - lineW) / 2; // السطر وهامشه يسعان → توسيط متوازن
+    if (colW <= win) {
+      a = colL - (win - colW) / 2; // العمود كله يسع داخل النافذة → توسيط
     } else {
-      const cx = Math.min(lineR, Math.max(lineL, readPoint.cx));
-      a = Math.min(lineR + PAD - win, Math.max(lineL - PAD, cx - win / 2));
+      a = Math.min(colR - win, Math.max(colL, readPoint.cx - win / 2));
     }
     const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
     // عموديًا: نُبقي السطر المقروء في وسط الشريط (ينزل مع القراءة)
@@ -1231,7 +1228,7 @@ export default function ReaderScreen() {
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
     Animated.timing(lensX, { toValue: tX, duration: 200, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 200, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
