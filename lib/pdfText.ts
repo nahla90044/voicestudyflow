@@ -28,7 +28,23 @@ function stripNoise(text: string): string {
 // إصدار الاستخراج. أي تغيير هنا يُبطل الكاش القديم ويعيد المعالجة.
 // v2: إزالة «تنظيف» الذكاء.  v3: تنقية الضجيج.  v4: إصلاح المسافات.
 // v5: استخدام OCR تلقائيًا للكتب ذات طبقة النص المكسورة (أنظف نص).
-const EXTRACT_VER = "-v9";
+// v10: تصحيح آيات القرآن بمرجعها مع نص المصحف الموثّق.
+const EXTRACT_VER = "-v10";
+
+// مرجع آية: «[السورة : رقم]» أو «(السورة: رقم)» — بوّابة رخيصة قبل استدعاء التصحيح
+const QURAN_REF_RE = /[[(]\s*[ء-ي][ء-ي\s]{2,}\s*[:：]\s*[٠-٩\d]{1,3}\s*[\])]/;
+
+/** يصحّح آيات القرآن في الصفحة بمطابقتها بنص المصحف (سيرفر) — فقط لو فيها مرجع آية. */
+async function correctQuranIfNeeded(text: string): Promise<string> {
+  if (!text || !QURAN_REF_RE.test(text)) return text;
+  try {
+    const { data, error } = await supabase.functions.invoke("quran-correct", { body: { text } });
+    const fixed = (data as { text?: string })?.text;
+    return !error && typeof fixed === "string" && fixed.trim().length > 0 ? fixed : text;
+  } catch {
+    return text; // فشل التصحيح غير حرج — نُبقي النص كما هو
+  }
+}
 
 // طبقة نص «مكسورة»: نسبة كبيرة من أحرف العرض العربية (presentation forms:
 // FB50–FDFF و FE70–FEFF). هذه الكتب تُستخرج بمسافات خاطئة وتشكيل مبعثر،
@@ -193,6 +209,8 @@ export async function extractPdfPageText(
   if (hasRealText && !isFigurePage) {
     // إصلاح خفيف للمسافات إن لزم (للنص الملتصق فقط، بتحقّق صارم) + تنقية فورية
     text = stripNoise(normalizeArabic(await fixArabicSpacing(text)));
+    // تصحيح آيات القرآن الكريم بمرجعها (لا يخطئ في كلام الله)
+    text = await correctQuranIfNeeded(text);
   } else {
     text = ""; // صفحة فارغة/غلاف/صورة فقط → تُتخطّى عند القراءة
   }
