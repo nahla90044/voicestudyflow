@@ -3,7 +3,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 
+import { useI18n } from "../../lib/i18n";
+
 export default function TabsLayout() {
+  const { t } = useI18n();
   return (
     <Tabs
       screenOptions={{
@@ -23,7 +26,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "الرئيسية",
+          title: t("tabs.home"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" color={color} size={size} />
           ),
@@ -33,7 +36,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="library"
         options={{
-          title: "المكتبة",
+          title: t("tabs.library"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="library" color={color} size={size} />
           ),
@@ -43,7 +46,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: "الخطة",
+          title: t("tabs.plan"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="calendar" color={color} size={size} />
           ),
@@ -53,7 +56,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="add-book"
         options={{
-          title: "إضافة",
+          title: t("tabs.add"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="add-circle" color={color} size={size} />
           ),
@@ -63,7 +66,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="flashcards"
         options={{
-          title: "البطاقات",
+          title: t("tabs.cards"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="albums" color={color} size={size} />
           ),
@@ -73,7 +76,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="activity"
         options={{
-          title: "النشاط",
+          title: t("tabs.activity"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart" color={color} size={size} />
           ),

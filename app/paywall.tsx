@@ -9,10 +9,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
+import { useDir, useI18n } from "../lib/i18n";
 import { getCurrentPlan, PLANS, setCurrentPlan, type Plan, type PlanKey } from "../lib/subscription";
 
 export default function PaywallScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const [current, setCurrent] = useState<PlanKey>("free");
 
   useEffect(() => {
@@ -26,20 +29,20 @@ export default function PaywallScreen() {
     }
     // الدفع الحقيقي عبر آبل/قوقل يُربط لاحقًا — الآن نعرض رسالة واضحة فقط
     Alert.alert(
-      `خطة ${plan.name}`,
-      `سيُفعَّل الدفع الآمن عبر آبل وقوقل قريبًا 🌟\nالسعر: ${plan.priceSar} ﷼ شهريًا`,
-      [{ text: "تمام", style: "default" }]
+      t("paywall.alert.title", { name: plan.name }),
+      t("paywall.alert.body", { price: plan.priceSar }),
+      [{ text: t("paywall.alert.ok"), style: "default" }]
     );
   }
 
   return (
     <ScreenBackground>
       <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-        <View style={styles.topBar}>
+        <View style={[styles.topBar, { flexDirection: dir.row }]}>
           <Pressable onPress={() => router.back()} style={styles.closeBtn} hitSlop={10}>
             <Ionicons name="close" size={22} color={Palette.text} />
           </Pressable>
-          <Text style={styles.restore}>استرجاع الشراء</Text>
+          <Text style={styles.restore}>{t("paywall.restore")}</Text>
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -47,8 +50,8 @@ export default function PaywallScreen() {
             <View style={styles.heroIcon}>
               <Ionicons name="sparkles" size={26} color="#fff" />
             </View>
-            <Text style={styles.title}>اختاري خطتك</Text>
-            <Text style={styles.subtitle}>ادفعي حسب عدد الكتب — وألغي وقت ما تبين</Text>
+            <Text style={styles.title}>{t("paywall.title")}</Text>
+            <Text style={styles.subtitle}>{t("paywall.subtitle")}</Text>
           </View>
 
           {PLANS.map((plan) => {
@@ -68,47 +71,47 @@ export default function PaywallScreen() {
                     colors={plan.gradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={styles.badge}
+                    style={[styles.badge, { flexDirection: dir.row }]}
                   >
                     <Ionicons name="star" size={11} color="#fff" />
-                    <Text style={styles.badgeTxt}>الأكثر اختيارًا</Text>
+                    <Text style={styles.badgeTxt}>{t("paywall.badge")}</Text>
                   </LinearGradient>
                 ) : null}
 
-                <View style={styles.cardHead}>
+                <View style={[styles.cardHead, { flexDirection: dir.row }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.planName}>{plan.name}</Text>
-                    <Text style={styles.planTag}>{plan.tagline}</Text>
+                    <Text style={[styles.planName, { textAlign: dir.textAlign }]}>{plan.name}</Text>
+                    <Text style={[styles.planTag, { textAlign: dir.textAlign }]}>{plan.tagline}</Text>
                   </View>
                   <LinearGradient colors={plan.gradient} style={styles.planDot}>
                     <Ionicons name="book" size={16} color="#fff" />
                   </LinearGradient>
                 </View>
 
-                <View style={styles.priceRow}>
+                <View style={[styles.priceRow, { flexDirection: dir.row }]}>
                   {free ? (
-                    <Text style={styles.priceFree}>مجاني</Text>
+                    <Text style={styles.priceFree}>{t("paywall.free")}</Text>
                   ) : (
                     <>
                       <Text style={styles.price}>{plan.priceSar}</Text>
-                      <Text style={styles.priceUnit}> ﷼ / شهر</Text>
+                      <Text style={styles.priceUnit}>{t("paywall.priceUnit")}</Text>
                     </>
                   )}
                 </View>
 
                 <View style={styles.features}>
                   {plan.features.map((f, i) => (
-                    <View key={i} style={styles.featRow}>
+                    <View key={i} style={[styles.featRow, { flexDirection: dir.row }]}>
                       <Ionicons name="checkmark-circle" size={17} color={Palette.neonCyan} />
-                      <Text style={styles.featTxt}>{f}</Text>
+                      <Text style={[styles.featTxt, { textAlign: dir.textAlign }]}>{f}</Text>
                     </View>
                   ))}
                 </View>
 
                 {isCurrent ? (
-                  <View style={styles.currentTag}>
+                  <View style={[styles.currentTag, { flexDirection: dir.row }]}>
                     <Ionicons name="checkmark-done" size={16} color={Palette.neonCyan} />
-                    <Text style={styles.currentTxt}>خطتك الحالية</Text>
+                    <Text style={styles.currentTxt}>{t("paywall.currentPlan")}</Text>
                   </View>
                 ) : (
                   <Pressable onPress={() => onChoose(plan)}>
@@ -118,7 +121,7 @@ export default function PaywallScreen() {
                       end={{ x: 1, y: 0 }}
                       style={styles.cta}
                     >
-                      <Text style={styles.ctaTxt}>{free ? "ابدئي مجانًا" : `اشتركي بـ ${plan.name}`}</Text>
+                      <Text style={styles.ctaTxt}>{free ? t("paywall.startFree") : t("paywall.subscribe", { name: plan.name })}</Text>
                     </LinearGradient>
                   </Pressable>
                 )}
@@ -126,9 +129,7 @@ export default function PaywallScreen() {
             );
           })}
 
-          <Text style={styles.note}>
-            الدفع الآمن عبر آبل و قوقل · يتجدّد شهريًا · يمكنك الإلغاء في أي وقت.{"\n"}الأسعار تشمل ضريبة القيمة المضافة.
-          </Text>
+          <Text style={styles.note}>{t("paywall.note")}</Text>
         </ScrollView>
       </SafeAreaView>
     </ScreenBackground>

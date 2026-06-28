@@ -24,6 +24,7 @@ import {
   VoiceWaveArt,
 } from "../components/brand/illustrations";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
+import { useI18n } from "../lib/i18n";
 
 export const ONBOARDING_KEY = "vsf_onboarded_v1";
 
@@ -31,40 +32,41 @@ const { width } = Dimensions.get("window");
 
 type Slide = {
   key: string;
-  title: string;
-  body: string;
+  titleKey: string;
+  bodyKey: string;
   Art: React.ComponentType<{ size?: number }>;
 };
 
 const SLIDES: Slide[] = [
   {
     key: "read",
-    title: "اقرأ واستمع",
-    body: "أضِف كتبك بصيغة PDF واقرأها داخل التطبيق بكل سهولة — في أي وقت ومن أي مكان.",
+    titleKey: "onboarding.read.title",
+    bodyKey: "onboarding.read.body",
     Art: ReadListenArt,
   },
   {
     key: "voice",
-    title: "أصوات بشرية طبيعية",
-    body: "استمع إلى كتابك بصوت بشري واضح بالعربية والإنجليزية، بدل الأصوات الآلية المتعبة.",
+    titleKey: "onboarding.voice.title",
+    bodyKey: "onboarding.voice.body",
     Art: VoiceWaveArt,
   },
   {
     key: "plan",
-    title: "خطة مذاكرة ذكية",
-    body: "حدِّد وقتك اليومي، والتطبيق يوزّع صفحات الكتاب على الأيام تلقائيًا مع أيام راحة.",
+    titleKey: "onboarding.plan.title",
+    bodyKey: "onboarding.plan.body",
     Art: PlanArt,
   },
   {
     key: "secure",
-    title: "بياناتك بخصوصية",
-    body: "كتبك وخططك محفوظة لك، مع إمكانية الأرشفة أو الحذف في أي وقت. ابدأ رحلتك الآن.",
+    titleKey: "onboarding.secure.title",
+    bodyKey: "onboarding.secure.body",
     Art: SecureArt,
   },
 ];
 
 export default function Onboarding() {
   const router = useRouter();
+  const { t } = useI18n();
   const scrollRef = useRef<ScrollView>(null);
   const [index, setIndex] = useState(0);
 
@@ -91,7 +93,7 @@ export default function Onboarding() {
         {/* تخطّي */}
         <View style={styles.topBar}>
           <Pressable onPress={finish} hitSlop={12}>
-            <Text style={styles.skip}>تخطّي</Text>
+            <Text style={styles.skip}>{t("onboarding.skip")}</Text>
           </Pressable>
         </View>
 
@@ -103,13 +105,13 @@ export default function Onboarding() {
           onScroll={onScroll}
           scrollEventThrottle={16}
         >
-          {SLIDES.map(({ key, title, body, Art }) => (
+          {SLIDES.map(({ key, titleKey, bodyKey, Art }) => (
             <View key={key} style={[styles.slide, { width }]}>
               <View style={styles.artWrap}>
                 <Art size={240} />
               </View>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.body}>{body}</Text>
+              <Text style={styles.title}>{t(titleKey)}</Text>
+              <Text style={styles.body}>{t(bodyKey)}</Text>
             </View>
           ))}
         </ScrollView>
@@ -134,7 +136,7 @@ export default function Onboarding() {
               style={styles.ctaGrad}
             >
               <Text style={styles.ctaTxt}>
-                {isLast ? "ابدأ الآن" : "التالي"}
+                {isLast ? t("onboarding.start") : t("common.next")}
               </Text>
             </LinearGradient>
           </Pressable>

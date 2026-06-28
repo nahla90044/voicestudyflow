@@ -15,13 +15,14 @@ import { ReadListenArt } from "../../components/brand/illustrations";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { countDue } from "../../lib/flashcards";
+import { useDir, useI18n } from "../../lib/i18n";
 import { getUserName } from "../../lib/settings";
 import { getStats, type Stats } from "../../lib/stats";
 
 type Feature = {
   icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  sub: string;
+  labelKey: string;
+  subKey: string;
   color: string;
   route: "/library" | "/add-book" | "/calendar" | "/activity";
 };
@@ -29,10 +30,10 @@ type Feature = {
 const HOWTO_KEY = "howto-tour-seen-v1";
 
 const FEATURES: Feature[] = [
-  { icon: "library", label: "المكتبة", sub: "كل كتبك", color: Palette.neonBlue, route: "/library" },
-  { icon: "add-circle", label: "إضافة كتاب", sub: "ارفع PDF", color: Palette.neonViolet, route: "/add-book" },
-  { icon: "calendar", label: "خطة اليوم", sub: "نظّم وقتك", color: Palette.neonCyan, route: "/calendar" },
-  { icon: "stats-chart", label: "النشاط", sub: "تقدّمك وسلسلتك", color: Palette.neonPink, route: "/activity" },
+  { icon: "library", labelKey: "home.feature.library.label", subKey: "home.feature.library.sub", color: Palette.neonBlue, route: "/library" },
+  { icon: "add-circle", labelKey: "home.feature.addBook.label", subKey: "home.feature.addBook.sub", color: Palette.neonViolet, route: "/add-book" },
+  { icon: "calendar", labelKey: "home.feature.plan.label", subKey: "home.feature.plan.sub", color: Palette.neonCyan, route: "/calendar" },
+  { icon: "stats-chart", labelKey: "home.feature.activity.label", subKey: "home.feature.activity.sub", color: Palette.neonPink, route: "/activity" },
 ];
 
 function Stat({ value, label }: { value: number; label: string }) {
@@ -46,6 +47,8 @@ function Stat({ value, label }: { value: number; label: string }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const [stats, setStats] = useState<Stats | null>(null);
   const [due, setDue] = useState(0);
   const [name, setName] = useState("");
@@ -81,31 +84,32 @@ export default function HomeScreen() {
   );
 
   const streak = stats?.streak ?? 0;
+  const hero = name || "بطل";
   const streakMsg =
     streak >= 7
-      ? "أسطورة! 🔥"
+      ? t("home.streak.msg.legend")
       : streak >= 3
-      ? `واصِل يا ${name || "بطل"}! 💪`
+      ? t("home.streak.msg.keepGoing", { name: hero })
       : streak >= 1
-      ? "بداية موفّقة ✨"
-      : "ابدأ سلسلتك اليوم 🌱";
+      ? t("home.streak.msg.goodStart")
+      : t("home.streak.msg.startToday");
 
   // كلمة تشجيع تتغيّر يوميًا (مختلفة كل يوم) — باسم المستخدم
   const who = name || "بطل";
-  const DAILY_CHEERS = [
-    `يومك موفّق يا ${who} 🌟`,
-    `خطوة بسيطة اليوم تصنع فرقًا يا ${who} 💫`,
-    `أنت أقرب لهدفك مما تظن يا ${who} 🚀`,
-    `ركّز قليلًا، تنجز كثيرًا يا ${who} 🎯`,
-    `كل صفحة تقرأها استثمار فيك يا ${who} 📚`,
-    `استمر يا ${who}، العِلم نور 🌿`,
-    `اجعل اليوم أفضل من أمس يا ${who} ✨`,
-    `إنجاز صغير اليوم خير من تأجيل كبير يا ${who} 🌱`,
-    `ثِق بنفسك يا ${who}، تستطيع 💪`,
-    `هدوء + تركيز = إنجاز يا ${who} 🧠`,
+  const CHEER_KEYS = [
+    "home.cheer.0",
+    "home.cheer.1",
+    "home.cheer.2",
+    "home.cheer.3",
+    "home.cheer.4",
+    "home.cheer.5",
+    "home.cheer.6",
+    "home.cheer.7",
+    "home.cheer.8",
+    "home.cheer.9",
   ];
-  const dayIndex = Math.floor(Date.now() / 86_400_000) % DAILY_CHEERS.length;
-  const dailyCheer = DAILY_CHEERS[dayIndex];
+  const dayIndex = Math.floor(Date.now() / 86_400_000) % CHEER_KEYS.length;
+  const dailyCheer = t(CHEER_KEYS[dayIndex], { name: who });
 
   return (
     <ScreenBackground>
@@ -115,7 +119,7 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* الشريط العلوي: قائمة جانبية */}
-          <View style={styles.topBar}>
+          <View style={[styles.topBar, { flexDirection: dir.row }]}>
             <AppDrawer />
           </View>
 
@@ -127,9 +131,9 @@ export default function HomeScreen() {
             <GlassCard radius={Radius.xl} glow={Palette.neonViolet} style={{ marginBottom: Spacing.lg }}>
               <View style={styles.hero}>
                 <ReadListenArt size={150} />
-                <Text style={styles.title}>{name ? `أهلًا ${name} 🌷` : "VoiceStudyFlow"}</Text>
+                <Text style={styles.title}>{name ? t("home.greeting", { name }) : "VoiceStudyFlow"}</Text>
                 <Text style={styles.dailyCheer}>{dailyCheer}</Text>
-                <Text style={styles.subtitle}>ذاكر بذكاء ✨ اقرأ، اسمع، خطّط، وأنجز</Text>
+                <Text style={styles.subtitle}>{t("home.subtitle")}</Text>
               </View>
             </GlassCard>
           </FadeIn>
@@ -138,23 +142,23 @@ export default function HomeScreen() {
           <FadeIn delay={80}>
             <GlassCard glow={Palette.neonPink} style={{ marginBottom: Spacing.xl }}>
               <View style={styles.streakWrap}>
-                <View style={styles.streakHead}>
+                <View style={[styles.streakHead, { flexDirection: dir.row }]}>
                   <View style={styles.flameWrap}>
                     <Text style={styles.flameEmoji}>🔥</Text>
                     <Text style={styles.flameNum}>{streak}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.streakTitle}>سلسلة {streak} يوم متتالي</Text>
-                    <Text style={styles.streakMsg}>{streakMsg}</Text>
+                    <Text style={[styles.streakTitle, { textAlign: dir.textAlign }]}>{t("home.streak.title", { count: streak })}</Text>
+                    <Text style={[styles.streakMsg, { textAlign: dir.textAlign }]}>{streakMsg}</Text>
                   </View>
                 </View>
 
-                <View style={styles.streakStats}>
-                  <Stat value={stats?.totalPages ?? 0} label="صفحة" />
-                  <Stat value={stats?.totalMinutes ?? 0} label="دقيقة" />
+                <View style={[styles.streakStats, { flexDirection: dir.row }]}>
+                  <Stat value={stats?.totalPages ?? 0} label={t("home.stat.pages")} />
+                  <Stat value={stats?.totalMinutes ?? 0} label={t("home.stat.minutes")} />
                   <Pressable onPress={() => router.push("/flashcards")} style={styles.statItem}>
                     <Text style={[styles.statValue, due > 0 && { color: Palette.neonPink }]}>{due}</Text>
-                    <Text style={styles.statLabel}>بطاقة مستحقة</Text>
+                    <Text style={styles.statLabel}>{t("home.stat.dueCards")}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -174,7 +178,7 @@ export default function HomeScreen() {
                 style={styles.ctaGrad}
               >
                 <Ionicons name="library" size={20} color="#fff" />
-                <Text style={styles.ctaTxt}>اذهب إلى المكتبة</Text>
+                <Text style={styles.ctaTxt}>{t("home.cta.library")}</Text>
               </LinearGradient>
             </Pressable>
           </FadeIn>
@@ -192,8 +196,8 @@ export default function HomeScreen() {
                       <View style={[styles.iconWrap, { backgroundColor: f.color + "22", borderColor: f.color + "66" }]}>
                         <Ionicons name={f.icon} size={22} color={f.color} />
                       </View>
-                      <Text style={styles.cardLabel}>{f.label}</Text>
-                      <Text style={styles.cardSub}>{f.sub}</Text>
+                      <Text style={[styles.cardLabel, { textAlign: dir.textAlign }]}>{t(f.labelKey)}</Text>
+                      <Text style={[styles.cardSub, { textAlign: dir.textAlign }]}>{t(f.subKey)}</Text>
                     </View>
                   </GlassCard>
                 </Pressable>
@@ -204,10 +208,10 @@ export default function HomeScreen() {
           {/* تلميح */}
           <FadeIn delay={540}>
           <GlassCard style={{ marginTop: Spacing.xl }}>
-            <View style={styles.hintRow}>
+            <View style={[styles.hintRow, { flexDirection: dir.row }]}>
               <Ionicons name="sparkles" size={18} color={Palette.neonCyan} />
-              <Text style={styles.hint}>
-                ابدأ بإضافة كتاب PDF من «إضافة كتاب»، ثم افتحه من المكتبة واستمع له بصوت بشري.
+              <Text style={[styles.hint, { textAlign: dir.textAlign }]}>
+                {t("home.hint")}
               </Text>
             </View>
           </GlassCard>
