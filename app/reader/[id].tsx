@@ -97,8 +97,11 @@ function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
 
 export default function ReaderScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const dir = useDir();
+  // اللغة الافتراضية للصوت/الترجمة تتبع لغة الواجهة (إنجليزي → صوت إنجليزي… إلخ)
+  const uiVoiceLang: "ar" | "en" | "fr" = lang === "en" || lang === "fr" ? lang : "ar";
+  const uiVoiceId = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === uiVoiceLang)?.voiceId ?? DEFAULT_VOICE_ID;
   const { id, title, pdf_path } = useLocalSearchParams<{
     id?: string;
     title?: string;
@@ -112,8 +115,8 @@ export default function ReaderScreen() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
-  const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">("ar"); // فلتر لغة الأصوات
+  const [voiceId, setVoiceId] = useState(uiVoiceId);
+  const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">(uiVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
   const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
   const [rate, setRate] = useState(1);
   const [sleepMin, setSleepMin] = useState(0);
@@ -170,11 +173,11 @@ export default function ReaderScreen() {
   // الاستماع بالعربية: ترجمة الصفحة ثم قراءتها بصوت عربي (لكتب اللغات)
   const [listenArabic, setListenArabic] = useState(false);
   const listenArabicRef = useRef(false);
-  const arTransRef = useRef<Map<number, string>>(new Map());
-  // لوحة الترجمة: اختيار صوت عربي للترجمة في مكان واحد
+  const arTransRef = useRef<Map<string, string>>(new Map());
+  // لوحة الترجمة: اختيار صوت بلغة الواجهة للاستماع المترجَم
   const [translateModal, setTranslateModal] = useState(false);
-  const [translateVoiceId, setTranslateVoiceId] = useState(DEFAULT_VOICE_ID);
-  const translateVoiceIdRef = useRef(DEFAULT_VOICE_ID);
+  const [translateVoiceId, setTranslateVoiceId] = useState(uiVoiceId);
+  const translateVoiceIdRef = useRef(uiVoiceId);
   // النطق الدقيق: تشكيل النص قبل القراءة (لكتب الدين والقانون والفصحى)
   const [tashkeelMode, setTashkeelMode] = useState(false);
   const tashkeelRef = useRef(false);
@@ -658,12 +661,14 @@ export default function ReaderScreen() {
   }
 
   // يترجم نص الصفحة إلى العربية (مع تخزين مؤقت)
-  async function translatePageToArabic(p: number, text: string): Promise<string> {
-    if (arTransRef.current.has(p)) return arTransRef.current.get(p)!;
+  // يترجم نص الصفحة إلى لغة الواجهة (إنجليزي/فرنسي/عربي) ويخزّنه للجلسة.
+  async function translatePage(p: number, text: string): Promise<string> {
+    const cacheKey = `${uiVoiceLang}:${p}`;
+    if (arTransRef.current.has(cacheKey)) return arTransRef.current.get(cacheKey)!;
     try {
-      const ar = (await aiAssist("translate", text)).trim();
-      const out = ar || text;
-      arTransRef.current.set(p, out);
+      const tr = (await aiAssist("translate", text, undefined, uiVoiceLang)).trim();
+      const out = tr || text;
+      arTransRef.current.set(cacheKey, out);
       return out;
     } catch {
       return text;
@@ -709,7 +714,7 @@ export default function ReaderScreen() {
 
       let pageText = res.text;
       if (listenArabicRef.current && pageText.trim()) {
-        pageText = await translatePageToArabic(res.page, pageText);
+        pageText = await translatePage(res.page, pageText);
       } else if (tashkeelRef.current && pageText.trim()) {
         pageText = await tashkeelPage(res.page, pageText);
       }
@@ -1694,7 +1699,7 @@ export default function ReaderScreen() {
         ) : null}
 
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
-        <View style={styles.aidsRow}>
+        <View style={[styles.aidsRow, { flexDirection: dir.row }]}>
           <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
             <LinearGradient colors={tashkeelMode ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
               <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}</Text>
@@ -1720,11 +1725,11 @@ export default function ReaderScreen() {
           </Pressable>
         </View>
 
-        {/* التحكم: السابقة — تشغيل — التالية (يمين ← يسار) */}
-        <View style={styles.controls}>
+        {/* التحكم: السابقة — تشغيل — التالية (يتبع اتجاه الواجهة) */}
+        <View style={[styles.controls, { flexDirection: dir.row }]}>
           <Pressable onPress={() => goPage(-1)} style={styles.navBtn} disabled={page <= 1} hitSlop={6}>
-            <Ionicons name="chevron-forward" size={20} color={page <= 1 ? Palette.textDim : Palette.text} />
-            <Text style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>{t("reader.nav.prevPage")}</Text>
+            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={page <= 1 ? Palette.textDim : Palette.text} />
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>{t("reader.nav.prevPage")}</Text>
           </Pressable>
 
           <Pressable onPress={togglePlay} style={styles.playBtn}>
@@ -1742,21 +1747,21 @@ export default function ReaderScreen() {
             hitSlop={6}
           >
             <Ionicons
-              name="chevron-back"
+              name={dir.isRTL ? "chevron-back" : "chevron-forward"}
               size={22}
               color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text}
             />
-            <Text style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
               {t("reader.nav.nextPage")}
             </Text>
           </Pressable>
         </View>
 
         {/* أدوات مدمجة (أيقونة + كلمة توضيحية) */}
-        <View style={styles.toolsRow}>
+        <View style={[styles.toolsRow, { flexDirection: dir.row }]}>
           <View style={styles.tool}>
             <Pressable onPress={() => skipSentence(-1)} style={styles.toolBtn} hitSlop={4}>
-              <Ionicons name="play-skip-forward" size={17} color={Palette.text} />
+              <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={17} color={Palette.text} />
               {skipMult > 1 && skipDir < 0 ? (
                 <View style={styles.skipBadge}>
                   <Text style={styles.skipBadgeTxt}>×{skipMult}</Text>
@@ -1767,7 +1772,7 @@ export default function ReaderScreen() {
           </View>
           <View style={styles.tool}>
             <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
-              <Ionicons name="play-skip-back" size={17} color={Palette.text} />
+              <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={17} color={Palette.text} />
               {skipMult > 1 && skipDir > 0 ? (
                 <View style={styles.skipBadge}>
                   <Text style={styles.skipBadgeTxt}>×{skipMult}</Text>
@@ -2206,7 +2211,7 @@ export default function ReaderScreen() {
 
             <Text style={[styles.trVoicesLabel, { textAlign: dir.textAlign }]}>{t("reader.translate.chooseVoice")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.voiceRow}>
-              {VOICE_CATALOG.filter((v) => !v.lang || v.lang === "ar").map((v) => {
+              {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === uiVoiceLang).map((v) => {
                 const sel = v.voiceId === translateVoiceId;
                 return (
                   <Pressable
@@ -3072,7 +3077,7 @@ const styles = StyleSheet.create({
 
   controls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 18 },
   navBtn: {
-    minWidth: 60,
+    width: 104,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: Radius.md,

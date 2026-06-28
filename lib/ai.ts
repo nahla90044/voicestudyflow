@@ -167,12 +167,13 @@ export async function defineWord(word: string, context: string): Promise<string>
 export async function aiAssist(
   action: AiAction,
   text: string,
-  question?: string
+  question?: string,
+  targetLang?: "ar" | "en" | "fr"
 ): Promise<string> {
   if (!text.trim()) return "";
 
   const { data, error } = await supabase.functions.invoke("ai-assist", {
-    body: { action, text, question },
+    body: { action, text, question, targetLang },
   });
 
   if (error) throw error;

@@ -73,9 +73,21 @@ Deno.serve(async (req: Request) => {
     const action: string = body.action ?? "summarize";
     const text: string = (body.text ?? "").toString().slice(0, 12000); // حد أمان
     const question: string = (body.question ?? "").toString();
+    const targetLang: string = (body.targetLang ?? "ar").toString();
 
     if (!SYSTEM[action]) return json({ error: "Unknown action" }, 400);
     if (!text.trim()) return json({ error: "Empty text" }, 400);
+
+    // الترجمة: اللغة الهدف تتبع لغة الواجهة (افتراضي العربية للتوافق الخلفي).
+    const TRANSLATE_TARGET: Record<string, string> = {
+      ar: "العربية الفصحى",
+      en: "clear, natural English",
+      fr: "un français clair et naturel",
+    };
+    const systemPrompt =
+      action === "translate"
+        ? `أنت مترجم محترف. ترجم النص التالي إلى ${TRANSLATE_TARGET[targetLang] ?? TRANSLATE_TARGET.ar} ترجمةً دقيقةً وسلسةً تحافظ على المعنى. أعد الترجمة فقط، دون أي مقدمة أو شرح أو النص الأصلي.`
+        : SYSTEM[action];
 
     const userContent =
       action === "ask"
@@ -90,7 +102,7 @@ Deno.serve(async (req: Request) => {
     const params: Record<string, unknown> = {
       model,
       max_tokens: MAX_TOKENS[action] ?? 1500,
-      system: SYSTEM[action],
+      system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     };
     // effort مدعوم في opus فقط
