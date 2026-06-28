@@ -81,6 +81,7 @@ const VOICE_IDS: Record<VoiceGender, string> = {
 /* ---------------- حالة التشغيل ---------------- */
 
 let currentPlayer: AudioPlayer | null = null;
+let currentVoiceRate = 1; // سرعة الصوت الجاري الداخلية (لتطبيق سرعة المستخدم فورًا)
 let currentFileUri: string | null = null;
 let audioModeReady = false;
 // مشغّل المقطع التالي مُحمّل مسبقًا (لتشغيل متواصل بلا فجوة بين المقاطع)
@@ -453,6 +454,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. زر السرعة يسرّع/يبطّئ
     // **نفس الصوت فقط** — نحافظ دائمًا على طبقة الصوت (pitch) فلا تتغيّر هويّته.
     const voiceRate = VOICE_CATALOG.find((v) => v.voiceId === opts.voiceId)?.rate ?? 1;
+    currentVoiceRate = voiceRate; // ليطبّق setLivePlaybackRate سرعة المستخدم فورًا
     const userRate = opts.rate && opts.rate > 0 ? opts.rate : 1;
     const finalRate = userRate * voiceRate;
     try {
@@ -623,4 +625,20 @@ function stopCurrentOnly(): void {
 export async function stopSpeaking(): Promise<void> {
   stopCurrentOnly();
   disposeWarm(); // إيقاف كامل (المستخدم) → نتخلّص من المشغّل التالي أيضًا
+}
+
+/**
+ * يطبّق سرعة المستخدم على الصوت الجاري **فورًا** أثناء القراءة (دون إيقاف/تشغيل)،
+ * مع الحفاظ على طبقة الصوت. تُضرب بسرعة الصوت الداخلية كما في بدء التشغيل.
+ */
+export function setLivePlaybackRate(userRate: number): void {
+  const p = currentPlayer;
+  if (!p) return;
+  const r = userRate > 0 ? userRate : 1;
+  try {
+    (p as { shouldCorrectPitch?: boolean }).shouldCorrectPitch = true;
+    p.setPlaybackRate(r * currentVoiceRate, "high");
+  } catch {
+    // نتجاهل — لو فشل التطبيق الفوري، ستُطبَّق السرعة على المقطع التالي
+  }
 }

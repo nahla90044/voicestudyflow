@@ -49,6 +49,7 @@ import { supabase } from "../../lib/supabase";
 import {
   DEFAULT_VOICE_ID,
   prefetchText,
+  setLivePlaybackRate,
   speakText,
   stopSpeaking,
   VOICE_CATALOG,
@@ -119,6 +120,7 @@ export default function ReaderScreen() {
   const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">(uiVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
   const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
   const [rate, setRate] = useState(1);
+  const rateRef = useRef(1); // أحدث سرعة (لتقرأها الجملة التالية بلا إغلاق قديم)
   const [sleepMin, setSleepMin] = useState(0);
   const [viewMode, setViewMode] = useState<"pdf" | "text">("pdf");
   const [sentences, setSentences] = useState<string[]>([]);
@@ -279,6 +281,7 @@ export default function ReaderScreen() {
       ]);
       setPage(savedPage);
       setRate(savedRate);
+      rateRef.current = savedRate;
       resumeIdxRef.current = savedSent; // يستأنف من نفس الجملة بالضبط
       prefsLoadedRef.current = true;
       setPrefsLoaded(true); // الآن page = الصفحة المحفوظة → حمّل صورتها (لا الغلاف)
@@ -465,6 +468,8 @@ export default function ReaderScreen() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
     const next = SPEEDS[(idx + 1) % SPEEDS.length];
     setRate(next);
+    rateRef.current = next; // الجملة التالية تأخذ السرعة الجديدة
+    setLivePlaybackRate(next); // والصوت الجاري يتغيّر فورًا دون إيقاف/تشغيل
     setReadingRate(next);
   }
 
@@ -547,7 +552,7 @@ export default function ReaderScreen() {
     setPresSlide(idx);
     speakText(slideSpeech(pageSlides[idx]), {
       voiceId: pickVoice(),
-      rate,
+      rate: rateRef.current,
       expressive: true, // صوت أدفأ وأكثر تعبيرًا للعرض التقديمي
       onDone: () => narrateSlidesFrom(idx + 1),
       onError: () => narrateSlidesFrom(idx + 1),
@@ -747,7 +752,7 @@ export default function ReaderScreen() {
         // أعلن رقم الصفحة مرة واحدة ثم اقرأ المحتوى
         speakText(`الصفحة رقم ${res.page}.`, {
           voiceId: pickVoice(),
-          rate,
+          rate: rateRef.current,
           onDone: () => playSentence(sents, 0, res.page, res.totalPages),
           onError: () => playSentence(sents, 0, res.page, res.totalPages),
         });
@@ -798,7 +803,7 @@ export default function ReaderScreen() {
       const totalWords = sents.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
       speakText(sents[i], {
         voiceId: pickVoice(),
-        rate,
+        rate: rateRef.current,
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
         onProgress: (frac) => {
           // frac الآن دقيق (من توقيت الحروف الحقيقي بعد محاذاته بالنص المعروض)
@@ -838,7 +843,7 @@ export default function ReaderScreen() {
         `أحسنتِ يا ${name}، نكمل.`,
       ];
       const phrase = phrases[Math.floor(focusCountRef.current / every) % phrases.length];
-      speakText(phrase, { voiceId, rate, onDone: speakCurrent, onError: speakCurrent });
+      speakText(phrase, { voiceId, rate: rateRef.current, onDone: speakCurrent, onError: speakCurrent });
     } else {
       speakCurrent();
     }
