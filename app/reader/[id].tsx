@@ -1202,6 +1202,20 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, Math.max(L + 0.2, R)) };
   }, [lines]);
 
+  // العمود الذي **يجب أن يسعه** التكبير: أوسع امتداد لأسطر النص الفعلية (نتجاهل
+  // القصيرة جدًا كأرقام الصفحات/الترويسات). نأخذ الحد الأقصى الحقيقي فلا يُقصّ أعرض سطر.
+  const fitCol = useMemo<{ L: number; R: number }>(() => {
+    const body = lines.filter((l) => l.w > 0.3);
+    if (body.length === 0) return textCol;
+    let L = 1;
+    let R = 0;
+    for (const l of body) {
+      L = Math.min(L, l.x);
+      R = Math.max(R, l.x + l.w);
+    }
+    return { L: Math.max(0, L), R: Math.min(1, Math.max(L + 0.2, R)) };
+  }, [lines, textCol]);
+
   // الكلمة المقروءة حاليًا (صندوقها) — لتظليل متحرّك يمين→يسار عبر السطر الظاهر
   const wordBox = useMemo<WordBox | null>(() => {
     if (!readPoint || pageWords.length === 0) return null;
@@ -1209,38 +1223,50 @@ export default function ReaderScreen() {
     return w ? { t: "", x: w.x, y: w.y, w: w.w, h: w.h } : null;
   }, [readPoint, pageWords]);
 
-  const lensScale = 1.9; // تكبير كبير (أكبر شوي من قبل)
+  // العدسة مغناطيس **متحرّك** يكبّر جزءًا من السطر ثم ينزلق مع القراءة فيغطّي السطر
+  // كاملًا يمينًا→يسارًا (وليست لقطة ثابتة للسطر كله). 1.7x = تكبير واضح ومريح.
+  const lensScale = 1.7;
 
-  // الشريط يمشي على السطر **كامل** يمين→يسار بتقدّم مضمون (idx يمرّ على كل صناديق
-  // السطر فالتقدّم 0→1 أكيد)، محصورًا داخل عمود النص (بلا هامش)، ثم ينزل للسطر التالي.
+  // العدسة تمسح السطر الحالي **كاملًا** مع تقدّم القراءة، محصورةً دائمًا داخل حدود
+  // السطر/عمود النص (فلا تُظهر هامش الصفحة الفاضي أبدًا)، وتصل لطرف السطر مضمونًا:
+  //   • النص العربي (RTL): تبدأ يمين السطر وتنتهي عند أقصى يساره.
+  //   • النص الأجنبي (LTR): تبدأ يسار السطر وتنتهي عند أقصى يمينه.
+  // وعموديًا تتمركز على السطر فتنزل سطرًا بسطر. الاتجاه يُضبط تلقائيًا (pageRTL).
   useEffect(() => {
     if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
     const imgH = lensW / (pageImgAspect || 0.7);
-    const minY = Math.min(0, -(imgH * lensScale - lensH));
-    const minX = Math.min(0, lensW - lensW * lensScale);
+    const scaledW = lensW * lensScale; // عرض الصورة المكبّرة
+    const scaledH = imgH * lensScale; // ارتفاع الصورة المكبّرة
+    const minX = Math.min(0, lensW - scaledW);
+    const minY = Math.min(0, lensH - scaledH);
     const win = 1 / lensScale; // عرض النافذة المرئية (بنسبة عرض الصفحة)
-    const colL = textCol.L;
-    const colR = textCol.R;
+
+    const colL = fitCol.L;
+    const colR = fitCol.R;
     const colW = colR - colL;
-    // تقدّم القراءة داخل السطر الحالي (مضمون 0→1)
-    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end);
-    const fRaw = ln && ln.end > ln.start ? (readPoint.idx - ln.start) / (ln.end - ln.start) : 0;
-    // نُكمل الاجتياز لأقصى اليسار عند ٨٥٪ من السطر ونثبت هناك آخر ١٥٪ — فيصل اليسار
-    // دائمًا رغم تأخّر الأنيميشن، بدل ما يقصّر عنه بكلمة-كلمتين.
-    const f = Math.min(1, Math.max(0, fRaw / 0.85));
-    let a: number;
+
+    // a = الحافة اليسرى للنافذة المرئية (نسبة من عرض الصفحة).
+    let tX: number;
     if (colW <= win) {
-      a = colL - (win - colW) / 2; // العمود يسع كاملًا
+      // عمود النص أضيق من النافذة (نص ضيّق) → وسّطه وثبّته داخل حدود الصورة.
+      const a = colL - (win - colW) / 2;
+      tX = Math.min(0, Math.max(minX, -a * scaledW));
     } else {
-      // f=0 يعرض يمين العمود، f=1 يعرض يساره → اجتياز السطر كامل يمين→يسار
-      a = (colR - win) * (1 - f) + colL * f;
+      // المغناطيس يضع **الكلمة المقروءة في منتصف العدسة دائمًا** وينزلق معها بحرية:
+      // يمين→يسار في العربي و يسار→يمين في الأجنبي تلقائيًا (cx يتبع موضع الكلمة).
+      // لا نحصره بحواف النص، فعند طرفَي السطر يظهر **هامش أبيض نظيف متساوٍ** (خلفية
+      // العدسة) بدل التصاق الكلمة بالحافة أو قصّها. الهامش داخل العدسة فقط لا في الكتاب.
+      const a = readPoint.cx - win / 2;
+      tX = -a * scaledW;
     }
-    const tX = Math.min(0, Math.max(minX, -a * lensScale * lensW));
+
+    // ── عموديًا: تمركز على السطر الحالي فتنزل مع كل سطر ──
     const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
-    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * imgH * lensScale));
+    const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * scaledH));
+
     Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, lines, textCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, readPoint, fitCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -1499,6 +1525,9 @@ export default function ReaderScreen() {
                   {lensW > 0 ? (
                     <Animated.View
                       style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
                         width: lensW * lensScale,
                         height: (lensW / (pageImgAspect || 0.7)) * lensScale,
                         transform: [{ translateX: lensX }, { translateY: lensY }],
