@@ -12,12 +12,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
 import { claimDeviceData, signInWithEmail, signUpEmail } from "../lib/auth";
+import { useDir, useI18n } from "../lib/i18n";
 import { ONBOARDING_KEY } from "./onboarding";
 
 type Mode = "signup" | "login";
 
 export default function AuthScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,8 +38,8 @@ export default function AuthScreen() {
   async function onSubmit() {
     setErr("");
     const e = email.trim().toLowerCase();
-    if (!e || !e.includes("@")) return setErr("أدخلي بريدًا صحيحًا");
-    if (password.length < 6) return setErr("كلمة المرور ٦ أحرف على الأقل");
+    if (!e || !e.includes("@")) return setErr(t("auth.err.email"));
+    if (password.length < 6) return setErr(t("auth.err.password"));
     setBusy(true);
     try {
       if (mode === "signup") {
@@ -52,10 +55,10 @@ export default function AuthScreen() {
       }
     } catch (ex: any) {
       const m = String(ex?.message ?? "");
-      if (/already registered|exists/i.test(m)) setErr("هذا البريد مسجّل — سجّلي دخولك بدله.");
-      else if (/invalid login|credentials/i.test(m)) setErr("البريد أو كلمة المرور غير صحيحة.");
-      else if (/not confirmed|confirm/i.test(m)) setErr("لم يتم تأكيد البريد بعد — افتحي رسالة التأكيد أولًا.");
-      else setErr(m || "تعذّر إتمام العملية");
+      if (/already registered|exists/i.test(m)) setErr(t("auth.err.exists"));
+      else if (/invalid login|credentials/i.test(m)) setErr(t("auth.err.credentials"));
+      else if (/not confirmed|confirm/i.test(m)) setErr(t("auth.err.notConfirmed"));
+      else setErr(m || t("auth.err.generic"));
     } finally {
       setBusy(false);
     }
@@ -68,7 +71,7 @@ export default function AuthScreen() {
       await signInWithEmail(email.trim().toLowerCase(), password);
       await finishLogin();
     } catch {
-      setErr("لم يتم التأكيد بعد. افتحي رسالة التأكيد في بريدك ثم أعيدي المحاولة.");
+      setErr(t("auth.err.notConfirmedRetry"));
     } finally {
       setBusy(false);
     }
@@ -87,34 +90,34 @@ export default function AuthScreen() {
             {awaitingConfirm ? (
               <View style={styles.card}>
                 <Ionicons name="mail-unread" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
-                <Text style={styles.confirmTitle}>أكّدي بريدك</Text>
+                <Text style={styles.confirmTitle}>{t("auth.confirm.title")}</Text>
                 <Text style={styles.confirmBody}>
-                  أرسلنا رسالة تأكيد إلى{"\n"}
+                  {t("auth.confirm.sentTo")}{"\n"}
                   <Text style={{ color: Palette.text, fontWeight: "900" }}>{email.trim()}</Text>
-                  {"\n"}افتحيها واضغطي رابط التأكيد، ثم ارجعي هنا.
+                  {"\n"}{t("auth.confirm.instructions")}
                 </Text>
                 {!!err && <Text style={styles.err}>{err}</Text>}
                 <Pressable onPress={onConfirmedLogin} style={styles.submit} disabled={busy}>
                   <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>أكّدت بريدي — دخّليني</Text>}
+                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.confirm.cta")}</Text>}
                   </LinearGradient>
                 </Pressable>
                 <Pressable onPress={() => setAwaitingConfirm(false)} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }}>
-                  <Text style={styles.switchTxt}>رجوع</Text>
+                  <Text style={styles.switchTxt}>{t("common.back")}</Text>
                 </Pressable>
               </View>
             ) : (
               <View style={styles.card}>
-                <View style={styles.tabs}>
+                <View style={[styles.tabs, { flexDirection: dir.row }]}>
                   <Pressable onPress={() => setMode("signup")} style={[styles.tab, mode === "signup" && styles.tabOn]}>
-                    <Text style={[styles.tabTxt, mode === "signup" && styles.tabTxtOn]}>حساب جديد</Text>
+                    <Text style={[styles.tabTxt, mode === "signup" && styles.tabTxtOn]}>{t("auth.tab.signup")}</Text>
                   </Pressable>
                   <Pressable onPress={() => setMode("login")} style={[styles.tab, mode === "login" && styles.tabOn]}>
-                    <Text style={[styles.tabTxt, mode === "login" && styles.tabTxtOn]}>تسجيل الدخول</Text>
+                    <Text style={[styles.tabTxt, mode === "login" && styles.tabTxtOn]}>{t("auth.tab.login")}</Text>
                   </Pressable>
                 </View>
 
-                <Text style={styles.label}>البريد الإلكتروني</Text>
+                <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("auth.email")}</Text>
                 <TextInput
                   value={email}
                   onChangeText={setEmail}
@@ -122,16 +125,16 @@ export default function AuthScreen() {
                   placeholderTextColor={Palette.textDim}
                   autoCapitalize="none"
                   keyboardType="email-address"
-                  style={styles.input}
+                  style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                 />
-                <Text style={styles.label}>كلمة المرور</Text>
+                <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("auth.password")}</Text>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="٦ أحرف على الأقل"
+                  placeholder={t("auth.passwordHint")}
                   placeholderTextColor={Palette.textDim}
                   secureTextEntry
-                  style={styles.input}
+                  style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                 />
 
                 {!!err && <Text style={styles.err}>{err}</Text>}
@@ -141,12 +144,12 @@ export default function AuthScreen() {
                     {busy ? (
                       <ActivityIndicator color="#fff" />
                     ) : (
-                      <Text style={styles.submitTxt}>{mode === "signup" ? "إنشاء الحساب" : "دخول"}</Text>
+                      <Text style={styles.submitTxt}>{mode === "signup" ? t("auth.cta.signup") : t("auth.cta.login")}</Text>
                     )}
                   </LinearGradient>
                 </Pressable>
 
-                <Text style={styles.note}>حسابك خاص بك، وكتبك وتقدّمك محفوظة فيه ومنفصلة تمامًا عن غيرك.</Text>
+                <Text style={styles.note}>{t("auth.note")}</Text>
               </View>
             )}
           </ScrollView>
