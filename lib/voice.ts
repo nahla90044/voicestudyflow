@@ -450,17 +450,18 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     // المشغّل المُحمّل مسبقًا (warm) إن توفّر → تشغيل فوري بلا فجوة، وإلا ننشئ واحدًا
     const player = adopted ?? createAudioPlayer({ uri: file.uri }, { updateInterval: 120 });
     currentPlayer = player;
-    // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. الأصوات ذات السرعة
-    // الخاصة (< 1) نلغي تصحيح طبقة الصوت لها فتصير أعمق مع البطء.
+    // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. زر السرعة يسرّع/يبطّئ
+    // **نفس الصوت فقط** — نحافظ دائمًا على طبقة الصوت (pitch) فلا تتغيّر هويّته.
     const voiceRate = VOICE_CATALOG.find((v) => v.voiceId === opts.voiceId)?.rate ?? 1;
     const userRate = opts.rate && opts.rate > 0 ? opts.rate : 1;
     const finalRate = userRate * voiceRate;
     try {
-      (player as { shouldCorrectPitch?: boolean }).shouldCorrectPitch = voiceRate >= 1;
+      (player as { shouldCorrectPitch?: boolean }).shouldCorrectPitch = true;
     } catch {}
     if (finalRate !== 1) {
       try {
-        player.setPlaybackRate(finalRate);
+        // تمرير جودة تصحيح الطبقة يضمن ثبات الطبقة عند أي سرعة (لا «تأثير سنجاب»)
+        player.setPlaybackRate(finalRate, "high");
       } catch {
         // نتجاهل — التشغيل بالسرعة الافتراضية أهم من توقّف الصوت
       }
