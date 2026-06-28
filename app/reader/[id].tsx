@@ -56,6 +56,7 @@ import {
 } from "../../lib/voice";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel, getUserName } from "../../lib/settings";
+import { useDir, useI18n } from "../../lib/i18n";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const SLEEP_OPTIONS = [0, 5, 15, 30] as const; // 0 = مطفأ (بالدقائق)
@@ -96,6 +97,8 @@ function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
 
 export default function ReaderScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const { id, title, pdf_path } = useLocalSearchParams<{
     id?: string;
     title?: string;
@@ -329,7 +332,7 @@ export default function ReaderScreen() {
   async function onToggleBookmark() {
     const was = bookmarks.includes(page);
     setBookmarks(await toggleBookmark(bookId, page));
-    showToast(was ? `أُزيلت علامة الصفحة ${page}` : `🔖 حُفظت الصفحة ${page} في علاماتك`);
+    showToast(was ? t("reader.toast.bookmarkRemoved", { page }) : t("reader.toast.bookmarkSaved", { page }));
   }
 
   // ضغطة مطوّلة على جملة في وضع النص → تظليل/إزالة
@@ -337,10 +340,10 @@ export default function ReaderScreen() {
     const existing = highlights.find((h) => h.page === page && h.text === text);
     if (existing) {
       setHighlights(await removeHighlight(bookId, existing.id));
-      showToast("أُزيل التظليل");
+      showToast(t("reader.toast.highlightRemoved"));
     } else {
       setHighlights(await addHighlight(bookId, { page, text }));
-      showToast("🖍️ تم تظليل المقطع وحفظه في ملاحظاتك");
+      showToast(t("reader.toast.highlightSaved"));
     }
   }
 
@@ -373,7 +376,7 @@ export default function ReaderScreen() {
       const text = highlights.map((h) => h.text).join("\n");
       const cards = await generateFlashcards(text);
       if (cards.length === 0) {
-        showToast("تعذّر توليد بطاقات من التحديدات");
+        showToast(t("reader.toast.cardsFromHighlightsFailed"));
         return;
       }
       const n = await addCards(
@@ -383,9 +386,9 @@ export default function ReaderScreen() {
           bookTitle: typeof title === "string" ? title : undefined,
         }))
       );
-      showToast(`🃏 أُضيفت ${n} بطاقة من تحديداتك`);
+      showToast(t("reader.toast.cardsAdded", { count: n }));
     } catch {
-      showToast("تعذّر توليد البطاقات");
+      showToast(t("reader.toast.cardsFailed"));
     } finally {
       setMakingCards(false);
     }
@@ -989,13 +992,13 @@ export default function ReaderScreen() {
     try {
       const text = await ensurePageText();
       if (!text.trim()) {
-        setAiResult("لا يوجد نص في هذه الصفحة.");
+        setAiResult(t("reader.ai.noPageText"));
         return;
       }
       const out = await aiAssist(action, text, aiQuestion);
-      setAiResult(out || "لا توجد نتيجة.");
+      setAiResult(out || t("reader.ai.noResult"));
     } catch {
-      setAiResult("تعذّر تنفيذ الطلب. ميزة الذكاء تحتاج تفعيل مفتاح Claude.");
+      setAiResult(t("reader.ai.requestFailed"));
     } finally {
       setAiBusy(false);
     }
@@ -1007,19 +1010,19 @@ export default function ReaderScreen() {
     try {
       const text = await ensurePageText();
       if (!text.trim()) {
-        setAiResult("لا يوجد نص في هذه الصفحة.");
+        setAiResult(t("reader.ai.noPageText"));
         return;
       }
       const cards = await generateFlashcards(text);
       if (cards.length === 0) {
-        setAiResult("تعذّر توليد بطاقات من هذه الصفحة.");
+        setAiResult(t("reader.ai.cardsFailed"));
         return;
       }
       const bookTitle = typeof title === "string" ? title : undefined;
       const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle })));
-      setAiResult(`✅ تم حفظ ${n} بطاقة مراجعة. راجعيها من تبويب «البطاقات».`);
+      setAiResult(t("reader.ai.cardsSaved", { count: n }));
     } catch {
-      setAiResult("تعذّر تنفيذ الطلب. ميزة الذكاء تحتاج تفعيل مفتاح Claude.");
+      setAiResult(t("reader.ai.requestFailed"));
     } finally {
       setAiBusy(false);
     }
@@ -1062,9 +1065,9 @@ export default function ReaderScreen() {
     setDictOpen(true);
     try {
       const m = await defineWord(word, context);
-      setDictMeaning(m || "لا يوجد معنى متاح.");
+      setDictMeaning(m || t("reader.dict.noMeaning"));
     } catch {
-      setDictMeaning("تعذّر جلب المعنى. تأكدي من تفعيل الذكاء (مفتاح Claude).");
+      setDictMeaning(t("reader.dict.meaningFailed"));
     } finally {
       setDictLoading(false);
     }
@@ -1074,7 +1077,7 @@ export default function ReaderScreen() {
   async function startIngest() {
     if (ingesting) {
       stopDownload();
-      showToast("أُوقف التحميل");
+      showToast(t("reader.toast.downloadStopped"));
       return;
     }
     let total = totalPages;
@@ -1089,7 +1092,7 @@ export default function ReaderScreen() {
     }
     const bookTitle = typeof title === "string" ? title : "الكتاب";
     await startDownload(pdfPath, bookTitle, total);
-    showToast("⬇️ يحمّل في الخلفية — يكمل حتى لو خرجتِ من الكتاب");
+    showToast(t("reader.toast.downloadingBackground"));
   }
 
   useEffect(() => {
@@ -1353,8 +1356,8 @@ export default function ReaderScreen() {
         <Pressable onPress={goBack} style={styles.backBtn} hitSlop={8}>
           <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
         </Pressable>
-        <Text style={styles.hTitle} numberOfLines={1}>
-          {typeof title === "string" && title.trim() ? title : "الكتاب"}
+        <Text style={[styles.hTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>
+          {typeof title === "string" && title.trim() ? title : t("reader.book")}
         </Text>
 
         <Pressable onPress={() => setFullText(true)} style={styles.iconBtn} hitSlop={8}>
@@ -1392,7 +1395,7 @@ export default function ReaderScreen() {
             size={16}
             color={Palette.text}
           />
-          <Text style={styles.modeToggleTxt}>{viewMode === "pdf" ? "نص" : "PDF"}</Text>
+          <Text style={styles.modeToggleTxt}>{viewMode === "pdf" ? t("reader.viewToggle.text") : "PDF"}</Text>
         </Pressable>
       </View>
       )}
@@ -1416,18 +1419,18 @@ export default function ReaderScreen() {
               >
                 <Ionicons name="brush" size={15} color={highlightMode ? "#0b1220" : Palette.text} />
                 <Text style={[styles.hlToggleTxt, highlightMode && { color: "#0b1220" }]}>
-                  {highlightMode ? "وضع التحديد مفعّل — المسي السطر" : "تحديد للدراسة 🖍️"}
+                  {highlightMode ? t("reader.highlight.modeOn") : t("reader.highlight.modeOff")}
                 </Text>
               </Pressable>
               <Pressable onPress={() => setNotesOpen(true)} style={styles.hlToggle}>
                 <Ionicons name="bookmarks-outline" size={15} color={Palette.text} />
-                <Text style={styles.hlToggleTxt}>مقتطفاتي</Text>
+                <Text style={styles.hlToggleTxt}>{t("reader.highlight.myExcerpts")}</Text>
               </Pressable>
             </View>
 
             {sentences.length === 0 ? (
               <Text style={styles.emptyTextSmall}>
-                {busy ? "جارٍ تحميل النص…" : "لا يوجد نص لعرضه في هذه الصفحة."}
+                {busy ? t("reader.text.loading") : t("reader.text.empty")}
               </Text>
             ) : (
               sentences.map((s, i) => {
@@ -1521,12 +1524,12 @@ export default function ReaderScreen() {
                 {pageImgLoading ? (
                   <>
                     <ActivityIndicator color={Palette.primary} />
-                    <Text style={styles.emptyTextSmall}>جارٍ تجهيز الصفحة…</Text>
+                    <Text style={styles.emptyTextSmall}>{t("reader.page.preparing")}</Text>
                   </>
                 ) : (
                   <>
                     <Ionicons name="document-outline" size={36} color={Palette.textDim} />
-                    <Text style={styles.emptyTextSmall}>اضغطي تشغيل أو تنقّلي لعرض الصفحة.</Text>
+                    <Text style={styles.emptyTextSmall}>{t("reader.page.tapPlayOrNavigate")}</Text>
                   </>
                 )}
               </View>
@@ -1640,8 +1643,8 @@ export default function ReaderScreen() {
         {/* زر واحد لاختيار الصوت */}
         <Pressable onPress={() => setVoiceModal(true)} style={styles.voicePickBtn}>
           <Ionicons name="chevron-down" size={16} color={Palette.textMuted} />
-          <Text style={styles.voicePickTxt} numberOfLines={1}>
-            الصوت: {VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? "اختاري"}
+          <Text style={[styles.voicePickTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
+            {t("reader.voice.label", { name: VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? t("reader.voice.choose") })}
           </Text>
         </Pressable>
 
@@ -1655,10 +1658,10 @@ export default function ReaderScreen() {
             size={16}
             color={presMusicKey ? Palette.neonCyan : Palette.textMuted}
           />
-          <Text style={styles.voicePickTxt} numberOfLines={1}>
+          <Text style={[styles.voicePickTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
             {presMusicKey
-              ? `موسيقى: ${MUSIC_OPTIONS.find((m) => m.key === presMusicKey)?.name}`
-              : "موسيقى خلفية 🎵"}
+              ? t("reader.music.label", { name: MUSIC_OPTIONS.find((m) => m.key === presMusicKey)?.name ?? "" })
+              : t("reader.music.background")}
           </Text>
         </Pressable>
         {showMusicPicker ? (
@@ -1670,7 +1673,7 @@ export default function ReaderScreen() {
               }}
               style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
             >
-              <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>بدون</Text>
+              <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>{t("reader.music.none")}</Text>
             </Pressable>
             {MUSIC_OPTIONS.map((m) => {
               const on = presMusicKey === m.key;
@@ -1694,13 +1697,13 @@ export default function ReaderScreen() {
         <View style={styles.aidsRow}>
           <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
             <LinearGradient colors={tashkeelMode ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? "النطق مُفعّل" : "نطق دقيق"}</Text>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}</Text>
             </LinearGradient>
           </Pressable>
 
           <Pressable onPress={() => setTranslateModal(true)} style={styles.aidWrap}>
             <LinearGradient colors={listenArabic ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? "الترجمة مُفعّلة" : "الترجمة"}</Text>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? t("reader.aids.translateOn") : t("reader.aids.translateOff")}</Text>
             </LinearGradient>
           </Pressable>
 
@@ -1712,7 +1715,7 @@ export default function ReaderScreen() {
             style={styles.aidWrap}
           >
             <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>عرض تقديمي</Text>
+              <Text style={styles.aidGradTxt} numberOfLines={1}>{t("reader.aids.present")}</Text>
             </LinearGradient>
           </Pressable>
         </View>
@@ -1721,7 +1724,7 @@ export default function ReaderScreen() {
         <View style={styles.controls}>
           <Pressable onPress={() => goPage(-1)} style={styles.navBtn} disabled={page <= 1} hitSlop={6}>
             <Ionicons name="chevron-forward" size={20} color={page <= 1 ? Palette.textDim : Palette.text} />
-            <Text style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>الصفحة السابقة</Text>
+            <Text style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>{t("reader.nav.prevPage")}</Text>
           </Pressable>
 
           <Pressable onPress={togglePlay} style={styles.playBtn}>
@@ -1744,7 +1747,7 @@ export default function ReaderScreen() {
               color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text}
             />
             <Text style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
-              الصفحة التالية
+              {t("reader.nav.nextPage")}
             </Text>
           </Pressable>
         </View>
@@ -1760,7 +1763,7 @@ export default function ReaderScreen() {
                 </View>
               ) : null}
             </Pressable>
-            <Text style={styles.toolCap}>مقطع سابق</Text>
+            <Text style={styles.toolCap}>{t("reader.tool.prevSegment")}</Text>
           </View>
           <View style={styles.tool}>
             <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
@@ -1771,13 +1774,13 @@ export default function ReaderScreen() {
                 </View>
               ) : null}
             </Pressable>
-            <Text style={styles.toolCap}>مقطع تالٍ</Text>
+            <Text style={styles.toolCap}>{t("reader.tool.nextSegment")}</Text>
           </View>
           <View style={styles.tool}>
             <Pressable onPress={cycleSpeed} style={styles.toolBtn} hitSlop={4}>
               <Text style={styles.toolTxt} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{rate}x</Text>
             </Pressable>
-            <Text style={styles.toolCap}>السرعة</Text>
+            <Text style={styles.toolCap}>{t("reader.tool.speed")}</Text>
           </View>
           <View style={styles.tool}>
             <Pressable
@@ -1787,7 +1790,7 @@ export default function ReaderScreen() {
             >
               <Ionicons name="moon-outline" size={17} color={sleepMin > 0 ? "#fff" : Palette.text} />
             </Pressable>
-            <Text style={styles.toolCap}>{sleepMin > 0 ? `${sleepMin}د` : "النوم"}</Text>
+            <Text style={styles.toolCap}>{sleepMin > 0 ? t("reader.tool.sleepMinutes", { minutes: sleepMin }) : t("reader.tool.sleep")}</Text>
           </View>
           <View style={styles.tool}>
             <Pressable
@@ -1800,7 +1803,7 @@ export default function ReaderScreen() {
             >
               <Ionicons name="keypad-outline" size={17} color={Palette.text} />
             </Pressable>
-            <Text style={styles.toolCap}>انتقال</Text>
+            <Text style={styles.toolCap}>{t("reader.tool.goto")}</Text>
           </View>
           <View style={styles.tool}>
             <Pressable
@@ -1821,7 +1824,7 @@ export default function ReaderScreen() {
                 color={fullyLoaded && !ingesting ? Palette.success : Palette.text}
               />
             </Pressable>
-            <Text style={styles.toolCap}>{fullyLoaded ? "محمّل" : "تحميل"}</Text>
+            <Text style={styles.toolCap}>{fullyLoaded ? t("reader.tool.loaded") : t("reader.tool.download")}</Text>
           </View>
         </View>
 
@@ -1834,9 +1837,9 @@ export default function ReaderScreen() {
           hitSlop={6}
         >
           <Text style={styles.pageInfo}>
-            الصفحة {page}
+            {t("reader.pageInfo.page", { page })}
             {totalPages ? ` / ${totalPages}` : ""}
-            {ingesting ? `  ·  تحميل ${ingestDone}/${ingestTotal}` : ""}
+            {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
           </Text>
         </Pressable>
         {ingesting && ingestTotal > 0 ? (
@@ -1847,7 +1850,7 @@ export default function ReaderScreen() {
           </View>
         ) : null}
         {voiceWarn ? (
-          <Text style={styles.warnTxt}>⚠️ تعذّر الصوت البشري: {voiceWarn}</Text>
+          <Text style={styles.warnTxt}>{t("reader.voice.humanFailed", { reason: voiceWarn })}</Text>
         ) : null}
       </View>
       )}
@@ -1864,7 +1867,7 @@ export default function ReaderScreen() {
         <View style={styles.aiMask}>
           <View style={styles.aiSheet}>
             <View style={styles.aiHeader}>
-              <Text style={styles.aiTitle}>🔖 علاماتي وملاحظاتي</Text>
+              <Text style={styles.aiTitle}>{t("reader.notes.title")}</Text>
               <Pressable onPress={() => setNotesOpen(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
@@ -1872,19 +1875,19 @@ export default function ReaderScreen() {
 
             <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
               {bookmarks.length === 0 && highlights.length === 0 ? (
-                <Text style={styles.notesHint}>
-                  لا توجد علامات بعد. استخدمي 🔖 لحفظ صفحة، أو اضغطي مطوّلاً على جملة في وضع النص لتظليلها.
+                <Text style={[styles.notesHint, { textAlign: dir.textAlign }]}>
+                  {t("reader.notes.empty")}
                 </Text>
               ) : null}
 
               {bookmarks.length > 0 ? (
                 <>
-                  <Text style={styles.notesSection}>الصفحات المحفوظة</Text>
-                  <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: 8 }}>
+                  <Text style={[styles.notesSection, { textAlign: dir.textAlign }]}>{t("reader.notes.savedPages")}</Text>
+                  <View style={{ flexDirection: dir.row, flexWrap: "wrap", gap: 8 }}>
                     {bookmarks.map((p) => (
                       <Pressable key={p} onPress={() => jumpTo(p)} style={styles.bmChip}>
                         <Ionicons name="bookmark" size={13} color={Palette.warn} />
-                        <Text style={styles.bmChipTxt}>صفحة {p}</Text>
+                        <Text style={styles.bmChipTxt}>{t("reader.notes.pageChip", { page: p })}</Text>
                       </Pressable>
                     ))}
                   </View>
@@ -1904,28 +1907,27 @@ export default function ReaderScreen() {
                       <Ionicons name="albums" size={16} color="#0b1220" />
                     )}
                     <Text style={styles.makeCardsTxt}>
-                      {makingCards ? "جارٍ التوليد…" : "🃏 حوّلي تحديداتي إلى بطاقات"}
+                      {makingCards ? t("reader.notes.generating") : t("reader.notes.makeCards")}
                     </Text>
                   </Pressable>
-                  <Text style={styles.notesSection}>المقاطع المظلّلة</Text>
+                  <Text style={[styles.notesSection, { textAlign: dir.textAlign }]}>{t("reader.notes.highlightsSection")}</Text>
                 </>
               ) : null}
               {highlights.map((h) => (
                 <View key={h.id} style={styles.hlCard}>
                   <Pressable onPress={() => jumpTo(h.page)}>
-                    <Text style={styles.hlPage}>صفحة {h.page}</Text>
-                    <Text style={styles.hlText} numberOfLines={3}>{h.text}</Text>
+                    <Text style={[styles.hlPage, { textAlign: dir.textAlign }]}>{t("reader.notes.pageLabel", { page: h.page })}</Text>
+                    <Text style={[styles.hlText, { textAlign: dir.textAlign }]} numberOfLines={3}>{h.text}</Text>
                   </Pressable>
 
                   {noteDraft?.id === h.id ? (
-                    <View style={{ flexDirection: "row-reverse", gap: 8, marginTop: 8 }}>
+                    <View style={{ flexDirection: dir.row, gap: 8, marginTop: 8 }}>
                       <TextInput
                         value={noteDraft.text}
-                        onChangeText={(t) => setNoteDraft({ id: h.id, text: t })}
-                        placeholder="اكتبي ملاحظة…"
+                        onChangeText={(txt) => setNoteDraft({ id: h.id, text: txt })}
+                        placeholder={t("reader.notes.notePlaceholder")}
                         placeholderTextColor={Palette.placeholder}
-                        style={styles.noteInput}
-                        textAlign="right"
+                        style={[styles.noteInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                         autoFocus
                       />
                       <Pressable onPress={saveNoteDraft} style={styles.noteSave}>
@@ -1940,18 +1942,18 @@ export default function ReaderScreen() {
 
                   <View style={styles.hlActions}>
                     <Pressable onPress={() => setNoteDraft({ id: h.id, text: h.note ?? "" })} hitSlop={6}>
-                      <Text style={styles.hlAction}>{h.note ? "تعديل الملاحظة" : "+ ملاحظة"}</Text>
+                      <Text style={styles.hlAction}>{h.note ? t("reader.notes.editNote") : t("reader.notes.addNote")}</Text>
                     </Pressable>
                     <Pressable
                       onPress={() =>
-                        Alert.alert("حذف", "حذف هذا التظليل؟", [
-                          { text: "إلغاء", style: "cancel" },
-                          { text: "حذف", style: "destructive", onPress: () => deleteHighlight(h.id) },
+                        Alert.alert(t("common.delete"), t("reader.notes.deleteHighlightConfirm"), [
+                          { text: t("common.cancel"), style: "cancel" },
+                          { text: t("common.delete"), style: "destructive", onPress: () => deleteHighlight(h.id) },
                         ])
                       }
                       hitSlop={6}
                     >
-                      <Text style={[styles.hlAction, { color: Palette.danger }]}>حذف</Text>
+                      <Text style={[styles.hlAction, { color: Palette.danger }]}>{t("common.delete")}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -1966,7 +1968,7 @@ export default function ReaderScreen() {
         <View style={styles.aiMask}>
           <View style={styles.aiSheet}>
             <View style={styles.aiHeader}>
-              <Text style={styles.aiTitle}>✨ مساعد الذكاء (الصفحة {page})</Text>
+              <Text style={styles.aiTitle}>{t("reader.ai.title", { page })}</Text>
               <Pressable onPress={() => setAiOpen(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
@@ -1975,19 +1977,19 @@ export default function ReaderScreen() {
             <View style={styles.aiActions}>
               <Pressable style={styles.aiAction} onPress={() => runAi("summarize")} disabled={aiBusy}>
                 <Ionicons name="list" size={18} color={Palette.neonCyan} />
-                <Text style={styles.aiActionTxt}>تلخيص</Text>
+                <Text style={styles.aiActionTxt}>{t("reader.ai.summarize")}</Text>
               </Pressable>
               <Pressable style={styles.aiAction} onPress={() => runAi("quiz")} disabled={aiBusy}>
                 <Ionicons name="help-circle" size={18} color={Palette.neonViolet} />
-                <Text style={styles.aiActionTxt}>اختبرني</Text>
+                <Text style={styles.aiActionTxt}>{t("reader.ai.quiz")}</Text>
               </Pressable>
               <Pressable style={styles.aiAction} onPress={makeFlashcards} disabled={aiBusy}>
                 <Ionicons name="albums" size={18} color={Palette.neonPink} />
-                <Text style={styles.aiActionTxt}>بطاقات</Text>
+                <Text style={styles.aiActionTxt}>{t("reader.ai.cards")}</Text>
               </Pressable>
               <Pressable style={styles.aiAction} onPress={() => runAi("translate")} disabled={aiBusy}>
                 <Ionicons name="language" size={18} color={Palette.neonBlue} />
-                <Text style={styles.aiActionTxt}>ترجمة</Text>
+                <Text style={styles.aiActionTxt}>{t("reader.ai.translate")}</Text>
               </Pressable>
             </View>
 
@@ -1995,10 +1997,9 @@ export default function ReaderScreen() {
               <TextInput
                 value={aiQuestion}
                 onChangeText={setAiQuestion}
-                placeholder="اسأل عن هذه الصفحة…"
+                placeholder={t("reader.ai.askPlaceholder")}
                 placeholderTextColor={Palette.placeholder}
-                style={styles.aiInput}
-                textAlign="right"
+                style={[styles.aiInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                 editable={!aiBusy}
               />
               <Pressable style={styles.aiSend} onPress={() => runAi("ask")} disabled={aiBusy || !aiQuestion.trim()}>
@@ -2010,13 +2011,13 @@ export default function ReaderScreen() {
               {aiBusy ? (
                 <View style={{ alignItems: "center", paddingVertical: 20 }}>
                   <ActivityIndicator color={Palette.primary} />
-                  <Text style={styles.aiHint}>جارٍ التفكير…</Text>
+                  <Text style={styles.aiHint}>{t("reader.ai.thinking")}</Text>
                 </View>
               ) : aiResult ? (
-                <Text style={styles.aiResultTxt}>{aiResult}</Text>
+                <Text style={[styles.aiResultTxt, { textAlign: dir.textAlign }]}>{aiResult}</Text>
               ) : (
                 <Text style={styles.aiHint}>
-                  اختر «تلخيص» أو «اختبرني»، أو اكتب سؤالاً عن محتوى الصفحة.
+                  {t("reader.ai.placeholder")}
                 </Text>
               )}
             </ScrollView>
@@ -2031,7 +2032,7 @@ export default function ReaderScreen() {
           <View style={styles.driveTop}>
             <Pressable onPress={() => setDrivingMode(false)} style={styles.driveExit} hitSlop={8}>
               <Ionicons name="chevron-down" size={18} color={Palette.text} />
-              <Text style={styles.driveExitTxt}>خروج من القيادة</Text>
+              <Text style={styles.driveExitTxt}>{t("reader.drive.exit")}</Text>
             </Pressable>
           </View>
 
@@ -2040,14 +2041,14 @@ export default function ReaderScreen() {
               {activeSentence >= 0 && sentences[activeSentence] ? (
                 <Text style={styles.driveSentence}>{sentences[activeSentence]}</Text>
               ) : (
-                <Text style={styles.driveHint}>اضغطي تشغيل لبدء القراءة 🎧</Text>
+                <Text style={styles.driveHint}>{t("reader.drive.tapPlay")}</Text>
               )}
             </GlassCard>
           </View>
 
           <Text style={styles.drivePage}>
-            الصفحة {page}
-            {totalPages ? ` من ${totalPages}` : ""}
+            {t("reader.pageInfo.page", { page })}
+            {totalPages ? t("reader.pageInfo.ofTotal", { total: totalPages }) : ""}
           </Text>
 
           <View style={styles.driveControls}>
@@ -2073,7 +2074,7 @@ export default function ReaderScreen() {
           </View>
 
           <Pressable onPress={cycleSpeed} style={styles.driveSpeed}>
-            <Text style={styles.driveSpeedTxt}>السرعة {rate}x</Text>
+            <Text style={styles.driveSpeedTxt}>{t("reader.drive.speed", { rate })}</Text>
           </Pressable>
         </View>
       </Modal>
@@ -2083,15 +2084,15 @@ export default function ReaderScreen() {
         <Pressable style={styles.gotoMask} onPress={() => setGotoOpen(false)}>
           <Pressable style={styles.gotoCard} onPress={() => {}}>
             <View style={styles.dictHead}>
-              <Text style={styles.dictWord}>الانتقال لصفحة</Text>
+              <Text style={[styles.dictWord, { textAlign: dir.textAlign }]}>{t("reader.goto.title")}</Text>
               <Pressable onPress={() => setGotoOpen(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
-            <Text style={styles.dictHint}>اكتبي رقم الصفحة (١ – {totalPages || "؟"})</Text>
+            <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.goto.hint", { total: totalPages || "؟" })}</Text>
             <TextInput
               value={gotoValue}
-              onChangeText={(t) => setGotoValue(t.replace(/[^0-9٠-٩]/g, ""))}
+              onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
               keyboardType="number-pad"
               placeholder={`${page}`}
               placeholderTextColor={Palette.placeholder}
@@ -2111,7 +2112,7 @@ export default function ReaderScreen() {
               style={styles.gotoBtn}
             >
               <Ionicons name="arrow-back" size={18} color="#fff" />
-              <Text style={styles.gotoBtnTxt}>انتقال للصفحة</Text>
+              <Text style={styles.gotoBtnTxt}>{t("reader.goto.cta")}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -2128,12 +2129,12 @@ export default function ReaderScreen() {
               </Pressable>
             </View>
             {dictLoading ? (
-              <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 8 }}>
+              <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
                 <ActivityIndicator color={Palette.primary} />
-                <Text style={styles.dictHint}>جارٍ جلب المعنى…</Text>
+                <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.dict.loading")}</Text>
               </View>
             ) : (
-              <Text style={styles.dictMeaning}>{dictMeaning}</Text>
+              <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
             )}
           </Pressable>
         </Pressable>
@@ -2144,7 +2145,7 @@ export default function ReaderScreen() {
         <View style={styles.aiMask}>
           <View style={styles.aiSheet}>
             <View style={styles.aiHeader}>
-              <Text style={styles.aiTitle}>اختاري الصوت</Text>
+              <Text style={styles.aiTitle}>{t("reader.voice.chooseTitle")}</Text>
               <Pressable onPress={() => setVoiceModal(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
@@ -2153,7 +2154,7 @@ export default function ReaderScreen() {
             {/* تبويبات اللغة */}
             <View style={styles.langRow}>
               {([
-                { k: "ar", label: "عربي" },
+                { k: "ar", label: t("reader.voice.tabArabic") },
                 { k: "en", label: "English" },
                 { k: "fr", label: "Français" },
               ] as const).map((l) => {
@@ -2193,17 +2194,17 @@ export default function ReaderScreen() {
         <View style={styles.aiMask}>
           <View style={styles.aiSheet}>
             <View style={styles.aiHeader}>
-              <Text style={styles.aiTitle}>🌐 الاستماع بالعربية</Text>
+              <Text style={styles.aiTitle}>{t("reader.translate.title")}</Text>
               <Pressable onPress={() => setTranslateModal(false)} hitSlop={8}>
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
 
-            <Text style={styles.notesHint}>
-              نترجم الكتاب (الإنجليزي/الفرنسي) إلى العربية ونقرؤه بالصوت العربي الذي تختارينه.
+            <Text style={[styles.notesHint, { textAlign: dir.textAlign }]}>
+              {t("reader.translate.desc")}
             </Text>
 
-            <Text style={styles.trVoicesLabel}>اختاري الصوت العربي:</Text>
+            <Text style={[styles.trVoicesLabel, { textAlign: dir.textAlign }]}>{t("reader.translate.chooseVoice")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.voiceRow}>
               {VOICE_CATALOG.filter((v) => !v.lang || v.lang === "ar").map((v) => {
                 const sel = v.voiceId === translateVoiceId;
@@ -2233,7 +2234,7 @@ export default function ReaderScreen() {
                 style={styles.trApply}
               >
                 <Text style={styles.trApplyTxt}>
-                  {listenArabic ? "إيقاف الترجمة" : "تفعيل والاستماع بالعربية"}
+                  {listenArabic ? t("reader.translate.stop") : t("reader.translate.enable")}
                 </Text>
               </LinearGradient>
             </Pressable>
@@ -2266,9 +2267,9 @@ export default function ReaderScreen() {
               hitSlop={8}
             >
               <Ionicons name="chevron-down" size={18} color={Palette.text} />
-              <Text style={styles.presExitTxt}>خروج</Text>
+              <Text style={styles.presExitTxt}>{t("reader.present.exit")}</Text>
             </Pressable>
-            <Text style={styles.presPage}>صفحة {page}</Text>
+            <Text style={styles.presPage}>{t("reader.notes.pageChip", { page })}</Text>
             {/* زر الموسيقى — يفتح اختيارات هادئة (للروايات/القصص) */}
             <Pressable
               onPress={() => setShowMusicPicker((v) => !v)}
@@ -2297,7 +2298,7 @@ export default function ReaderScreen() {
                 }}
                 style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
               >
-                <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>بدون</Text>
+                <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>{t("reader.music.none")}</Text>
               </Pressable>
               {MUSIC_OPTIONS.map((m) => {
                 const on = presMusicKey === m.key;
@@ -2322,13 +2323,13 @@ export default function ReaderScreen() {
             {slidesLoading ? (
               <View style={styles.presCenter}>
                 <ActivityIndicator color={Palette.neonCyan} />
-                <Text style={styles.presHint}>جارٍ تجهيز الشرائح…</Text>
+                <Text style={styles.presHint}>{t("reader.present.preparingSlides")}</Text>
               </View>
             ) : pageSlides.length === 0 ? (
               <View style={styles.presCenter}>
                 <Ionicons name="easel-outline" size={48} color={Palette.textDim} />
                 <Text style={styles.presHint}>
-                  شغّلي القراءة لتظهر الشرائح، أو تأكّدي من رصيد الذكاء.
+                  {t("reader.present.emptySlides")}
                 </Text>
               </View>
             ) : (
@@ -2392,7 +2393,7 @@ export default function ReaderScreen() {
           </Pressable>
           {pageSlides.length > 0 ? (
             <Text style={styles.presNarrateHint}>
-              {presNarrating ? "يسرد العرض بالصوت…" : "اضغط للاستماع إلى العرض شريحة بشريحة 🎧"}
+              {presNarrating ? t("reader.present.narrating") : t("reader.present.narrateHint")}
             </Text>
           ) : null}
         </View>
@@ -2405,17 +2406,16 @@ export default function ReaderScreen() {
             <View style={styles.gateIcon}>
               <Ionicons name="cloud-download" size={34} color={Palette.neonCyan} />
             </View>
-            <Text style={styles.gateTitle}>حمّلي الكتاب للاستماع المتواصل</Text>
+            <Text style={styles.gateTitle}>{t("reader.gate.title")}</Text>
             <Text style={styles.gateBody}>
-              سمعتِ صفحتين 👏 — للقراءة بسلاسة بلا تقطيع ولا تشتيت، حمّلي الكتاب كاملًا أولًا.
-              يكمل في الخلفية حتى لو خرجتِ من الكتاب.
+              {t("reader.gate.body")}
             </Text>
             <Pressable onPress={gateDownloadNow} style={styles.gatePrimary}>
               <Ionicons name="cloud-download" size={18} color="#0b1220" />
-              <Text style={styles.gatePrimaryTxt}>حمّل الكتاب الآن</Text>
+              <Text style={styles.gatePrimaryTxt}>{t("reader.gate.downloadNow")}</Text>
             </Pressable>
             <Pressable onPress={gateContinueWithout} style={styles.gateSecondary} hitSlop={6}>
-              <Text style={styles.gateSecondaryTxt}>أكمل بدون تحميل</Text>
+              <Text style={styles.gateSecondaryTxt}>{t("reader.gate.continueWithout")}</Text>
             </Pressable>
           </View>
         </View>
