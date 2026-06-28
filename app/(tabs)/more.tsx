@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../../components/brand/glass-card";
+import { LanguageSwitcher } from "../../components/brand/language-switcher";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
@@ -259,6 +260,11 @@ export default function MoreScreen() {
             <Ionicons name="chevron-back" size={20} color="#fff" />
           </LinearGradient>
         </Pressable>
+
+        {/* اللغة */}
+        <GlassCard contentStyle={styles.cardC} glow={Palette.neonBlue}>
+          <LanguageSwitcher />
+        </GlassCard>
 
         {/* الثيمات */}
         <GlassCard contentStyle={styles.cardC} glow={Palette.neonPink}>

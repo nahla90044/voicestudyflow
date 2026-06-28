@@ -11,6 +11,7 @@ import { AnimatedSplash } from "../components/brand/animated-splash";
 import { Palette } from "../constants/design";
 import { getSession } from "../lib/auth";
 import { resumePendingDownload } from "../lib/downloadManager";
+import { LanguageProvider } from "../lib/i18n";
 import { ThemeProvider } from "../lib/themeContext";
 import { ONBOARDING_KEY } from "./onboarding";
 
@@ -50,6 +51,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <LanguageProvider>
       <ThemeProvider>
       <SafeAreaProvider>
         <StatusBar style="light" />
@@ -67,6 +69,7 @@ export default function RootLayout() {
         {booting ? <AnimatedSplash /> : null}
       </SafeAreaProvider>
       </ThemeProvider>
+      </LanguageProvider>
     </GestureHandlerRootView>
   );
 }

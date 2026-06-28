@@ -13,7 +13,9 @@
       "bundleIdentifier": "io.nahlah.voicestudyflow",
       "buildNumber": "1",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -45,7 +47,8 @@
           }
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,
