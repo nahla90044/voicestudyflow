@@ -11,9 +11,17 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import { getDailyGoal, setDailyGoal } from "../../lib/goals";
+import { useDir, useI18n } from "../../lib/i18n";
 import { getStats, type Stats } from "../../lib/stats";
 
 const GOAL_OPTIONS = [10, 20, 30, 45, 60];
+
+const STAT_ITEMS = [
+  { icon: "flame" as const, labelKey: "activity.stat.streak", get: (s: Stats | null) => s?.streak ?? 0, color: Palette.neonPink },
+  { icon: "headset" as const, labelKey: "activity.stat.minutes", get: (s: Stats | null) => s?.totalMinutes ?? 0, color: Palette.neonCyan },
+  { icon: "documents" as const, labelKey: "activity.stat.pages", get: (s: Stats | null) => s?.totalPages ?? 0, color: Palette.neonBlue },
+  { icon: "checkmark-done" as const, labelKey: "activity.stat.books", get: (s: Stats | null) => s?.booksCompleted ?? 0, color: Palette.neonViolet },
+];
 
 function todayISOLocal() {
   const d = new Date();
@@ -22,6 +30,8 @@ function todayISOLocal() {
 }
 
 export default function ActivityScreen() {
+  const { t } = useI18n();
+  const dir = useDir();
   const [stats, setStats] = useState<Stats | null>(null);
   const [goal, setGoal] = useState(20);
 
@@ -41,27 +51,20 @@ export default function ActivityScreen() {
     setDailyGoal(next);
   }
 
-  const statItems = [
-    { icon: "flame" as const, label: "سلسلة", value: `${stats?.streak ?? 0}`, color: Palette.neonPink },
-    { icon: "headset" as const, label: "دقائق", value: `${stats?.totalMinutes ?? 0}`, color: Palette.neonCyan },
-    { icon: "documents" as const, label: "صفحات", value: `${stats?.totalPages ?? 0}`, color: Palette.neonBlue },
-    { icon: "checkmark-done" as const, label: "كتب", value: `${stats?.booksCompleted ?? 0}`, color: Palette.neonViolet },
-  ];
-
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <ScreenHeader icon="stats-chart" title="النشاط" subtitle="تقدّمك وسلسلتك اليومية" color={Palette.neonCyan} />
+        <ScreenHeader icon="stats-chart" title={t("activity.header.title")} subtitle={t("activity.header.subtitle")} color={Palette.neonCyan} />
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingBottom: 110, gap: Spacing.lg }} showsVerticalScrollIndicator={false}>
           <FadeIn delay={0}>
             <GlassCard glow={Palette.neonPink}>
-              <View style={styles.statsRow}>
-                {statItems.map((s) => (
-                  <View key={s.label} style={styles.statItem}>
+              <View style={[styles.statsRow, { flexDirection: dir.row }]}>
+                {STAT_ITEMS.map((s) => (
+                  <View key={s.labelKey} style={styles.statItem}>
                     <Ionicons name={s.icon} size={20} color={s.color} />
-                    <Text style={styles.statValue}>{s.value}</Text>
-                    <Text style={styles.statLabel}>{s.label}</Text>
+                    <Text style={styles.statValue}>{`${s.get(stats)}`}</Text>
+                    <Text style={styles.statLabel}>{t(s.labelKey)}</Text>
                   </View>
                 ))}
               </View>
@@ -71,17 +74,17 @@ export default function ActivityScreen() {
           <FadeIn delay={90}>
             <GlassCard glow={Palette.success}>
               <View style={styles.goalCard}>
-                <View style={styles.goalHead}>
-                  <Text style={styles.goalTitle}>🎯 هدف اليوم</Text>
+                <View style={[styles.goalHead, { flexDirection: dir.row }]}>
+                  <Text style={[styles.goalTitle, { textAlign: dir.textAlign }]}>{t("activity.goal.title")}</Text>
                   <Pressable onPress={cycleGoal} style={styles.goalChip}>
-                    <Text style={styles.goalChipTxt}>{goal} دقيقة</Text>
+                    <Text style={styles.goalChipTxt}>{t("activity.goal.chip", { goal })}</Text>
                   </Pressable>
                 </View>
                 <View style={styles.goalBarBg}>
                   <View style={[styles.goalBarFill, { width: `${goalPct}%`, backgroundColor: goalPct >= 100 ? Palette.success : Palette.primary }]} />
                 </View>
-                <Text style={styles.goalSub}>
-                  {goalPct >= 100 ? "🎉 أنجزتِ هدف اليوم!" : `${todayMin} من ${goal} دقيقة (${goalPct}%)`}
+                <Text style={[styles.goalSub, { textAlign: dir.textAlign }]}>
+                  {goalPct >= 100 ? t("activity.goal.done") : t("activity.goal.progress", { todayMin, goal, goalPct })}
                 </Text>
               </View>
             </GlassCard>
@@ -90,7 +93,7 @@ export default function ActivityScreen() {
           <FadeIn delay={170}>
             <GlassCard glow={Palette.neonCyan}>
               <View style={styles.heatCard}>
-                <Text style={styles.goalTitle}>🔥 نشاط المذاكرة</Text>
+                <Text style={[styles.goalTitle, { textAlign: dir.textAlign }]}>{t("activity.heatmap.title")}</Text>
                 <StudyHeatmap days={stats?.days ?? {}} />
               </View>
             </GlassCard>

@@ -13,6 +13,7 @@ import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
+import { useDir, useI18n } from "../../lib/i18n";
 import { supabase } from "../../lib/supabase";
 
 type Book = {
@@ -24,6 +25,8 @@ type Book = {
 };
 
 export default function ArchiveScreen() {
+  const { t } = useI18n();
+  const dir = useDir();
   const [rows, setRows] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,16 +75,16 @@ export default function ArchiveScreen() {
     if (error) {
       Alert.alert("Error", error.message);
     } else {
-      Alert.alert("✅", "تمت إعادة الكتاب للمكتبة");
+      Alert.alert("✅", t("explore.alert.restored"));
       load();
     }
   }
 
   async function deleteForever(book: Book) {
-    Alert.alert("حذف نهائي؟", "سيتم حذف الكتاب من التخزين نهائيًا.", [
-      { text: "إلغاء", style: "cancel" },
+    Alert.alert(t("explore.alert.deleteTitle"), t("explore.alert.deleteBody"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "حذف نهائي",
+        text: t("explore.alert.deleteConfirm"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -98,7 +101,7 @@ export default function ArchiveScreen() {
               .eq("id", book.id);
             if (bErr) throw bErr;
 
-            Alert.alert("✅", "تم حذف الكتاب نهائيًا");
+            Alert.alert("✅", t("explore.alert.deleted"));
             load();
           } catch (e: any) {
             Alert.alert("Error", e?.message ?? String(e));
@@ -113,8 +116,8 @@ export default function ArchiveScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScreenHeader
         icon="file-tray-full"
-        title="الأرشيف"
-        subtitle="استرجع كتبك أو احذفها نهائيًا (ضغط مطوّل)"
+        title={t("explore.header.title")}
+        subtitle={t("explore.header.subtitle")}
         color={Palette.neonPink}
       />
 
@@ -128,21 +131,21 @@ export default function ArchiveScreen() {
           <Pressable onLongPress={() => deleteForever(item)}>
             <GlassCard contentStyle={styles.cardRow} glow={Palette.neonPink}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title} numberOfLines={1}>
+              <Text style={[styles.title, { textAlign: dir.textAlign }]} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={styles.meta}>
+              <Text style={[styles.meta, { textAlign: dir.textAlign }]}>
                 {item.archived_at
-                  ? `مؤرشف: ${item.archived_at.slice(0, 10)}`
+                  ? t("explore.archivedOn", { date: item.archived_at.slice(0, 10) })
                   : "—"}
               </Text>
-              <Text style={styles.hint} numberOfLines={1}>
-                (اضغط مطولًا للحذف النهائي)
+              <Text style={[styles.hint, { textAlign: dir.textAlign }]} numberOfLines={1}>
+                {t("explore.longPressHint")}
               </Text>
             </View>
 
             <GradientButton
-              title="استرجاع"
+              title={t("explore.restore")}
               icon="arrow-undo"
               colors={Gradients.success}
               onPress={() => restore(item)}
@@ -152,8 +155,8 @@ export default function ArchiveScreen() {
         )}
         ListEmptyComponent={
           <View style={{ padding: 24 }}>
-            <Text style={{ color: "#9fb3c8", textAlign: "right" }}>
-              الأرشيف فارغ الآن.
+            <Text style={{ color: "#9fb3c8", textAlign: dir.textAlign }}>
+              {t("explore.empty")}
             </Text>
           </View>
         }

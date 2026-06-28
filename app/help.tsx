@@ -9,21 +9,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenBackground } from "../components/brand/screen-background";
 import { HowToTour } from "../components/brand/howto-tour";
 import { Palette, Radius, Spacing } from "../constants/design";
+import { useDir, useI18n } from "../lib/i18n";
 
-type Topic = { icon: keyof typeof Ionicons.glyphMap; color: string; title: string; body: string };
+type Topic = { icon: keyof typeof Ionicons.glyphMap; color: string; titleKey: string; bodyKey: string };
 
 const TOPICS: Topic[] = [
-  { icon: "library", color: Palette.neonViolet, title: "📚 المكتبة", body: "الضغط على الكتاب يفتحه للقراءة. والضغط المطوّل يكشف الخيارات: المجلدات، المنهج الدراسي، إعادة التسمية، الأرشفة، والحذف." },
-  { icon: "hand-left", color: Palette.neonBlue, title: "👆 الضغط المطوّل", body: "في المكتبة، الضغط المطوّل على أي كتاب يفتح قائمة إجراءات إضافية مهمة. مفتاح لاكتشاف ميزات أكثر." },
-  { icon: "list", color: Palette.neonCyan, title: "📋 المنهج الدراسي", body: "وحدات بقائمة متابعة، ولكل وحدة اختبار وخريطة ذهنية وملخّص صوتي. مع إمكانية طباعة المنهج أو الخريطة." },
-  { icon: "headset", color: Palette.neonPink, title: "🎧 القراءة الصوتية", body: "قارئ يقرأ ويشرح بصوت طبيعي. تحكّم بالسرعة (حتى ×0.5)، وتنقّل بين المقاطع — والضغط المتكرر يسرّع التخطّي (×2 ×3)." },
-  { icon: "language", color: Palette.neonCyan, title: "🗣️ النطق والترجمة", body: "نطق دقيق بالتشكيل، وترجمة فورية، وأصوات بعدة لغات." },
-  { icon: "sparkles", color: Palette.neonPink, title: "🛠️ أدوات الذكاء", body: "تلخيص الصفحة، الأسئلة، بطاقات المراجعة، الخريطة الذهنية، والعرض التقديمي — كلها بضغطة." },
-  { icon: "timer", color: Palette.neonViolet, title: "⏱️ التركيز والمتابعة", body: "مؤقّت تركيز (بومودورو)، سلسلة أيام، ودرجات لوضع التركيز تخفّف المشتّتات أثناء القراءة." },
+  { icon: "library", color: Palette.neonViolet, titleKey: "help.topic.library.title", bodyKey: "help.topic.library.body" },
+  { icon: "hand-left", color: Palette.neonBlue, titleKey: "help.topic.longPress.title", bodyKey: "help.topic.longPress.body" },
+  { icon: "list", color: Palette.neonCyan, titleKey: "help.topic.syllabus.title", bodyKey: "help.topic.syllabus.body" },
+  { icon: "headset", color: Palette.neonPink, titleKey: "help.topic.audio.title", bodyKey: "help.topic.audio.body" },
+  { icon: "language", color: Palette.neonCyan, titleKey: "help.topic.pronounce.title", bodyKey: "help.topic.pronounce.body" },
+  { icon: "sparkles", color: Palette.neonPink, titleKey: "help.topic.ai.title", bodyKey: "help.topic.ai.body" },
+  { icon: "timer", color: Palette.neonViolet, titleKey: "help.topic.focus.title", bodyKey: "help.topic.focus.body" },
 ];
 
 export default function HelpScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const [tour, setTour] = useState(false);
 
   return (
@@ -33,24 +36,24 @@ export default function HelpScreen() {
           <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
             <Ionicons name="chevron-forward" size={22} color={Palette.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>كيف أستخدم التطبيق؟</Text>
+          <Text style={styles.headerTitle}>{t("help.title")}</Text>
           <View style={styles.iconBtn} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Pressable onPress={() => setTour(true)} style={styles.tourBtn}>
+          <Pressable onPress={() => setTour(true)} style={[styles.tourBtn, { flexDirection: dir.row }]}>
             <Ionicons name="play-circle" size={22} color={Palette.neonViolet} />
-            <Text style={styles.tourTxt}>إعادة الجولة التعريفية ✨</Text>
+            <Text style={styles.tourTxt}>{t("help.replayTour")}</Text>
           </Pressable>
 
-          {TOPICS.map((t, i) => (
-            <View key={i} style={styles.card}>
-              <View style={[styles.cardIcon, { backgroundColor: t.color + "22", borderColor: t.color + "55" }]}>
-                <Ionicons name={t.icon} size={20} color={t.color} />
+          {TOPICS.map((topic, i) => (
+            <View key={i} style={[styles.card, { flexDirection: dir.row }]}>
+              <View style={[styles.cardIcon, { backgroundColor: topic.color + "22", borderColor: topic.color + "55" }]}>
+                <Ionicons name={topic.icon} size={20} color={topic.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{t.title}</Text>
-                <Text style={styles.cardBody}>{t.body}</Text>
+                <Text style={[styles.cardTitle, { textAlign: dir.textAlign }]}>{t(topic.titleKey)}</Text>
+                <Text style={[styles.cardBody, { textAlign: dir.textAlign }]}>{t(topic.bodyKey)}</Text>
               </View>
             </View>
           ))}
@@ -60,9 +63,9 @@ export default function HelpScreen() {
             onPress={() => Linking.openURL("mailto:Nahlah@Nahlah.io").catch(() => {})}
             style={styles.contact}
           >
-            <Text style={styles.contactName}>تصميم وتطوير: Nahla</Text>
-            <Text style={styles.contactMail}>للتواصل والملاحظات: Nahlah@Nahlah.io</Text>
-            <Text style={styles.madeIn}>صنع في الرياض 💚</Text>
+            <Text style={styles.contactName}>{t("help.contact.design")}</Text>
+            <Text style={styles.contactMail}>{t("help.contact.mail")}</Text>
+            <Text style={styles.madeIn}>{t("help.madeIn")}</Text>
           </Pressable>
         </ScrollView>
       </SafeAreaView>

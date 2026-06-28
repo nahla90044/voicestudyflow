@@ -10,6 +10,7 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getCards, reviewCard, type Card, type Rating } from "../../lib/flashcards";
+import { useDir, useI18n } from "../../lib/i18n";
 
 const ALL = "__all__";
 const NONE = "__none__";
@@ -23,6 +24,8 @@ function todayISO() {
 type BookGroup = { key: string; title: string; total: number; due: number };
 
 export default function FlashcardsScreen() {
+  const { t } = useI18n();
+  const dir = useDir();
   const [all, setAll] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"picker" | "review">("picker");
@@ -52,13 +55,13 @@ export default function FlashcardsScreen() {
     const map = new Map<string, BookGroup>();
     for (const c of all) {
       const key = c.bookId ?? NONE;
-      const g = map.get(key) ?? { key, title: c.bookTitle || "بطاقات عامة", total: 0, due: 0 };
+      const g = map.get(key) ?? { key, title: c.bookTitle || t("flashcards.generalCards"), total: 0, due: 0 };
       g.total += 1;
       if (c.due <= today) g.due += 1;
       map.set(key, g);
     }
     return [...map.values()].sort((a, b) => b.due - a.due);
-  }, [all]);
+  }, [all, t]);
 
   const totalDue = useMemo(() => {
     const today = todayISO();
@@ -112,8 +115,8 @@ export default function FlashcardsScreen() {
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         <ScreenHeader
           icon="albums"
-          title="البطاقات"
-          subtitle={mode === "review" ? bookName : "اختاري الكتاب الذي تريدين مراجعته"}
+          title={t("flashcards.header.title")}
+          subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
           color={Palette.neonPink}
         />
 
@@ -121,21 +124,21 @@ export default function FlashcardsScreen() {
         {mode === "picker" ? (
           loading ? (
             <View style={styles.center}>
-              <Text style={styles.dim}>جارٍ التحميل…</Text>
+              <Text style={styles.dim}>{t("common.loading")}</Text>
             </View>
           ) : books.length === 0 ? (
             <View style={styles.center}>
               <Ionicons name="albums-outline" size={64} color={Palette.textDim} />
-              <Text style={styles.doneTitle}>لا توجد بطاقات بعد</Text>
-              <Text style={styles.dim}>ولّدي بطاقات من زر «ذكاء» داخل القارئ، أو من «حوّلي تحديداتي إلى بطاقات».</Text>
+              <Text style={styles.doneTitle}>{t("flashcards.empty.title")}</Text>
+              <Text style={styles.dim}>{t("flashcards.empty.body")}</Text>
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
               {books.length > 1 ? (
-                <Pressable onPress={() => startBook(ALL, "كل الكتب")} style={[styles.bookRow, styles.allRow]}>
+                <Pressable onPress={() => startBook(ALL, t("flashcards.allBooks"))} style={[styles.bookRow, styles.allRow]}>
                   <View style={styles.bookInfo}>
-                    <Text style={styles.bookTitle}>📚 كل الكتب</Text>
-                    <Text style={styles.bookSub}>{all.length} بطاقة</Text>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]}>📚 {t("flashcards.allBooks")}</Text>
+                    <Text style={[styles.bookSub, { textAlign: dir.textAlign }]}>{t("flashcards.cardsCount", { count: all.length })}</Text>
                   </View>
                   <View style={[styles.dueBadge, totalDue === 0 && styles.dueBadge0]}>
                     <Text style={styles.dueBadgeTxt}>{totalDue}</Text>
@@ -146,8 +149,8 @@ export default function FlashcardsScreen() {
               {books.map((b) => (
                 <Pressable key={b.key} onPress={() => startBook(b.key, b.title)} style={styles.bookRow}>
                   <View style={styles.bookInfo}>
-                    <Text style={styles.bookTitle} numberOfLines={1}>📖 {b.title}</Text>
-                    <Text style={styles.bookSub}>{b.total} بطاقة · {b.due} مستحقّة</Text>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {b.title}</Text>
+                    <Text style={[styles.bookSub, { textAlign: dir.textAlign }]}>{t("flashcards.bookStats", { total: b.total, due: b.due })}</Text>
                   </View>
                   <View style={[styles.dueBadge, b.due === 0 && styles.dueBadge0]}>
                     <Text style={styles.dueBadgeTxt}>{b.due}</Text>
@@ -160,8 +163,8 @@ export default function FlashcardsScreen() {
           /* ====== انتهت المراجعة ====== */
           <View style={styles.center}>
             <Ionicons name="checkmark-done-circle" size={72} color={Palette.success} />
-            <Text style={styles.doneTitle}>أنهيتِ مراجعة «{bookName}» 🎉</Text>
-            <GradientButton title="رجوع للكتب" icon="arrow-back" onPress={() => setMode("picker")} style={{ alignSelf: "stretch", marginTop: Spacing.lg }} />
+            <Text style={styles.doneTitle}>{t("flashcards.reviewDone", { book: bookName })}</Text>
+            <GradientButton title={t("flashcards.backToBooks")} icon="arrow-back" onPress={() => setMode("picker")} style={{ alignSelf: "stretch", marginTop: Spacing.lg }} />
           </View>
         ) : (
           /* ====== المراجعة ====== */
@@ -169,7 +172,7 @@ export default function FlashcardsScreen() {
             <View style={styles.reviewTop}>
               <Pressable onPress={() => setMode("picker")} hitSlop={8} style={styles.backChip}>
                 <Ionicons name="chevron-forward" size={16} color={Palette.text} />
-                <Text style={styles.backChipTxt}>الكتب</Text>
+                <Text style={styles.backChipTxt}>{t("flashcards.books")}</Text>
               </Pressable>
               <Text style={styles.counter}>{idx + 1} / {queue.length}</Text>
             </View>
@@ -179,18 +182,18 @@ export default function FlashcardsScreen() {
                 <Animated.View style={[styles.face, frontStyle]}>
                   <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.faceGrad}>
                     <Ionicons name="help" size={150} color="rgba(255,255,255,0.08)" style={styles.watermark} />
-                    <Text style={styles.faceLabel}>السؤال</Text>
+                    <Text style={styles.faceLabel}>{t("flashcards.question")}</Text>
                     <Text style={styles.faceText}>{card?.front}</Text>
-                    <View style={styles.tapHintRow}>
+                    <View style={[styles.tapHintRow, { flexDirection: dir.row }]}>
                       <Ionicons name="sync" size={13} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.tapHint}>اضغطي لقلب البطاقة</Text>
+                      <Text style={styles.tapHint}>{t("flashcards.tapToFlip")}</Text>
                     </View>
                   </LinearGradient>
                 </Animated.View>
                 <Animated.View style={[styles.face, backStyle]}>
                   <LinearGradient colors={Gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.faceGrad}>
                     <Ionicons name="bulb" size={150} color="rgba(255,255,255,0.10)" style={styles.watermark} />
-                    <Text style={styles.faceLabelDark}>الإجابة</Text>
+                    <Text style={styles.faceLabelDark}>{t("flashcards.answer")}</Text>
                     <Text style={styles.faceTextDark}>{card?.back}</Text>
                   </LinearGradient>
                 </Animated.View>
@@ -198,13 +201,13 @@ export default function FlashcardsScreen() {
             </View>
 
             {flipped ? (
-              <View style={styles.ratings}>
-                <GradientButton title="مرة ثانية" colors={["#ff5d6c", "#ff8a5c"]} onPress={() => rate("again")} style={{ flex: 1 }} />
-                <GradientButton title="جيد" colors={Gradients.brand} onPress={() => rate("good")} style={{ flex: 1 }} />
-                <GradientButton title="سهل" colors={Gradients.success} onPress={() => rate("easy")} style={{ flex: 1 }} />
+              <View style={[styles.ratings, { flexDirection: dir.row }]}>
+                <GradientButton title={t("flashcards.rate.again")} colors={["#ff5d6c", "#ff8a5c"]} onPress={() => rate("again")} style={{ flex: 1 }} />
+                <GradientButton title={t("flashcards.rate.good")} colors={Gradients.brand} onPress={() => rate("good")} style={{ flex: 1 }} />
+                <GradientButton title={t("flashcards.rate.easy")} colors={Gradients.success} onPress={() => rate("easy")} style={{ flex: 1 }} />
               </View>
             ) : (
-              <GradientButton title="اكشفي الإجابة" icon="eye" colors={Gradients.neon} onPress={toggleFlip} />
+              <GradientButton title={t("flashcards.revealAnswer")} icon="eye" colors={Gradients.neon} onPress={toggleFlip} />
             )}
           </View>
         )}

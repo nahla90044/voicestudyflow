@@ -17,6 +17,7 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
+import { useDir, useI18n } from "../../lib/i18n";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
@@ -32,6 +33,8 @@ const MPP_KEY = "vsf_minutes_per_page"; // إعداد عام: دقيقة/صفح�
 
 export default function AddBookScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
 
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState("60");
@@ -103,7 +106,7 @@ export default function AddBookScreen() {
 
   async function save(createPlanNow: boolean) {
     if (!file) {
-      Alert.alert("تنبيه", "اختر ملف PDF أولاً");
+      Alert.alert(t("addBook.alert.warnTitle"), t("addBook.alert.pickFirst"));
       return;
     }
 
@@ -153,8 +156,8 @@ export default function AddBookScreen() {
         if (!pageCount || pageCount <= 0) {
           // الكتاب اتضاف فعلاً، بس ما قدرنا نحسب الصفحات للخطة
           Alert.alert(
-            "تمت إضافة الكتاب ✅",
-            "لكن تعذّر تحديد عدد الصفحات تلقائيًا لإنشاء الخطة. تقدرين كتابة عدد الصفحات يدويًا وإنشاء الخطة لاحقًا."
+            t("addBook.alert.bookAddedTitle"),
+            t("addBook.alert.pageCountFailed")
           );
           setTitle("");
           setPageCountManual("");
@@ -173,12 +176,12 @@ export default function AddBookScreen() {
           bufferEvery: 7,
         });
 
-        Alert.alert("✅", `تم إنشاء خطة ذكية\nعدد الصفحات: ${pageCount}\nالأيام: ${result.days}`);
+        Alert.alert("✅", t("addBook.alert.planCreated", { pages: pageCount, days: result.days }));
 
         // ✅ الانتقال لشاشة الخطة لعرضها
         router.push("/calendar");
       } else {
-        Alert.alert("✅", "تمت إضافة الكتاب");
+        Alert.alert("✅", t("addBook.alert.bookAdded"));
         router.push("/library");
       }
 
@@ -186,7 +189,7 @@ export default function AddBookScreen() {
       setPageCountManual("");
       setFile(null);
     } catch (e: any) {
-      Alert.alert("Error", e?.message ?? String(e));
+      Alert.alert(t("addBook.alert.errorTitle"), e?.message ?? String(e));
     } finally {
       setBusyMode(null);
     }
@@ -197,59 +200,59 @@ export default function AddBookScreen() {
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <ScreenHeader
         icon="add-circle"
-        title="إضافة كتاب"
-        subtitle="ارفع ملف PDF وأنشئ خطة"
+        title={t("addBook.header.title")}
+        subtitle={t("addBook.header.subtitle")}
         color={Palette.neonViolet}
         style={{ marginHorizontal: 0, marginTop: 0 }}
       />
 
       <GlassCard contentStyle={styles.formCard} glow={Palette.neonViolet}>
         <GradientButton
-          title={file ? "✅ تم اختيار ملف" : "اختيار ملف PDF"}
+          title={file ? t("addBook.fileChosen") : t("addBook.pickFile")}
           icon="document-attach"
           variant="ghost"
           onPress={pickPdf}
           disabled={busy}
         />
 
-        <Text style={styles.label}>عنوان الكتاب (اختياري)</Text>
+        <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("addBook.titleLabel")}</Text>
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="إذا تُرك فارغًا يأخذ اسم الملف"
+          placeholder={t("addBook.titlePlaceholder")}
           placeholderTextColor="#8aa0b8"
-          style={styles.input}
+          style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
           editable={!busy}
         />
 
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label} numberOfLines={1}>عدد الصفحات</Text>
+            <Text style={[styles.label, { textAlign: dir.textAlign }]} numberOfLines={1}>{t("addBook.pageCountLabel")}</Text>
             <TextInput
               value={pageCountManual}
               onChangeText={setPageCountManual}
               keyboardType="number-pad"
-              style={styles.input}
+              style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
               editable={!busy}
-              placeholder="إذا تُرك فارغًا يُحسب تلقائيًا"
+              placeholder={t("addBook.pageCountPlaceholder")}
               placeholderTextColor="#8aa0b8"
             />
           </View>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.label} numberOfLines={1}>الدقائق اليومية</Text>
+            <Text style={[styles.label, { textAlign: dir.textAlign }]} numberOfLines={1}>{t("addBook.dailyMinutesLabel")}</Text>
             <TextInput
               value={minutes}
               onChangeText={setMinutes}
               keyboardType="number-pad"
-              style={styles.input}
+              style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
               editable={!busy}
             />
           </View>
         </View>
 
         <GradientButton
-          title="حفظ الكتاب فقط"
+          title={t("addBook.saveOnly")}
           icon="save"
           onPress={() => save(false)}
           loading={busyMode === "save"}
@@ -257,7 +260,7 @@ export default function AddBookScreen() {
         />
 
         <GradientButton
-          title="حفظ + إنشاء خطة ذكية"
+          title={t("addBook.saveAndPlan")}
           icon="sparkles"
           colors={Gradients.neon}
           onPress={() => save(true)}
@@ -265,8 +268,8 @@ export default function AddBookScreen() {
           disabled={!canCreatePlan || busy}
         />
 
-        <Text style={styles.hint}>
-          إذا لم تُدخل عدد الصفحات، يحسبه التطبيق تلقائيًا من ملف PDF.
+        <Text style={[styles.hint, { textAlign: dir.textAlign }]}>
+          {t("addBook.hint")}
         </Text>
       </GlassCard>
     </SafeAreaView>

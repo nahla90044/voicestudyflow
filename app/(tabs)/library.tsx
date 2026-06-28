@@ -32,6 +32,7 @@ import {
 } from "../../lib/folders";
 import { getPageImage } from "../../lib/pageImage";
 import { supabase } from "../../lib/supabase";
+import { useDir, useI18n } from "../../lib/i18n";
 
 type Book = {
   id: string;
@@ -56,6 +57,8 @@ type BookRow = Book & { plan?: Plan | null };
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
 
   const [rows, setRows] = useState<BookRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +183,7 @@ export default function LibraryScreen() {
 
       if (error) throw error;
 
-      Alert.alert("✅", "تم نقل الكتاب للأرشيف");
+      Alert.alert("✅", t("library.alert.archived"));
       load();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? String(e));
@@ -189,12 +192,12 @@ export default function LibraryScreen() {
 
   function confirmDelete(book: BookRow) {
     Alert.alert(
-      "حذف نهائي؟",
-      "سيتم حذف الكتاب من التخزين نهائيًا. لديك 6 ثواني للتراجع بعد الحذف.",
+      t("library.delete.confirmTitle"),
+      t("library.delete.confirmBody"),
       [
-        { text: "إلغاء", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "حذف نهائي",
+          text: t("library.delete.confirmCta"),
           style: "destructive",
           onPress: () => startPendingDelete(book),
         },
@@ -309,7 +312,7 @@ export default function LibraryScreen() {
   const folderCount = (id: string) => Object.values(assign).filter((v) => v === id).length;
 
   function createFolder() {
-    Alert.prompt?.("مجلد جديد", "اسم المجلد", async (name?: string) => {
+    Alert.prompt?.(t("library.folder.newTitle"), t("library.folder.newPrompt"), async (name?: string) => {
       if (name && name.trim()) {
         const f = await addFolder(name);
         await loadFolders();
@@ -319,12 +322,12 @@ export default function LibraryScreen() {
   }
 
   function editFolder(f: Folder) {
-    Alert.alert(f.name, "خيارات المجلد", [
-      { text: "إلغاء", style: "cancel" },
+    Alert.alert(f.name, t("library.folder.options"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "إعادة تسمية",
+        text: t("library.folder.rename"),
         onPress: () =>
-          Alert.prompt?.("إعادة تسمية", "الاسم الجديد", async (name?: string) => {
+          Alert.prompt?.(t("library.folder.rename"), t("library.folder.renamePrompt"), async (name?: string) => {
             if (name && name.trim()) {
               await renameFolder(f.id, name);
               loadFolders();
@@ -332,7 +335,7 @@ export default function LibraryScreen() {
           }, undefined, f.name),
       },
       {
-        text: "حذف المجلد",
+        text: t("library.folder.delete"),
         style: "destructive",
         onPress: async () => {
           await removeFolder(f.id);
@@ -352,32 +355,33 @@ export default function LibraryScreen() {
       },
     }));
     buttons.push({
-      text: "بدون مجلد",
+      text: t("library.folder.none"),
       onPress: async () => {
         await setBookFolder(book.id, null);
         loadFolders();
       },
     });
-    buttons.push({ text: "إنشاء مجلد جديد", onPress: createFolder });
-    buttons.push({ text: "إلغاء", style: "cancel" });
-    Alert.alert("نقل إلى مجلد", book.title, buttons);
+    buttons.push({ text: t("library.folder.create"), onPress: createFolder });
+    buttons.push({ text: t("common.cancel"), style: "cancel" });
+    Alert.alert(t("library.folder.moveTitle"), book.title, buttons);
   }
 
   function cycleSort() {
     setSortBy((s) => (s === "new" ? "old" : s === "old" ? "title" : "new"));
   }
-  const sortLabel = sortBy === "new" ? "الأحدث" : sortBy === "old" ? "الأقدم" : "أبجدي";
+  const sortLabel =
+    sortBy === "new" ? t("library.sort.new") : sortBy === "old" ? t("library.sort.old") : t("library.sort.title");
 
-  const FILTERS: { key: typeof filter; label: string }[] = [
-    { key: "all", label: "الكل" },
-    { key: "withPlan", label: "لها خطة" },
-    { key: "noPlan", label: "بدون خطة" },
+  const FILTERS: { key: typeof filter; labelKey: string }[] = [
+    { key: "all", labelKey: "library.filter.all" },
+    { key: "withPlan", labelKey: "library.filter.withPlan" },
+    { key: "noPlan", labelKey: "library.filter.noPlan" },
   ];
 
   return (
     <ScreenBackground>
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader icon="library" title="المكتبة" subtitle="كل كتبك في مكان واحد" color={Palette.neonBlue} />
+      <ScreenHeader icon="library" title={t("library.header.title")} subtitle={t("library.header.subtitle")} color={Palette.neonBlue} />
 
       <View style={styles.header}>
         {/* شريط البحث */}
@@ -386,10 +390,9 @@ export default function LibraryScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="ابحث عن كتاب…"
+            placeholder={t("library.searchPlaceholder")}
             placeholderTextColor={Palette.placeholder}
-            style={styles.searchInput}
-            textAlign="right"
+            style={[styles.searchInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
           />
           {query ? (
             <Pressable onPress={() => setQuery("")} hitSlop={8}>
@@ -407,7 +410,7 @@ export default function LibraryScreen() {
               style={[styles.fChip, filter === f.key && styles.fChipActive]}
             >
               <Text style={[styles.fChipTxt, filter === f.key && styles.fChipTxtActive]}>
-                {f.label}
+                {t(f.labelKey)}
               </Text>
             </Pressable>
           ))}
@@ -429,7 +432,7 @@ export default function LibraryScreen() {
             style={[styles.folderChip, !selectedFolder && styles.folderChipActive]}
           >
             <Text style={[styles.folderChipTxt, !selectedFolder && styles.folderChipTxtActive]}>
-              📚 الكل
+              📚 {t("library.folder.all")}
             </Text>
           </Pressable>
 
@@ -456,7 +459,7 @@ export default function LibraryScreen() {
 
           <Pressable onPress={createFolder} style={[styles.folderChip, styles.folderAdd]}>
             <Ionicons name="add" size={15} color={Palette.neonBlue} />
-            <Text style={[styles.folderChipTxt, { color: Palette.neonBlue }]}>مجلد</Text>
+            <Text style={[styles.folderChipTxt, { color: Palette.neonBlue }]}>{t("library.folder.chip")}</Text>
           </Pressable>
         </ScrollView>
       </View>
@@ -478,15 +481,15 @@ export default function LibraryScreen() {
               style={styles.bookCardWrap}
               onPress={() => onPressBook(item)}
               onLongPress={() => {
-                Alert.alert(item.title, "اختر إجراءً", [
-                  { text: "إلغاء", style: "cancel" },
+                Alert.alert(item.title, t("library.actions.title"), [
+                  { text: t("common.cancel"), style: "cancel" },
 
                   // 📁 نقل إلى مجلد
-                  { text: "📁 نقل إلى مجلد", onPress: () => moveBookToFolder(item) },
+                  { text: t("library.actions.moveToFolder"), onPress: () => moveBookToFolder(item) },
 
                   // 📋 المنهج الدراسي (syllabus)
                   {
-                    text: "📋 المنهج الدراسي",
+                    text: t("library.actions.syllabus"),
                     onPress: () =>
                       router.push({
                         pathname: "/syllabus/[id]",
@@ -495,11 +498,11 @@ export default function LibraryScreen() {
                   },
 
                   // ✅ زر الأرشفة
-                  { text: "نقل للأرشيف", onPress: () => archiveBook(item) },
+                  { text: t("library.actions.archive"), onPress: () => archiveBook(item) },
 
-                  { text: "تعديل العنوان", onPress: () => openRename(item) },
+                  { text: t("library.actions.editTitle"), onPress: () => openRename(item) },
                   {
-                    text: "حذف نهائي",
+                    text: t("library.actions.delete"),
                     style: "destructive",
                     onPress: () => confirmDelete(item),
                   },
@@ -528,7 +531,7 @@ export default function LibraryScreen() {
 
                   {isActive ? (
                     <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>تحت الإجراء</Text>
+                      <Text style={styles.activeBadgeText}>{t("library.activeBadge")}</Text>
                     </View>
                   ) : null}
 
@@ -550,10 +553,10 @@ export default function LibraryScreen() {
                       <Text style={styles.metaTxt}>
                         {item.plan.start_date} → {item.plan.end_date}
                       </Text>
-                      <Text style={styles.metaTxt}>⏱ {item.plan.daily_minutes} دقيقة/يوم</Text>
+                      <Text style={styles.metaTxt}>⏱ {t("library.meta.perDay", { minutes: item.plan.daily_minutes })}</Text>
                     </>
                   ) : (
-                    <Text style={styles.metaTxt}>لا توجد خطة</Text>
+                    <Text style={styles.metaTxt}>{t("library.meta.noPlan")}</Text>
                   )}
                 </View>
               </GlassCard>
@@ -562,10 +565,10 @@ export default function LibraryScreen() {
         }}
         ListEmptyComponent={
           <View style={{ padding: 24 }}>
-            <Text style={{ color: "#9fb3c8", textAlign: "right" }}>
+            <Text style={{ color: "#9fb3c8", textAlign: dir.textAlign }}>
               {rows.length > 0
-                ? "لا نتائج مطابقة للبحث أو الفلتر."
-                : "لا توجد كتب بعد. أضِف كتابًا من تبويب “إضافة”."}
+                ? t("library.empty.noResults")
+                : t("library.empty.noBooks")}
             </Text>
           </View>
         }
@@ -573,11 +576,11 @@ export default function LibraryScreen() {
 
       {undoVisible ? (
         <View style={styles.undoBar}>
-          <Text style={styles.undoTxt} numberOfLines={1}>
-            سيتم حذف “{undoTitle}” نهائيًا…
+          <Text style={[styles.undoTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
+            {t("library.undo.pending", { title: undoTitle })}
           </Text>
           <GradientButton
-            title="تراجع"
+            title={t("library.undo.cta")}
             icon="arrow-undo"
             colors={Gradients.success}
             onPress={undoDelete}
@@ -588,19 +591,18 @@ export default function LibraryScreen() {
       {renameOpen ? (
         <View style={styles.modalMask}>
           <GlassCard contentStyle={styles.modal} style={{ width: "100%", maxWidth: 420 }}>
-            <Text style={styles.modalTitle}>تعديل العنوان</Text>
+            <Text style={[styles.modalTitle, { textAlign: dir.textAlign }]}>{t("library.rename.title")}</Text>
             <TextInput
               value={renameValue}
               onChangeText={setRenameValue}
-              style={styles.modalInput}
-              placeholder="العنوان"
+              style={[styles.modalInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+              placeholder={t("library.rename.placeholder")}
               placeholderTextColor="#8aa0b8"
-              textAlign="right"
             />
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <GradientButton title="حفظ" icon="checkmark" onPress={saveRename} style={{ flex: 1 }} />
+            <View style={{ flexDirection: dir.row, gap: 10 }}>
+              <GradientButton title={t("common.save")} icon="checkmark" onPress={saveRename} style={{ flex: 1 }} />
               <GradientButton
-                title="إلغاء"
+                title={t("common.cancel")}
                 variant="ghost"
                 onPress={() => setRenameOpen(false)}
                 style={{ flex: 1 }}
