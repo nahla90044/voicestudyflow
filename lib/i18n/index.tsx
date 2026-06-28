@@ -6,7 +6,9 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { dict } from "./strings";
 
 export type Lang = "ar" | "en" | "fr";
-export const LANGS: Lang[] = ["ar", "en", "fr"];
+// اللغات المعروضة في الواجهة. الفرنسية مؤجَّلة لتحديث لاحق (البنية جاهزة:
+// أعِد "fr" هنا واملأ قاموسها في strings.ts فتظهر تلقائيًا).
+export const LANGS: Lang[] = ["ar", "en"];
 export const LANG_LABELS: Record<Lang, string> = { ar: "العربية", en: "English", fr: "Français" };
 export const isRTLLang = (l: Lang): boolean => l === "ar";
 
@@ -23,7 +25,9 @@ const FALLBACK: Record<Lang, Lang[]> = {
 function detectDeviceLang(): Lang {
   try {
     const code = getLocales?.()[0]?.languageCode?.toLowerCase();
-    if (code === "en" || code === "fr" || code === "ar") return code;
+    if (code === "ar") return "ar";
+    // الإنجليزية متاحة الآن؛ والفرنسية مؤجَّلة → نوجّه أجهزتها للإنجليزية مؤقتًا.
+    if (code === "en" || code === "fr") return "en";
   } catch {
     // تجاهُل — نرجع للافتراضي
   }
@@ -62,7 +66,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const stored = (await AsyncStorage.getItem(STORAGE_KEY)) as Lang | null;
-        if (stored === "ar" || stored === "en" || stored === "fr") setLangState(stored);
+        // الفرنسية مؤجَّلة: أي اختيار "fr" مخزَّن سابقًا يُعامَل كإنجليزية.
+        if (stored === "ar" || stored === "en") setLangState(stored);
+        else if (stored === "fr") setLangState("en");
       } catch {
         // تجاهُل
       }

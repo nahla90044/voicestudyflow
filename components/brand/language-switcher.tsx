@@ -1,5 +1,6 @@
 // components/brand/language-switcher.tsx
-// مبدّل لغة الواجهة (العربية / English / Français). مستقل — يعتمد على نظام i18n فقط.
+// مبدّل لغة الواجهة (العربية / English). الفرنسية مؤجَّلة لتحديث لاحق.
+// يعرض ما في LANGS تلقائيًا — مستقل، يعتمد على نظام i18n فقط.
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Palette } from "../../constants/design";
