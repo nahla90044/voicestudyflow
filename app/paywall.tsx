@@ -29,7 +29,7 @@ export default function PaywallScreen() {
     }
     // الدفع الحقيقي عبر آبل/قوقل يُربط لاحقًا — الآن نعرض رسالة واضحة فقط
     Alert.alert(
-      t("paywall.alert.title", { name: plan.name }),
+      t("paywall.alert.title", { name: t(`plans.${plan.key}.name`) }),
       t("paywall.alert.body", { price: plan.priceSar }),
       [{ text: t("paywall.alert.ok"), style: "default" }]
     );
@@ -80,8 +80,8 @@ export default function PaywallScreen() {
 
                 <View style={[styles.cardHead, { flexDirection: dir.row }]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.planName, { textAlign: dir.textAlign }]}>{plan.name}</Text>
-                    <Text style={[styles.planTag, { textAlign: dir.textAlign }]}>{plan.tagline}</Text>
+                    <Text style={[styles.planName, { textAlign: dir.textAlign }]}>{t(`plans.${plan.key}.name`)}</Text>
+                    <Text style={[styles.planTag, { textAlign: dir.textAlign }]}>{t(`plans.${plan.key}.tagline`)}</Text>
                   </View>
                   <LinearGradient colors={plan.gradient} style={styles.planDot}>
                     <Ionicons name="book" size={16} color="#fff" />
@@ -100,10 +100,10 @@ export default function PaywallScreen() {
                 </View>
 
                 <View style={styles.features}>
-                  {plan.features.map((f, i) => (
+                  {plan.features.map((_f, i) => (
                     <View key={i} style={[styles.featRow, { flexDirection: dir.row }]}>
                       <Ionicons name="checkmark-circle" size={17} color={Palette.neonCyan} />
-                      <Text style={[styles.featTxt, { textAlign: dir.textAlign }]}>{f}</Text>
+                      <Text style={[styles.featTxt, { textAlign: dir.textAlign }]}>{t(`plans.${plan.key}.feat${i}`)}</Text>
                     </View>
                   ))}
                 </View>
@@ -121,7 +121,7 @@ export default function PaywallScreen() {
                       end={{ x: 1, y: 0 }}
                       style={styles.cta}
                     >
-                      <Text style={styles.ctaTxt}>{free ? t("paywall.startFree") : t("paywall.subscribe", { name: plan.name })}</Text>
+                      <Text style={styles.ctaTxt}>{free ? t("paywall.startFree") : t("paywall.subscribe", { name: t(`plans.${plan.key}.name`) })}</Text>
                     </LinearGradient>
                   </Pressable>
                 )}

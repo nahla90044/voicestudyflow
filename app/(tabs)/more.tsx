@@ -255,7 +255,7 @@ export default function MoreScreen() {
               <Ionicons name="sparkles" size={20} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.upTitle, { textAlign: dir.textAlign }]}>{t("more.plan.your", { plan: planByKey(planKey).name })}</Text>
+              <Text style={[styles.upTitle, { textAlign: dir.textAlign }]}>{t("more.plan.your", { plan: t(`plans.${planKey}.name`) })}</Text>
               <Text style={[styles.upSub, { textAlign: dir.textAlign }]}>
                 {planKey === "free" ? t("more.plan.subFree") : t("more.plan.subManage")}
               </Text>
@@ -293,7 +293,7 @@ export default function MoreScreen() {
                     <View style={[styles.themeDot, { backgroundColor: theme.accent }]} />
                   </LinearGradient>
                   <Text style={[styles.themeName, active && { color: theme.accent }]}>
-                    {theme.emoji} {theme.name}
+                    {theme.emoji} {t(`themes.${theme.id}`)}
                   </Text>
                   {active ? <Text style={[styles.themeActive, { color: theme.accent }]}>{t("more.theme.active")}</Text> : null}
                 </Pressable>
@@ -501,7 +501,7 @@ export default function MoreScreen() {
             {"\n"}
             {t("more.about.disclaimer")}
           </Text>
-          <Text style={styles.madeIn}>صنع في الرياض 💚</Text>
+          <Text style={styles.madeIn}>{t("more.madeIn")}</Text>
         </GlassCard>
       </ScrollView>
 
