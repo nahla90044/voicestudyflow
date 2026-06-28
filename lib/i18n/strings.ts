@@ -575,6 +575,12 @@ const ar: Record<string, string> = {
   "plans.premium.feat1": "كل مزايا برو",
   "plans.premium.feat2": "أولوية في المعالجة",
   "plans.premium.feat3": "دعم مميّز",
+  // الموسيقى الخلفية (Background music)
+  "music.piano": "بيانو هادئ",
+  "music.nature": "طبيعة",
+  "music.strings": "وتريات",
+  "music.lofi": "لو-فاي",
+  "music.meditation": "تأمّل",
 };
 
 const en: Record<string, string> = {
@@ -1126,6 +1132,11 @@ const en: Record<string, string> = {
   "plans.premium.feat1": "All Pro features",
   "plans.premium.feat2": "Priority processing",
   "plans.premium.feat3": "Premium support",
+  "music.piano": "Calm piano",
+  "music.nature": "Nature",
+  "music.strings": "Strings",
+  "music.lofi": "Lo-fi",
+  "music.meditation": "Meditation",
 };
 
 // الفرنسي: يُملأ في مرحلة لاحقة. حاليًا نعتمد على fallback الإنجليزي عبر دالة t.

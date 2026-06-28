@@ -1665,7 +1665,7 @@ export default function ReaderScreen() {
           />
           <Text style={[styles.voicePickTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
             {presMusicKey
-              ? t("reader.music.label", { name: MUSIC_OPTIONS.find((m) => m.key === presMusicKey)?.name ?? "" })
+              ? t("reader.music.label", { name: t(`music.${presMusicKey}`) })
               : t("reader.music.background")}
           </Text>
         </Pressable>
@@ -1691,7 +1691,7 @@ export default function ReaderScreen() {
                   }}
                   style={[styles.musicChip, on && styles.musicChipOn]}
                 >
-                  <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {m.name}</Text>
+                  <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {t(`music.${m.key}`)}</Text>
                 </Pressable>
               );
             })}
@@ -2316,7 +2316,7 @@ export default function ReaderScreen() {
                     }}
                     style={[styles.musicChip, on && styles.musicChipOn]}
                   >
-                    <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {m.name}</Text>
+                    <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {t(`music.${m.key}`)}</Text>
                   </Pressable>
                 );
               })}
