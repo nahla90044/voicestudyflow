@@ -6,12 +6,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
-import { claimDeviceData, signInWithEmail, signUpEmail } from "../lib/auth";
+import { claimDeviceData, resetPassword, signInWithEmail, signUpEmail } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
 import { ONBOARDING_KEY } from "./onboarding";
 
@@ -77,6 +77,18 @@ export default function AuthScreen() {
     }
   }
 
+  async function onForgot() {
+    const e = email.trim().toLowerCase();
+    if (!e || !e.includes("@")) return setErr(t("auth.err.emailFirst"));
+    setErr("");
+    try {
+      await resetPassword(e);
+      Alert.alert(t("auth.forgot.sentTitle"), t("auth.forgot.sentBody", { email: e }));
+    } catch {
+      setErr(t("auth.err.generic"));
+    }
+  }
+
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe}>
@@ -137,6 +149,12 @@ export default function AuthScreen() {
                   style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                 />
 
+                {mode === "login" ? (
+                  <Pressable onPress={onForgot} hitSlop={6} style={{ alignSelf: dir.isRTL ? "flex-start" : "flex-end", marginTop: 8 }}>
+                    <Text style={styles.forgotTxt}>{t("auth.forgot.link")}</Text>
+                  </Pressable>
+                ) : null}
+
                 {!!err && <Text style={styles.err}>{err}</Text>}
 
                 <Pressable onPress={onSubmit} style={styles.submit} disabled={busy}>
@@ -194,6 +212,7 @@ const styles = StyleSheet.create({
   submitTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
   note: { color: Palette.textDim, fontSize: 12, lineHeight: 20, textAlign: "center", marginTop: 16 },
   switchTxt: { color: Palette.neonCyan, fontSize: 14, fontWeight: "700" },
+  forgotTxt: { color: Palette.neonCyan, fontSize: 13, fontWeight: "700" },
   confirmTitle: { color: Palette.text, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 12 },
   confirmBody: { color: Palette.textMuted, fontSize: 14, lineHeight: 24, textAlign: "center", marginTop: 10 },
 });

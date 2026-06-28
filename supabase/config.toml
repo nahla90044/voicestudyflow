@@ -17,6 +17,10 @@ verify_jwt = true
 import_map = "./functions/pdf-extract-text/deno.json"
 entrypoint = "./functions/pdf-extract-text/index.ts"
 
+[functions.delete-account]
+enabled = true
+verify_jwt = true
+
 [functions.pdf-pagecount]
 enabled = true
 verify_jwt = true

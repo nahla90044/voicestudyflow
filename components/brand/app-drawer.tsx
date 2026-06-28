@@ -13,11 +13,11 @@ import { getCurrentPlan, type PlanKey } from "../../lib/subscription";
 import { LanguageSwitcher } from "./language-switcher";
 import { BrandMark } from "./logo";
 
-type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/auth" | "/paywall";
+type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/profile" | "/paywall";
 type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: Route; color: string };
 
 const ITEMS: Item[] = [
-  { icon: "person-circle", labelKey: "drawer.account", route: "/auth", color: Palette.neonBlue },
+  { icon: "person-circle", labelKey: "drawer.profile", route: "/profile", color: Palette.neonBlue },
   { icon: "timer", labelKey: "drawer.focusTimer", route: "/pomodoro", color: Palette.neonCyan },
   { icon: "settings", labelKey: "drawer.settings", route: "/more", color: Palette.neonViolet },
   { icon: "file-tray-full", labelKey: "drawer.archive", route: "/explore", color: Palette.neonPink },

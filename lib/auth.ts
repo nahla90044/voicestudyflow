@@ -139,3 +139,10 @@ export async function signOut() {
   await supabase.auth.signOut();
   cachedUserId = null;
 }
+
+/** إرسال رسالة إعادة تعيين كلمة المرور للبريد. */
+export async function resetPassword(email: string): Promise<void> {
+  const e = email.trim().toLowerCase();
+  const { error } = await supabase.auth.resetPasswordForEmail(e);
+  if (error) throw error;
+}
