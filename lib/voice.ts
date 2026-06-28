@@ -1,14 +1,11 @@
 // lib/voice.ts
-// أصوات بشرية عبر ElevenLabs مع رجوع تلقائي لصوت الجهاز (expo-speech)
-// عند عدم وجود مفتاح أو فشل الطلب.
+// أصوات بشرية عبر ElevenLabs مع رجوع تلقائي لصوت الجهاز (expo-speech) عند الفشل.
 //
-// الإعداد عبر متغيرات البيئة (.env):
-//   EXPO_PUBLIC_ELEVENLABS_API_KEY=...
-//   EXPO_PUBLIC_ELEVENLABS_VOICE_FEMALE=<voice_id>   (اختياري)
-//   EXPO_PUBLIC_ELEVENLABS_VOICE_MALE=<voice_id>     (اختياري)
-//
-// الإنتاج: إذا لم يوجد مفتاح محلي، نستدعي دالة Supabase «tts» التي تحفظ
-// المفتاح سرّيًا بالسيرفر. الواجهة (speakText/stopSpeaking) تبقى كما هي.
+// الأمان: لا يوجد أي مفتاح ElevenLabs في العميل إطلاقًا. كل طلبات الصوت تمرّ عبر
+// دالة Supabase «tts» (Edge Function) التي تحفظ المفتاح سرّيًا بالسيرفر
+// (Deno.env). لا تضعي EXPO_PUBLIC_ELEVENLABS_API_KEY في .env — أي متغيّر
+// EXPO_PUBLIC_ يُحزَّم داخل التطبيق ويصبح مكشوفًا. الواجهة (speakText/stopSpeaking)
+// تبقى كما هي.
 
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import { Directory, File, Paths } from "expo-file-system";
