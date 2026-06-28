@@ -15,6 +15,7 @@ import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../../lib/voice";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../../constants/design";
+import { useDir, useI18n } from "../../lib/i18n";
 import {
   generateMindmap,
   generateSyllabus,
@@ -44,6 +45,8 @@ function fmtRange(s: UnitSchedule): string {
 }
 
 export default function SyllabusScreen() {
+  const { t } = useI18n();
+  const dir = useDir();
   const { id, title, pdf_path } = useLocalSearchParams<{
     id?: string;
     title?: string;
@@ -51,7 +54,7 @@ export default function SyllabusScreen() {
   }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const bookId = typeof id === "string" ? id : "";
-  const bookTitle = typeof title === "string" ? title : "المنهج الدراسي";
+  const bookTitle = typeof title === "string" ? title : t("syllabus.title");
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -112,7 +115,7 @@ export default function SyllabusScreen() {
       setDone(new Array(data.units.length).fill(false));
       await loadSchedule(data.units.length);
     } catch (e: any) {
-      setErr(e?.message ?? "تعذّر إنشاء المنهج");
+      setErr(e?.message ?? t("syllabus.err.generate"));
     } finally {
       setBusy(false);
     }
@@ -140,7 +143,7 @@ export default function SyllabusScreen() {
       const map = await generateMindmap(ctx);
       if (!map) {
         setMmUnit(null);
-        setErr("تعذّر إنشاء الخريطة الذهنية.");
+        setErr(t("syllabus.err.mindmap"));
       } else {
         setMm(map);
       }
@@ -165,7 +168,7 @@ export default function SyllabusScreen() {
       const text = (await aiAssist("summarize", ctx)).trim();
       if (!text) {
         setSumUnit(null);
-        setErr("تعذّر إنشاء الملخّص.");
+        setErr(t("syllabus.err.summary"));
         return;
       }
       setSumText(text);
@@ -215,7 +218,7 @@ export default function SyllabusScreen() {
       const ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
       const qs = await generateUnitQuiz(ctx);
       if (qs.length === 0) {
-        setErr("تعذّر إنشاء الكويز، حاولي مرة أخرى.");
+        setErr(t("syllabus.err.quiz"));
         setQuizUnit(null);
       } else {
         setQuiz(qs);
@@ -269,16 +272,16 @@ export default function SyllabusScreen() {
         (u, i) => `
         <div class="unit">
           <h3>${i + 1}. ${esc(u.title)}</h3>
-          ${sched[i] ? `<p class="when">📅 ذاكريها: ${esc(fmtRange(sched[i]))}</p>` : ""}
-          ${u.topics.length ? `<ul>${u.topics.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+          ${sched[i] ? `<p class="when">📅 ${esc(t("syllabus.studyOn"))}: ${esc(fmtRange(sched[i]))}</p>` : ""}
+          ${u.topics.length ? `<ul>${u.topics.map((topic) => `<li>${esc(topic)}</li>`).join("")}</ul>` : ""}
           ${u.outcome ? `<p class="out">🎯 ${esc(u.outcome)}</p>` : ""}
         </div>`
       )
       .join("");
     const tips = syl.tips?.length
-      ? `<div class="tips"><h2>نصائح دراسية</h2><ul>${syl.tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`
+      ? `<div class="tips"><h2>${esc(t("syllabus.print.tipsHeading"))}</h2><ul>${syl.tips.map((tip) => `<li>${esc(tip)}</li>`).join("")}</ul></div>`
       : "";
-    const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+    const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8"><style>
       * { font-family: -apple-system, 'SF Arabic', sans-serif; }
       body { padding: 28px; color: #14233a; }
       h1 { font-size: 22px; margin: 0 0 4px; }
@@ -293,7 +296,7 @@ export default function SyllabusScreen() {
       .box { display:inline-block; width:14px; height:14px; border:1.5px solid #5b3df5; border-radius:4px; margin-inline-start:8px; vertical-align:middle; }
     </style></head><body>
       <h1>${esc(syl.title ?? bookTitle)}</h1>
-      <p class="sub">منهج دراسي — ${total} وحدة · للطباعة والمتابعة ✅</p>
+      <p class="sub">${esc(t("syllabus.print.sub", { count: total }))}</p>
       ${units}
       ${tips}
     </body></html>`;
@@ -317,7 +320,7 @@ export default function SyllabusScreen() {
         </div>`;
       })
       .join("");
-    const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>
+    const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8"><style>
       * { font-family: -apple-system, 'SF Arabic', sans-serif; }
       body { padding: 28px; color: #14233a; }
       h1 { font-size: 20px; margin: 0 0 14px; text-align:center; }
@@ -328,7 +331,7 @@ export default function SyllabusScreen() {
       ul { margin:8px 0 0; padding-inline-start:22px; }
       li { margin:4px 0; font-size:13.5px; }
     </style></head><body>
-      <h1>🗺️ الخريطة الذهنية — ${esc(bookTitle)}</h1>
+      <h1>🗺️ ${esc(t("syllabus.mindmap.title"))} — ${esc(bookTitle)}</h1>
       <div class="center">${esc(mm.center)}</div>
       ${branches}
     </body></html>`;
@@ -341,12 +344,12 @@ export default function SyllabusScreen() {
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
         {/* رأس */}
-        <View style={styles.header}>
+        <View style={[styles.header, { flexDirection: dir.row }]}>
           <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
             <Ionicons name="chevron-forward" size={22} color={Palette.text} />
           </Pressable>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            المنهج الدراسي
+            {t("syllabus.title")}
           </Text>
           {syl ? (
             <Pressable onPress={onPrint} style={styles.iconBtn} hitSlop={8}>
@@ -364,14 +367,13 @@ export default function SyllabusScreen() {
         ) : !syl ? (
           <View style={styles.center}>
             <Ionicons name="sparkles" size={40} color={Palette.neonViolet} />
-            <Text style={styles.emptyTitle}>أنشئي منهجًا دراسيًا لهذا الكتاب</Text>
+            <Text style={styles.emptyTitle}>{t("syllabus.empty.title")}</Text>
             <Text style={styles.emptySub}>
-              نقرأ أوّل صفحات الكتاب ونحوّلها إلى وحدات بعناوين ومواضيع ومخرجات تعلّم،
-              مع تشيك ليست لمتابعة تقدّمك.
+              {t("syllabus.empty.sub")}
             </Text>
             {!!err && <Text style={styles.err}>{err}</Text>}
             <GradientButton
-              title="إنشاء المنهج بالذكاء ✨"
+              title={t("syllabus.empty.generate")}
               icon="sparkles"
               onPress={onGenerate}
               loading={busy}
@@ -379,7 +381,7 @@ export default function SyllabusScreen() {
             />
             <Pressable onPress={startReading} style={styles.readNowBtn}>
               <Ionicons name="book" size={18} color={Palette.text} />
-              <Text style={styles.readNowTxt}>ابدأ القراءة الآن 📖</Text>
+              <Text style={styles.readNowTxt}>{t("syllabus.readNowFull")}</Text>
             </Pressable>
           </View>
         ) : (
@@ -389,10 +391,10 @@ export default function SyllabusScreen() {
               <Text style={styles.bookTitle} numberOfLines={3}>
                 {syl.title ?? bookTitle}
               </Text>
-              <View style={styles.progRow}>
+              <View style={[styles.progRow, { flexDirection: dir.row }]}>
                 <Text style={styles.progPct}>{pct}%</Text>
                 <Text style={styles.progLabel}>
-                  {completed} / {total} وحدة مكتملة
+                  {t("syllabus.progress.completed", { completed, total })}
                 </Text>
               </View>
               <View style={styles.progTrack}>
@@ -400,7 +402,7 @@ export default function SyllabusScreen() {
               </View>
               {sched.length === 0 && (
                 <Text style={[styles.noPlanHint, { marginTop: 12 }]}>
-                  💡 أنشئي خطة لهذا الكتاب (زر «حفظ + إنشاء خطة ذكية») لتظهر أيام مذاكرة كل وحدة هنا.
+                  {t("syllabus.noPlanHint")}
                 </Text>
               )}
             </GlassCard>
@@ -408,7 +410,7 @@ export default function SyllabusScreen() {
             {/* زر الدخول للقراءة — بارز فوق الوحدات */}
             <Pressable onPress={startReading} style={styles.readNowBtn}>
               <Ionicons name="book" size={18} color={Palette.text} />
-              <Text style={styles.readNowTxt}>ابدأ القراءة 📖</Text>
+              <Text style={styles.readNowTxt}>{t("syllabus.readNow")}</Text>
             </Pressable>
 
             {/* الوحدات (تشيك ليست) */}
@@ -417,38 +419,40 @@ export default function SyllabusScreen() {
               return (
                 <Pressable key={i} onPress={() => toggle(i)} style={styles.unitWrap}>
                   <GlassCard contentStyle={styles.unitCard} glow={isDone ? Palette.neonCyan : undefined}>
-                    <View style={styles.unitHead}>
+                    <View style={[styles.unitHead, { flexDirection: dir.row }]}>
                       <View style={[styles.check, isDone && styles.checkOn]}>
                         {isDone && <Ionicons name="checkmark" size={16} color="#0b1220" />}
                       </View>
-                      <Text style={[styles.unitTitle, isDone && styles.unitTitleDone]}>
+                      <Text style={[styles.unitTitle, isDone && styles.unitTitleDone, { textAlign: dir.textAlign }]}>
                         {i + 1}. {u.title}
                       </Text>
                     </View>
                     {sched[i] && (
-                      <View style={styles.schedRow}>
+                      <View style={[styles.schedRow, { flexDirection: dir.row }]}>
                         <Ionicons name="calendar-outline" size={13} color={Palette.neonCyan} />
                         <Text style={styles.schedTxt}>
-                          ذاكريها: {fmtRange(sched[i])}{"  ·  "}اليوم {sched[i].dayFrom}
-                          {sched[i].dayTo !== sched[i].dayFrom ? `–${sched[i].dayTo}` : ""}
+                          {t("syllabus.studyOn")}: {fmtRange(sched[i])}{"  ·  "}
+                          {sched[i].dayTo !== sched[i].dayFrom
+                            ? t("syllabus.dayRange", { from: sched[i].dayFrom, to: sched[i].dayTo })
+                            : t("syllabus.day", { day: sched[i].dayFrom })}
                         </Text>
                       </View>
                     )}
-                    {u.topics.map((t, k) => (
-                      <View key={k} style={styles.topicRow}>
+                    {u.topics.map((topic, k) => (
+                      <View key={k} style={[styles.topicRow, { flexDirection: dir.row }]}>
                         <Text style={styles.topicDot}>•</Text>
-                        <Text style={styles.topicTxt}>{t}</Text>
+                        <Text style={[styles.topicTxt, { textAlign: dir.textAlign }]}>{topic}</Text>
                       </View>
                     ))}
                     {!!u.outcome && (
-                      <Text style={styles.outcome}>🎯 {u.outcome}</Text>
+                      <Text style={[styles.outcome, { textAlign: dir.textAlign }]}>🎯 {u.outcome}</Text>
                     )}
 
-                    <View style={styles.unitActions}>
+                    <View style={[styles.unitActions, { flexDirection: dir.row }]}>
                       <Pressable
                         onPress={() => startSummary(i)}
                         disabled={sumLoading}
-                        style={[styles.quizBtn, styles.sumBtn]}
+                        style={[styles.quizBtn, styles.sumBtn, { flexDirection: dir.row }]}
                       >
                         {sumLoading && sumUnit === i ? (
                           <ActivityIndicator size="small" color={Palette.neonCyan} />
@@ -456,14 +460,14 @@ export default function SyllabusScreen() {
                           <Ionicons name="headset" size={15} color={Palette.neonCyan} />
                         )}
                         <Text style={[styles.quizBtnTxt, { color: Palette.neonCyan }]}>
-                          {sumLoading && sumUnit === i ? "…" : "🎧 ملخّص صوتي"}
+                          {sumLoading && sumUnit === i ? "…" : t("syllabus.action.summary")}
                         </Text>
                       </Pressable>
 
                       <Pressable
                         onPress={() => startQuiz(i)}
                         disabled={quizLoading}
-                        style={[styles.quizBtn, { flex: 1, marginTop: 0 }]}
+                        style={[styles.quizBtn, { flex: 1, marginTop: 0, flexDirection: dir.row }]}
                       >
                         {quizLoading && quizUnit === i ? (
                           <ActivityIndicator size="small" color={Palette.neonViolet} />
@@ -471,7 +475,7 @@ export default function SyllabusScreen() {
                           <Ionicons name="help-circle" size={15} color={Palette.neonViolet} />
                         )}
                         <Text style={styles.quizBtnTxt}>
-                          {quizLoading && quizUnit === i ? "…" : "🧠 اختبرني"}
+                          {quizLoading && quizUnit === i ? "…" : t("syllabus.action.quiz")}
                         </Text>
                       </Pressable>
                     </View>
@@ -479,7 +483,7 @@ export default function SyllabusScreen() {
                     <Pressable
                       onPress={() => startMindmap(i)}
                       disabled={mmLoading}
-                      style={[styles.quizBtn, styles.mmBtn]}
+                      style={[styles.quizBtn, styles.mmBtn, { flexDirection: dir.row }]}
                     >
                       {mmLoading && mmUnit === i ? (
                         <ActivityIndicator size="small" color="#a3e635" />
@@ -487,7 +491,7 @@ export default function SyllabusScreen() {
                         <Ionicons name="git-network" size={15} color="#a3e635" />
                       )}
                       <Text style={[styles.quizBtnTxt, { color: "#bef264" }]}>
-                        {mmLoading && mmUnit === i ? "جارٍ الرسم…" : "🗺️ خريطة ذهنية"}
+                        {mmLoading && mmUnit === i ? t("syllabus.action.drawing") : t("syllabus.action.mindmap")}
                       </Text>
                     </Pressable>
                   </GlassCard>
@@ -498,18 +502,18 @@ export default function SyllabusScreen() {
             {/* نصائح */}
             {!!syl.tips?.length && (
               <GlassCard contentStyle={styles.tipsCard} glow={Palette.neonCyan}>
-                <Text style={styles.tipsTitle}>نصائح للدراسة 💡</Text>
-                {syl.tips.map((t, i) => (
-                  <View key={i} style={styles.topicRow}>
+                <Text style={[styles.tipsTitle, { textAlign: dir.textAlign }]}>{t("syllabus.tipsTitle")}</Text>
+                {syl.tips.map((tip, i) => (
+                  <View key={i} style={[styles.topicRow, { flexDirection: dir.row }]}>
                     <Text style={styles.topicDot}>•</Text>
-                    <Text style={styles.topicTxt}>{t}</Text>
+                    <Text style={[styles.topicTxt, { textAlign: dir.textAlign }]}>{tip}</Text>
                   </View>
                 ))}
               </GlassCard>
             )}
 
             <GradientButton
-              title="طباعة / مشاركة المنهج"
+              title={t("syllabus.printShare")}
               icon="print"
               variant="ghost"
               onPress={onPrint}
@@ -528,9 +532,9 @@ export default function SyllabusScreen() {
         >
           <View style={styles.quizMask}>
             <View style={styles.quizSheet}>
-              <View style={styles.quizHeader}>
+              <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
                 <Text style={styles.quizHeaderTxt}>
-                  {quizDone ? "النتيجة" : `سؤال ${qStep + 1} / ${quiz.length}`}
+                  {quizDone ? t("syllabus.quiz.result") : t("syllabus.quiz.question", { step: qStep + 1, total: quiz.length })}
                 </Text>
                 <Pressable onPress={closeQuiz} hitSlop={8}>
                   <Ionicons name="close" size={22} color={Palette.textMuted} />
@@ -544,13 +548,13 @@ export default function SyllabusScreen() {
                   </Text>
                   <Text style={styles.quizResultMsg}>
                     {qScore === quiz.length
-                      ? "ممتازة! إتقان كامل 🌟"
+                      ? t("syllabus.quiz.perfect")
                       : qScore >= Math.ceil(quiz.length / 2)
-                      ? "أداء جيد، راجعي ما فاتك 👏"
-                      : "تحتاج مراجعة هذه الوحدة 📚"}
+                      ? t("syllabus.quiz.good")
+                      : t("syllabus.quiz.review")}
                   </Text>
                   <GradientButton
-                    title="تمام"
+                    title={t("common.done")}
                     icon="checkmark"
                     onPress={closeQuiz}
                     style={{ alignSelf: "stretch", marginTop: Spacing.md }}
@@ -558,7 +562,7 @@ export default function SyllabusScreen() {
                 </View>
               ) : quiz[qStep] ? (
                 <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-                  <Text style={styles.quizQ}>{quiz[qStep].q}</Text>
+                  <Text style={[styles.quizQ, { textAlign: dir.textAlign }]}>{quiz[qStep].q}</Text>
                   {quiz[qStep].options.map((opt, oi) => {
                     const isCorrect = oi === quiz[qStep].answer;
                     const picked = qPicked === oi;
@@ -569,11 +573,12 @@ export default function SyllabusScreen() {
                         onPress={() => pickAnswer(oi)}
                         style={[
                           styles.quizOpt,
+                          { flexDirection: dir.row },
                           reveal && isCorrect && styles.quizOptCorrect,
                           reveal && picked && !isCorrect && styles.quizOptWrong,
                         ]}
                       >
-                        <Text style={styles.quizOptTxt}>{opt}</Text>
+                        <Text style={[styles.quizOptTxt, { textAlign: dir.textAlign }]}>{opt}</Text>
                         {reveal && isCorrect ? (
                           <Ionicons name="checkmark-circle" size={18} color={Palette.success} />
                         ) : reveal && picked && !isCorrect ? (
@@ -584,7 +589,7 @@ export default function SyllabusScreen() {
                   })}
                   {qPicked !== null && (
                     <GradientButton
-                      title={qStep + 1 >= quiz.length ? "عرض النتيجة" : "السؤال التالي"}
+                      title={qStep + 1 >= quiz.length ? t("syllabus.quiz.showResult") : t("syllabus.quiz.nextQuestion")}
                       icon="arrow-back"
                       onPress={nextQuestion}
                       style={{ marginTop: Spacing.md }}
@@ -605,22 +610,22 @@ export default function SyllabusScreen() {
         >
           <View style={styles.quizMask}>
             <View style={styles.quizSheet}>
-              <View style={styles.quizHeader}>
+              <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
                 <Text style={styles.quizHeaderTxt} numberOfLines={1}>
-                  🎧 ملخّص: {sumUnit !== null ? syl?.units[sumUnit]?.title : ""}
+                  🎧 {t("syllabus.summary.label")}: {sumUnit !== null ? syl?.units[sumUnit]?.title : ""}
                 </Text>
                 <Pressable onPress={closeSummary} hitSlop={8}>
                   <Ionicons name="close" size={22} color={Palette.textMuted} />
                 </Pressable>
               </View>
 
-              <Pressable onPress={toggleSummaryPlay} style={styles.sumPlay}>
+              <Pressable onPress={toggleSummaryPlay} style={[styles.sumPlay, { flexDirection: dir.row }]}>
                 <Ionicons name={sumPlaying ? "pause" : "play"} size={20} color="#0b1220" />
-                <Text style={styles.sumPlayTxt}>{sumPlaying ? "إيقاف مؤقّت" : "استماع"}</Text>
+                <Text style={styles.sumPlayTxt}>{sumPlaying ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
               </Pressable>
 
               <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-                <Text style={styles.sumText}>{sumText}</Text>
+                <Text style={[styles.sumText, { textAlign: dir.textAlign }]}>{sumText}</Text>
               </ScrollView>
             </View>
           </View>
@@ -635,9 +640,9 @@ export default function SyllabusScreen() {
         >
           <View style={styles.quizMask}>
             <View style={styles.quizSheet}>
-              <View style={styles.quizHeader}>
-                <Text style={styles.quizHeaderTxt}>🗺️ الخريطة الذهنية</Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+              <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
+                <Text style={styles.quizHeaderTxt}>🗺️ {t("syllabus.mindmap.title")}</Text>
+                <View style={{ flexDirection: dir.row, alignItems: "center", gap: 14 }}>
                   <Pressable onPress={printMindmap} hitSlop={8}>
                     <Ionicons name="print-outline" size={21} color={Palette.textMuted} />
                   </Pressable>
@@ -661,7 +666,7 @@ export default function SyllabusScreen() {
                     <BuzanMindMap map={mm} size={320} />
                   </ScrollView>
                 ) : null}
-                <Text style={styles.mmHint}>كبّري بإصبعين للتفاصيل · أو اقرئيها كقائمة بالأسفل</Text>
+                <Text style={styles.mmHint}>{t("syllabus.mindmap.hint")}</Text>
 
                 {/* العقدة المركزية (قائمة) */}
                 <View style={styles.mmCenter}>
@@ -674,14 +679,14 @@ export default function SyllabusScreen() {
                   const c = MM_COLORS[bi % MM_COLORS.length];
                   return (
                     <View key={bi} style={[styles.mmBranch2, { borderColor: c + "66" }]}>
-                      <View style={[styles.mmBranchHead, { backgroundColor: c + "22" }]}>
+                      <View style={[styles.mmBranchHead, { backgroundColor: c + "22", flexDirection: dir.row }]}>
                         <View style={[styles.mmDot, { backgroundColor: c }]} />
-                        <Text style={[styles.mmBranchLabel, { color: c }]}>{b.label}</Text>
+                        <Text style={[styles.mmBranchLabel, { color: c, textAlign: dir.textAlign }]}>{b.label}</Text>
                       </View>
                       {b.points.map((p, pi) => (
-                        <View key={pi} style={styles.mmPointRow}>
+                        <View key={pi} style={[styles.mmPointRow, { flexDirection: dir.row }]}>
                           <Text style={[styles.mmPointDash, { color: c }]}>—</Text>
-                          <Text style={styles.mmPointTxt}>{p}</Text>
+                          <Text style={[styles.mmPointTxt, { textAlign: dir.textAlign }]}>{p}</Text>
                         </View>
                       ))}
                     </View>

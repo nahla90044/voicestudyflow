@@ -4,6 +4,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { Palette } from "../../constants/design";
+import { useDir, useI18n } from "../../lib/i18n";
 
 type Props = { days: Record<string, { m: number }>; weeks?: number };
 
@@ -23,6 +24,8 @@ function levelColor(min: number): string {
 }
 
 export function StudyHeatmap({ days, weeks = 13 }: Props) {
+  const { t } = useI18n();
+  const dir = useDir();
   // نهاية الشبكة: نهاية الأسبوع الحالي (السبت)؛ البداية: أحد قبل (weeks-1) أسبوع
   const today = new Date();
   const start = new Date(today);
@@ -44,8 +47,8 @@ export function StudyHeatmap({ days, weeks = 13 }: Props) {
   return (
     <View>
       {/* شرح مبسّط: كل مربّع يوم، ولونه يدلّ على دقائق مذاكرتك فيه */}
-      <Text style={styles.caption}>
-        كل مربّع = يوم خلال آخر ٣ أشهر، ولونه يدلّ على دقائق مذاكرتك فيه (الأخضر الأغمق = وقت أطول).
+      <Text style={[styles.caption, { textAlign: dir.textAlign }]}>
+        {t("heatmap.caption")}
       </Text>
 
       <View style={styles.grid}>
@@ -68,11 +71,11 @@ export function StudyHeatmap({ days, weeks = 13 }: Props) {
       </View>
 
       <View style={styles.legend}>
-        <Text style={styles.legendTxt}>دقائق أقل</Text>
+        <Text style={styles.legendTxt}>{t("heatmap.less")}</Text>
         {[0, 9, 19, 39, 50].map((m, i) => (
           <View key={i} style={[styles.cell, { backgroundColor: levelColor(m) }]} />
         ))}
-        <Text style={styles.legendTxt}>دقائق أكثر</Text>
+        <Text style={styles.legendTxt}>{t("heatmap.more")}</Text>
       </View>
     </View>
   );
@@ -84,5 +87,5 @@ const styles = StyleSheet.create({
   cell: { width: 13, height: 13, borderRadius: 3 },
   legend: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10, justifyContent: "flex-end" },
   legendTxt: { color: Palette.textDim, fontSize: 11, fontWeight: "700" },
-  caption: { color: Palette.textMuted, fontSize: 12.5, lineHeight: 21, textAlign: "right", marginBottom: 12 },
+  caption: { color: Palette.textMuted, fontSize: 12.5, lineHeight: 21, marginBottom: 12 },
 });

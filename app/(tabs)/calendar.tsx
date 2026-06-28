@@ -26,6 +26,7 @@ import {
 } from "../../lib/sessionMeta";
 import { supabase } from "../../lib/supabase";
 import { getUnitForDate } from "../../lib/syllabus";
+import { useDir, useI18n } from "../../lib/i18n";
 
 type ViewMode = "daily" | "weekly" | "monthly";
 
@@ -60,9 +61,38 @@ type CalendarBlock = {
 };
 
 // الأسبوع يبدأ الأحد، والعطلة الجمعة (مؤشر 5) والسبت (مؤشر 6)
-const ايام_الاسبوع = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-const ايام_مختصرة = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
-const DAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ايام_الاسبوع_KEYS = [
+  "calendar.day.sun",
+  "calendar.day.mon",
+  "calendar.day.tue",
+  "calendar.day.wed",
+  "calendar.day.thu",
+  "calendar.day.fri",
+  "calendar.day.sat",
+];
+const DAYS_EN_KEYS = [
+  "calendar.dayHead.sun",
+  "calendar.dayHead.mon",
+  "calendar.dayHead.tue",
+  "calendar.dayHead.wed",
+  "calendar.dayHead.thu",
+  "calendar.dayHead.fri",
+  "calendar.dayHead.sat",
+];
+const MONTH_KEYS = [
+  "calendar.month.jan",
+  "calendar.month.feb",
+  "calendar.month.mar",
+  "calendar.month.apr",
+  "calendar.month.may",
+  "calendar.month.jun",
+  "calendar.month.jul",
+  "calendar.month.aug",
+  "calendar.month.sep",
+  "calendar.month.oct",
+  "calendar.month.nov",
+  "calendar.month.dec",
+];
 const WEEKEND_IDX = [5, 6]; // الجمعة، السبت
 
 function pad2(n: number) {
@@ -111,13 +141,9 @@ function monthKey(iso: string) {
 }
 
 // أشهر ميلادية بالعربي (ثابتة) — نتفادى ar-SA لأنها هجرية
-const اشهر_ميلادية = [
-  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
-];
-function formatMonthArabic(iso: string) {
+function formatMonthArabic(iso: string, t: (k: string) => string) {
   const d = safeDateFromISO(iso);
-  return `${اشهر_ميلادية[d.getMonth()]} ${d.getFullYear()}`;
+  return `${t(MONTH_KEYS[d.getMonth()])} ${d.getFullYear()}`;
 }
 
 function compareTime(a?: string, b?: string) {
@@ -144,6 +170,8 @@ function hashColor(id: string) {
 
 export default function CalendarScreen() {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const [mode, setMode] = useState<ViewMode>("weekly");
   const [cursorISO, setCursorISO] = useState(todayISO());
 
@@ -163,25 +191,25 @@ export default function CalendarScreen() {
     getSessionTypes().then(setSessionTypes);
   }, []);
   function chooseSessionType(b: CalendarBlock) {
-    const opts: any[] = SESSION_TYPES.map((t) => ({
-      text: sessionTypes[b.id] === t ? `✓ ${t}` : t,
+    const opts: any[] = SESSION_TYPES.map((item) => ({
+      text: sessionTypes[b.id] === item ? `✓ ${item}` : item,
       onPress: async () => {
-        await setSessionType(b.id, t);
-        setSessionTypes((p) => ({ ...p, [b.id]: t }));
+        await setSessionType(b.id, item);
+        setSessionTypes((p) => ({ ...p, [b.id]: item }));
       },
     }));
     opts.push({
-      text: "نوع آخر…",
+      text: t("calendar.sessionType.other"),
       onPress: () =>
-        Alert.prompt?.("نوع الجلسة", "اكتبي النوع", async (txt?: string) => {
+        Alert.prompt?.(t("calendar.sessionType.title"), t("calendar.sessionType.prompt"), async (txt?: string) => {
           if (txt && txt.trim()) {
             await setSessionType(b.id, txt.trim());
             setSessionTypes((p) => ({ ...p, [b.id]: txt.trim() }));
           }
         }),
     });
-    opts.push({ text: "إلغاء", style: "cancel" });
-    Alert.alert("نوع الجلسة", "اختاري النشاط", opts);
+    opts.push({ text: t("common.cancel"), style: "cancel" });
+    Alert.alert(t("calendar.sessionType.title"), t("calendar.sessionType.pick"), opts);
   }
 
   // عند فتح جلسة لكتاب له منهج: اعرض وحدة المنهج المقابلة لتاريخها (مع تخزين مؤقت للسرعة)
@@ -236,14 +264,14 @@ export default function CalendarScreen() {
 
   // ✅ عنوان التاريخ حسب الوضع
   const range = useMemo(() => {
-    if (mode === "daily") return { caption: "اليوم", value: cursorISO };
+    if (mode === "daily") return { caption: t("calendar.range.day"), value: cursorISO };
     if (mode === "weekly") {
       const start = startOfWeekISO(cursorISO);
       const end = addDaysISO(start, 6);
-      return { caption: "الأسبوع", value: `${start}  →  ${end}` };
+      return { caption: t("calendar.range.week"), value: `${start}  →  ${end}` };
     }
-    return { caption: "الشهر", value: formatMonthArabic(cursorISO) };
-  }, [mode, cursorISO]);
+    return { caption: t("calendar.range.month"), value: formatMonthArabic(cursorISO, t) };
+  }, [mode, cursorISO, t]);
 
   function goPrev() {
     if (mode === "daily") setCursorISO((p) => addDaysISO(p, -1));
@@ -326,7 +354,7 @@ export default function CalendarScreen() {
           id: `event_${r.id}`,
           kind: "event",
           dateISO: String(dateISO).slice(0, 10),
-          title: String(r.title ?? r.name ?? "حدث"),
+          title: String(r.title ?? r.name ?? t("calendar.fallback.event")),
           time: r.time ?? r.event_time ?? undefined,
           status,
           eventType: (r.type ?? r.event_type ?? "اختبار") as StudentEventType,
@@ -357,7 +385,7 @@ export default function CalendarScreen() {
           id: `session_${r.id}`,
           kind: "session",
           dateISO: String(dateISO).slice(0, 10),
-          title: String(r.title ?? r.kind ?? "جلسة مذاكرة"),
+          title: String(r.title ?? r.kind ?? t("calendar.fallback.session")),
           time: r.time ?? undefined,
           status,
           minutesPlanned: Number(r.minutes ?? r.minutes_planned ?? 0),
@@ -442,29 +470,29 @@ export default function CalendarScreen() {
 
   function openActions(b: CalendarBlock) {
     // long press
-    Alert.alert(b.title, "خيارات", [
-      { text: "إلغاء", style: "cancel" },
+    Alert.alert(b.title, t("calendar.actions.title"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "تعديل (لاحقًا)",
-        onPress: () => Alert.alert("تعديل", "سيتم لاحقًا ربط شاشة تعديل كاملة بنفس مودال الإضافة."),
+        text: t("calendar.actions.editLater"),
+        onPress: () => Alert.alert(t("common.edit"), t("calendar.actions.editLaterBody")),
       },
       {
-        text: "حذف",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () => handleDelete(b),
       },
       {
-        text: "إلغاء المهمة",
+        text: t("calendar.actions.cancelTask"),
         onPress: () => setStatus(b, "canceled"),
       },
     ]);
   }
 
   async function handleDelete(b: CalendarBlock) {
-    Alert.alert("حذف نهائي؟", b.title, [
-      { text: "إلغاء", style: "cancel" },
+    Alert.alert(t("calendar.delete.confirmTitle"), b.title, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "حذف",
+        text: t("common.delete"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -510,15 +538,15 @@ export default function CalendarScreen() {
       {/* Header */}
       <ScreenHeader
         icon="calendar"
-        title="التخطيط"
-        subtitle="خطتك اليومية ونسبة إنجازك"
+        title={t("calendar.header.title")}
+        subtitle={t("calendar.header.subtitle")}
         color={Palette.neonCyan}
       />
 
       {/* Chart بدل Tabs */}
       <GlassCard style={styles.chartCardOuter} contentStyle={styles.chartCardC} glow={Palette.neonCyan}>
-        <View style={{ flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={styles.chartTitle}>ملخص الإنجاز</Text>
+        <View style={{ flexDirection: dir.row, justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={[styles.chartTitle, { textAlign: dir.textAlign }]}>{t("calendar.chart.title")}</Text>
           <Text style={styles.chartPct}>{chart.pct}%</Text>
         </View>
 
@@ -526,15 +554,15 @@ export default function CalendarScreen() {
           <View style={[styles.barFill, { width: `${chart.pct}%` }]} />
         </View>
 
-        <View style={styles.chartRow}>
-          <MiniStat label="منجزة" value={chart.done} tint="green" />
-          <MiniStat label="تحتاج وقت" value={chart.more} tint="orange" />
-          <MiniStat label="غير منجزة" value={chart.pending} tint="blue" />
+        <View style={[styles.chartRow, { flexDirection: dir.row }]}>
+          <MiniStat label={t("calendar.chart.done")} value={chart.done} tint="green" />
+          <MiniStat label={t("calendar.chart.more")} value={chart.more} tint="orange" />
+          <MiniStat label={t("calendar.chart.pending")} value={chart.pending} tint="blue" />
         </View>
       </GlassCard>
 
       {/* Date row: سهم يمين + الأسبوع في المنتصف + سهم يسار */}
-      <View style={styles.dateRow}>
+      <View style={[styles.dateRow, { flexDirection: dir.row }]}>
         <Pressable onPress={goPrev} style={styles.navBtn} hitSlop={10}>
           <Ionicons name="chevron-forward" size={20} color={Palette.primary} />
         </Pressable>
@@ -550,24 +578,24 @@ export default function CalendarScreen() {
       </View>
 
       {/* Mode buttons بجنب بعض */}
-      <View style={styles.modeRow}>
-        <ModeBtn label="شهري" active={mode === "monthly"} onPress={() => setMode("monthly")} />
-        <ModeBtn label="أسبوعي" active={mode === "weekly"} onPress={() => setMode("weekly")} />
-        <ModeBtn label="يومي" active={mode === "daily"} onPress={() => setMode("daily")} />
+      <View style={[styles.modeRow, { flexDirection: dir.row }]}>
+        <ModeBtn label={t("calendar.mode.monthly")} active={mode === "monthly"} onPress={() => setMode("monthly")} />
+        <ModeBtn label={t("calendar.mode.weekly")} active={mode === "weekly"} onPress={() => setMode("weekly")} />
+        <ModeBtn label={t("calendar.mode.daily")} active={mode === "daily"} onPress={() => setMode("daily")} />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         {/* Header section actions */}
-        <View style={styles.sectionHeader}>
+        <View style={[styles.sectionHeader, { flexDirection: dir.row }]}>
           <Text style={styles.sectionTitle}>
-            {mode === "daily" ? "جدول اليوم" : mode === "weekly" ? "الجدول الأسبوعي" : "الجدول الشهري"}
+            {mode === "daily" ? t("calendar.schedule.daily") : mode === "weekly" ? t("calendar.schedule.weekly") : t("calendar.schedule.monthly")}
           </Text>
         </View>
 
         {/* محتوى حسب الوضع */}
         {loading ? (
           <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
-            <Text style={{ color: "#9fb3c8", textAlign: "right" }}>جاري التحميل…</Text>
+            <Text style={{ color: "#9fb3c8", textAlign: dir.textAlign }}>{t("common.loading")}</Text>
           </View>
         ) : mode === "daily" ? (
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
@@ -598,16 +626,16 @@ export default function CalendarScreen() {
                     isToday && styles.weekDayToday,
                   ]}
                 >
-                  <View style={styles.weekDayHead}>
+                  <View style={[styles.weekDayHead, { flexDirection: dir.row }]}>
                     <View style={[styles.weekDayBadge, isToday && { backgroundColor: Palette.primary }]}>
                       <Text style={styles.weekDayNum}>{Number(d.slice(8, 10))}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.weekDayName}>
-                        {ايام_الاسبوع[idx]}
-                        {isWeekend ? "  • عطلة" : ""}
+                      <Text style={[styles.weekDayName, { textAlign: dir.textAlign }]}>
+                        {t(ايام_الاسبوع_KEYS[idx])}
+                        {isWeekend ? `  • ${t("calendar.weekend")}` : ""}
                       </Text>
-                      <Text style={styles.weekDayDate}>{d}</Text>
+                      <Text style={[styles.weekDayDate, { textAlign: dir.textAlign }]}>{d}</Text>
                     </View>
 
                     {total > 0 ? (
@@ -620,11 +648,11 @@ export default function CalendarScreen() {
                         {pct}%
                       </Text>
                     ) : null}
-                    {isToday ? <Text style={styles.todayTag}>اليوم</Text> : null}
+                    {isToday ? <Text style={styles.todayTag}>{t("calendar.today")}</Text> : null}
                   </View>
 
                   {list.length === 0 ? (
-                    <Text style={styles.weekDayEmpty}>— لا يوجد</Text>
+                    <Text style={[styles.weekDayEmpty, { textAlign: dir.textAlign }]}>{t("calendar.none")}</Text>
                   ) : (
                     <View style={{ gap: 8, marginTop: 8 }}>
                       {list.map((b) => (
@@ -644,19 +672,19 @@ export default function CalendarScreen() {
         ) : (
           <View style={{ paddingHorizontal: 16 }}>
             {/* رؤوس أيام الأسبوع */}
-            <View style={styles.monthHeadRow}>
-              {DAYS_EN.map((d, i) => (
+            <View style={[styles.monthHeadRow, { flexDirection: dir.row }]}>
+              {DAYS_EN_KEYS.map((dKey, i) => (
                 <Text
-                  key={d}
+                  key={dKey}
                   style={[styles.monthHeadCell, WEEKEND_IDX.includes(i) && { color: Palette.warn }]}
                 >
-                  {d}
+                  {t(dKey)}
                 </Text>
               ))}
             </View>
 
             {/* شبكة أيام الشهر */}
-            <View style={styles.monthGrid}>
+            <View style={[styles.monthGrid, { flexDirection: dir.row }]}>
               {monthMatrix.map((d, i) => {
                 const inMonth = monthKey(d) === monthKey(cursorISO);
                 const isToday = d === todayISO();
@@ -694,7 +722,7 @@ export default function CalendarScreen() {
             </View>
 
             <Text style={styles.monthHint}>
-              اضغط على أي يوم لعرض مهامه • أعمدة الجمعة والسبت عطلة
+              {t("calendar.monthHint")}
             </Text>
           </View>
         )}
@@ -709,13 +737,13 @@ export default function CalendarScreen() {
                 {/* عنوان: اسم الكتاب/المادة بوضوح */}
                 <Text style={styles.sheetTitle} numberOfLines={2}>
                   {selected.kind === "session"
-                    ? selected.bookTitle || "جلسة مذاكرة"
+                    ? selected.bookTitle || t("calendar.fallback.session")
                     : selected.title}
                 </Text>
 
                 {/* نوع الجلسة — قابل للتغيير */}
                 {selected.kind === "session" ? (
-                  <Pressable onPress={() => chooseSessionType(selected)} style={styles.typeChip}>
+                  <Pressable onPress={() => chooseSessionType(selected)} style={[styles.typeChip, { flexDirection: dir.row }]}>
                     <Ionicons name="pricetag-outline" size={13} color={Palette.neonCyan} />
                     <Text style={styles.typeChipTxt}>
                       {sessionTypes[selected.id] || DEFAULT_SESSION_TYPE}
@@ -726,29 +754,29 @@ export default function CalendarScreen() {
 
                 <Text style={styles.sheetMeta}>
                   {selected.dateISO}
-                  {selected.minutesPlanned ? ` · ${selected.minutesPlanned} دقيقة` : ""}
+                  {selected.minutesPlanned ? ` · ${t("calendar.sheet.minutes", { count: selected.minutesPlanned })}` : ""}
                   {selected.kind === "session" && selected.pagesTarget
-                    ? ` · ${selected.pagesDone ?? 0}/${selected.pagesTarget} صفحة`
+                    ? ` · ${t("calendar.sheet.pages", { done: selected.pagesDone ?? 0, target: selected.pagesTarget })}`
                     : ""}
                 </Text>
 
                 {/* المنهج اليوم */}
                 {selected.kind === "session" && (unitLoading || unitLabel) ? (
-                  <View style={styles.unitChip}>
+                  <View style={[styles.unitChip, { flexDirection: dir.row }]}>
                     <Ionicons name="reader-outline" size={15} color={Palette.neonCyan} />
                     <Text style={styles.unitChipTxt} numberOfLines={2}>
-                      {unitLoading ? "…المنهج اليوم" : `المنهج اليوم: ${unitLabel}`}
+                      {unitLoading ? t("calendar.unit.loading") : t("calendar.unit.label", { unit: unitLabel ?? "" })}
                     </Text>
                   </View>
                 ) : null}
 
                 {/* الحالة — اختيار واحد واضح (أيقونة فوق نص موسّط) */}
-                <Text style={styles.sheetLabel}>الحالة</Text>
-                <View style={styles.statusRow}>
+                <Text style={styles.sheetLabel}>{t("calendar.status.label")}</Text>
+                <View style={[styles.statusRow, { flexDirection: dir.row }]}>
                   {([
-                    { k: "done", label: "تم", icon: "checkmark-circle", on: Palette.success },
-                    { k: "more_time", label: "يحتاج وقت", icon: "time-outline", on: Palette.warn },
-                    { k: "pending", label: "لم تتم", icon: "ellipse-outline", on: Palette.textMuted },
+                    { k: "done", label: t("common.done"), icon: "checkmark-circle", on: Palette.success },
+                    { k: "more_time", label: t("calendar.status.moreTime"), icon: "time-outline", on: Palette.warn },
+                    { k: "pending", label: t("calendar.status.notDone"), icon: "ellipse-outline", on: Palette.textMuted },
                   ] as const).map((opt) => {
                     const active = selected.status === opt.k;
                     return (
@@ -771,19 +799,19 @@ export default function CalendarScreen() {
 
                 {/* أزرار حقيقية */}
                 {selected.kind === "session" && selected.bookId ? (
-                  <Pressable onPress={() => openBookFromSession(selected)} style={styles.sheetPrimary}>
+                  <Pressable onPress={() => openBookFromSession(selected)} style={[styles.sheetPrimary, { flexDirection: dir.row }]}>
                     <Ionicons name="book" size={18} color="#0b1220" />
-                    <Text style={styles.sheetPrimaryTxt}>افتح الكتاب واقرأ</Text>
+                    <Text style={styles.sheetPrimaryTxt}>{t("calendar.sheet.openBook")}</Text>
                   </Pressable>
                 ) : null}
 
-                <View style={styles.sheetFooter}>
+                <View style={[styles.sheetFooter, { flexDirection: dir.row }]}>
                   <Pressable onPress={() => setSheetOpen(false)} style={styles.closeBtn}>
-                    <Text style={styles.closeBtnTxt}>إغلاق</Text>
+                    <Text style={styles.closeBtnTxt}>{t("common.close")}</Text>
                   </Pressable>
-                  <Pressable onPress={() => handleDelete(selected)} style={styles.deleteBtn} hitSlop={6}>
+                  <Pressable onPress={() => handleDelete(selected)} style={[styles.deleteBtn, { flexDirection: dir.row }]} hitSlop={6}>
                     <Ionicons name="trash-outline" size={15} color={Palette.danger} />
-                    <Text style={styles.sheetDanger}>حذف</Text>
+                    <Text style={styles.sheetDanger}>{t("common.delete")}</Text>
                   </Pressable>
                 </View>
               </>
@@ -795,12 +823,12 @@ export default function CalendarScreen() {
       {/* ✅ Fullscreen zoom */}
       <Modal visible={fullOpen} animationType="slide" onRequestClose={() => setFullOpen(false)} presentationStyle="fullScreen">
         <SafeAreaView style={styles.modalSafe} edges={["top", "left", "right"]}>
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { flexDirection: dir.row }]}>
             <Text style={styles.modalTitle}>
-              {mode === "daily" ? "تكبير اليوم" : mode === "weekly" ? "تكبير الأسبوع" : "تكبير الشهر"}
+              {mode === "daily" ? t("calendar.zoom.day") : mode === "weekly" ? t("calendar.zoom.week") : t("calendar.zoom.month")}
             </Text>
             <Pressable onPress={() => setFullOpen(false)} style={styles.modalCloseBtn} hitSlop={12}>
-              <Text style={styles.modalCloseTxt}>إغلاق</Text>
+              <Text style={styles.modalCloseTxt}>{t("common.close")}</Text>
             </Pressable>
           </View>
 
@@ -819,13 +847,13 @@ export default function CalendarScreen() {
                   const list = blocksByDay.get(d) ?? [];
                   return (
                     <View key={d} style={styles.bigBlock}>
-                      <Text style={styles.bigBlockTitle}>
-                        {ايام_الاسبوع[idx]} • {d}
+                      <Text style={[styles.bigBlockTitle, { textAlign: dir.textAlign }]}>
+                        {t(ايام_الاسبوع_KEYS[idx])} • {d}
                       </Text>
 
                       <View style={{ gap: 10, marginTop: 10 }}>
                         {list.length === 0 ? (
-                          <Text style={styles.muted}>— لا يوجد</Text>
+                          <Text style={[styles.muted, { textAlign: dir.textAlign }]}>{t("calendar.none")}</Text>
                         ) : (
                           list.map((b) => (
                             <BlockCard
@@ -900,9 +928,11 @@ function ModeBtn({
 }
 
 function Empty() {
+  const { t } = useI18n();
+  const dir = useDir();
   return (
     <View style={styles.emptyCard}>
-      <Text style={styles.emptyTxt}>لا يوجد عناصر في هذا النطاق.</Text>
+      <Text style={[styles.emptyTxt, { textAlign: dir.textAlign }]}>{t("calendar.emptyRange")}</Text>
     </View>
   );
 }
@@ -928,38 +958,43 @@ function BlockCard({
   compact?: boolean;
   big?: boolean;
 }) {
+  const { t } = useI18n();
+  const dir = useDir();
   const done = b.status === "done";
   const more = b.status === "more_time";
 
   const leftColor = b.kind === "session" ? (b.color ?? "rgba(46,204,113,0.35)") : "rgba(79,140,255,0.35)";
-  const badgeTxt = b.kind === "session" ? (b.bookTitle ? `كتاب: ${b.bookTitle}` : "جلسة") : (b.eventType ?? "حدث");
+  const badgeTxt =
+    b.kind === "session"
+      ? (b.bookTitle ? t("calendar.block.book", { title: b.bookTitle }) : t("calendar.block.session"))
+      : (b.eventType ?? t("calendar.fallback.event"));
 
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} style={[styles.block, compact && styles.blockCompact, big && styles.blockBig]}>
       <View style={[styles.blockInner, { borderLeftColor: leftColor, opacity: done ? 0.65 : 1 }]}>
-        <View style={styles.blockTop}>
+        <View style={[styles.blockTop, { flexDirection: dir.row }]}>
           <View style={[styles.badge, more && { borderColor: "rgba(255,165,0,0.45)" }]}>
             <Text style={styles.badgeTxt} numberOfLines={1}>{badgeTxt}</Text>
           </View>
 
           {/* ✅ أيقونات ثابتة داخل الإطار (حل السلة خارج الاطار) */}
-          <View style={styles.iconRow}>
+          <View style={[styles.iconRow, { flexDirection: dir.row }]}>
             <View style={[styles.stateDot, done ? styles.dotDone : more ? styles.dotMore : styles.dotPending]} />
           </View>
         </View>
 
-        <Text style={[styles.blockTitle, big && { fontSize: 14 }]} numberOfLines={2}>
+        <Text style={[styles.blockTitle, big && { fontSize: 14 }, { textAlign: dir.textAlign }]} numberOfLines={2}>
           {b.title}
         </Text>
 
-        <Text style={styles.blockMeta} numberOfLines={1}>
-          {b.dateISO} • {b.time ?? "—"} • {done ? "منجزة" : more ? "تحتاج وقت" : "غير منجزة"}
+        <Text style={[styles.blockMeta, { textAlign: dir.textAlign }]} numberOfLines={1}>
+          {b.dateISO} • {b.time ?? "—"} • {done ? t("calendar.block.done") : more ? t("calendar.block.more") : t("calendar.block.pending")}
         </Text>
 
         {b.kind === "session" ? (
-          <Text style={styles.blockMeta} numberOfLines={1}>
-            {b.minutesPlanned ? `${b.minutesPlanned} د` : ""}
-            {b.pagesTarget ? ` • صفحات: ${b.pagesDone ?? 0}/${b.pagesTarget}` : ""}
+          <Text style={[styles.blockMeta, { textAlign: dir.textAlign }]} numberOfLines={1}>
+            {b.minutesPlanned ? t("calendar.block.minutes", { count: b.minutesPlanned }) : ""}
+            {b.pagesTarget ? ` • ${t("calendar.block.pages", { done: b.pagesDone ?? 0, target: b.pagesTarget })}` : ""}
           </Text>
         ) : null}
       </View>
@@ -978,6 +1013,7 @@ function MonthList({
   onLongPress: (b: CalendarBlock) => void;
   big?: boolean;
 }) {
+  const dir = useDir();
   const grouped = useMemo(() => {
     const m = new Map<string, CalendarBlock[]>();
     for (const b of blocks) {
@@ -994,7 +1030,7 @@ function MonthList({
     <View style={{ paddingHorizontal: 16, gap: 12 }}>
       {grouped.map(([dateISO, list]) => (
         <View key={dateISO} style={[styles.bigBlock, big && { padding: 16 }]}>
-          <Text style={styles.bigBlockTitle}>{dateISO}</Text>
+          <Text style={[styles.bigBlockTitle, { textAlign: dir.textAlign }]}>{dateISO}</Text>
           <View style={{ gap: 10, marginTop: 10 }}>
             {list.map((b) => (
               <BlockCard key={b.id} b={b} big={big} onPress={() => onPress(b)} onLongPress={() => onLongPress(b)} />

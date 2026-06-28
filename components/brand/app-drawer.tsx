@@ -7,20 +7,23 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Palette, Radius, Spacing } from "../../constants/design";
+import { useDir, useI18n } from "../../lib/i18n";
 import { BrandMark } from "./logo";
 
-type Item = { icon: keyof typeof Ionicons.glyphMap; label: string; route: "/more" | "/explore" | "/pomodoro" | "/help" | "/auth"; color: string };
+type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: "/more" | "/explore" | "/pomodoro" | "/help" | "/auth"; color: string };
 
 const ITEMS: Item[] = [
-  { icon: "person-circle", label: "الحساب / تسجيل الدخول", route: "/auth", color: Palette.neonBlue },
-  { icon: "timer", label: "مؤقّت التركيز", route: "/pomodoro", color: Palette.neonCyan },
-  { icon: "settings", label: "الإعدادات", route: "/more", color: Palette.neonViolet },
-  { icon: "file-tray-full", label: "الأرشيف", route: "/explore", color: Palette.neonPink },
-  { icon: "help-circle", label: "كيف أستخدم التطبيق؟", route: "/help", color: Palette.neonCyan },
+  { icon: "person-circle", labelKey: "drawer.account", route: "/auth", color: Palette.neonBlue },
+  { icon: "timer", labelKey: "drawer.focusTimer", route: "/pomodoro", color: Palette.neonCyan },
+  { icon: "settings", labelKey: "drawer.settings", route: "/more", color: Palette.neonViolet },
+  { icon: "file-tray-full", labelKey: "drawer.archive", route: "/explore", color: Palette.neonPink },
+  { icon: "help-circle", labelKey: "drawer.help", route: "/help", color: Palette.neonCyan },
 ];
 
 export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
   const router = useRouter();
+  const { t } = useI18n();
+  const dir = useDir();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
 
@@ -42,11 +45,11 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
 
           {/* اللوحة على اليمين */}
           <View style={[styles.panel, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
-            <View style={styles.head}>
+            <View style={[styles.head, { flexDirection: dir.row }]}>
               <BrandMark size={42} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.appName}>VoiceStudyFlow</Text>
-                <Text style={styles.appSub}>ذاكر بذكاء ✨</Text>
+                <Text style={[styles.appName, { textAlign: dir.textAlign }]}>VoiceStudyFlow</Text>
+                <Text style={[styles.appSub, { textAlign: dir.textAlign }]}>{t("drawer.subtitle")}</Text>
               </View>
               <Pressable onPress={() => setOpen(false)} hitSlop={8}>
                 <Ionicons name="close" size={24} color={Palette.textMuted} />
@@ -55,20 +58,20 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
 
             <View style={{ gap: 10, marginTop: Spacing.xl }}>
               {ITEMS.map((it) => (
-                <Pressable key={it.route} onPress={() => go(it.route)} style={styles.item}>
+                <Pressable key={it.route} onPress={() => go(it.route)} style={[styles.item, { flexDirection: dir.row }]}>
                   <View style={[styles.itemIcon, { backgroundColor: it.color + "22", borderColor: it.color + "55" }]}>
                     <Ionicons name={it.icon} size={20} color={it.color} />
                   </View>
-                  <Text style={styles.itemTxt}>{it.label}</Text>
+                  <Text style={[styles.itemTxt, { textAlign: dir.textAlign }]}>{t(it.labelKey)}</Text>
                   <Ionicons name="chevron-back" size={18} color={Palette.textDim} />
                 </Pressable>
               ))}
             </View>
 
             <View style={{ flex: 1 }} />
-            <Text style={styles.footer}>تصميم وتطوير: Nahla</Text>
+            <Text style={styles.footer}>{t("drawer.credit", { name: "Nahla" })}</Text>
             <Text style={styles.footerMail}>Nahlah@Nahlah.io</Text>
-            <Text style={styles.madeIn}>صنع في الرياض 💚</Text>
+            <Text style={styles.madeIn}>{t("drawer.madeIn")}</Text>
           </View>
         </View>
       </Modal>

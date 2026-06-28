@@ -9,6 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../components/brand/glass-card";
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
+import { useDir, useI18n } from "../lib/i18n";
 import { getUserName } from "../lib/settings";
 import { recordActivity } from "../lib/stats";
 
@@ -22,6 +23,8 @@ function fmt(s: number) {
 }
 
 export default function PomodoroScreen() {
+  const { t } = useI18n();
+  const dir = useDir();
   const [phase, setPhase] = useState<"focus" | "break">("focus");
   const [left, setLeft] = useState(FOCUS);
   const [running, setRunning] = useState(false);
@@ -42,7 +45,7 @@ export default function PomodoroScreen() {
         Vibration.vibrate(600);
         if (phase === "focus") {
           recordActivity({ minutes: 25 }).catch(() => {});
-          setTomatoes((t) => t + 1);
+          setTomatoes((n) => n + 1);
           setPhase("break");
           return BREAK;
         } else {
@@ -76,17 +79,17 @@ export default function PomodoroScreen() {
   const accent = phase === "focus" ? Palette.neonCyan : Palette.success;
   const phaseMsg =
     phase === "focus"
-      ? `ركّزي يا ${name || "بطلة"} 🎯`
-      : "استراحة قصيرة ☕";
+      ? t("pomodoro.focusMsg", { name: name || t("pomodoro.championFallback") })
+      : t("pomodoro.breakMsg");
 
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={styles.header}>
+        <View style={[styles.header, { flexDirection: dir.row }]}>
           <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
             <Ionicons name="chevron-forward" size={22} color={Palette.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>مؤقّت التركيز</Text>
+          <Text style={styles.headerTitle}>{t("pomodoro.title")}</Text>
           <View style={styles.iconBtn} />
         </View>
 
@@ -94,7 +97,7 @@ export default function PomodoroScreen() {
           <GlassCard glow={accent} radius={Radius.xl} style={{ width: "100%" }} contentStyle={styles.card}>
             <View style={[styles.phasePill, { backgroundColor: accent + "22", borderColor: accent }]}>
               <Text style={[styles.phaseTxt, { color: accent }]}>
-                {phase === "focus" ? "🎯 جلسة تركيز" : "☕ استراحة"}
+                {phase === "focus" ? t("pomodoro.phaseFocus") : t("pomodoro.phaseBreak")}
               </Text>
             </View>
 
@@ -106,30 +109,28 @@ export default function PomodoroScreen() {
             </View>
 
             <View style={styles.tomatoes}>
-              <Text style={styles.tomatoTxt}>🍅 {tomatoes} جلسة مكتملة اليوم</Text>
+              <Text style={styles.tomatoTxt}>{t("pomodoro.completedToday", { count: tomatoes })}</Text>
             </View>
 
             {/* أزرار */}
-            <Pressable onPress={() => setRunning((r) => !r)} style={[styles.primary, { backgroundColor: accent }]}>
+            <Pressable onPress={() => setRunning((r) => !r)} style={[styles.primary, { backgroundColor: accent, flexDirection: dir.row }]}>
               <Ionicons name={running ? "pause" : "play"} size={22} color="#0b1220" />
-              <Text style={styles.primaryTxt}>{running ? "إيقاف مؤقّت" : "ابدئي"}</Text>
+              <Text style={styles.primaryTxt}>{running ? t("pomodoro.pause") : t("pomodoro.start")}</Text>
             </Pressable>
 
-            <View style={styles.row}>
-              <Pressable onPress={reset} style={styles.secondary}>
+            <View style={[styles.row, { flexDirection: dir.row }]}>
+              <Pressable onPress={reset} style={[styles.secondary, { flexDirection: dir.row }]}>
                 <Ionicons name="refresh" size={16} color={Palette.text} />
-                <Text style={styles.secondaryTxt}>إعادة</Text>
+                <Text style={styles.secondaryTxt}>{t("pomodoro.reset")}</Text>
               </Pressable>
-              <Pressable onPress={skip} style={styles.secondary}>
+              <Pressable onPress={skip} style={[styles.secondary, { flexDirection: dir.row }]}>
                 <Ionicons name="play-skip-forward" size={16} color={Palette.text} />
-                <Text style={styles.secondaryTxt}>تخطّي</Text>
+                <Text style={styles.secondaryTxt}>{t("pomodoro.skip")}</Text>
               </Pressable>
             </View>
           </GlassCard>
 
-          <Text style={styles.hint}>
-            ٢٥ دقيقة تركيز ثم ٥ دقائق راحة. الجلسات المكتملة تُحتسب في نشاطك وسلسلتك 🔥
-          </Text>
+          <Text style={styles.hint}>{t("pomodoro.hint")}</Text>
         </View>
       </SafeAreaView>
     </ScreenBackground>

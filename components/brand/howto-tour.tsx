@@ -7,44 +7,23 @@ import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { useDir, useI18n } from "../../lib/i18n";
 
-type Step = { emoji: string; title: string; body: string };
+type Step = { emoji: string; titleKey: string; bodyKey: string };
 
 // صياغة محايدة (للجميع) بأسلوب الأسماء بدل الأفعال المؤنّثة/المذكّرة
 const STEPS: Step[] = [
-  {
-    emoji: "📚",
-    title: "المكتبة",
-    body: "كل الكتب هنا. الضغط على الكتاب يفتحه للقراءة مباشرة. والضغط المطوّل على الكتاب يفتح قائمة الخيارات: نقل لمجلد، المنهج الدراسي، إعادة تسمية، أرشفة، وحذف.",
-  },
-  {
-    emoji: "👆",
-    title: "الضغط المطوّل",
-    body: "في المكتبة، الضغط المطوّل على أي كتاب يكشف إجراءات إضافية مهمة (المجلدات والمنهج والأرشفة). جرّبه لاكتشاف المزيد.",
-  },
-  {
-    emoji: "📋",
-    title: "المنهج الدراسي",
-    body: "لكل كتاب منهج بوحدات وقائمة متابعة، مع اختبار وخريطة ذهنية وملخّص صوتي لكل وحدة. يُفتح من قائمة الضغط المطوّل على الكتاب.",
-  },
-  {
-    emoji: "🎧",
-    title: "القراءة الصوتية",
-    body: "قارئ بصوت طبيعي يقرأ ويشرح. التحكّم بالسرعة، والتنقّل بين المقاطع، والاستئناف من نفس الموضع.",
-  },
-  {
-    emoji: "🗣️",
-    title: "النطق والترجمة",
-    body: "نطق دقيق بالتشكيل، وترجمة فورية، وأصوات بعدة لغات — حسب الحاجة.",
-  },
-  {
-    emoji: "🛠️",
-    title: "أدوات الذكاء",
-    body: "تلخيص الصفحة، الأسئلة، بطاقات المراجعة، الخريطة الذهنية، والعرض التقديمي — كلها بضغطة.",
-  },
+  { emoji: "📚", titleKey: "howto.step0.title", bodyKey: "howto.step0.body" },
+  { emoji: "👆", titleKey: "howto.step1.title", bodyKey: "howto.step1.body" },
+  { emoji: "📋", titleKey: "howto.step2.title", bodyKey: "howto.step2.body" },
+  { emoji: "🎧", titleKey: "howto.step3.title", bodyKey: "howto.step3.body" },
+  { emoji: "🗣️", titleKey: "howto.step4.title", bodyKey: "howto.step4.body" },
+  { emoji: "🛠️", titleKey: "howto.step5.title", bodyKey: "howto.step5.body" },
 ];
 
 export function HowToTour({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const dir = useDir();
   const [step, setStep] = useState(0);
   const isLast = step === STEPS.length - 1;
   const s = STEPS[step];
@@ -63,15 +42,15 @@ export function HowToTour({ visible, onClose }: { visible: boolean; onClose: () 
       <View style={styles.mask}>
         <View style={styles.card}>
           <Pressable onPress={close} style={styles.skip} hitSlop={8}>
-            <Text style={styles.skipTxt}>تخطّي</Text>
+            <Text style={styles.skipTxt}>{t("howto.skip")}</Text>
           </Pressable>
 
           <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.emojiWrap}>
             <Text style={styles.emoji}>{s.emoji}</Text>
           </LinearGradient>
 
-          <Text style={styles.title}>{s.title}</Text>
-          <Text style={styles.body}>{s.body}</Text>
+          <Text style={styles.title}>{t(s.titleKey)}</Text>
+          <Text style={styles.body}>{t(s.bodyKey)}</Text>
 
           {/* نقاط التقدّم */}
           <View style={styles.dots}>
@@ -82,7 +61,7 @@ export function HowToTour({ visible, onClose }: { visible: boolean; onClose: () 
 
           <Pressable onPress={next} style={styles.nextBtn}>
             <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.nextGrad}>
-              <Text style={styles.nextTxt}>{isLast ? "يلّا نبدأ ✨" : "التالي"}</Text>
+              <Text style={styles.nextTxt}>{isLast ? t("howto.start") : t("common.next")}</Text>
               {!isLast && <Ionicons name="chevron-back" size={18} color="#fff" />}
             </LinearGradient>
           </Pressable>
