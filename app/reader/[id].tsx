@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as ScreenOrientation from "expo-screen-orientation";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1099,6 +1100,24 @@ export default function ReaderScreen() {
   useEffect(() => {
     lensOpenRef.current = lensOpen;
   }, [lensOpen]);
+
+  // وضع العرض (landscape) للعدسة: عند فتحها **نسمح** بالدوران فتقلب الجهاز بنفسك
+  // أفقيًا فتتّسع العدسة ويكبر الخط (دوران الجهاز يلتفّ كاملًا بشكل سليم، بعكس فرض
+  // الاتجاه برمجيًا الذي يلوي المحتوى فقط). عند إغلاقها نقفل العمودي فيرجع تلقائيًا.
+  useEffect(() => {
+    if (lensOpen) {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
+  }, [lensOpen]);
+
+  // أمان: عند مغادرة القارئ نضمن الرجوع للوضع العمودي حتى لو كانت العدسة مفتوحة.
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
 
   // نتتبّع موضع القراءة (لتظليل الكلمة على الـPDF/العدسة) في وضع PDF أو عند فتح العدسة
   useEffect(() => {
