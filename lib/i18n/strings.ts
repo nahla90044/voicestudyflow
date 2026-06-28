@@ -300,6 +300,7 @@ const ar: Record<string, string> = {
   "help.madeIn": "صنع في الرياض 💚",
   // القائمة الجانبية (Drawer)
   "drawer.subtitle": "ذاكر بذكاء ✨",
+  "drawer.subscription": "الاشتراك",
   "drawer.account": "الحساب / تسجيل الدخول",
   "drawer.focusTimer": "مؤقّت التركيز",
   "drawer.settings": "الإعدادات",
@@ -865,6 +866,7 @@ const en: Record<string, string> = {
   "help.contact.mail": "Contact & feedback: Nahlah@Nahlah.io",
   "help.madeIn": "Made in Riyadh 💚",
   "drawer.subtitle": "Study smart ✨",
+  "drawer.subscription": "Subscription",
   "drawer.account": "Account / Sign in",
   "drawer.focusTimer": "Focus timer",
   "drawer.settings": "Settings",

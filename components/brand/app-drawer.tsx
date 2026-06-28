@@ -1,16 +1,20 @@
 // components/brand/app-drawer.tsx
 // قائمة جانبية (☰) تنفتح من اليمين، فيها: الإعدادات، الأرشيف.
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Palette, Radius, Spacing } from "../../constants/design";
+import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
+import { getCurrentPlan, type PlanKey } from "../../lib/subscription";
+import { LanguageSwitcher } from "./language-switcher";
 import { BrandMark } from "./logo";
 
-type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: "/more" | "/explore" | "/pomodoro" | "/help" | "/auth"; color: string };
+type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/auth" | "/paywall";
+type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: Route; color: string };
 
 const ITEMS: Item[] = [
   { icon: "person-circle", labelKey: "drawer.account", route: "/auth", color: Palette.neonBlue },
@@ -26,8 +30,14 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
   const dir = useDir();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [planKey, setPlanKey] = useState<PlanKey>("free");
 
-  function go(route: Item["route"]) {
+  // نحمّل نوع الاشتراك الحالي عند فتح القائمة (ليظهر محدّثًا دائمًا)
+  useEffect(() => {
+    if (open) getCurrentPlan().then(setPlanKey).catch(() => {});
+  }, [open]);
+
+  function go(route: Route) {
     setOpen(false);
     router.push(route);
   }
@@ -56,7 +66,29 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
               </Pressable>
             </View>
 
-            <View style={{ gap: 10, marginTop: Spacing.xl }}>
+            {/* الاشتراك — يظهر نوعه مباشرة (وصول سريع للترقية) */}
+            <Pressable onPress={() => go("/paywall")} style={{ marginTop: Spacing.lg }}>
+              <LinearGradient
+                colors={Gradients.brand}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.subCard, { flexDirection: dir.row }]}
+              >
+                <Ionicons name="sparkles" size={20} color="#fff" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.subLabel, { textAlign: dir.textAlign }]}>{t("drawer.subscription")}</Text>
+                  <Text style={[styles.subPlan, { textAlign: dir.textAlign }]}>{t(`plans.${planKey}.name`)}</Text>
+                </View>
+                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color="#fff" />
+              </LinearGradient>
+            </Pressable>
+
+            {/* اللغة — تبديل سريع بدون الدخول للإعدادات */}
+            <View style={styles.langWrap}>
+              <LanguageSwitcher />
+            </View>
+
+            <View style={{ gap: 10, marginTop: Spacing.lg }}>
               {ITEMS.map((it) => (
                 <Pressable key={it.route} onPress={() => go(it.route)} style={[styles.item, { flexDirection: dir.row }]}>
                   <View style={[styles.itemIcon, { backgroundColor: it.color + "22", borderColor: it.color + "55" }]}>
@@ -106,6 +138,15 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row-reverse", alignItems: "center", gap: 12 },
   appName: { color: Palette.text, fontSize: 18, fontWeight: "900", textAlign: "right" },
   appSub: { color: Palette.textDim, fontSize: 12, textAlign: "right", marginTop: 2 },
+  subCard: {
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: Radius.lg,
+  },
+  subLabel: { color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" },
+  subPlan: { color: "#fff", fontSize: 16, fontWeight: "900", marginTop: 1 },
+  langWrap: { marginTop: Spacing.lg },
   item: {
     flexDirection: "row-reverse",
     alignItems: "center",
