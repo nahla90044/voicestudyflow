@@ -21,6 +21,9 @@
     <input id="pw" type="password" placeholder="New password · كلمة المرور الجديدة" autocomplete="new-password" />
     <input id="pw2" type="password" placeholder="Confirm · تأكيد كلمة المرور" autocomplete="new-password" />
     <input id="otp" type="text" inputmode="numeric" maxlength="6" placeholder="2FA code · رمز التحقق الثنائي" autocomplete="one-time-code" style="display:none" />
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#9fb0d0;margin:6px 2px;cursor:pointer">
+      <input id="showpw" type="checkbox" /> Show password · إظهار كلمة المرور
+    </label>
     <button id="btn">Update password · تحديث</button>
     <p id="msg"></p>
   </div>
@@ -41,6 +44,12 @@
   })();
   const otp = document.getElementById("otp");
   let needMfa = false;
+
+  document.getElementById("showpw").addEventListener("change", (e) => {
+    const type = e.target.checked ? "text" : "password";
+    document.getElementById("pw").type = type;
+    document.getElementById("pw2").type = type;
+  });
 
   // لو الحساب مفعّل 2FA، نرفع الجلسة لـAAL2 بالتحقق من الرمز قبل تغيير كلمة المرور
   async function elevateMfa(code) {
