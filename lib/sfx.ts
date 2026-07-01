@@ -77,6 +77,7 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "symphony", name: "سمفونية", kind: "music", lengthMs: 90000, prompt: "very calm classical symphony, soft slow strings and light woodwinds, gentle, peaceful, continuous ambient pad texture, no loud crescendos and no percussion" },
   { key: "cinematic", name: "سينمائي", kind: "music", lengthMs: 90000, prompt: "calm cinematic ambient, warm sustained strings and soft pads, slow evolving, peaceful, continuous" },
   { key: "lofi_long", name: "لو-فاي غني", kind: "music", lengthMs: 90000, prompt: "mellow lo-fi chillhop instrumental for studying, relaxed steady groove, warm, continuous, soft" },
+  { key: "classical", name: "كلاسيكي هادئ", kind: "music", lengthMs: 90000, prompt: "calm classical orchestral piece in a warm romantic style, gentle slow strings and soft piano, peaceful and soothing for reading, soft dynamics, no loud crescendos, continuous" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣

@@ -102,6 +102,7 @@ const MUSIC_EMOJI: Record<string, string> = {
   symphony: "🎼",
   cinematic: "🎬",
   lofi_long: "🎶",
+  classical: "🎵",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
