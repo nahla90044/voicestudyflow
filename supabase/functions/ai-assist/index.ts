@@ -105,15 +105,13 @@ Deno.serve(async (req: Request) => {
 
     const client = new Anthropic({ apiKey });
 
-    const model = MODEL[action] ?? "claude-opus-4-8";
+    const model = MODEL[action] ?? "claude-sonnet-4-6";
     const params: Record<string, unknown> = {
       model,
       max_tokens: MAX_TOKENS[action] ?? 1500,
       system: GUARD + systemPrompt,
       messages: [{ role: "user", content: userContent }],
     };
-    // effort مدعوم في opus فقط
-    if (model.startsWith("claude-opus")) params.output_config = { effort: "low" };
 
     const msg = await client.messages.create(params as Parameters<typeof client.messages.create>[0]);
 
