@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -16,18 +16,32 @@ import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
 
 const GOAL_OPTIONS = [10, 20, 30, 45, 60];
 
-// عدّاد الكتب (books) يأتي من قاعدة البيانات per-user، لا من العدّاد المحلي
-const STAT_ITEMS = [
-  { icon: "flame" as const, labelKey: "activity.stat.streak", get: (s: Stats | null) => s?.streak ?? 0, color: Palette.neonPink },
-  { icon: "headset" as const, labelKey: "activity.stat.minutes", get: (s: Stats | null) => s?.totalMinutes ?? 0, color: Palette.neonCyan },
-  { icon: "documents" as const, labelKey: "activity.stat.pages", get: (s: Stats | null) => s?.totalPages ?? 0, color: Palette.neonBlue },
-  { icon: "library" as const, labelKey: "activity.stat.books", get: (_s: Stats | null) => 0, color: Palette.neonViolet, isBooks: true },
-];
+type Period = "today" | "week" | "month";
 
 function todayISOLocal() {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// مجموع الدقائق/الصفحات للفترة المختارة (اليوم = يوم واحد، الأسبوع = ٧ أيام، الشهر = ٣٠)
+function periodSum(days: Record<string, { m: number; p: number }>, period: Period) {
+  const back = period === "today" ? 0 : period === "week" ? 6 : 29;
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  let m = 0;
+  let p = 0;
+  for (let i = 0; i <= back; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const iso = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+    const log = days[iso];
+    if (log) {
+      m += log.m || 0;
+      p += log.p || 0;
+    }
+  }
+  return { m, p };
 }
 
 export default function ActivityScreen() {
@@ -36,6 +50,19 @@ export default function ActivityScreen() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [books, setBooks] = useState(0);
   const [goal, setGoal] = useState(20);
+  const [period, setPeriod] = useState<Period>("today");
+
+  const { m: periodMin, p: periodPages } = useMemo(
+    () => periodSum(stats?.days ?? {}, period),
+    [stats, period]
+  );
+
+  const cells = [
+    { icon: "flame" as const, label: t("activity.stat.streak"), value: stats?.streak ?? 0, color: Palette.neonPink },
+    { icon: "headset" as const, label: t("activity.stat.minutes"), value: periodMin, color: Palette.neonCyan },
+    { icon: "documents" as const, label: t("activity.stat.pages"), value: periodPages, color: Palette.neonBlue },
+    { icon: "library" as const, label: t("activity.stat.books"), value: books, color: Palette.neonViolet },
+  ];
 
   useFocusEffect(
     useCallback(() => {
@@ -61,13 +88,21 @@ export default function ActivityScreen() {
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingBottom: 110, gap: Spacing.lg }} showsVerticalScrollIndicator={false}>
           <FadeIn delay={0}>
+            {/* مبدّل الفترة: اليوم / الأسبوع / الشهر — يؤثّر على الدقائق والصفحات */}
+            <View style={[styles.periodRow, { flexDirection: dir.row }]}>
+              {(["today", "week", "month"] as Period[]).map((p) => (
+                <Pressable key={p} onPress={() => setPeriod(p)} style={[styles.periodChip, period === p && styles.periodChipOn]}>
+                  <Text style={[styles.periodTxt, period === p && styles.periodTxtOn]}>{t(`activity.period.${p}`)}</Text>
+                </Pressable>
+              ))}
+            </View>
             <GlassCard glow={Palette.neonPink}>
               <View style={[styles.statsRow, { flexDirection: dir.row }]}>
-                {STAT_ITEMS.map((s) => (
-                  <View key={s.labelKey} style={styles.statItem}>
-                    <Ionicons name={s.icon} size={20} color={s.color} />
-                    <Text style={styles.statValue}>{`${"isBooks" in s && s.isBooks ? books : s.get(stats)}`}</Text>
-                    <Text style={styles.statLabel}>{t(s.labelKey)}</Text>
+                {cells.map((c) => (
+                  <View key={c.label} style={styles.statItem}>
+                    <Ionicons name={c.icon} size={20} color={c.color} />
+                    <Text style={styles.statValue}>{`${c.value}`}</Text>
+                    <Text style={styles.statLabel}>{c.label}</Text>
                   </View>
                 ))}
               </View>
@@ -109,6 +144,11 @@ export default function ActivityScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  periodRow: { flexDirection: "row-reverse", gap: 8, marginBottom: 10, justifyContent: "center" },
+  periodChip: { paddingVertical: 7, paddingHorizontal: 18, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  periodChipOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  periodTxt: { color: Palette.textMuted, fontSize: 13, fontWeight: "800" },
+  periodTxtOn: { color: "#0b1220" },
   statsRow: { flexDirection: "row-reverse", justifyContent: "space-around", paddingVertical: Spacing.lg, paddingHorizontal: Spacing.sm },
   statItem: { alignItems: "center", gap: 4 },
   statValue: { color: Palette.text, fontSize: 20, fontWeight: "900" },
