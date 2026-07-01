@@ -2,14 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
-import { getCards, reviewCard, type Card, type Rating } from "../../lib/flashcards";
+import { getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getSavedItems, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 
@@ -125,6 +125,41 @@ export default function FlashcardsScreen() {
     setIdx((i) => i + 1);
   }
 
+  // حذف البطاقة الحالية (بعد تأكيد) ثم المتابعة للتالية
+  function deleteCurrentCard() {
+    const card = queue[idx];
+    if (!card) return;
+    Alert.alert(t("flashcards.delete.cardTitle"), t("flashcards.delete.cardBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: async () => {
+          await removeCard(card.id);
+          setQueue((q) => q.filter((c) => c.id !== card.id));
+          flip.setValue(0);
+          setFlipped(false);
+          reload();
+        },
+      },
+    ]);
+  }
+
+  // حذف كل بطاقات كتاب (من القائمة) بعد تأكيد
+  function deleteBookCards(key: string, title: string) {
+    Alert.alert(t("flashcards.delete.bookTitle"), t("flashcards.delete.bookBody", { book: title }), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: async () => {
+          await removeCardsForBook(key === NONE ? undefined : key);
+          reload();
+        },
+      },
+    ]);
+  }
+
   const card = queue[idx];
   const reviewDone = mode === "review" && idx >= queue.length;
 
@@ -221,6 +256,9 @@ export default function FlashcardsScreen() {
                   <View style={[styles.dueBadge, b.due === 0 && styles.dueBadge0]}>
                     <Text style={styles.dueBadgeTxt}>{b.due}</Text>
                   </View>
+                  <Pressable onPress={() => deleteBookCards(b.key, b.title)} hitSlop={10} style={styles.trashBtn}>
+                    <Ionicons name="trash-outline" size={20} color={Palette.danger} />
+                  </Pressable>
                 </Pressable>
               ))}
             </ScrollView>
@@ -235,12 +273,17 @@ export default function FlashcardsScreen() {
         ) : (
           /* ====== المراجعة ====== */
           <View style={styles.body}>
-            <View style={styles.reviewTop}>
+            <View style={[styles.reviewTop, { flexDirection: dir.row }]}>
               <Pressable onPress={() => setMode("picker")} hitSlop={8} style={styles.backChip}>
                 <Ionicons name="chevron-forward" size={16} color={Palette.text} />
                 <Text style={styles.backChipTxt}>{t("flashcards.books")}</Text>
               </Pressable>
-              <Text style={styles.counter}>{idx + 1} / {queue.length}</Text>
+              <View style={[styles.reviewTopRight, { flexDirection: dir.row }]}>
+                <Text style={styles.counter}>{idx + 1} / {queue.length}</Text>
+                <Pressable onPress={deleteCurrentCard} hitSlop={8} style={styles.trashChip}>
+                  <Ionicons name="trash-outline" size={18} color={Palette.danger} />
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.cardArea}>
@@ -328,6 +371,9 @@ const styles = StyleSheet.create({
   backChip: { flexDirection: "row-reverse", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 12, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   backChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
   counter: { color: Palette.textDim, fontSize: 13, fontWeight: "800" },
+  reviewTopRight: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
+  trashChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  trashBtn: { padding: 6, marginStart: 4 },
 
   cardArea: { flex: 1 },
   press: { flex: 1 },

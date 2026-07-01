@@ -569,8 +569,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "التشغيل";
     player.play();
-    // فعّل أزرار شاشة القفل لهذا المقطع؛ المقطع التالي سيتولّى تلقائيًا عند بدئه.
-    activateLockScreen(player);
+    // ملاحظة: أُزيل تفعيل شاشة القفل هنا مؤقتًا — كان يُعاد على كل مقطع فيُحدث
+    // «قطعة/تشويش» بين الجُمل. يُعاد لاحقًا بمعمارية مشغّل واحد متواصل.
   } catch (e) {
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
     console.warn("VSF_TTS_FALLBACK", reason);

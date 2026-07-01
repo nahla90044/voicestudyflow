@@ -301,6 +301,10 @@ const ar: Record<string, string> = {
   "flashcards.reviewDone": "أنهيت مراجعة «{book}» 🎉",
   "flashcards.backToBooks": "رجوع للكتب",
   "flashcards.books": "الكتب",
+  "flashcards.delete.cardTitle": "حذف البطاقة",
+  "flashcards.delete.cardBody": "هل تريد حذف هذه البطاقة؟",
+  "flashcards.delete.bookTitle": "حذف بطاقات الكتاب",
+  "flashcards.delete.bookBody": "حذف كل بطاقات «{book}»؟ لا يمكن التراجع.",
   "flashcards.question": "السؤال",
   "flashcards.answer": "الإجابة",
   "flashcards.tapToFlip": "اضغط لقلب البطاقة",
@@ -625,9 +629,9 @@ const ar: Record<string, string> = {
   // خطط الاشتراك (Plans)
   // الموسيقى الخلفية (Background music)
   "music.piano": "بيانو هادئ",
-  "music.nature": "طبيعة",
-  "music.strings": "وتريات",
-  "music.lofi": "لو-فاي",
+  "music.nature": "مطر وطيور",
+  "music.strings": "سمفونية هادئة",
+  "music.lofi": "أمواج البحر",
   "music.meditation": "تأمّل",
 };
 
@@ -917,6 +921,10 @@ const en: Record<string, string> = {
   "flashcards.reviewDone": "You finished reviewing “{book}” 🎉",
   "flashcards.backToBooks": "Back to books",
   "flashcards.books": "Books",
+  "flashcards.delete.cardTitle": "Delete card",
+  "flashcards.delete.cardBody": "Delete this card?",
+  "flashcards.delete.bookTitle": "Delete book's cards",
+  "flashcards.delete.bookBody": "Delete all cards for “{book}”? This can't be undone.",
   "flashcards.question": "Question",
   "flashcards.answer": "Answer",
   "flashcards.tapToFlip": "Tap to flip the card",
@@ -1228,9 +1236,9 @@ const en: Record<string, string> = {
   "themes.ocean": "Ocean",
   "themes.sand": "Warm Sand",
   "music.piano": "Calm piano",
-  "music.nature": "Nature",
-  "music.strings": "Strings",
-  "music.lofi": "Lo-fi",
+  "music.nature": "Rain & birds",
+  "music.strings": "Calm symphony",
+  "music.lofi": "Ocean waves",
   "music.meditation": "Meditation",
 };
 

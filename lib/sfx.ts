@@ -5,7 +5,7 @@ import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
 
-const DIR = "sfx-cache-v3"; // v3: موسيقى ElevenLabs (مقطوعات أطول) بدل مؤثّرات قصيرة
+const DIR = "sfx-cache-v4"; // v4: مقطوعات أهدأ (سمفونيات/طبيعة) بمزيج جديد
 
 function dir(): Directory {
   const d = new Directory(Paths.cache, DIR);
@@ -64,11 +64,11 @@ async function getMusicFile(key: string, prompt: string, lengthMs: number): Prom
 }
 
 export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [
-  { key: "piano", name: "بيانو هادئ", prompt: "calm slow solo piano, gentle and warm, continuous ambient background for studying, soft dynamics, no strong intro or ending, loopable" },
-  { key: "nature", name: "طبيعة", prompt: "peaceful ambient soundscape with soft nature textures and gentle warm pads, calm and continuous, soothing background, loopable" },
-  { key: "strings", name: "وتريات", prompt: "warm soft cinematic strings pad, slow and soothing, continuous ambient background, no strong intro or ending, loopable" },
-  { key: "lofi", name: "لو-فاي", prompt: "mellow lo-fi chillhop instrumental for studying, relaxed steady groove, continuous soft background, loopable" },
-  { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone with airy warm pads, very soft and calming, continuous, loopable" },
+  { key: "strings", name: "سمفونية هادئة", prompt: "very calm classical symphony, soft slow strings and light woodwinds, gentle and quiet, peaceful, continuous, no loud crescendos and no percussion, loopable background" },
+  { key: "piano", name: "بيانو هادئ", prompt: "very soft slow solo piano, gentle and quiet, calm and peaceful, continuous minimal background, no percussion, loopable" },
+  { key: "nature", name: "مطر وطيور", prompt: "gentle nature ambience, soft steady rain and distant birds, very calm and soothing, quiet continuous background, loopable" },
+  { key: "lofi", name: "أمواج البحر", prompt: "gentle ocean waves on a calm shore, soft and soothing, quiet continuous nature background, loopable" },
+  { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient pad, very soft airy and calming, quiet continuous drone, loopable" },
 ];
 
 // طول مقطوعة الموسيقى (ms) — ٦٠ث: أطول وأنعم من مؤثّرات ٢٢ث، وبتكلفة معقولة.
@@ -103,7 +103,7 @@ export async function startAmbient(key: string): Promise<void> {
     ambientPlayer = createAudioPlayer({ uri: f.uri });
     ambientKey = key;
     ambientPlayer.loop = true;
-    ambientPlayer.volume = 0.14; // خفيفة حتى لا تشتّت
+    ambientPlayer.volume = 0.06; // خفيفة جدًا — أقل من صوت القارئ بوضوح
     ambientPlayer.play();
   } catch {}
 }

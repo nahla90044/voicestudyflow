@@ -103,3 +103,15 @@ export async function removeCard(id: string): Promise<void> {
   const cards = await getCards();
   await save(cards.filter((c) => c.id !== id));
 }
+
+/** يحذف كل بطاقات كتاب معيّن (أو البطاقات العامة إن كان bookId فارغًا). */
+export async function removeCardsForBook(bookId?: string): Promise<void> {
+  const norm = (b?: string) => b ?? "";
+  const cards = await getCards();
+  await save(cards.filter((c) => norm(c.bookId) !== norm(bookId)));
+}
+
+/** يحذف جميع البطاقات. */
+export async function clearAllCards(): Promise<void> {
+  await save([]);
+}

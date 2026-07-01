@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  AppState,
   Image,
   Modal,
   Pressable,
@@ -82,10 +83,10 @@ function wordIndexAtFraction(sentence: string, frac: number): number {
 // يقسّم الشرائح ذات النقاط الكثيرة على شرائح متتابعة (لئلا يُقصّ المحتوى في شريحة)
 // رمز تعبيري لكل نوع موسيقى (لبطاقات اختيار الموسيقى في العرض التقديمي)
 const MUSIC_EMOJI: Record<string, string> = {
+  strings: "🎼",
   piano: "🎹",
-  nature: "🌿",
-  strings: "🎻",
-  lofi: "🎧",
+  nature: "🌧️",
+  lofi: "🌊",
   meditation: "🧘",
 };
 
@@ -312,6 +313,14 @@ export default function ReaderScreen() {
       // ملاحظة: لا نوقف تحميل الكتاب عند الخروج — يكمل في الخلفية عبر المدير العام
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // أوقف موسيقى الخلفية عند مغادرة التطبيق (لا تستمر في الخلفية ولا تعلَق)
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s !== "active") stopAmbient();
+    });
+    return () => sub.remove();
   }, []);
 
   // حفظ آخر صفحة عند تغيّرها (بعد تحميل التفضيلات لتفادي الكتابة فوق المحفوظ)
@@ -2364,6 +2373,8 @@ export default function ReaderScreen() {
           presNarratingRef.current = false;
           setPresNarrating(false);
           stopSpeaking();
+          stopAmbient(); // أوقف موسيقى الخلفية عند الخروج من العرض
+          setPresMusicKey(null);
           setPresentOpen(false);
         }}
       >
@@ -2375,6 +2386,8 @@ export default function ReaderScreen() {
                 presNarratingRef.current = false;
           setPresNarrating(false);
           stopSpeaking();
+          stopAmbient(); // أوقف موسيقى الخلفية عند الخروج من العرض
+          setPresMusicKey(null);
           setPresentOpen(false);
               }}
               style={styles.presExit}
