@@ -12,7 +12,7 @@ import { deleteAccountPermanently, resetAccountData } from "../lib/account";
 import { getDisplayName, getSession, updateName } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
 import { getFocusLevel, getUserName, setFocusLevel, setUserName, type FocusLevel } from "../lib/settings";
-import { getStats, type Stats } from "../lib/stats";
+import { getMyBookCount, getStats, type Stats } from "../lib/stats";
 
 const WARN = "#f5a623"; // لون تحذير لزر إعادة الضبط
 
@@ -42,6 +42,7 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState("");
   const [createdAt, setCreatedAt] = useState<string | undefined>();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [bookCount, setBookCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [focus, setFocus] = useState<FocusLevel>(0);
@@ -56,6 +57,7 @@ export default function ProfileScreen() {
       setNameInput(await getUserName().catch(() => ""));
       setFocus(await getFocusLevel().catch((): FocusLevel => 0));
       setStats(await getStats().catch(() => null));
+      setBookCount(await getMyBookCount().catch(() => 0));
     })();
   }, []);
 
@@ -132,7 +134,7 @@ export default function ProfileScreen() {
     { key: "streak", value: stats?.streak ?? 0 },
     { key: "pages", value: stats?.totalPages ?? 0 },
     { key: "minutes", value: stats?.totalMinutes ?? 0 },
-    { key: "books", value: stats?.booksCompleted ?? 0 },
+    { key: "books", value: bookCount },
   ] as const;
 
   return (

@@ -12,15 +12,16 @@ import { ScreenHeader } from "../../components/brand/screen-header";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import { getDailyGoal, setDailyGoal } from "../../lib/goals";
 import { useDir, useI18n } from "../../lib/i18n";
-import { getStats, type Stats } from "../../lib/stats";
+import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
 
 const GOAL_OPTIONS = [10, 20, 30, 45, 60];
 
+// عدّاد الكتب (books) يأتي من قاعدة البيانات per-user، لا من العدّاد المحلي
 const STAT_ITEMS = [
   { icon: "flame" as const, labelKey: "activity.stat.streak", get: (s: Stats | null) => s?.streak ?? 0, color: Palette.neonPink },
   { icon: "headset" as const, labelKey: "activity.stat.minutes", get: (s: Stats | null) => s?.totalMinutes ?? 0, color: Palette.neonCyan },
   { icon: "documents" as const, labelKey: "activity.stat.pages", get: (s: Stats | null) => s?.totalPages ?? 0, color: Palette.neonBlue },
-  { icon: "checkmark-done" as const, labelKey: "activity.stat.books", get: (s: Stats | null) => s?.booksCompleted ?? 0, color: Palette.neonViolet },
+  { icon: "library" as const, labelKey: "activity.stat.books", get: (_s: Stats | null) => 0, color: Palette.neonViolet, isBooks: true },
 ];
 
 function todayISOLocal() {
@@ -33,12 +34,14 @@ export default function ActivityScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [books, setBooks] = useState(0);
   const [goal, setGoal] = useState(20);
 
   useFocusEffect(
     useCallback(() => {
       getStats().then(setStats);
       getDailyGoal().then(setGoal);
+      getMyBookCount().then(setBooks);
     }, [])
   );
 
@@ -63,7 +66,7 @@ export default function ActivityScreen() {
                 {STAT_ITEMS.map((s) => (
                   <View key={s.labelKey} style={styles.statItem}>
                     <Ionicons name={s.icon} size={20} color={s.color} />
-                    <Text style={styles.statValue}>{`${s.get(stats)}`}</Text>
+                    <Text style={styles.statValue}>{`${"isBooks" in s && s.isBooks ? books : s.get(stats)}`}</Text>
                     <Text style={styles.statLabel}>{t(s.labelKey)}</Text>
                   </View>
                 ))}

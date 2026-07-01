@@ -66,6 +66,8 @@ export default function SyllabusScreen() {
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [genPct, setGenPct] = useState(0); // تقدّم توليد المنهج (٪)
+  const [genMsg, setGenMsg] = useState(""); // رسالة المرحلة الحالية
   const [syl, setSyl] = useState<Syllabus | null>(null);
   const [done, setDone] = useState<boolean[]>([]);
   const [sched, setSched] = useState<UnitSchedule[]>([]);
@@ -120,6 +122,30 @@ export default function SyllabusScreen() {
       }
     })();
   }, [pdfPath]);
+
+  // مؤشّر تقدّم لتوليد المنهج — يوضّح أن التطبيق يعمل وكم تقريبًا تبقّى.
+  // (توليد المنهج الكامل نداءٌ واحد لا يبثّ تقدّمًا، فنُظهر تقدّمًا زمنيًا سلسًا.)
+  useEffect(() => {
+    if (!busy) {
+      setGenPct(0);
+      return;
+    }
+    const msgs = [
+      t("syllabus.gen.reading"),
+      t("syllabus.gen.extracting"),
+      t("syllabus.gen.lectures"),
+      t("syllabus.gen.finishing"),
+    ];
+    let p = 0;
+    setGenPct(3);
+    setGenMsg(msgs[0]);
+    const id = setInterval(() => {
+      p = Math.min(92, p + Math.max(1, Math.round((92 - p) * 0.07)));
+      setGenPct(p);
+      setGenMsg(msgs[p < 25 ? 0 : p < 55 ? 1 : p < 82 ? 2 : 3]);
+    }, 450);
+    return () => clearInterval(id);
+  }, [busy, t]);
 
   async function onGenerate() {
     setErr("");
@@ -465,13 +491,26 @@ export default function SyllabusScreen() {
               {t("syllabus.empty.sub")}
             </Text>
             {!!err && <Text style={styles.err}>{err}</Text>}
-            <GradientButton
-              title={t("syllabus.empty.generate")}
-              icon="sparkles"
-              onPress={onGenerate}
-              loading={busy}
-              style={{ marginTop: Spacing.lg, alignSelf: "stretch" }}
-            />
+            {busy ? (
+              // شريط تقدّم واضح: يطمئن المستخدم أن التطبيق يعمل ويوضّح ما تبقّى
+              <View style={styles.genWrap}>
+                <View style={[styles.genHead, { flexDirection: dir.row }]}>
+                  <Text style={styles.genMsg}>{genMsg}</Text>
+                  <Text style={styles.genPct}>{genPct}%</Text>
+                </View>
+                <View style={styles.genTrack}>
+                  <View style={[styles.genFill, { width: `${genPct}%` }]} />
+                </View>
+                <Text style={styles.genHint}>{t("syllabus.gen.hint")}</Text>
+              </View>
+            ) : (
+              <GradientButton
+                title={t("syllabus.empty.generate")}
+                icon="sparkles"
+                onPress={onGenerate}
+                style={{ marginTop: Spacing.lg, alignSelf: "stretch" }}
+              />
+            )}
             <Pressable onPress={startReading} style={styles.readNowBtn}>
               <Ionicons name="book" size={18} color={Palette.text} />
               <Text style={styles.readNowTxt}>{t("syllabus.readNowFull")}</Text>
@@ -859,6 +898,14 @@ const styles = StyleSheet.create({
   },
   readNowTxt: { color: Palette.text, fontSize: 16, fontWeight: "900" },
   err: { color: Palette.warn, fontSize: 13, textAlign: "center", marginTop: 8, fontWeight: "700" },
+
+  genWrap: { alignSelf: "stretch", marginTop: Spacing.lg, gap: 8 },
+  genHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  genMsg: { color: Palette.text, fontSize: 14, fontWeight: "800" },
+  genPct: { color: Palette.neonViolet, fontSize: 15, fontWeight: "900" },
+  genTrack: { height: 10, borderRadius: 5, backgroundColor: Palette.surface, overflow: "hidden" },
+  genFill: { height: "100%", borderRadius: 5, backgroundColor: Palette.neonViolet },
+  genHint: { color: Palette.textDim, fontSize: 12, textAlign: "center", lineHeight: 19, marginTop: 4 },
 
   scroll: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl, gap: 12 },
   progCard: { padding: Spacing.lg },

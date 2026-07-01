@@ -2,6 +2,9 @@
 // تتبّع إحصائيات المذاكرة + سلسلة الأيام (Streak) محليًا.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { getUserId } from "./auth";
+import { supabase } from "./supabase";
+
 const KEY = "vsf:stats:v1";
 
 export type DayLog = { m: number; p: number }; // دقائق، صفحات
@@ -96,4 +99,24 @@ export async function recordBookCompleted(): Promise<void> {
   const s = await getStats();
   s.booksCompleted += 1;
   await save(s);
+}
+
+/**
+ * عدد كتب المستخدم الحالي **فعليًا** من قاعدة البيانات (محميّ per-user عبر RLS).
+ * نستخدمه بدل العدّاد المحلي حتى يرى كل مستخدم كتبه هو فقط — بلا تسريب بين
+ * الحسابات وبلا تصفير عند تسجيل الدخول. يرجع 0 إن لم توجد جلسة أو حدث خطأ.
+ */
+export async function getMyBookCount(): Promise<number> {
+  try {
+    const uid = await getUserId();
+    const { count, error } = await supabase
+      .from("books")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", uid)
+      .not("is_archived", "is", true);
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
 }

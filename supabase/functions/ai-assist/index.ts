@@ -63,6 +63,10 @@ const MODEL: Record<string, string> = {
   // فالسرعة أهم شيء لتجربة الاستماع → نموذج سريع بدل الإبطاء.
   tashkeel: "claude-haiku-4-5-20251001",
   translate: "claude-haiku-4-5-20251001",
+  // المنهج: استخراج الوحدات من الفهرس مهمة استخراجية منظّمة → نموذج سريع
+  // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
+  syllabus: "claude-haiku-4-5-20251001",
+  unitquiz: "claude-haiku-4-5-20251001",
 };
 const MAX_TOKENS: Record<string, number> = { cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, translate: 4000, slides: 1500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 

@@ -17,7 +17,7 @@ import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { countDue } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getDisplayName } from "../../lib/auth";
-import { getStats, type Stats } from "../../lib/stats";
+import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
 
 type Feature = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -51,6 +51,7 @@ export default function HomeScreen() {
   const dir = useDir();
   const [stats, setStats] = useState<Stats | null>(null);
   const [due, setDue] = useState(0);
+  const [books, setBooks] = useState(0);
   const [name, setName] = useState("");
   const [tour, setTour] = useState(false);
 
@@ -71,11 +72,12 @@ export default function HomeScreen() {
     useCallback(() => {
       let on = true;
       (async () => {
-        const [s, d, n] = await Promise.all([getStats(), countDue(), getDisplayName()]);
+        const [s, d, n, b] = await Promise.all([getStats(), countDue(), getDisplayName(), getMyBookCount()]);
         if (!on) return;
         setStats(s);
         setDue(d);
         setName(n.trim());
+        setBooks(b);
       })();
       return () => {
         on = false;
@@ -154,6 +156,10 @@ export default function HomeScreen() {
                 </View>
 
                 <View style={[styles.streakStats, { flexDirection: dir.row }]}>
+                  <Pressable onPress={() => router.push("/library")} style={styles.statItem}>
+                    <Text style={styles.statValue}>{books}</Text>
+                    <Text style={styles.statLabel}>{t("home.stat.books")}</Text>
+                  </Pressable>
                   <Stat value={stats?.totalPages ?? 0} label={t("home.stat.pages")} />
                   <Stat value={stats?.totalMinutes ?? 0} label={t("home.stat.minutes")} />
                   <Pressable onPress={() => router.push("/flashcards")} style={styles.statItem}>
