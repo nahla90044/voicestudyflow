@@ -11,7 +11,7 @@ import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
-import { getSavedItems, removeSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
+import { getSavedItems, removeSavedItem, updateSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 import { removeUnitContent, type UnitContentKind } from "../../lib/unitContent";
 
 const ALL = "__all__";
@@ -68,6 +68,10 @@ export default function FlashcardsScreen() {
       g.items.push(it);
       map.set(it.pdfPath, g);
     }
+    // المؤرشفة تنزل لأسفل كل مجموعة
+    for (const g of map.values()) {
+      g.items.sort((a, b) => (a.archived ? 1 : 0) - (b.archived ? 1 : 0) || b.savedAt - a.savedAt);
+    }
     return [...map.values()];
   }, [saved, tab]);
 
@@ -90,6 +94,48 @@ export default function FlashcardsScreen() {
           getSavedItems().then(setSaved);
         },
       },
+    ]);
+  }
+
+  const refreshSaved = () => getSavedItems().then(setSaved);
+
+  // قائمة خيارات العنصر المحفوظ (بالضغط المطوَّل) — بديل أنيق لأيقونة الحذف
+  function savedMenu(it: SavedItem) {
+    Alert.alert(it.label, undefined, [
+      { text: t("study.menu.open"), onPress: () => openSaved(it) },
+      { text: t("study.menu.rename"), onPress: () => renameSaved(it) },
+      {
+        text: it.studied ? t("study.menu.unstudied") : t("study.menu.studied"),
+        onPress: () => updateSavedItem(it.key, { studied: !it.studied }).then(refreshSaved),
+      },
+      {
+        text: it.archived ? t("study.menu.unarchive") : t("study.menu.archive"),
+        onPress: () => updateSavedItem(it.key, { archived: !it.archived }).then(refreshSaved),
+      },
+      { text: t("common.delete"), style: "destructive", onPress: () => deleteSaved(it) },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  }
+
+  function renameSaved(it: SavedItem) {
+    Alert.prompt?.(
+      t("study.rename.title"),
+      undefined,
+      (txt?: string) => {
+        const v = (txt || "").trim();
+        if (v) updateSavedItem(it.key, { label: v }).then(refreshSaved);
+      },
+      "plain-text",
+      it.label
+    );
+  }
+
+  // قائمة خيارات كتاب البطاقات (بالضغط المطوَّل)
+  function bookMenu(b: BookGroup) {
+    Alert.alert(b.title, undefined, [
+      { text: t("study.menu.review"), onPress: () => startBook(b.key, b.title) },
+      { text: t("study.menu.deleteAll"), style: "destructive", onPress: () => deleteBookCards(b.key, b.title) },
+      { text: t("common.cancel"), style: "cancel" },
     ]);
   }
 
@@ -228,6 +274,10 @@ export default function FlashcardsScreen() {
           })}
         </View>
 
+        {mode !== "review" ? (
+          <Text style={[styles.longPressHint, { textAlign: dir.textAlign }]}>{t("study.longPressHint")}</Text>
+        ) : null}
+
         {tab !== "cards" ? (
           savedGroups.length === 0 ? (
             <View style={styles.center}>
@@ -241,13 +291,18 @@ export default function FlashcardsScreen() {
                 <View key={g.items[0]?.pdfPath ?? g.title} style={{ gap: 8, marginBottom: 6 }}>
                   <Text style={[styles.savedBook, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {g.title}</Text>
                   {g.items.map((it) => (
-                    <Pressable key={it.key} onPress={() => openSaved(it)} style={styles.bookRow}>
+                    <Pressable
+                      key={it.key}
+                      onPress={() => openSaved(it)}
+                      onLongPress={() => savedMenu(it)}
+                      delayLongPress={300}
+                      style={[styles.bookRow, it.archived && styles.rowArchived]}
+                    >
+                      {it.studied ? <Ionicons name="checkmark-circle" size={18} color={Palette.neonCyan} /> : null}
                       <View style={styles.bookInfo}>
                         <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={2}>{it.label}</Text>
                       </View>
-                      <Pressable onPress={() => deleteSaved(it)} hitSlop={10} style={styles.trashBtn}>
-                        <Ionicons name="trash-outline" size={20} color={Palette.danger} />
-                      </Pressable>
+                      {it.archived ? <Text style={styles.archTag}>{t("study.archived")}</Text> : null}
                       <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={Palette.textDim} />
                     </Pressable>
                   ))}
@@ -281,7 +336,13 @@ export default function FlashcardsScreen() {
               ) : null}
 
               {books.map((b) => (
-                <Pressable key={b.key} onPress={() => startBook(b.key, b.title)} style={styles.bookRow}>
+                <Pressable
+                  key={b.key}
+                  onPress={() => startBook(b.key, b.title)}
+                  onLongPress={() => bookMenu(b)}
+                  delayLongPress={300}
+                  style={styles.bookRow}
+                >
                   <View style={styles.bookInfo}>
                     <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {b.title}</Text>
                     <Text style={[styles.bookSub, { textAlign: dir.textAlign }]}>{t("flashcards.bookStats", { total: b.total, due: b.due })}</Text>
@@ -289,9 +350,6 @@ export default function FlashcardsScreen() {
                   <View style={[styles.dueBadge, b.due === 0 && styles.dueBadge0]}>
                     <Text style={styles.dueBadgeTxt}>{b.due}</Text>
                   </View>
-                  <Pressable onPress={() => deleteBookCards(b.key, b.title)} hitSlop={10} style={styles.trashBtn}>
-                    <Ionicons name="trash-outline" size={20} color={Palette.danger} />
-                  </Pressable>
                 </Pressable>
               ))}
             </ScrollView>
@@ -319,14 +377,11 @@ export default function FlashcardsScreen() {
                 <Pressable onPress={() => goCard(1)} disabled={idx >= queue.length - 1} hitSlop={8} style={styles.navChip}>
                   <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={idx >= queue.length - 1 ? Palette.textDim : Palette.text} />
                 </Pressable>
-                <Pressable onPress={deleteCurrentCard} hitSlop={8} style={styles.trashChip}>
-                  <Ionicons name="trash-outline" size={18} color={Palette.danger} />
-                </Pressable>
               </View>
             </View>
 
             <View style={styles.cardArea}>
-              <Pressable onPress={toggleFlip} style={styles.press}>
+              <Pressable onPress={toggleFlip} onLongPress={deleteCurrentCard} delayLongPress={450} style={styles.press}>
                 <Animated.View style={[styles.face, frontStyle]}>
                   <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.faceGrad}>
                     <Ionicons name="help" size={150} color="rgba(255,255,255,0.08)" style={styles.watermark} />
@@ -421,6 +476,9 @@ const styles = StyleSheet.create({
   reviewTopRight: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
   trashChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   navChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  longPressHint: { color: Palette.textDim, fontSize: 12, fontWeight: "700", paddingHorizontal: Spacing.xl, paddingTop: 8 },
+  rowArchived: { opacity: 0.5 },
+  archTag: { color: Palette.textDim, fontSize: 11, fontWeight: "800", paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill, backgroundColor: Palette.surface, overflow: "hidden" },
   fab: {
     position: "absolute",
     bottom: 24,

@@ -12,10 +12,12 @@ export type SavedItem = {
   kind: SavedKind;
   pdfPath: string;
   bookTitle: string; // لتجميعها حسب الكتاب
-  label: string; // عنوان العنصر (عنوان الوحدة أو «الصفحة N»)
+  label: string; // عنوان العنصر (عنوان الوحدة أو «الصفحة N») — قابل لإعادة التسمية
   page?: number; // وضع القارئ (صفحة)
   unit?: number; // وضع المنهج (وحدة)
   savedAt: number;
+  studied?: boolean; // أُشِّر كمدروس من القائمة
+  archived?: boolean; // منقول إلى الأرشيف
 };
 
 const KEY = "vsf:savedstudy:v1";
@@ -39,6 +41,17 @@ export async function addSavedItem(item: SavedItem): Promise<void> {
     await AsyncStorage.setItem(KEY, JSON.stringify(next));
   } catch {
     // الفهرس اختياري — لا نُفشل العملية إن تعذّر
+  }
+}
+
+/** يعدّل حقول عنصر محفوظ (تسمية/تأشير كمدروس/أرشفة). */
+export async function updateSavedItem(key: string, patch: Partial<SavedItem>): Promise<void> {
+  try {
+    const all = await getSavedItems();
+    const next = all.map((i) => (i.key === key ? { ...i, ...patch } : i));
+    await AsyncStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    // نتجاهل
   }
 }
 
