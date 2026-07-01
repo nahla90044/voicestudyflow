@@ -704,6 +704,7 @@ const ar: Record<string, string> = {
   "music.sax_calm": "ساكسفون هادئ",
   "music.sax_romantic": "ساكسفون رومانسي",
   "music.sax_night": "ساكسفون ليلي",
+  "music.saveroom": "غرفة الأمان",
   "music.rain": "مطر",
   "music.ocean": "أمواج البحر",
   "music.forest": "غابة",
@@ -1403,6 +1404,7 @@ const en: Record<string, string> = {
   "music.sax_calm": "Calm sax",
   "music.sax_romantic": "Romantic sax",
   "music.sax_night": "Night sax",
+  "music.saveroom": "Safe room",
   "music.meditation": "Meditation",
 };
 

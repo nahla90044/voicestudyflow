@@ -126,6 +126,7 @@ const MUSIC_EMOJI: Record<string, string> = {
   sax_calm: "🎷",
   sax_romantic: "🎷",
   sax_night: "🎷",
+  saveroom: "🕯️",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
