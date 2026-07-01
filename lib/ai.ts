@@ -179,7 +179,8 @@ export async function defineWord(word: string, context: string): Promise<string>
   const w = word.trim();
   if (!w) return "";
   const { data, error } = await supabase.functions.invoke("ai-assist", {
-    body: { action: "define", question: w, text: context.slice(0, 240) },
+    // targetLang = لغة الواجهة → معنى الكلمة يتبع لغة التطبيق (إنجليزي لواجهة إنجليزية)
+    body: { action: "define", question: w, text: context.slice(0, 240), targetLang: getCurrentLang() },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
