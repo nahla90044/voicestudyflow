@@ -113,6 +113,8 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "saveroom", name: "غرفة الأمان", kind: "music", lengthMs: 120000, prompt: "warm nostalgic safe-room piano piece that opens immediately with a gentle heartfelt solo piano melody from the very first note, no slow intro or fade-in, soft warm ambient pad enters underneath, calm soothing and reassuring with a faint bittersweet melancholy, slow and comforting, a feeling of safety rest and quiet relief, intimate and cozy, instrumental" },
   // 🌫️ «ضباب حزين» — بطابع Silent Hill 2 / The Room الحزين المؤثر (مقطوعة أصلية بنفس الإحساس، بلا نسخ)
   { key: "melancholy", name: "ضباب حزين", kind: "music", lengthMs: 120000, prompt: "deeply emotional melancholic ballad, tender expressive lead acoustic guitar with warm reverb over a soft mellow piano and hazy ambient pad, aching bittersweet longing and heartfelt sadness, slow dreamy trip-hop groove with a gentle laid-back beat, beautiful cinematic and introspective, foggy nostalgic and moving, instrumental" },
+  // ☀️ «تفاؤل» — بطابع أغاني Legally Blonde المتفائلة المبهجة (مقطوعة أصلية بنفس الروح، بلا نسخ)
+  { key: "optimistic", name: "تفاؤل", kind: "music", lengthMs: 120000, prompt: "bright uplifting optimistic feel-good pop instrumental, cheerful joyful and full of positive empowering energy, warm piano sparkling bright synths and a bouncy upbeat rhythm with punchy drums, sunny hopeful and motivating like an unstoppable good day, catchy beautiful and confident, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣

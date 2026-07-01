@@ -423,6 +423,8 @@ export default function MoreScreen() {
             {t("more.about.purpose")}
             {"\n"}
             {t("more.about.disclaimer")}
+            {"\n"}
+            {t("more.about.music")}
           </Text>
           <Text style={styles.madeIn}>{t("more.madeIn")}</Text>
         </GlassCard>

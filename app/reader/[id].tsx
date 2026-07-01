@@ -128,6 +128,7 @@ const MUSIC_EMOJI: Record<string, string> = {
   sax_night: "🎷",
   saveroom: "🕯️",
   melancholy: "🌫️",
+  optimistic: "☀️",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
@@ -1856,6 +1857,9 @@ export default function ReaderScreen() {
             })}
           </ScrollView>
         ) : null}
+        {showMusicPicker ? (
+          <Text style={[styles.musicNote, { textAlign: dir.textAlign }]}>{t("reader.music.aiNote")}</Text>
+        ) : null}
 
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={[styles.aidsRow, { flexDirection: dir.row }]}>
@@ -2536,6 +2540,9 @@ export default function ReaderScreen() {
               })}
             </ScrollView>
           ) : null}
+          {showMusicPicker ? (
+            <Text style={[styles.musicNote, { textAlign: dir.textAlign }]}>{t("reader.music.aiNote")}</Text>
+          ) : null}
 
           {/* الشريحة */}
           <View style={styles.presStage}>
@@ -3203,6 +3210,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   musicChipOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  musicNote: { color: Palette.textMuted, fontSize: 11, fontWeight: "600", marginTop: 6, opacity: 0.85 },
   musicChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
   musicChipTxtOn: { color: "#0b1220" },
   // بطاقات موسيقى العرض التقديمي (ارتفاع ثابت — لا تتمدّد لأشرطة طويلة)
