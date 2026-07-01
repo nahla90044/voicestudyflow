@@ -45,24 +45,6 @@ async function getSfxFile(key: string, prompt: string, duration: number): Promis
 
 /* ---------------- موسيقى خلفية هادئة (اختيارات متعددة، حلقة) ---------------- */
 // كل الخيارات هادئة ومريحة
-// موسيقى ElevenLabs (v1/music): مقطوعة أطول وأغنى ومرخّصة تجاريًا. عند تعذّرها
-// (خطة/شبكة) نرجع لمؤثّر الصوت القصير حتى لا تنقطع الميزة.
-async function getMusicFile(key: string, prompt: string, lengthMs: number): Promise<File | null> {
-  const f = new File(dir(), `${hash(key)}.mp3`);
-  if (f.exists && (f.size ?? 0) > 0) return f;
-  try {
-    const { data, error } = await supabase.functions.invoke("music", { body: { prompt, lengthMs } });
-    const audio = (data as { audio?: string; error?: string })?.audio;
-    if (!error && audio) {
-      f.write(b64ToBytes(audio));
-      return f;
-    }
-  } catch {
-    // نتجاهل — نجرّب مؤثّر الصوت كبديل
-  }
-  return getSfxFile(key, prompt, 22);
-}
-
 // مؤثّرات صوت قصيرة ذات **تكرار سلس** (seamless loop) — تتكرّر بلا «قطعة»،
 // على عكس مقطوعات ElevenLabs الطويلة التي لها بداية/نهاية واضحة عند التكرار.
 export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [

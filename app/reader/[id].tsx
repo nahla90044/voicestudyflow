@@ -47,7 +47,6 @@ import {
 import { MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { isOwner } from "../../lib/auth";
-import { supabase } from "../../lib/supabase";
 import {
   DEFAULT_VOICE_ID,
   prefetchText,
