@@ -13,6 +13,7 @@ import { Palette, Radius, Spacing } from "../constants/design";
 import { aiAssist } from "../lib/ai";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
+import { addSavedItem } from "../lib/savedStudy";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../lib/voice";
@@ -33,7 +34,7 @@ function stripMarkdown(s: string): string {
 export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
-  const { pdf_path, unit, page, title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string }>();
+  const { pdf_path, unit, page, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string; book_title?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
@@ -41,6 +42,7 @@ export default function UnitSummaryScreen() {
   const srcId = pageMode ? pageNum : unitIdx;
   const kind = pageMode ? "pagesummary" : "summary";
   const unitTitle = typeof title === "string" ? title : "";
+  const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
 
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
@@ -93,6 +95,22 @@ export default function UnitSummaryScreen() {
       stopSpeaking();
     };
   }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, t]);
+
+  // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → ملخّصات) متى توفّر المحتوى
+  useEffect(() => {
+    if (!text || !pdfPath) return;
+    addSavedItem({
+      key: `summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`,
+      kind: "summary",
+      pdfPath,
+      bookTitle,
+      label: unitTitle || (pageMode ? String(pageNum) : ""),
+      page: pageMode ? pageNum : undefined,
+      unit: pageMode ? undefined : unitIdx,
+      savedAt: Date.now(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
 
   function togglePlay() {
     if (playing) {

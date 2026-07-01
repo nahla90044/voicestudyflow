@@ -449,7 +449,7 @@ export default function SyllabusScreen() {
                         onPress={() =>
                           router.push({
                             pathname: "/unit-summary",
-                            params: { pdf_path: pdfPath, unit: i, title: u.title },
+                            params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
                           })
                         }
                         style={[styles.quizBtn, styles.sumBtn, { flexDirection: dir.row }]}
@@ -464,7 +464,7 @@ export default function SyllabusScreen() {
                         onPress={() =>
                           router.push({
                             pathname: "/unit-quiz",
-                            params: { pdf_path: pdfPath, unit: i, title: u.title },
+                            params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
                           })
                         }
                         style={[styles.quizBtn, { flex: 1, marginTop: 0, flexDirection: dir.row }]}

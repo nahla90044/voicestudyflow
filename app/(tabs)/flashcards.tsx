@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,6 +11,7 @@ import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getCards, reviewCard, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
+import { getSavedItems, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 
 const ALL = "__all__";
 const NONE = "__none__";
@@ -23,9 +24,14 @@ function todayISO() {
 
 type BookGroup = { key: string; title: string; total: number; due: number };
 
+type StudyTab = "cards" | "summary" | "quiz";
+
 export default function FlashcardsScreen() {
   const { t } = useI18n();
   const dir = useDir();
+  const router = useRouter();
+  const [tab, setTab] = useState<StudyTab>("cards");
+  const [saved, setSaved] = useState<SavedItem[]>([]);
   const [all, setAll] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"picker" | "review">("picker");
@@ -47,8 +53,33 @@ export default function FlashcardsScreen() {
     useCallback(() => {
       setMode("picker");
       reload();
+      getSavedItems().then(setSaved);
     }, [reload])
   );
+
+  // عناصر المحفوظات (ملخّصات/اختبارات) مجمَّعة حسب الكتاب للتبويب الحالي
+  const savedGroups = useMemo(() => {
+    const kind: SavedKind = tab === "quiz" ? "quiz" : "summary";
+    const items = saved.filter((s) => s.kind === kind).sort((a, b) => b.savedAt - a.savedAt);
+    const map = new Map<string, { title: string; items: SavedItem[] }>();
+    for (const it of items) {
+      const g = map.get(it.pdfPath) ?? { title: it.bookTitle || it.label, items: [] };
+      g.items.push(it);
+      map.set(it.pdfPath, g);
+    }
+    return [...map.values()];
+  }, [saved, tab]);
+
+  function openSaved(it: SavedItem) {
+    const params: Record<string, string> = {
+      pdf_path: it.pdfPath,
+      title: it.label,
+      book_title: it.bookTitle,
+    };
+    if (it.page != null) params.page = String(it.page);
+    if (it.unit != null) params.unit = String(it.unit);
+    router.push({ pathname: it.kind === "quiz" ? "/unit-quiz" : "/unit-summary", params });
+  }
 
   const books = useMemo<BookGroup[]>(() => {
     const today = todayISO();
@@ -120,8 +151,43 @@ export default function FlashcardsScreen() {
           color={Palette.neonPink}
         />
 
-        {/* ====== اختيار الكتاب ====== */}
-        {mode === "picker" ? (
+        {/* شريط التبويبات: بطاقات / ملخّصات / اختبارات (مركز مراجعة موحّد) */}
+        <View style={[styles.segRow, { flexDirection: dir.row }]}>
+          {(["cards", "summary", "quiz"] as StudyTab[]).map((seg) => {
+            const on = tab === seg;
+            return (
+              <Pressable key={seg} onPress={() => setTab(seg)} style={[styles.segBtn, on && styles.segBtnOn]}>
+                <Text style={[styles.segTxt, on && styles.segTxtOn]} numberOfLines={1}>{t(`flashcards.tab.${seg}`)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {tab !== "cards" ? (
+          savedGroups.length === 0 ? (
+            <View style={styles.center}>
+              <Ionicons name={tab === "quiz" ? "help-circle-outline" : "list-outline"} size={64} color={Palette.textDim} />
+              <Text style={styles.doneTitle}>{t("flashcards.saved.emptyTitle")}</Text>
+              <Text style={styles.dim}>{t("flashcards.saved.emptyBody")}</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
+              {savedGroups.map((g) => (
+                <View key={g.items[0]?.pdfPath ?? g.title} style={{ gap: 8, marginBottom: 6 }}>
+                  <Text style={[styles.savedBook, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {g.title}</Text>
+                  {g.items.map((it) => (
+                    <Pressable key={it.key} onPress={() => openSaved(it)} style={styles.bookRow}>
+                      <View style={styles.bookInfo}>
+                        <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={2}>{it.label}</Text>
+                      </View>
+                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={Palette.textDim} />
+                    </Pressable>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          )
+        ) : mode === "picker" ? (
           loading ? (
             <View style={styles.center}>
               <Text style={styles.dim}>{t("common.loading")}</Text>
@@ -221,6 +287,22 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 10 },
   dim: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22 },
   doneTitle: { color: Palette.text, fontSize: 18, fontWeight: "900", textAlign: "center", marginTop: 8 },
+
+  segRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: Spacing.xl, paddingTop: 4, paddingBottom: 10 },
+  segBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 9,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  segBtnOn: { backgroundColor: Palette.neonPink, borderColor: Palette.neonPink },
+  segTxt: { color: Palette.text, fontSize: 14, fontWeight: "800" },
+  segTxtOn: { color: "#fff" },
+  savedBook: { color: Palette.textMuted, fontSize: 13, fontWeight: "900", marginTop: 6 },
 
   pickerWrap: { paddingHorizontal: Spacing.xl, paddingBottom: 100, gap: 10 },
   bookRow: {

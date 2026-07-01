@@ -12,6 +12,7 @@ import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
+import { addSavedItem } from "../lib/savedStudy";
 import { generateUnitQuiz, getSyllabus, type QuizQ } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 
@@ -24,7 +25,7 @@ const LEVEL_COLOR: Record<"easy" | "medium" | "hard", string> = {
 export default function UnitQuizScreen() {
   const { t } = useI18n();
   const dir = useDir();
-  const { pdf_path, unit, page, title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string }>();
+  const { pdf_path, unit, page, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string; book_title?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
@@ -32,6 +33,7 @@ export default function UnitQuizScreen() {
   const srcId = pageMode ? pageNum : unitIdx;
   const kind = pageMode ? "pagequiz" : "quiz";
   const unitTitle = typeof title === "string" ? title : "";
+  const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -80,6 +82,22 @@ export default function UnitQuizScreen() {
       on = false;
     };
   }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, t]);
+
+  // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → اختبارات) متى توفّرت الأسئلة
+  useEffect(() => {
+    if (!quiz.length || !pdfPath) return;
+    addSavedItem({
+      key: `quiz|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`,
+      kind: "quiz",
+      pdfPath,
+      bookTitle,
+      label: unitTitle || (pageMode ? String(pageNum) : ""),
+      page: pageMode ? pageNum : undefined,
+      unit: pageMode ? undefined : unitIdx,
+      savedAt: Date.now(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quiz.length]);
 
   function pick(opt: number) {
     if (picked !== null) return;

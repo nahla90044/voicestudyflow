@@ -2059,7 +2059,12 @@ export default function ReaderScreen() {
                   setAiOpen(false);
                   router.push({
                     pathname: "/unit-summary",
-                    params: { pdf_path: pdfPath, page: String(page), title: t("reader.ai.pageTitle", { page }) },
+                    params: {
+                      pdf_path: pdfPath,
+                      page: String(page),
+                      title: t("reader.ai.pageTitle", { page }),
+                      book_title: typeof title === "string" ? title : "",
+                    },
                   });
                 }}
               >
@@ -2072,7 +2077,12 @@ export default function ReaderScreen() {
                   setAiOpen(false);
                   router.push({
                     pathname: "/unit-quiz",
-                    params: { pdf_path: pdfPath, page: String(page), title: t("reader.ai.pageTitle", { page }) },
+                    params: {
+                      pdf_path: pdfPath,
+                      page: String(page),
+                      title: t("reader.ai.pageTitle", { page }),
+                      book_title: typeof title === "string" ? title : "",
+                    },
                   });
                 }}
               >
