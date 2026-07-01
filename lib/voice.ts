@@ -569,8 +569,9 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "التشغيل";
     player.play();
-    // ملاحظة: أُزيل تفعيل شاشة القفل هنا مؤقتًا — كان يُعاد على كل مقطع فيُحدث
-    // «قطعة/تشويش» بين الجُمل. يُعاد لاحقًا بمعمارية مشغّل واحد متواصل.
+    // أزرار شاشة القفل (تشغيل/إيقاف + «قيد التشغيل») لهذا المقطع. التفعيل يخص مركز
+    // «قيد التشغيل» فقط ولا يمسّ جلسة الصوت، فلا يُحدث تقطيعًا في الصوت.
+    activateLockScreen(player);
   } catch (e) {
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
     console.warn("VSF_TTS_FALLBACK", reason);
