@@ -819,8 +819,8 @@ export default function ReaderScreen() {
       }
       const start = Math.min(Math.max(0, startIdx), sents.length - 1);
       if (announce && start === 0) {
-        // أعلن رقم الصفحة مرة واحدة ثم اقرأ المحتوى
-        speakText(`الصفحة رقم ${res.page}.`, {
+        // أعلن رقم الصفحة مرة واحدة (بلغة الواجهة) ثم اقرأ المحتوى
+        speakText(t("reader.speak.page", { page: res.page }), {
           voiceId: pickVoice(),
           rate: rateRef.current,
           onDone: () => playSentence(sents, 0, res.page, res.totalPages),

@@ -5,7 +5,7 @@ import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
 
-const DIR = "sfx-cache-v5"; // v5: رجوع لمؤثّرات التكرار السلس (بلا قطعة) بدل ElevenLabs
+const DIR = "sfx-cache-v6"; // v6: مؤثّرات ١٢ث ذات تكرار سلس (تفضيل المستخدمة)
 
 function dir(): Directory {
   const d = new Directory(Paths.cache, DIR);
@@ -73,8 +73,8 @@ export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [
   { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone, very soft, airy, calming, seamless loop" },
 ];
 
-// طول مقطع المؤثّر (ث) — حلقة سلسة قصيرة.
-const MUSIC_SECONDS = 22;
+// طول مقطع المؤثّر (ث) — ١٢ث: الأنعم في التكرار بلا أي «قطعة» (تفضيل المستخدمة).
+const MUSIC_SECONDS = 12;
 
 let ambientPlayer: AudioPlayer | null = null;
 let ambientKey: string | null = null;
