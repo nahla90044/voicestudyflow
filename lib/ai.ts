@@ -41,9 +41,9 @@ export async function moderateContent(text: string): Promise<Moderation> {
   }
 }
 
-/** يولّد شرائح عرض تقديمي من نص (عنوان + نقاط + إيموجي). */
-export async function generateSlides(text: string): Promise<Slide[]> {
-  const raw = await aiAssist("slides", text);
+/** يولّد شرائح عرض تقديمي من نص (عنوان + نقاط + إيموجي) بلغة الواجهة. */
+export async function generateSlides(text: string, lang: "ar" | "en" | "fr" = "ar"): Promise<Slide[]> {
+  const raw = await aiAssist("slides", text, undefined, lang);
   const m = raw.match(/\[[\s\S]*\]/);
   if (!m) return [];
   try {

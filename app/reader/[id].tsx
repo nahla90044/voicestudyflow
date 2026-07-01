@@ -507,7 +507,7 @@ export default function ReaderScreen() {
     }
     (async () => {
       try {
-        const sl = splitLongSlides(await generateSlides(sentences.join(" ").slice(0, 4000)));
+        const sl = splitLongSlides(await generateSlides(sentences.join(" ").slice(0, 4000), uiVoiceLang));
         if (!active) return;
         slidesCacheRef.current.set(p, sl);
         if (presentOpen) setPageSlides(sl);
@@ -1196,6 +1196,22 @@ export default function ReaderScreen() {
     };
   }, [lensOpen, pdfPath, page]);
 
+  // هل نص الكتاب عربي؟ (النطق الدقيق/التشكيل خاصٌّ بالعربية فقط — نخفيه لغير العربي)
+  const isArabicText = useMemo(() => {
+    const sample = sentences.slice(0, 8).join(" ").slice(0, 600);
+    const ar = (sample.match(/[؀-ۿ]/g) || []).length;
+    const latin = (sample.match(/[A-Za-z]/g) || []).length;
+    return ar >= Math.max(4, latin); // عربي إن كانت الحروف العربية هي الغالبة
+  }, [sentences]);
+
+  // أمان: إن كان النص غير عربي وكان التشكيل مفعّلًا، أوقفه (خاصية عربية فقط)
+  useEffect(() => {
+    if (!isArabicText && tashkeelRef.current) {
+      tashkeelRef.current = false;
+      setTashkeelMode(false);
+    }
+  }, [isArabicText]);
+
   // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
   type Line = { x: number; y: number; w: number; h: number; start: number; end: number };
   const lines = useMemo<Line[]>(() => {
@@ -1729,11 +1745,14 @@ export default function ReaderScreen() {
 
         {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
         <View style={[styles.aidsRow, { flexDirection: dir.row }]}>
-          <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
-            <LinearGradient colors={tashkeelMode ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}</Text>
-            </LinearGradient>
-          </Pressable>
+          {/* النطق الدقيق (التشكيل) خاصٌّ بالنص العربي فقط — نخفيه للكتب الأجنبية */}
+          {isArabicText ? (
+            <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
+              <LinearGradient colors={tashkeelMode ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
+                <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}</Text>
+              </LinearGradient>
+            </Pressable>
+          ) : null}
 
           <Pressable onPress={() => setTranslateModal(true)} style={styles.aidWrap}>
             <LinearGradient colors={listenArabic ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
