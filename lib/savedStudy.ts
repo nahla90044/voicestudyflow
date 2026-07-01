@@ -41,3 +41,26 @@ export async function addSavedItem(item: SavedItem): Promise<void> {
     // الفهرس اختياري — لا نُفشل العملية إن تعذّر
   }
 }
+
+/** يحذف عنصرًا محفوظًا واحدًا من الفهرس. */
+export async function removeSavedItem(key: string): Promise<void> {
+  try {
+    const all = await getSavedItems();
+    await AsyncStorage.setItem(KEY, JSON.stringify(all.filter((i) => i.key !== key)));
+  } catch {
+    // نتجاهل
+  }
+}
+
+/** يحذف كل محفوظات كتاب من نوع معيّن (كل ملخّصاته أو كل اختباراته). */
+export async function removeSavedForBook(pdfPath: string, kind: SavedKind): Promise<void> {
+  try {
+    const all = await getSavedItems();
+    await AsyncStorage.setItem(
+      KEY,
+      JSON.stringify(all.filter((i) => !(i.pdfPath === pdfPath && i.kind === kind)))
+    );
+  } catch {
+    // نتجاهل
+  }
+}

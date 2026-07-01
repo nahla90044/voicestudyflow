@@ -39,6 +39,19 @@ export async function getUnitContent<T>(
   }
 }
 
+/** يحذف المحتوى المخزَّن لهذه الوحدة/الصفحة (عند حذف الملخّص/الاختبار). */
+export async function removeUnitContent(
+  pdfPath: string,
+  unit: number,
+  kind: UnitContentKind
+): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(keyFor(pdfPath, unit, kind));
+  } catch {
+    // نتجاهل
+  }
+}
+
 /** يخزّن المحتوى المولّد لهذه الوحدة محليًا لإعادة استخدامه بلا تكلفة ذكاء. */
 export async function setUnitContent<T>(
   pdfPath: string,

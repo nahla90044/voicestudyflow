@@ -11,7 +11,8 @@ import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
-import { getSavedItems, type SavedItem, type SavedKind } from "../../lib/savedStudy";
+import { getSavedItems, removeSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
+import { removeUnitContent, type UnitContentKind } from "../../lib/unitContent";
 
 const ALL = "__all__";
 const NONE = "__none__";
@@ -69,6 +70,28 @@ export default function FlashcardsScreen() {
     }
     return [...map.values()];
   }, [saved, tab]);
+
+  // نوع التخزين في unitContent حسب المصدر (صفحة قارئ أم وحدة منهج)
+  function contentKind(it: SavedItem): UnitContentKind {
+    if (it.kind === "quiz") return it.page != null ? "pagequiz" : "quiz";
+    return it.page != null ? "pagesummary" : "summary";
+  }
+
+  // حذف ملخّص/اختبار محفوظ (الفهرس + الملف المخزَّن) بعد تأكيد
+  function deleteSaved(it: SavedItem) {
+    Alert.alert(t("flashcards.saved.deleteTitle"), t("flashcards.saved.deleteBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: async () => {
+          await removeSavedItem(it.key);
+          await removeUnitContent(it.pdfPath, it.page ?? it.unit ?? 0, contentKind(it));
+          getSavedItems().then(setSaved);
+        },
+      },
+    ]);
+  }
 
   function openSaved(it: SavedItem) {
     const params: Record<string, string> = {
@@ -222,6 +245,9 @@ export default function FlashcardsScreen() {
                       <View style={styles.bookInfo}>
                         <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={2}>{it.label}</Text>
                       </View>
+                      <Pressable onPress={() => deleteSaved(it)} hitSlop={10} style={styles.trashBtn}>
+                        <Ionicons name="trash-outline" size={20} color={Palette.danger} />
+                      </Pressable>
                       <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={Palette.textDim} />
                     </Pressable>
                   ))}
