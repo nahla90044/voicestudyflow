@@ -151,7 +151,7 @@ export default function ReaderScreen() {
   // وضع القيادة (واجهة كبيرة مبسّطة)
   const [drivingMode, setDrivingMode] = useState(false);
   // وضع ملء الشاشة للقراءة (إخفاء الأزرار وتكبير النص)
-  const [fullText, setFullText] = useState(true); // القراءة تفتح كامل الشاشة افتراضيًا
+  const [fullText, setFullText] = useState(false); // تفتح بواجهة القراءة الكاملة (النص + الأزرار)؛ زر التكبير للملء
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
@@ -199,7 +199,7 @@ export default function ReaderScreen() {
   const [presentOpen, setPresentOpen] = useState(false);
   const [pageSlides, setPageSlides] = useState<Slide[]>([]);
   const [slidesLoading, setSlidesLoading] = useState(false);
-  const slidesCacheRef = useRef<Map<number, Slide[]>>(new Map());
+  const slidesCacheRef = useRef<Map<string, Slide[]>>(new Map()); // المفتاح: «اللغة:الصفحة»
   // سرد العرض التقديمي بصوت ElevenLabs (شريحة بشريحة)
   const [presNarrating, setPresNarrating] = useState(false);
   const [presSlide, setPresSlide] = useState(0);
@@ -512,8 +512,10 @@ export default function ReaderScreen() {
   useEffect(() => {
     if ((!presentOpen && !presUsedRef.current) || sentences.length === 0) return;
     const p = page;
-    if (slidesCacheRef.current.has(p)) {
-      setPageSlides(slidesCacheRef.current.get(p)!);
+    // المفتاح يتضمّن لغة الواجهة → الشرائح تتبع اللغة، وتبديلها يعيد التوليد لا يعرض القديم
+    const key = `${uiVoiceLang}:${p}`;
+    if (slidesCacheRef.current.has(key)) {
+      setPageSlides(slidesCacheRef.current.get(key)!);
       return;
     }
     let active = true;
@@ -525,7 +527,7 @@ export default function ReaderScreen() {
       try {
         const sl = splitLongSlides(await generateSlides(sentences.join(" ").slice(0, 4000), uiVoiceLang));
         if (!active) return;
-        slidesCacheRef.current.set(p, sl);
+        slidesCacheRef.current.set(key, sl);
         if (presentOpen) setPageSlides(sl);
       } catch {
         if (active && presentOpen) setPageSlides([]);
@@ -536,7 +538,7 @@ export default function ReaderScreen() {
     return () => {
       active = false;
     };
-  }, [presentOpen, page, sentences.length]);
+  }, [presentOpen, page, sentences.length, uiVoiceLang]);
 
   // الشريحة المعروضة = اختيار المستخدم/السرد (تنقّل يدوي حر)
   const slideIdx = pageSlides.length > 0 ? Math.min(Math.max(0, presSlide), pageSlides.length - 1) : 0;
