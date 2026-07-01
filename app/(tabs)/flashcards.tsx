@@ -32,6 +32,7 @@ export default function FlashcardsScreen() {
   const dir = useDir();
   const router = useRouter();
   const [tab, setTab] = useState<StudyTab>("cards");
+  const [showArchived, setShowArchived] = useState(false); // عرض المؤرشفة بدل الحالية
   const [saved, setSaved] = useState<SavedItem[]>([]);
   const [all, setAll] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,18 +62,23 @@ export default function FlashcardsScreen() {
   // عناصر المحفوظات (ملخّصات/اختبارات) مجمَّعة حسب الكتاب للتبويب الحالي
   const savedGroups = useMemo(() => {
     const kind: SavedKind = tab === "quiz" ? "quiz" : "summary";
-    const items = saved.filter((s) => s.kind === kind).sort((a, b) => b.savedAt - a.savedAt);
+    // نعرض إمّا الحالية أو المؤرشفة (حسب الزر) — فلا تختلط ولا تختفي
+    const items = saved
+      .filter((s) => s.kind === kind && (showArchived ? !!s.archived : !s.archived))
+      .sort((a, b) => b.savedAt - a.savedAt);
     const map = new Map<string, { title: string; items: SavedItem[] }>();
     for (const it of items) {
       const g = map.get(it.pdfPath) ?? { title: it.bookTitle || it.label, items: [] };
       g.items.push(it);
       map.set(it.pdfPath, g);
     }
-    // المؤرشفة تنزل لأسفل كل مجموعة
-    for (const g of map.values()) {
-      g.items.sort((a, b) => (a.archived ? 1 : 0) - (b.archived ? 1 : 0) || b.savedAt - a.savedAt);
-    }
     return [...map.values()];
+  }, [saved, tab, showArchived]);
+
+  // عدد المؤرشفة للتبويب الحالي (لعرضه على زر الأرشيف)
+  const archivedCount = useMemo(() => {
+    const kind: SavedKind = tab === "quiz" ? "quiz" : "summary";
+    return saved.filter((s) => s.kind === kind && s.archived).length;
   }, [saved, tab]);
 
   // نوع التخزين في unitContent حسب المصدر (صفحة قارئ أم وحدة منهج)
@@ -278,12 +284,26 @@ export default function FlashcardsScreen() {
           <Text style={[styles.longPressHint, { textAlign: dir.textAlign }]}>{t("study.longPressHint")}</Text>
         ) : null}
 
+        {/* مبدّل: الحالية / المؤرشفة — للملخّصات والاختبارات */}
+        {tab !== "cards" ? (
+          <View style={[styles.archToggleRow, { flexDirection: dir.row }]}>
+            <Pressable onPress={() => setShowArchived(false)} style={[styles.archToggle, !showArchived && styles.archToggleOn]}>
+              <Text style={[styles.archToggleTxt, !showArchived && styles.archToggleTxtOn]}>{t("study.filter.current")}</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowArchived(true)} style={[styles.archToggle, showArchived && styles.archToggleOn]}>
+              <Text style={[styles.archToggleTxt, showArchived && styles.archToggleTxtOn]}>
+                {t("study.filter.archived")}{archivedCount > 0 ? ` (${archivedCount})` : ""}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {tab !== "cards" ? (
           savedGroups.length === 0 ? (
             <View style={styles.center}>
               <Ionicons name={tab === "quiz" ? "help-circle-outline" : "list-outline"} size={64} color={Palette.textDim} />
-              <Text style={styles.doneTitle}>{t("flashcards.saved.emptyTitle")}</Text>
-              <Text style={styles.dim}>{t("flashcards.saved.emptyBody")}</Text>
+              <Text style={styles.doneTitle}>{showArchived ? t("study.archived.emptyTitle") : t("flashcards.saved.emptyTitle")}</Text>
+              <Text style={styles.dim}>{showArchived ? t("study.archived.emptyBody") : t("flashcards.saved.emptyBody")}</Text>
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
@@ -296,13 +316,12 @@ export default function FlashcardsScreen() {
                       onPress={() => openSaved(it)}
                       onLongPress={() => savedMenu(it)}
                       delayLongPress={300}
-                      style={[styles.bookRow, it.archived && styles.rowArchived]}
+                      style={styles.bookRow}
                     >
                       {it.studied ? <Ionicons name="checkmark-circle" size={18} color={Palette.neonCyan} /> : null}
                       <View style={styles.bookInfo}>
                         <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={2}>{it.label}</Text>
                       </View>
-                      {it.archived ? <Text style={styles.archTag}>{t("study.archived")}</Text> : null}
                       <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={Palette.textDim} />
                     </Pressable>
                   ))}
@@ -477,6 +496,11 @@ const styles = StyleSheet.create({
   trashChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   navChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   longPressHint: { color: Palette.textDim, fontSize: 12, fontWeight: "700", paddingHorizontal: Spacing.xl, paddingTop: 8 },
+  archToggleRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: Spacing.xl, paddingTop: 10 },
+  archToggle: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  archToggleOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
+  archToggleTxt: { color: Palette.textMuted, fontSize: 13, fontWeight: "800" },
+  archToggleTxtOn: { color: "#fff" },
   rowArchived: { opacity: 0.5 },
   archTag: { color: Palette.textDim, fontSize: 11, fontWeight: "800", paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill, backgroundColor: Palette.surface, overflow: "hidden" },
   fab: {

@@ -1953,13 +1953,15 @@ export default function ReaderScreen() {
           </View>
         </View>
 
-        {/* سطر الحالة: الصفحة (قابل للانتقال) + تقدّم التحميل */}
+        {/* سطر الحالة: الصفحة (قابل للانتقال) + تقدّم التحميل.
+            محصور بعرض النص فقط (alignSelf) حتى لا يفتح لمسُ الفراغ حوله «الانتقال». */}
         <Pressable
           onPress={() => {
             setGotoValue(String(page));
             setGotoOpen(true);
           }}
           hitSlop={6}
+          style={{ alignSelf: "center" }}
         >
           <Text style={styles.pageInfo}>
             {t("reader.pageInfo.page", { page })}
