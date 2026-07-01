@@ -679,6 +679,9 @@ const ar: Record<string, string> = {
   "music.nature": "طبيعة",
   "music.strings": "وتريات",
   "music.lofi": "لو-فاي",
+  "music.symphony": "سمفونية",
+  "music.cinematic": "سينمائي",
+  "music.lofi_long": "لو-فاي غني",
   "music.meditation": "تأمّل",
 };
 
@@ -1333,6 +1336,9 @@ const en: Record<string, string> = {
   "music.nature": "Nature",
   "music.strings": "Strings",
   "music.lofi": "Lo-fi",
+  "music.symphony": "Symphony",
+  "music.cinematic": "Cinematic",
+  "music.lofi_long": "Lo-fi rich",
   "music.meditation": "Meditation",
 };
 
