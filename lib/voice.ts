@@ -495,40 +495,18 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
   try {
     const gender = opts.gender ?? "female";
 
-    // المقطع المُحمّل مسبقًا (warm): نشغّله **فورًا** بلا انتظار قرص/توليد — هذا
-    // ما يزيل الفجوة/«القطع» بين الجُمل. توقيت الحروف للهايلايت يُقرأ لاحقًا.
-    step = "تجهيز الصوت";
-    const warmKey = vidForWarm + (opts.expressive ? "|x" : "");
-    let starts: number[] = [];
-    let fileUri: string;
-    if (adopted) {
-      if (!audioModeReady) {
-        await ensureAudioMode();
-        if (myToken !== playToken) return;
-      }
-      fileUri = expectedUri;
-      // اقرأ توقيت الحروف في الخلفية (لا يؤخّر بدء الصوت) — الهايلايت يبدأ فور جهوزه
-      void timingFileFor(clean, warmKey)
-        .text()
-        .then((txt) => {
-          try {
-            starts = JSON.parse(txt);
-          } catch {}
-        })
-        .catch(() => {});
-    } else {
-      step = "توليد الصوت";
-      const r = await synthToFile(clean, gender, opts.voiceId, opts.expressive);
-      if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
-      await ensureAudioMode();
-      if (myToken !== playToken) return;
-      starts = r.starts;
-      fileUri = r.file.uri;
-    }
-    currentFileUri = fileUri;
+    step = "توليد الصوت";
+    const { file, starts } = await synthToFile(clean, gender, opts.voiceId, opts.expressive);
+    if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
+
+    step = "وضع الصوت";
+    await ensureAudioMode();
+    if (myToken !== playToken) return;
+    currentFileUri = file.uri;
 
     step = "إنشاء المشغّل";
-    const player = adopted ?? createAudioPlayer({ uri: fileUri }, { updateInterval: 120 });
+    // المشغّل المُحمّل مسبقًا (warm) إن توفّر → تشغيل فوري بلا فجوة، وإلا ننشئ واحدًا
+    const player = adopted ?? createAudioPlayer({ uri: file.uri }, { updateInterval: 120 });
     currentPlayer = player;
     // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. زر السرعة يسرّع/يبطّئ
     // **نفس الصوت فقط** — نحافظ دائمًا على طبقة الصوت (pitch) فلا تتغيّر هويّته.

@@ -5,7 +5,7 @@ import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
 
-const DIR = "sfx-cache-v4"; // v4: مقطوعات أهدأ (سمفونيات/طبيعة) بمزيج جديد
+const DIR = "sfx-cache-v5"; // v5: رجوع لمؤثّرات التكرار السلس (بلا قطعة) بدل ElevenLabs
 
 function dir(): Directory {
   const d = new Directory(Paths.cache, DIR);
@@ -63,16 +63,18 @@ async function getMusicFile(key: string, prompt: string, lengthMs: number): Prom
   return getSfxFile(key, prompt, 22);
 }
 
+// مؤثّرات صوت قصيرة ذات **تكرار سلس** (seamless loop) — تتكرّر بلا «قطعة»،
+// على عكس مقطوعات ElevenLabs الطويلة التي لها بداية/نهاية واضحة عند التكرار.
 export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [
-  { key: "strings", name: "سمفونية هادئة", prompt: "very calm classical symphony, soft slow strings and light woodwinds, gentle and quiet, peaceful, continuous, no loud crescendos and no percussion, loopable background" },
-  { key: "piano", name: "بيانو هادئ", prompt: "very soft slow solo piano, gentle and quiet, calm and peaceful, continuous minimal background, no percussion, loopable" },
-  { key: "nature", name: "مطر وطيور", prompt: "gentle nature ambience, soft steady rain and distant birds, very calm and soothing, quiet continuous background, loopable" },
-  { key: "lofi", name: "أمواج البحر", prompt: "gentle ocean waves on a calm shore, soft and soothing, quiet continuous nature background, loopable" },
-  { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient pad, very soft airy and calming, quiet continuous drone, loopable" },
+  { key: "strings", name: "وتريات هادئة", prompt: "calm soft warm orchestral strings pad, soothing, slow, gentle, seamless loop" },
+  { key: "piano", name: "بيانو هادئ", prompt: "soft slow calm solo piano, gentle, peaceful, seamless loop" },
+  { key: "nature", name: "مطر وطيور", prompt: "gentle calm nature ambience, soft rain and distant birds, soothing, seamless loop" },
+  { key: "lofi", name: "أمواج البحر", prompt: "gentle calm ocean waves ambience, soft and soothing, seamless loop" },
+  { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone, very soft, airy, calming, seamless loop" },
 ];
 
-// طول مقطوعة الموسيقى (ms) — ٦٠ث: أطول وأنعم من مؤثّرات ٢٢ث، وبتكلفة معقولة.
-const MUSIC_MS = 60000;
+// طول مقطع المؤثّر (ث) — حلقة سلسة قصيرة.
+const MUSIC_SECONDS = 22;
 
 let ambientPlayer: AudioPlayer | null = null;
 let ambientKey: string | null = null;
@@ -85,7 +87,7 @@ let ambientKey: string | null = null;
 export async function warmAllMusic(): Promise<void> {
   try {
     await Promise.all(
-      MUSIC_OPTIONS.map((o) => getMusicFile(`music-${o.key}`, o.prompt, MUSIC_MS).catch(() => null))
+      MUSIC_OPTIONS.map((o) => getSfxFile(`music-${o.key}`, o.prompt, MUSIC_SECONDS).catch(() => null))
     );
   } catch {
     // التحضير المسبق اختياري — لا نُزعج المستخدم عند فشله
@@ -97,13 +99,13 @@ export async function startAmbient(key: string): Promise<void> {
   if (!opt) return;
   if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
   stopAmbient();
-  const f = await getMusicFile(`music-${opt.key}`, opt.prompt, MUSIC_MS);
+  const f = await getSfxFile(`music-${opt.key}`, opt.prompt, MUSIC_SECONDS);
   if (!f) return;
   try {
     ambientPlayer = createAudioPlayer({ uri: f.uri });
     ambientKey = key;
     ambientPlayer.loop = true;
-    ambientPlayer.volume = 0.06; // خفيفة جدًا — أقل من صوت القارئ بوضوح
+    ambientPlayer.volume = 0.1; // خفيفة — أقل من صوت القارئ
     ambientPlayer.play();
   } catch {}
 }

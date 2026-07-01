@@ -670,7 +670,7 @@ const ar: Record<string, string> = {
   // الموسيقى الخلفية (Background music)
   "music.piano": "بيانو هادئ",
   "music.nature": "مطر وطيور",
-  "music.strings": "سمفونية هادئة",
+  "music.strings": "وتريات هادئة",
   "music.lofi": "أمواج البحر",
   "music.meditation": "تأمّل",
 };
@@ -1317,7 +1317,7 @@ const en: Record<string, string> = {
   "themes.sand": "Warm Sand",
   "music.piano": "Calm piano",
   "music.nature": "Rain & birds",
-  "music.strings": "Calm symphony",
+  "music.strings": "Calm strings",
   "music.lofi": "Ocean waves",
   "music.meditation": "Meditation",
 };
