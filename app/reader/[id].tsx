@@ -245,6 +245,18 @@ export default function ReaderScreen() {
   const presNarratingRef = useRef(false);
   const presUsedRef = useRef(false); // فُتح العرض مرة → جهّز الشرائح مسبقًا للصفحات التالية
   const [presMusicKey, setPresMusicKey] = useState<string | null>(null); // موسيقى مختارة (null = بدون)
+  const [musicLoading, setMusicLoading] = useState<string | null>(null); // مقطوعة قيد التحميل/التوليد
+
+  // اختيار موسيقى مع مؤشّر تحميل فوري (تظهر «قيد التحميل» لحين جهوز المقطوعة)
+  async function selectMusic(key: string) {
+    setPresMusicKey(key);
+    setMusicLoading(key);
+    try {
+      await startAmbient(key);
+    } finally {
+      setMusicLoading((k) => (k === key ? null : k));
+    }
+  }
   const [showMusicPicker, setShowMusicPicker] = useState(false);
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null);
 
@@ -1824,16 +1836,19 @@ export default function ReaderScreen() {
             </Pressable>
             {MUSIC_OPTIONS.map((m) => {
               const on = presMusicKey === m.key;
+              const loading = musicLoading === m.key;
               return (
                 <Pressable
                   key={m.key}
-                  onPress={() => {
-                    setPresMusicKey(m.key);
-                    startAmbient(m.key);
-                  }}
+                  onPress={() => selectMusic(m.key)}
                   style={[styles.musicChip, on && styles.musicChipOn]}
                 >
-                  <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {t(`music.${m.key}`)}</Text>
+                  {loading ? (
+                    <ActivityIndicator size="small" color={on ? "#0b1220" : Palette.text} />
+                  ) : null}
+                  <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>
+                    {loading ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -2499,18 +2514,20 @@ export default function ReaderScreen() {
               </Pressable>
               {MUSIC_OPTIONS.map((m) => {
                 const on = presMusicKey === m.key;
+                const loading = musicLoading === m.key;
                 return (
                   <Pressable
                     key={m.key}
-                    onPress={() => {
-                      setPresMusicKey(m.key);
-                      startAmbient(m.key); // معاينة فورية + تشغيل
-                    }}
+                    onPress={() => selectMusic(m.key)}
                     style={[styles.musicCard, on && styles.musicCardOn]}
                   >
-                    <Text style={styles.musicCardEmoji}>{MUSIC_EMOJI[m.key] ?? "🎵"}</Text>
+                    {loading ? (
+                      <ActivityIndicator size="small" color={on ? "#0b1220" : Palette.text} />
+                    ) : (
+                      <Text style={styles.musicCardEmoji}>{MUSIC_EMOJI[m.key] ?? "🎵"}</Text>
+                    )}
                     <Text style={[styles.musicCardTxt, on && styles.musicCardTxtOn]} numberOfLines={1}>
-                      {t(`music.${m.key}`)}
+                      {loading ? t("reader.music.loading") : t(`music.${m.key}`)}
                     </Text>
                   </Pressable>
                 );
