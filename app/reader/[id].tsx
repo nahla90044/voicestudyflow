@@ -50,6 +50,7 @@ import {
   DEFAULT_VOICE_ID,
   prefetchText,
   setLivePlaybackRate,
+  setNowPlaying,
   speakText,
   stopSpeaking,
   VOICE_CATALOG,
@@ -705,6 +706,12 @@ export default function ReaderScreen() {
   // announce: يذكر رقم الصفحة مرة واحدة (عند بدء القراءة/الانتقال اليدوي فقط)
   async function playFromPage(p: number, startIdx = 0, announce = false) {
     if (!pdfPath) return;
+
+    // بيانات شاشة القفل (اسم الكتاب + الصوت) — تظهر مثل البودكاست عند القراءة والجوال مقفل
+    setNowPlaying({
+      title: typeof title === "string" && title.trim() ? title : "VoiceStudyFlow",
+      artist: VOICE_CATALOG.find((v) => v.voiceId === pickVoice())?.name ?? "",
+    });
 
     // بوّابة التحميل: بعد صفحتين مجانيتين، شجّعي تحميل الكتاب كامل قبل المتابعة
     const seen = sessionPagesRef.current;

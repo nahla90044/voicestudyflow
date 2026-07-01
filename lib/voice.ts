@@ -101,6 +101,48 @@ function disposeWarm() {
   }
 }
 
+/* -------- أزرار التحكّم على شاشة القفل (مثل البودكاست) -------- */
+// بيانات «قيد التشغيل» التي تظهر على شاشة القفل (يحدّثها القارئ باسم الكتاب والصوت).
+let nowPlayingMeta: { title: string; artist: string } = { title: "VoiceStudyFlow", artist: "" };
+
+/** يحدّث بيانات شاشة القفل (اسم الكتاب/الصوت) قبل بدء القراءة. */
+export function setNowPlaying(meta: { title?: string; artist?: string }): void {
+  nowPlayingMeta = {
+    title: meta.title?.trim() || "VoiceStudyFlow",
+    artist: meta.artist?.trim() || "",
+  };
+}
+
+// نوع مساعد: دوال شاشة القفل قد لا تتوفّر في كل النسخ (Expo Go) → اختيارية وآمنة.
+type LockScreenCapable = {
+  setActiveForLockScreen?: (active: boolean, metadata?: AudioMetadata, options?: object) => void;
+  updateLockScreenMetadata?: (metadata: AudioMetadata) => void;
+  clearLockScreenControls?: () => void;
+};
+type AudioMetadata = { title?: string; artist?: string; albumTitle?: string; artworkUrl?: string };
+
+/** يفعّل أزرار شاشة القفل لهذا المشغّل (يتجاهل بأمان إن لم تتوفّر الميزة). */
+function activateLockScreen(player: AudioPlayer): void {
+  try {
+    (player as unknown as LockScreenCapable).setActiveForLockScreen?.(
+      true,
+      { title: nowPlayingMeta.title, artist: nowPlayingMeta.artist, albumTitle: "VoiceStudyFlow" },
+      // نُبقي زرّي التشغيل/الإيقاف فقط (المقاطع قصيرة، فلا معنى للتقديم داخل المقطع)
+      { showSeekForward: false, showSeekBackward: false }
+    );
+  } catch {
+    // الميزة غير متوفّرة → التشغيل يكمل عاديًا بلا أزرار قفل
+  }
+}
+
+/** يزيل أزرار شاشة القفل عند التوقّف الكامل. */
+function clearLockScreen(player: AudioPlayer | null): void {
+  if (!player) return;
+  try {
+    (player as unknown as LockScreenCapable).clearLockScreenControls?.();
+  } catch {}
+}
+
 async function ensureAudioMode() {
   if (audioModeReady) return;
   // يشغّل الصوت حتى لو الجهاز على الصامت، ويكمل في الخلفية / عند قفل الشاشة.
@@ -527,6 +569,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "التشغيل";
     player.play();
+    // فعّل أزرار شاشة القفل لهذا المقطع؛ المقطع التالي سيتولّى تلقائيًا عند بدئه.
+    activateLockScreen(player);
   } catch (e) {
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
     console.warn("VSF_TTS_FALLBACK", reason);
@@ -638,6 +682,7 @@ function stopCurrentOnly(): void {
 }
 
 export async function stopSpeaking(): Promise<void> {
+  clearLockScreen(currentPlayer); // إيقاف كامل → أزل أزرار شاشة القفل
   stopCurrentOnly();
   disposeWarm(); // إيقاف كامل (المستخدم) → نتخلّص من المشغّل التالي أيضًا
 }
