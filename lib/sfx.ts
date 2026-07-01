@@ -76,7 +76,6 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   // أصوات الطبيعة (مؤثّرات قصيرة ذات تكرار سلس) — مريحة للقراءة
   { key: "rain", name: "مطر", prompt: "steady gentle rain, soft calming rainfall ambience, seamless loop" },
   { key: "ocean", name: "أمواج البحر", prompt: "gentle calm ocean waves on a quiet shore, soothing, seamless loop" },
-  { key: "forest", name: "غابة", prompt: "peaceful forest ambience, soft distant birdsong and gentle breeze, seamless loop" },
   { key: "stream", name: "جدول ماء", prompt: "gentle flowing stream, soft babbling brook water, calming, seamless loop" },
   { key: "birds", name: "طيور", prompt: "soft morning birdsong ambience, gentle and calming, seamless loop" },
   { key: "wind", name: "نسيم", prompt: "soft gentle wind through trees, calm airy breeze ambience, seamless loop" },
@@ -91,7 +90,6 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "dark", name: "مظلم", kind: "music", lengthMs: 90000, prompt: "dark tense cinematic orchestral score, ominous low strings and brass, suspenseful and dramatic thriller atmosphere, instrumental film score" },
   { key: "historical", name: "تاريخي", kind: "music", lengthMs: 90000, prompt: "noble historical orchestral score, warm strings and soft horns, epic period-drama atmosphere, dignified and emotional, instrumental film score" },
   { key: "classical", name: "كلاسيكي", kind: "music", lengthMs: 90000, prompt: "calm classical orchestral piece in a warm romantic style, gentle slow strings and soft piano, peaceful and soothing, instrumental" },
-  { key: "study", name: "تركيز", kind: "music", lengthMs: 90000, prompt: "calm gentle orchestral for focus and studying, soft warm strings and light piano, peaceful, steady and continuous, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣

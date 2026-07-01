@@ -101,7 +101,6 @@ const MUSIC_EMOJI: Record<string, string> = {
   meditation: "🧘",
   rain: "🌧️",
   ocean: "🌊",
-  forest: "🌲",
   stream: "🏞️",
   birds: "🐦",
   wind: "🍃",
@@ -114,7 +113,6 @@ const MUSIC_EMOJI: Record<string, string> = {
   dark: "🌑",
   historical: "🏛️",
   classical: "🎼",
-  study: "🎓",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
