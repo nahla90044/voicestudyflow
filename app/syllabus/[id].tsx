@@ -10,9 +10,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { GlassCard } from "../../components/brand/glass-card";
 import { BuzanMindMap } from "../../components/brand/mindmap";
-import { aiAssist } from "../../lib/ai";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
-import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../../lib/voice";
+import { stopSpeaking } from "../../lib/voice";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../../constants/design";
@@ -20,24 +19,15 @@ import { useDir, useI18n } from "../../lib/i18n";
 import {
   generateMindmap,
   generateSyllabus,
-  generateUnitQuiz,
   getSyllabus,
   getUnitSchedule,
   setUnitDone,
   type MindMap,
-  type QuizQ,
   type Syllabus,
   type UnitSchedule,
 } from "../../lib/syllabus";
 
 const MM_COLORS = ["#7c5cff", "#4f8cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d"];
-
-// ألوان درجات صعوبة أسئلة الاختبار (سهل → صعب)
-const LEVEL_COLOR: Record<"easy" | "medium" | "hard", string> = {
-  easy: "#2ecc71",
-  medium: "#f5a623",
-  hard: "#ff6b9d",
-};
 
 const AR_MONTHS = [
   "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
@@ -73,25 +63,10 @@ export default function SyllabusScreen() {
   const [sched, setSched] = useState<UnitSchedule[]>([]);
   const [err, setErr] = useState("");
 
-  // كويز الوحدة
-  const [quizUnit, setQuizUnit] = useState<number | null>(null); // الوحدة قيد الاختبار
-  const [quizLoading, setQuizLoading] = useState(false);
-  const [quiz, setQuiz] = useState<QuizQ[]>([]);
-  const [qStep, setQStep] = useState(0);
-  const [qPicked, setQPicked] = useState<number | null>(null);
-  const [qScore, setQScore] = useState(0);
-  const [quizDone, setQuizDone] = useState(false);
-
-  // الخريطة الذهنية
+  // الخريطة الذهنية (الاختبار والملخّص صارا صفحتين مستقلتين: unit-quiz / unit-summary)
   const [mmUnit, setMmUnit] = useState<number | null>(null);
   const [mmLoading, setMmLoading] = useState(false);
   const [mm, setMm] = useState<MindMap | null>(null);
-
-  // الملخّص الصوتي
-  const [sumUnit, setSumUnit] = useState<number | null>(null);
-  const [sumLoading, setSumLoading] = useState(false);
-  const [sumText, setSumText] = useState("");
-  const [sumPlaying, setSumPlaying] = useState(false);
 
   async function loadSchedule(unitCount: number) {
     try {
@@ -201,117 +176,6 @@ export default function SyllabusScreen() {
     } finally {
       setMmLoading(false);
     }
-  }
-
-  async function startSummary(i: number) {
-    if (!syl) return;
-    const u = syl.units[i];
-    setSumUnit(i);
-    setSumLoading(true);
-    setSumText("");
-    setSumPlaying(false);
-    try {
-      // مخزَّن مسبقًا؟ افتح صفحة الملخّص فورًا بلا استهلاك ذكاء (يقرأ ثم يستمع إن شاء)
-      const cached = await getUnitContent<string>(pdfPath, i, "summary");
-      if (cached) {
-        setSumText(cached);
-        return;
-      }
-      const ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${
-        u.outcome ? ` الهدف: ${u.outcome}.` : ""
-      } اشرح هذه النقاط بإيجاز في فقرة متصلة مناسبة للاستماع.`;
-      const text = (await aiAssist("summarize", ctx)).trim();
-      if (!text) {
-        setSumUnit(null);
-        setErr(t("syllabus.err.summary"));
-        return;
-      }
-      setSumText(text);
-      setUnitContent(pdfPath, i, "summary", text);
-    } catch {
-      setSumUnit(null);
-      setErr(t("syllabus.err.summary"));
-    } finally {
-      setSumLoading(false);
-    }
-  }
-
-  function playSummary(text: string) {
-    setSumPlaying(true);
-    speakText(text, {
-      voiceId: DEFAULT_VOICE_ID,
-      onDone: () => setSumPlaying(false),
-      onError: () => setSumPlaying(false),
-    });
-  }
-
-  function toggleSummaryPlay() {
-    if (sumPlaying) {
-      stopSpeaking();
-      setSumPlaying(false);
-    } else if (sumText) {
-      playSummary(sumText);
-    }
-  }
-
-  function closeSummary() {
-    stopSpeaking();
-    setSumPlaying(false);
-    setSumUnit(null);
-  }
-
-  async function startQuiz(i: number) {
-    if (!syl) return;
-    const u = syl.units[i];
-    setQuizUnit(i);
-    setQuizLoading(true);
-    setQuiz([]);
-    setQStep(0);
-    setQPicked(null);
-    setQScore(0);
-    setQuizDone(false);
-    try {
-      // مخزَّن مسبقًا؟ استخدمه فورًا بلا استهلاك ذكاء
-      const cached = await getUnitContent<QuizQ[]>(pdfPath, i, "quiz");
-      if (cached && cached.length) {
-        setQuiz(cached);
-        return;
-      }
-      const ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
-      const qs = await generateUnitQuiz(ctx);
-      if (qs.length === 0) {
-        setErr(t("syllabus.err.quiz"));
-        setQuizUnit(null);
-      } else {
-        setQuiz(qs);
-        setUnitContent(pdfPath, i, "quiz", qs);
-      }
-    } catch {
-      setQuizUnit(null);
-      setErr(t("syllabus.err.quiz"));
-    } finally {
-      setQuizLoading(false);
-    }
-  }
-
-  function pickAnswer(opt: number) {
-    if (qPicked !== null) return;
-    setQPicked(opt);
-    if (opt === quiz[qStep].answer) setQScore((s) => s + 1);
-  }
-
-  function nextQuestion() {
-    if (qStep + 1 >= quiz.length) {
-      setQuizDone(true);
-    } else {
-      setQStep((s) => s + 1);
-      setQPicked(null);
-    }
-  }
-
-  function closeQuiz() {
-    setQuizUnit(null);
-    setQuiz([]);
   }
 
   async function toggle(i: number) {
@@ -582,32 +446,32 @@ export default function SyllabusScreen() {
 
                     <View style={[styles.unitActions, { flexDirection: dir.row }]}>
                       <Pressable
-                        onPress={() => startSummary(i)}
-                        disabled={sumLoading}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/unit-summary",
+                            params: { pdf_path: pdfPath, unit: i, title: u.title },
+                          })
+                        }
                         style={[styles.quizBtn, styles.sumBtn, { flexDirection: dir.row }]}
                       >
-                        {sumLoading && sumUnit === i ? (
-                          <ActivityIndicator size="small" color={Palette.neonCyan} />
-                        ) : (
-                          <Ionicons name="headset" size={15} color={Palette.neonCyan} />
-                        )}
+                        <Ionicons name="headset" size={15} color={Palette.neonCyan} />
                         <Text style={[styles.quizBtnTxt, { color: Palette.neonCyan }]}>
-                          {sumLoading && sumUnit === i ? "…" : t("syllabus.action.summary")}
+                          {t("syllabus.action.summary")}
                         </Text>
                       </Pressable>
 
                       <Pressable
-                        onPress={() => startQuiz(i)}
-                        disabled={quizLoading}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/unit-quiz",
+                            params: { pdf_path: pdfPath, unit: i, title: u.title },
+                          })
+                        }
                         style={[styles.quizBtn, { flex: 1, marginTop: 0, flexDirection: dir.row }]}
                       >
-                        {quizLoading && quizUnit === i ? (
-                          <ActivityIndicator size="small" color={Palette.neonViolet} />
-                        ) : (
-                          <Ionicons name="help-circle" size={15} color={Palette.neonViolet} />
-                        )}
+                        <Ionicons name="help-circle" size={15} color={Palette.neonViolet} />
                         <Text style={styles.quizBtnTxt}>
-                          {quizLoading && quizUnit === i ? "…" : t("syllabus.action.quiz")}
+                          {t("syllabus.action.quiz")}
                         </Text>
                       </Pressable>
                     </View>
@@ -657,151 +521,6 @@ export default function SyllabusScreen() {
             <View style={{ height: 24 }} />
           </ScrollView>
         )}
-
-        {/* مودال الكويز */}
-        <Modal
-          visible={quizUnit !== null && quiz.length > 0}
-          transparent
-          animationType="slide"
-          onRequestClose={closeQuiz}
-        >
-          <View style={styles.quizMask}>
-            <View style={styles.quizSheet}>
-              <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
-                <Text style={styles.quizHeaderTxt}>
-                  {quizDone ? t("syllabus.quiz.result") : t("syllabus.quiz.question", { step: qStep + 1, total: quiz.length })}
-                </Text>
-                <Pressable onPress={closeQuiz} hitSlop={8}>
-                  <Ionicons name="close" size={22} color={Palette.textMuted} />
-                </Pressable>
-              </View>
-
-              {quizDone ? (
-                (() => {
-                  const pctScore = Math.round((qScore / Math.max(1, quiz.length)) * 100);
-                  const lvl = pctScore >= 85 ? "advanced" : pctScore >= 55 ? "intermediate" : "beginner";
-                  const lvlColor = lvl === "advanced" ? Palette.success : lvl === "intermediate" ? Palette.neonCyan : Palette.warn;
-                  return (
-                    <View style={styles.quizResult}>
-                      <Text style={styles.quizScoreBig}>
-                        {qScore} / {quiz.length}
-                      </Text>
-                      {/* مستوى الطالب حسب نتيجته عبر الأسئلة المتدرّجة */}
-                      <View style={[styles.levelPill, { borderColor: lvlColor, backgroundColor: lvlColor + "1f" }]}>
-                        <Text style={[styles.levelPillTxt, { color: lvlColor }]}>
-                          {t("syllabus.quiz.yourLevel")}: {t(`syllabus.quiz.levelResult.${lvl}`)}
-                        </Text>
-                      </View>
-                      <Text style={styles.quizResultMsg}>
-                        {qScore === quiz.length
-                          ? t("syllabus.quiz.perfect")
-                          : qScore >= Math.ceil(quiz.length / 2)
-                          ? t("syllabus.quiz.good")
-                          : t("syllabus.quiz.review")}
-                      </Text>
-                      <GradientButton
-                        title={t("common.done")}
-                        icon="checkmark"
-                        onPress={closeQuiz}
-                        style={{ alignSelf: "stretch", marginTop: Spacing.md }}
-                      />
-                    </View>
-                  );
-                })()
-              ) : quiz[qStep] ? (
-                <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-                  {/* شارة الصعوبة + نقاط التقدّم (تدرّج من الأسهل إلى الأصعب) */}
-                  <View style={[styles.diffRow, { flexDirection: dir.row }]}>
-                    <View
-                      style={[
-                        styles.diffBadge,
-                        { borderColor: LEVEL_COLOR[quiz[qStep].level], backgroundColor: LEVEL_COLOR[quiz[qStep].level] + "22" },
-                      ]}
-                    >
-                      <Text style={[styles.diffBadgeTxt, { color: LEVEL_COLOR[quiz[qStep].level] }]}>
-                        {t(`syllabus.quiz.level.${quiz[qStep].level}`)}
-                      </Text>
-                    </View>
-                    <View style={[styles.dotsRow, { flexDirection: dir.row }]}>
-                      {quiz.map((qq, di) => (
-                        <View
-                          key={di}
-                          style={[
-                            styles.qDot,
-                            { backgroundColor: di <= qStep ? LEVEL_COLOR[qq.level] : Palette.glassBorder },
-                          ]}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                  <Text style={[styles.quizQ, { textAlign: dir.textAlign }]}>{quiz[qStep].q}</Text>
-                  {quiz[qStep].options.map((opt, oi) => {
-                    const isCorrect = oi === quiz[qStep].answer;
-                    const picked = qPicked === oi;
-                    const reveal = qPicked !== null;
-                    return (
-                      <Pressable
-                        key={oi}
-                        onPress={() => pickAnswer(oi)}
-                        style={[
-                          styles.quizOpt,
-                          { flexDirection: dir.row },
-                          reveal && isCorrect && styles.quizOptCorrect,
-                          reveal && picked && !isCorrect && styles.quizOptWrong,
-                        ]}
-                      >
-                        <Text style={[styles.quizOptTxt, { textAlign: dir.textAlign }]}>{opt}</Text>
-                        {reveal && isCorrect ? (
-                          <Ionicons name="checkmark-circle" size={18} color={Palette.success} />
-                        ) : reveal && picked && !isCorrect ? (
-                          <Ionicons name="close-circle" size={18} color={Palette.danger} />
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
-                  {qPicked !== null && (
-                    <GradientButton
-                      title={qStep + 1 >= quiz.length ? t("syllabus.quiz.showResult") : t("syllabus.quiz.nextQuestion")}
-                      icon="arrow-back"
-                      onPress={nextQuestion}
-                      style={{ marginTop: Spacing.md }}
-                    />
-                  )}
-                </ScrollView>
-              ) : null}
-            </View>
-          </View>
-        </Modal>
-
-        {/* مودال الملخّص الصوتي */}
-        <Modal
-          visible={sumUnit !== null && !!sumText}
-          transparent
-          animationType="slide"
-          onRequestClose={closeSummary}
-        >
-          <View style={styles.quizMask}>
-            <View style={styles.quizSheet}>
-              <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
-                <Text style={styles.quizHeaderTxt} numberOfLines={1}>
-                  🎧 {t("syllabus.summary.label")}: {sumUnit !== null ? syl?.units[sumUnit]?.title : ""}
-                </Text>
-                <Pressable onPress={closeSummary} hitSlop={8}>
-                  <Ionicons name="close" size={22} color={Palette.textMuted} />
-                </Pressable>
-              </View>
-
-              <Pressable onPress={toggleSummaryPlay} style={[styles.sumPlay, { flexDirection: dir.row }]}>
-                <Ionicons name={sumPlaying ? "pause" : "play"} size={20} color="#0b1220" />
-                <Text style={styles.sumPlayTxt}>{sumPlaying ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
-              </Pressable>
-
-              <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-                <Text style={[styles.sumText, { textAlign: dir.textAlign }]}>{sumText}</Text>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
 
         {/* مودال الخريطة الذهنية */}
         <Modal
