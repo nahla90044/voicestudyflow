@@ -103,79 +103,33 @@ export async function warmAllMusic(): Promise<void> {
   // بلا تحضير مسبق — الخيارات كثيرة، فنولّد ما يُختار فقط.
 }
 
-/* --- حلقة متواصلة بلا قطع: مشغّلان ينتقل الصوت بينهما بتلاشٍ متصالب --- */
+/* --- تشغيل بحلقة بسيطة موثوقة (نفس رفع ٣): مؤثّرات التكرار السلس بلا قطعة --- */
 const AMB_VOLUME = 0.14;
-const CROSSFADE_MS = 2500;
 
-let ambA: AudioPlayer | null = null;
-let ambB: AudioPlayer | null = null;
-let ambActive: AudioPlayer | null = null;
+let ambientPlayer: AudioPlayer | null = null;
 let ambientKey: string | null = null;
-let ambLoopTimer: ReturnType<typeof setInterval> | null = null;
-let ambFadeTimer: ReturnType<typeof setInterval> | null = null;
-let ambFading = false;
 
 export function stopAmbient(): void {
-  if (ambLoopTimer) { clearInterval(ambLoopTimer); ambLoopTimer = null; }
-  if (ambFadeTimer) { clearInterval(ambFadeTimer); ambFadeTimer = null; }
-  for (const p of [ambA, ambB]) {
-    if (p) {
-      try { p.pause(); } catch {}
-      try { p.remove(); } catch {}
-    }
+  if (ambientPlayer) {
+    try { ambientPlayer.pause(); } catch {}
+    try { ambientPlayer.remove(); } catch {}
+    ambientPlayer = null;
   }
-  ambA = ambB = ambActive = null;
   ambientKey = null;
-  ambFading = false;
-}
-
-function beginCrossfade(): void {
-  const cur = ambActive;
-  const next = cur === ambA ? ambB : ambA;
-  if (!cur || !next) return;
-  ambFading = true;
-  try { next.seekTo(0); } catch {}
-  next.volume = 0;
-  try { next.play(); } catch {}
-  let i = 0;
-  const steps = 25;
-  if (ambFadeTimer) clearInterval(ambFadeTimer);
-  ambFadeTimer = setInterval(() => {
-    i++;
-    const r = Math.min(1, i / steps);
-    try { cur.volume = AMB_VOLUME * (1 - r); } catch {}
-    try { next.volume = AMB_VOLUME * r; } catch {}
-    if (i >= steps) {
-      if (ambFadeTimer) { clearInterval(ambFadeTimer); ambFadeTimer = null; }
-      try { cur.pause(); cur.seekTo(0); cur.volume = AMB_VOLUME; } catch {}
-      ambActive = next;
-      ambFading = false;
-    }
-  }, CROSSFADE_MS / steps);
 }
 
 export async function startAmbient(key: string): Promise<void> {
   const opt = MUSIC_OPTIONS.find((o) => o.key === key);
   if (!opt) return;
-  if (ambActive && ambientKey === key) return; // نفس المقطع شغّال
+  if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
   stopAmbient();
   const f = await fileFor(opt);
   if (!f) return;
   try {
-    ambA = createAudioPlayer({ uri: f.uri }, { updateInterval: 200 });
-    ambB = createAudioPlayer({ uri: f.uri }, { updateInterval: 200 });
-    ambA.volume = AMB_VOLUME;
-    ambB.volume = 0;
-    ambActive = ambA;
+    ambientPlayer = createAudioPlayer({ uri: f.uri });
     ambientKey = key;
-    ambA.play();
-    // مراقب الحلقة: قبل نهاية المقطع نبدأ التلاشي المتصالب مع النسخة الأخرى
-    ambLoopTimer = setInterval(() => {
-      const p = ambActive;
-      if (!p || ambFading) return;
-      const dur = p.duration ?? 0;
-      const t = p.currentTime ?? 0;
-      if (dur > 0.5 && t >= dur - CROSSFADE_MS / 1000) beginCrossfade();
-    }, 200);
+    ambientPlayer.loop = true;
+    ambientPlayer.volume = AMB_VOLUME;
+    ambientPlayer.play();
   } catch {}
 }
