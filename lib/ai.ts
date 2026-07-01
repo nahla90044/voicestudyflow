@@ -1,5 +1,6 @@
 // lib/ai.ts
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
+import { getCurrentLang } from "./i18n";
 import { supabase } from "./supabase";
 
 export type AiAction =
@@ -209,10 +210,13 @@ export async function aiAssist(
 ): Promise<string> {
   if (!text.trim()) return "";
 
+  // بلا لغة صريحة → نتبع لغة الواجهة، فتخرج كل مولّدات الذكاء بلغة المستخدم.
+  const lang = targetLang ?? getCurrentLang();
+
   // مهلة قصوى 60ث: إن لم يردّ السيرفر نرمي خطأً بدل ترك الواجهة معلّقة للأبد.
   const { data, error } = await withTimeout(
     supabase.functions.invoke("ai-assist", {
-      body: { action, text, question, targetLang },
+      body: { action, text, question, targetLang: lang },
     }),
     60000,
     action

@@ -16,6 +16,19 @@ import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../lib/voice";
 
+// يزيل رموز الماركداون إن ظهرت (عنوان #، عريض **، خطوط ---، شفرة `) → نص نظيف
+function stripMarkdown(s: string): string {
+  return String(s || "")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/^\s*-{3,}\s*$/gm, "")
+    .replace(/`+/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
@@ -36,7 +49,7 @@ export default function UnitSummaryScreen() {
         // مخزَّن مسبقًا؟ اعرضه فورًا بلا ذكاء
         const cached = await getUnitContent<string>(pdfPath, unitIdx, "summary");
         if (cached) {
-          if (on) setText(cached);
+          if (on) setText(stripMarkdown(cached));
           return;
         }
         const r = await getSyllabus(pdfPath);
@@ -54,7 +67,7 @@ export default function UnitSummaryScreen() {
           return;
         }
         setUnitContent(pdfPath, unitIdx, "summary", out);
-        if (on) setText(out);
+        if (on) setText(stripMarkdown(out));
       } catch {
         if (on) setErr(t("syllabus.err.summary"));
       } finally {

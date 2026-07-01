@@ -4,6 +4,8 @@
 // فلا نستهلك الذكاء الاصطناعي مرارًا لنفس الموضوع لنفس الطالب.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import { getCurrentLang } from "./i18n";
+
 export type UnitContentKind = "summary" | "quiz" | "mindmap";
 
 // تجزئة FNV-1a لاسم مفتاح ثابت قصير من مسار الـPDF
@@ -17,7 +19,9 @@ function hashKey(s: string): string {
 }
 
 function keyFor(pdfPath: string, unit: number, kind: UnitContentKind): string {
-  return `unitc:${kind}:${hashKey(pdfPath)}:${unit}`;
+  // نضمّن لغة الواجهة في المفتاح: تبديل اللغة يعيد التوليد بلغة المستخدم بدل عرض
+  // محتوى مخزَّن بلغة قديمة (كتاب إنجليزي بواجهة إنجليزية → محتوى إنجليزي).
+  return `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:${unit}`;
 }
 
 /** يُرجع المحتوى المخزَّن لهذه الوحدة إن وُجد، أو null. */

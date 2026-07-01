@@ -34,6 +34,14 @@ function detectDeviceLang(): Lang {
   return "ar";
 }
 
+// اللغة الحالية للواجهة كمتغيّر وحدة — لقراءتها خارج React (مثل مولّدات الذكاء
+// التي تعمل في المكتبات) فتتبع مخرجات الذكاء لغة الواجهة تلقائيًا.
+let _currentLang: Lang = detectDeviceLang();
+/** لغة الواجهة الحالية (غير-خطّافية). الفرنسية مؤجَّلة → تُعامَل كإنجليزية. */
+export function getCurrentLang(): Lang {
+  return _currentLang === "fr" ? "en" : _currentLang;
+}
+
 function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {
   let s: string | undefined;
   for (const l of FALLBACK[lang]) {
@@ -75,8 +83,14 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // زامن المتغيّر غير-الخطّافي مع لغة الواجهة الحالية (لمولّدات الذكاء)
+  useEffect(() => {
+    _currentLang = lang;
+  }, [lang]);
+
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
+    _currentLang = l;
     AsyncStorage.setItem(STORAGE_KEY, l).catch(() => {});
   }, []);
 
