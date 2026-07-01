@@ -310,30 +310,35 @@ export default function SyllabusScreen() {
     if (!mm) return;
     const esc = (s: string) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // كل فرع بطاقة ملوّنة مرتّبة داخل شبكة عمودين — خريطة كاملة بلا قص
     const branches = mm.branches
       .map((b, i) => {
         const c = MM_COLORS[i % MM_COLORS.length];
         const pts = b.points.map((p) => `<li>${esc(p)}</li>`).join("");
         return `<div class="br" style="border-color:${c}">
-          <div class="brh" style="color:${c}"><span class="dot" style="background:${c}"></span>${esc(b.label)}</div>
+          <div class="brh" style="background:${c}"><span class="num">${i + 1}</span>${esc(b.label)}</div>
           ${pts ? `<ul>${pts}</ul>` : ""}
         </div>`;
       })
       .join("");
     const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8"><style>
-      * { font-family: -apple-system, 'SF Arabic', sans-serif; }
+      * { font-family: -apple-system, 'SF Arabic', sans-serif; box-sizing: border-box; }
       body { padding: 28px; color: #14233a; }
-      h1 { font-size: 20px; margin: 0 0 14px; text-align:center; }
-      .center { background:#5b3df5; color:#fff; font-weight:800; font-size:17px; text-align:center; padding:14px; border-radius:14px; margin:0 auto 18px; max-width:420px; }
-      .br { border:2px solid; border-radius:12px; padding:10px 14px; margin:0 0 12px; page-break-inside: avoid; }
-      .brh { font-weight:800; font-size:15px; display:flex; align-items:center; gap:8px; }
-      .dot { width:11px; height:11px; border-radius:50%; display:inline-block; }
-      ul { margin:8px 0 0; padding-inline-start:22px; }
-      li { margin:4px 0; font-size:13.5px; }
+      h1 { font-size: 20px; margin: 0 0 16px; text-align:center; }
+      .center { background:#5b3df5; color:#fff; font-weight:800; font-size:18px; text-align:center; padding:16px 20px; border-radius:16px; margin:0 auto 8px; max-width:460px; }
+      .stem { width:2px; height:22px; background:#c7cede; margin:0 auto 14px; }
+      .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+      .br { border:2px solid; border-radius:14px; overflow:hidden; page-break-inside: avoid; }
+      .brh { font-weight:800; font-size:15px; color:#fff; display:flex; align-items:center; gap:8px; padding:10px 14px; }
+      .num { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,0.28); font-size:13px; flex:none; }
+      ul { margin:0; padding:10px 20px; }
+      li { margin:5px 0; font-size:13.5px; line-height:1.5; }
+      @media print { .grid { gap:12px; } }
     </style></head><body>
       <h1>🗺️ ${esc(t("syllabus.mindmap.title"))} — ${esc(bookTitle)}</h1>
       <div class="center">${esc(mm.center)}</div>
-      ${branches}
+      <div class="stem"></div>
+      <div class="grid">${branches}</div>
     </body></html>`;
     try {
       await Print.printAsync({ html });
@@ -512,11 +517,14 @@ export default function SyllabusScreen() {
               </GlassCard>
             )}
 
+            {/* دور مستقل عن طابعة الهيدر: إعادة توليد المنهج كاملًا من الكتاب
+                (يعيد بناء الوحدات بالفهرس الكامل بدل النسخة القديمة المختصرة). */}
             <GradientButton
-              title={t("syllabus.printShare")}
-              icon="print"
+              title={t("syllabus.regenerate")}
+              icon="refresh"
               variant="ghost"
-              onPress={onPrint}
+              onPress={onGenerate}
+              loading={busy}
               style={{ marginTop: Spacing.md }}
             />
             <View style={{ height: 24 }} />

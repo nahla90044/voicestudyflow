@@ -50,17 +50,19 @@ export async function getSyllabus(
 /** يولّد المنهج من نص الكتاب (أول الصفحات) ويخزّنه. */
 export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
   // اجمع نص أوّل الصفحات الحقيقية
+  // نقرأ صفحاتٍ أكثر ونصًّا أطول حتى يلتقط الذكاء فهرس المحتويات كاملًا
+  // (كتاب فيه ١٥ وحدة يذكرها الفهرس في أوّله) فيغطّي كل الوحدات لا أوّلها فقط.
   const { data: pages } = await supabase
     .from("page_cache")
     .select("text,page")
     .eq("pdf_path", pdfPath)
     .neq("source", "empty")
     .order("page")
-    .limit(15);
+    .limit(30);
   const text = (pages ?? [])
     .map((p: any) => p.text)
     .join("\n")
-    .slice(0, 6000);
+    .slice(0, 16000);
   if (text.trim().length < 100) {
     throw new Error("لا يوجد نص كافٍ. افتحي الكتاب واقرئي أول صفحاته أولًا.");
   }

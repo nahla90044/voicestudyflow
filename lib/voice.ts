@@ -69,6 +69,11 @@ export const VOICE_CATALOG: VoiceOption[] = [
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
 
+/** لغة الصوت المختار من الكتالوج (افتراضي عربي) — تحدّد طريقة تنظيف النص للنطق. */
+export function voiceLangOf(voiceId?: string): "ar" | "en" | "fr" {
+  return VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.lang ?? "ar";
+}
+
 /* ---------------- إعدادات الصوت ---------------- */
 // لا مفتاح صوت في العميل — التوليد عبر الدالة السحابية «tts» فقط (المفتاح بالسيرفر).
 
@@ -324,9 +329,18 @@ function expandEraMarkers(text: string): string {
 // تنظيف النص للنطق مع **حماية آيات القرآن الكريم**: أي نص بين القوسين المزخرفين
 // ﴿ ﴾ يُقرأ حرفيًا بتشكيله كاملًا بلا أي تحويل (أرقام/إحالات/مصادر)، حتى لا يُخطئ
 // القارئ في كلام الله. باقي النص يمرّ بالتنظيف المعتاد.
-function cleanForSpeech(text: string): string {
+function cleanForSpeech(text: string, lang: "ar" | "en" | "fr" = "ar"): string {
   const src = text?.trim() ?? "";
   if (!src) return "";
+  // كتب اللغات (إنجليزي/فرنسي): لا نحوّل الأرقام إلى كلمات عربية ولا نطبّق التوسّعات
+  // العربية (هجري/ميلادي، المراجع القانونية). نحوّل فقط الأرقام العربية الهندية إلى
+  // لاتينية ليقرأها الصوت الأجنبي بلغته الصحيحة (٢٠٢٤ → 2024 → «twenty twenty-four»).
+  if (lang !== "ar") {
+    return stripCitations(src)
+      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
   return src
     .split(/([﴾﴿][^﴾﴿]*[﴾﴿])/) // نفصل الآيات المزخرفة كمقاطع مستقلة
     .map((seg) => {
@@ -415,8 +429,9 @@ function makeSpokenToOrigFrac(orig: string, clean: string): (cleanCharIdx: numbe
 
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
-  // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر)
-  const clean = cleanForSpeech(text);
+  // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر).
+  // تنظيف واعٍ باللغة: كتب الإنجليزي/الفرنسي لا تُنطق أرقامها بالعربية.
+  const clean = cleanForSpeech(text, voiceLangOf(opts.voiceId));
   if (!clean) return;
 
   // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
@@ -534,7 +549,7 @@ export async function warmNext(
   text: string,
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
-  const clean = cleanForSpeech(text);
+  const clean = cleanForSpeech(text, voiceLangOf(opts.voiceId));
   if (!clean) return;
   try {
     const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
@@ -558,7 +573,7 @@ export async function prefetchText(
   opts: { voiceId?: string; gender?: VoiceGender } = {}
 ): Promise<void> {
   try {
-    const clean = cleanForSpeech(text);
+    const clean = cleanForSpeech(text, voiceLangOf(opts.voiceId));
     if (!clean) return;
     await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
   } catch {
