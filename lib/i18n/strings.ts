@@ -683,6 +683,15 @@ const ar: Record<string, string> = {
   "music.cinematic": "سينمائي",
   "music.lofi_long": "لو-فاي غني",
   "music.classical": "كلاسيكي هادئ",
+  "music.rain": "مطر",
+  "music.ocean": "أمواج البحر",
+  "music.forest": "غابة",
+  "music.stream": "جدول ماء",
+  "music.birds": "طيور",
+  "music.wind": "نسيم",
+  "music.fire": "مدفأة",
+  "music.thunder": "مطر ورعد",
+  "music.night": "ليل هادئ",
   "music.meditation": "تأمّل",
 };
 
@@ -1341,6 +1350,15 @@ const en: Record<string, string> = {
   "music.cinematic": "Cinematic",
   "music.lofi_long": "Lo-fi rich",
   "music.classical": "Calm classical",
+  "music.rain": "Rain",
+  "music.ocean": "Ocean waves",
+  "music.forest": "Forest",
+  "music.stream": "Stream",
+  "music.birds": "Birds",
+  "music.wind": "Breeze",
+  "music.fire": "Fireplace",
+  "music.thunder": "Rain & thunder",
+  "music.night": "Night",
   "music.meditation": "Meditation",
 };
 

@@ -73,6 +73,16 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "strings", name: "وتريات", prompt: "calm soft warm strings pad, soothing, slow, cinematic, seamless loop" },
   { key: "lofi", name: "لو-فاي", prompt: "calm soft lo-fi chillhop beat for studying, mellow, relaxing, seamless loop" },
   { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone, very soft, airy, calming, seamless loop" },
+  // أصوات الطبيعة (مؤثّرات قصيرة ذات تكرار سلس) — مريحة للقراءة
+  { key: "rain", name: "مطر", prompt: "steady gentle rain, soft calming rainfall ambience, seamless loop" },
+  { key: "ocean", name: "أمواج البحر", prompt: "gentle calm ocean waves on a quiet shore, soothing, seamless loop" },
+  { key: "forest", name: "غابة", prompt: "peaceful forest ambience, soft distant birdsong and gentle breeze, seamless loop" },
+  { key: "stream", name: "جدول ماء", prompt: "gentle flowing stream, soft babbling brook water, calming, seamless loop" },
+  { key: "birds", name: "طيور", prompt: "soft morning birdsong ambience, gentle and calming, seamless loop" },
+  { key: "wind", name: "نسيم", prompt: "soft gentle wind through trees, calm airy breeze ambience, seamless loop" },
+  { key: "fire", name: "مدفأة", prompt: "cozy crackling fireplace, soft warm campfire ambience, calming, seamless loop" },
+  { key: "thunder", name: "مطر ورعد", prompt: "gentle steady rain with soft distant thunder, calming, seamless loop" },
+  { key: "night", name: "ليل هادئ", prompt: "peaceful summer night ambience, soft crickets and gentle breeze, calming, seamless loop" },
   // مقطوعات ElevenLabs (أغنى) — kind: music
   { key: "symphony", name: "سمفونية", kind: "music", lengthMs: 90000, prompt: "very calm classical symphony, soft slow strings and light woodwinds, gentle, peaceful, continuous ambient pad texture, no loud crescendos and no percussion" },
   { key: "cinematic", name: "سينمائي", kind: "music", lengthMs: 90000, prompt: "calm cinematic ambient, warm sustained strings and soft pads, slow evolving, peaceful, continuous" },
@@ -88,17 +98,9 @@ async function fileFor(opt: MusicOption): Promise<File | null> {
     : getSfxFile(`music-${opt.key}`, opt.prompt, MUSIC_SECONDS);
 }
 
-/** يحضّر مؤثّرات رفع ٣ القصيرة مسبقًا (رخيصة). مقطوعات ElevenLabs تُولَّد عند اختيارها. */
+/** كل مقطوعة تُولَّد عند اختيارها أول مرة ثم تُخزَّن (توفير التكلفة مع كثرة الخيارات). */
 export async function warmAllMusic(): Promise<void> {
-  try {
-    await Promise.all(
-      MUSIC_OPTIONS.filter((o) => o.kind !== "music").map((o) =>
-        getSfxFile(`music-${o.key}`, o.prompt, MUSIC_SECONDS).catch(() => null)
-      )
-    );
-  } catch {
-    // اختياري
-  }
+  // بلا تحضير مسبق — الخيارات كثيرة، فنولّد ما يُختار فقط.
 }
 
 /* --- حلقة متواصلة بلا قطع: مشغّلان ينتقل الصوت بينهما بتلاشٍ متصالب --- */
