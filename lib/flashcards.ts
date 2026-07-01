@@ -16,6 +16,7 @@ export type Card = {
   box: number; // 0..5
   due: string; // YYYY-MM-DD
   createdAt: string;
+  archived?: boolean; // مؤرشفة → تُستثنى من المراجعة وتظهر في «المؤرشفة»
 };
 
 export type Rating = "again" | "good" | "easy";
@@ -77,7 +78,7 @@ export async function addCards(
 /** البطاقات المستحقّة اليوم. */
 export async function getDueCards(): Promise<Card[]> {
   const today = todayISO();
-  return (await getCards()).filter((c) => c.due <= today);
+  return (await getCards()).filter((c) => !c.archived && c.due <= today);
 }
 
 export async function countDue(): Promise<number> {
@@ -102,6 +103,19 @@ export async function reviewCard(id: string, rating: Rating): Promise<void> {
 export async function removeCard(id: string): Promise<void> {
   const cards = await getCards();
   await save(cards.filter((c) => c.id !== id));
+}
+
+/** يؤرشف/يرجع كل بطاقات كتاب معيّن (أو البطاقات العامة إن كان bookId فارغًا). */
+export async function archiveCardsForBook(bookId: string | undefined, archived: boolean): Promise<void> {
+  const norm = (b?: string) => b ?? "";
+  const cards = await getCards();
+  await save(cards.map((c) => (norm(c.bookId) === norm(bookId) ? { ...c, archived } : c)));
+}
+
+/** يؤرشف/يرجع بطاقة واحدة. */
+export async function archiveCard(id: string, archived: boolean): Promise<void> {
+  const cards = await getCards();
+  await save(cards.map((c) => (c.id === id ? { ...c, archived } : c)));
 }
 
 /** يحذف كل بطاقات كتاب معيّن (أو البطاقات العامة إن كان bookId فارغًا). */

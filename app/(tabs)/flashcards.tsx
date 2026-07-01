@@ -9,7 +9,7 @@ import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
-import { getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
+import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getSavedItems, removeSavedItem, updateSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 import { removeUnitContent, type UnitContentKind } from "../../lib/unitContent";
@@ -77,9 +77,10 @@ export default function FlashcardsScreen() {
 
   // عدد المؤرشفة للتبويب الحالي (لعرضه على زر الأرشيف)
   const archivedCount = useMemo(() => {
+    if (tab === "cards") return all.filter((c) => c.archived).length;
     const kind: SavedKind = tab === "quiz" ? "quiz" : "summary";
     return saved.filter((s) => s.kind === kind && s.archived).length;
-  }, [saved, tab]);
+  }, [saved, all, tab]);
 
   // نوع التخزين في unitContent حسب المصدر (صفحة قارئ أم وحدة منهج)
   function contentKind(it: SavedItem): UnitContentKind {
@@ -140,6 +141,10 @@ export default function FlashcardsScreen() {
   function bookMenu(b: BookGroup) {
     Alert.alert(b.title, undefined, [
       { text: t("study.menu.review"), onPress: () => startBook(b.key, b.title) },
+      {
+        text: showArchived ? t("study.menu.unarchive") : t("study.menu.archive"),
+        onPress: () => archiveCardsForBook(b.key === NONE ? undefined : b.key, !showArchived).then(reload),
+      },
       { text: t("study.menu.deleteAll"), style: "destructive", onPress: () => deleteBookCards(b.key, b.title) },
       { text: t("common.cancel"), style: "cancel" },
     ]);
@@ -156,10 +161,14 @@ export default function FlashcardsScreen() {
     router.push({ pathname: it.kind === "quiz" ? "/unit-quiz" : "/unit-summary", params });
   }
 
+  // البطاقات ضمن العرض الحالي (الحالية أو المؤرشفة حسب المبدّل)
+  const inView = useCallback((c: Card) => (showArchived ? !!c.archived : !c.archived), [showArchived]);
+
   const books = useMemo<BookGroup[]>(() => {
     const today = todayISO();
     const map = new Map<string, BookGroup>();
     for (const c of all) {
+      if (!inView(c)) continue;
       const key = c.bookId ?? NONE;
       const g = map.get(key) ?? { key, title: c.bookTitle || t("flashcards.generalCards"), total: 0, due: 0 };
       g.total += 1;
@@ -167,16 +176,16 @@ export default function FlashcardsScreen() {
       map.set(key, g);
     }
     return [...map.values()].sort((a, b) => b.due - a.due);
-  }, [all, t]);
+  }, [all, t, inView]);
 
   const totalDue = useMemo(() => {
     const today = todayISO();
-    return all.filter((c) => c.due <= today).length;
+    return all.filter((c) => !c.archived && c.due <= today).length;
   }, [all]);
 
   function startBook(key: string, title: string) {
     const today = todayISO();
-    const inBook = (c: Card) => key === ALL || (c.bookId ?? NONE) === key;
+    const inBook = (c: Card) => (key === ALL || (c.bookId ?? NONE) === key) && inView(c);
     let q = all.filter((c) => inBook(c) && c.due <= today);
     if (q.length === 0) q = all.filter(inBook); // لا مستحقّ؟ راجعي كل بطاقات الكتاب
     setQueue(q);
@@ -224,6 +233,26 @@ export default function FlashcardsScreen() {
           reload();
         },
       },
+    ]);
+  }
+
+  // قائمة البطاقة الحالية (ضغط مطوّل): أرشفة أو حذف
+  function cardMenu() {
+    const card = queue[idx];
+    if (!card) return;
+    Alert.alert(card.front, undefined, [
+      {
+        text: card.archived ? t("study.menu.unarchive") : t("study.menu.archive"),
+        onPress: async () => {
+          await archiveCard(card.id, !card.archived);
+          setQueue((q) => q.filter((c) => c.id !== card.id));
+          flip.setValue(0);
+          setFlipped(false);
+          reload();
+        },
+      },
+      { text: t("common.delete"), style: "destructive", onPress: deleteCurrentCard },
+      { text: t("common.cancel"), style: "cancel" },
     ]);
   }
 
@@ -284,8 +313,8 @@ export default function FlashcardsScreen() {
           <Text style={[styles.longPressHint, { textAlign: dir.textAlign }]}>{t("study.longPressHint")}</Text>
         ) : null}
 
-        {/* مبدّل: الحالية / المؤرشفة — للملخّصات والاختبارات */}
-        {tab !== "cards" ? (
+        {/* مبدّل: الحالية / المؤرشفة — لكل التبويبات (خارج وضع المراجعة) */}
+        {mode !== "review" ? (
           <View style={[styles.archToggleRow, { flexDirection: dir.row }]}>
             <Pressable onPress={() => setShowArchived(false)} style={[styles.archToggle, !showArchived && styles.archToggleOn]}>
               <Text style={[styles.archToggleTxt, !showArchived && styles.archToggleTxtOn]}>{t("study.filter.current")}</Text>
@@ -400,7 +429,7 @@ export default function FlashcardsScreen() {
             </View>
 
             <View style={styles.cardArea}>
-              <Pressable onPress={toggleFlip} onLongPress={deleteCurrentCard} delayLongPress={450} style={styles.press}>
+              <Pressable onPress={toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
                 <Animated.View style={[styles.face, frontStyle]}>
                   <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.faceGrad}>
                     <Ionicons name="help" size={150} color="rgba(255,255,255,0.08)" style={styles.watermark} />
