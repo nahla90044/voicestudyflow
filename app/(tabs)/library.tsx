@@ -417,8 +417,8 @@ export default function LibraryScreen() {
           ) : null}
         </View>
 
-        {/* الفلاتر + الفرز */}
-        <View style={styles.filterRow}>
+        {/* الفلاتر + الفرز — قابلة للتمرير أفقيًا لتصل لكل الأزرار على الشاشات الأضيق */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {FILTERS.map((f) => (
             <Pressable
               key={f.key}
@@ -439,7 +439,7 @@ export default function LibraryScreen() {
           <Pressable onPress={() => { load(); loadFolders(); }} style={styles.sortBtn} hitSlop={6}>
             <Ionicons name="refresh" size={16} color={Palette.text} />
           </Pressable>
-        </View>
+        </ScrollView>
 
         {/* المجلدات */}
         <ScrollView
