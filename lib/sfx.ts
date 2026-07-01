@@ -111,6 +111,8 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "sax_night", name: "ساكسفون ليلي", kind: "music", lengthMs: 30000, prompt: "soft mellow late-night saxophone, calm smooth relaxed jazz, laid-back and warm, instrumental" },
   // 🕯️ «غرفة الأمان» — بإحساس موسيقى الحفظ الهادئة الآمنة (مقطوعة أصلية بنفس الجو، بلا نسخ)
   { key: "saveroom", name: "غرفة الأمان", kind: "music", lengthMs: 30000, prompt: "calm safe-haven ambient music, sparse gentle melancholic piano notes over a soft warm ambient pad, comforting peaceful and reassuring, minimal slow and quiet, a feeling of safety and rest, instrumental" },
+  // 🌫️ «ضباب حزين» — بطابع موسيقى Silent Hill الحالمة الحزينة (مقطوعة أصلية بنفس الإحساس، بلا نسخ)
+  { key: "melancholy", name: "ضباب حزين", kind: "music", lengthMs: 30000, prompt: "melancholic atmospheric music, soft acoustic guitar and warm mellow piano over a hazy ambient pad, emotional haunting and beautiful, slow dreamy trip-hop mood with a gentle soft rhythm, moody foggy and introspective, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣
