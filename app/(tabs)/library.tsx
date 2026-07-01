@@ -5,6 +5,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,15 +20,17 @@ import { GlassCard } from "../../components/brand/glass-card";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
-import { Gradients, Palette, Radius } from "../../constants/design";
+import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import {
   addFolder,
+  FOLDER_COLORS,
   getAssignments,
   getFolders,
   removeFolder,
   renameFolder,
   setBookFolder,
+  setFolderColor,
   type Folder,
 } from "../../lib/folders";
 import { getPageImage } from "../../lib/pageImage";
@@ -104,6 +107,7 @@ export default function LibraryScreen() {
   const [folders, setFolders] = useState<Folder[]>([]);
   const [assign, setAssign] = useState<Record<string, string>>({});
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [colorFolder, setColorFolder] = useState<Folder | null>(null); // مجلد قيد تغيير اللون
 
   async function loadFolders() {
     const [f, a] = await Promise.all([getFolders(), getAssignments()]);
@@ -352,6 +356,7 @@ export default function LibraryScreen() {
             }
           }, undefined, f.name),
       },
+      { text: t("library.folder.color"), onPress: () => setColorFolder(f) },
       {
         text: t("library.folder.delete"),
         style: "destructive",
@@ -362,6 +367,13 @@ export default function LibraryScreen() {
         },
       },
     ]);
+  }
+
+  async function pickFolderColor(color: string) {
+    if (!colorFolder) return;
+    await setFolderColor(colorFolder.id, color);
+    setColorFolder(null);
+    loadFolders();
   }
 
   function moveBookToFolder(book: BookRow) {
@@ -633,6 +645,27 @@ export default function LibraryScreen() {
           </GlassCard>
         </View>
       ) : null}
+
+      {/* اختيار لون المجلد — إشارة ملوّنة يختارها المستخدم */}
+      <Modal visible={!!colorFolder} transparent animationType="fade" onRequestClose={() => setColorFolder(null)}>
+        <Pressable style={styles.colorMask} onPress={() => setColorFolder(null)}>
+          <Pressable style={styles.colorCard} onPress={() => {}}>
+            <Text style={[styles.colorTitle, { textAlign: dir.textAlign }]}>
+              {t("library.folder.colorTitle", { name: colorFolder?.name ?? "" })}
+            </Text>
+            <View style={styles.colorGrid}>
+              {FOLDER_COLORS.map((c) => {
+                const on = colorFolder?.color === c;
+                return (
+                  <Pressable key={c} onPress={() => pickFolderColor(c)} style={[styles.colorSwatch, { backgroundColor: c }, on && styles.colorSwatchOn]}>
+                    {on ? <Ionicons name="checkmark" size={20} color="#fff" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
     </ScreenBackground>
   );
@@ -736,7 +769,14 @@ const styles = StyleSheet.create({
   folderChipActive: { backgroundColor: "rgba(79,140,255,0.2)", borderColor: Palette.neonBlue },
   folderChipTxt: { color: "#c9d4e2", fontSize: 13, fontWeight: "800" },
   folderChipTxtActive: { color: Palette.neonBlue },
-  folderDot: { width: 9, height: 9, borderRadius: 5 },
+  // إشارة ملوّنة على شكل «كعب كتاب» (شريط عمودي) — مميّزة عن دوائر ألوان أبل
+  folderDot: { width: 4, height: 15, borderRadius: 2 },
+  colorMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 24 },
+  colorCard: { width: "100%", maxWidth: 360, backgroundColor: Palette.bgElevated, borderRadius: Radius.xl, borderWidth: 1, borderColor: Palette.glassBorder, padding: Spacing.lg, gap: 16 },
+  colorTitle: { color: Palette.text, fontSize: 16, fontWeight: "900" },
+  colorGrid: { flexDirection: "row", flexWrap: "wrap", gap: 14, justifyContent: "center" },
+  colorSwatch: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
+  colorSwatchOn: { borderColor: "#fff" },
   folderAdd: { borderColor: "rgba(79,140,255,0.5)", borderStyle: "dashed" },
   folderBadge: {
     position: "absolute",

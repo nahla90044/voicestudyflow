@@ -47,6 +47,12 @@ export async function renameFolder(id: string, name: string): Promise<void> {
   await saveFolders(list.map((f) => (f.id === id ? { ...f, name: name.trim() || f.name } : f)));
 }
 
+/** يغيّر لون المجلد (إشارة ملوّنة يختارها المستخدم). */
+export async function setFolderColor(id: string, color: string): Promise<void> {
+  const list = await getFolders();
+  await saveFolders(list.map((f) => (f.id === id ? { ...f, color } : f)));
+}
+
 /** يحذف المجلد ويُزيل إسناد كتبه (لا يحذف الكتب). */
 export async function removeFolder(id: string): Promise<void> {
   const list = await getFolders();
