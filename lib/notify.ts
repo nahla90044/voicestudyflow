@@ -13,8 +13,7 @@ async function ensureAndroidChannel() {
   });
 }
 
-const ENABLED_KEY = "vsf:reminder:enabled";
-const HOUR_KEY = "vsf:reminder:hour";
+const HOURS_KEY = "vsf:reminder:hours"; // مصفوفة ساعات يومية (JSON)
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -25,48 +24,50 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function getReminder(): Promise<{ enabled: boolean; hour: number }> {
-  const [en, hr] = await Promise.all([
-    AsyncStorage.getItem(ENABLED_KEY),
-    AsyncStorage.getItem(HOUR_KEY),
-  ]);
-  const hour = hr ? Number(hr) : 20;
-  return { enabled: en === "1", hour: Number.isFinite(hour) ? hour : 20 };
-}
-
-/** يفعّل التنبيه اليومي على ساعة محددة (24h)، يطلب الإذن إن لزم. */
-export async function enableDailyReminder(hour: number): Promise<boolean> {
+async function ensurePermission(): Promise<boolean> {
   const perm = await Notifications.getPermissionsAsync();
-  let granted = perm.granted;
-  if (!granted) {
-    const req = await Notifications.requestPermissionsAsync();
-    granted = req.granted;
-  }
-  if (!granted) return false;
-
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "وقت وردك اليوم 📚",
-      body: "خصّص دقائق لكتابك وحافظ على سلسلتك ✨",
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour,
-      minute: 0,
-    },
-  });
-
-  await AsyncStorage.multiSet([
-    [ENABLED_KEY, "1"],
-    [HOUR_KEY, String(hour)],
-  ]);
-  return true;
+  if (perm.granted) return true;
+  const req = await Notifications.requestPermissionsAsync();
+  return req.granted;
 }
 
-export async function disableDailyReminder(): Promise<void> {
+/** قائمة أوقات التذكير اليومية المحفوظة (ساعات ٠–٢٣ مرتّبة). */
+export async function getReminders(): Promise<number[]> {
+  try {
+    const raw = await AsyncStorage.getItem(HOURS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((h: unknown) => Number.isInteger(h) && (h as number) >= 0 && (h as number) <= 23)
+      .sort((a: number, b: number) => a - b);
+  } catch {
+    return [];
+  }
+}
+
+/** يجدول تنبيهًا يوميًا لكل ساعة في القائمة (يستبدل كل الجدولة السابقة). */
+export async function setReminders(hours: number[]): Promise<boolean> {
+  if (!(await ensurePermission())) return false;
+  await ensureAndroidChannel();
+  const uniq = [...new Set(hours)].filter((h) => h >= 0 && h <= 23).sort((a, b) => a - b);
   await Notifications.cancelAllScheduledNotificationsAsync();
-  await AsyncStorage.setItem(ENABLED_KEY, "0");
+  for (const hour of uniq) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "وقت وردك اليوم 📚",
+        body: "خصّص دقائق لكتابك وحافظ على سلسلتك ✨",
+        sound: "default",
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour,
+        minute: 0,
+        channelId: "default",
+      },
+    });
+  }
+  await AsyncStorage.setItem(HOURS_KEY, JSON.stringify(uniq));
+  return true;
 }
 
 /** يطلب الإذن (إن لزم) ثم يرسل إشعارًا تجريبيًا بصوت وبانر خلال ثانيتين. */

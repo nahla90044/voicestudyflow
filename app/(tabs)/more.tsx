@@ -7,6 +7,7 @@ import {
   Alert,
   InputAccessoryView,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +16,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+// أوقات التذكير المتاحة (٥ صباحًا حتى ١١ مساءً)
+const REMINDER_HOURS = Array.from({ length: 19 }, (_, i) => i + 5);
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../../components/brand/glass-card";
 import { LanguageSwitcher } from "../../components/brand/language-switcher";
@@ -26,29 +30,9 @@ import { THEMES } from "../../constants/themes";
 import { useTheme } from "../../lib/themeContext";
 import { useDir, useI18n } from "../../lib/i18n";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  disableDailyReminder,
-  enableDailyReminder,
-  getReminder,
-  sendTestNotification,
-} from "../../lib/notify";
-import {
-  getFocusLevel,
-  getMinutesPerPage,
-  getUserName,
-  setFocusLevel,
-  setMinutesPerPage,
-  setUserName,
-  type FocusLevel,
-} from "../../lib/settings";
-import { getCurrentPlan, planByKey, type PlanKey } from "../../lib/subscription";
+import { getReminders, sendTestNotification, setReminders } from "../../lib/notify";
+import { getMinutesPerPage, setMinutesPerPage } from "../../lib/settings";
 
-const FOCUS_LABELS: { level: FocusLevel; labelKey: string; hintKey: string }[] = [
-  { level: 0, labelKey: "more.focus.level0", hintKey: "more.focus.level0Hint" },
-  { level: 1, labelKey: "more.focus.level1", hintKey: "more.focus.level1Hint" },
-  { level: 2, labelKey: "more.focus.level2", hintKey: "more.focus.level2Hint" },
-  { level: 3, labelKey: "more.focus.level3", hintKey: "more.focus.level3Hint" },
-];
 import {
   audioCacheSize,
   clearAudioCache,
@@ -69,23 +53,13 @@ export default function MoreScreen() {
   const [loading, setLoading] = useState(true);
   const [kbVisible, setKbVisible] = useState(false);
 
-  // الاسم ووضع التركيز
-  const [userName, setUserNameState] = useState("");
-  const [focusLevel, setFocusLevelState] = useState<FocusLevel>(0);
-
-  // الخطة الحالية
-  const [planKey, setPlanKey] = useState<PlanKey>("free");
-  useEffect(() => {
-    getCurrentPlan().then(setPlanKey);
-  }, []);
-
   // إعدادات الصوت
   const [lang, setLang] = useState<"ar" | "en">("ar");
   const [gender, setGender] = useState<"male" | "female">("female");
 
   // التنبيه اليومي
-  const [reminderOn, setReminderOn] = useState(false);
-  const [reminderHour, setReminderHour] = useState(20);
+  const [reminderHours, setReminderHours] = useState<number[]>([]);
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
 
   // تخزين الصوت
   const [cacheBytes, setCacheBytes] = useState(0);
@@ -110,16 +84,7 @@ export default function MoreScreen() {
     (async () => {
       const v = await getMinutesPerPage();
       setMinPerPageState(String(v));
-      let nm = await getUserName();
-      if (!nm) {
-        nm = "نهلة"; // اسمكِ افتراضيًا 🌷
-        await setUserName(nm);
-      }
-      setUserNameState(nm);
-      setFocusLevelState(await getFocusLevel());
-      const r = await getReminder();
-      setReminderOn(r.enabled);
-      setReminderHour(r.hour);
+      setReminderHours(await getReminders());
       refreshCacheSize();
       setLoading(false);
     })();
@@ -145,34 +110,29 @@ export default function MoreScreen() {
     Alert.alert("✅", t("more.alert.settingSaved"));
   }
 
-  async function saveName() {
-    await setUserName(userName);
-    Keyboard.dismiss();
-    Alert.alert("✅", userName.trim() ? t("more.alert.welcome", { name: userName.trim() }) : t("common.done"));
-  }
-
-  async function pickFocusLevel(level: FocusLevel) {
-    setFocusLevelState(level);
-    await setFocusLevel(level);
-    if (level > 0 && !userName.trim()) {
-      Alert.alert(t("more.focus.alertTitle"), t("more.focus.alertBody"));
-    }
-  }
-
   async function replayTutorial() {
     await AsyncStorage.removeItem(ONBOARDING_KEY);
     router.replace("/onboarding");
   }
 
-  async function toggleReminder() {
-    if (reminderOn) {
-      await disableDailyReminder();
-      setReminderOn(false);
-    } else {
-      const ok = await enableDailyReminder(reminderHour);
-      if (ok) setReminderOn(true);
-      else Alert.alert(t("more.notify.title"), t("more.notify.permDenied"));
-    }
+  // يطبّق قائمة التذكيرات على النظام (جدولة) ويحفظها
+  async function applyReminders(hours: number[]) {
+    const uniq = [...new Set(hours)].sort((a, b) => a - b);
+    const ok = await setReminders(uniq);
+    if (ok) setReminderHours(uniq);
+    else Alert.alert(t("more.notify.title"), t("more.notify.permDenied"));
+    return ok;
+  }
+
+  async function addReminder(h: number) {
+    setTimePickerOpen(false);
+    if (reminderHours.includes(h)) return; // موجود مسبقًا
+    const ok = await applyReminders([...reminderHours, h]);
+    if (ok) Alert.alert("✅", t("more.reminder.added", { time: fmtHour(h) }));
+  }
+
+  async function removeReminder(h: number) {
+    await applyReminders(reminderHours.filter((x) => x !== h));
   }
 
   async function testNotification() {
@@ -186,13 +146,6 @@ export default function MoreScreen() {
     } catch (e: any) {
       Alert.alert(t("more.notify.sendFailed"), e?.message ?? String(e));
     }
-  }
-
-  async function cycleReminderHour() {
-    const opts = [8, 14, 20];
-    const next = opts[(opts.indexOf(reminderHour) + 1) % opts.length];
-    setReminderHour(next);
-    if (reminderOn) await enableDailyReminder(next); // أعد الجدولة على الوقت الجديد
   }
 
   function fmtHour(h: number) {
@@ -243,27 +196,6 @@ export default function MoreScreen() {
           style={{ marginHorizontal: 0 }}
         />
 
-        {/* الاشتراك / الترقية */}
-        <Pressable onPress={() => router.push("/paywall" as never)}>
-          <LinearGradient
-            colors={Gradients.neonViolet}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.upCard, { flexDirection: dir.row }]}
-          >
-            <View style={styles.upIcon}>
-              <Ionicons name="sparkles" size={20} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.upTitle, { textAlign: dir.textAlign }]}>{t("more.plan.your", { plan: t(`plans.${planKey}.name`) })}</Text>
-              <Text style={[styles.upSub, { textAlign: dir.textAlign }]}>
-                {planKey === "free" ? t("more.plan.subFree") : t("more.plan.subManage")}
-              </Text>
-            </View>
-            <Ionicons name="chevron-back" size={20} color="#fff" />
-          </LinearGradient>
-        </Pressable>
-
         {/* اللغة */}
         <GlassCard contentStyle={styles.cardC} glow={Palette.neonBlue}>
           <LanguageSwitcher />
@@ -300,45 +232,6 @@ export default function MoreScreen() {
               );
             })}
           </View>
-        </GlassCard>
-
-        {/* الاسم ووضع التركيز */}
-        <GlassCard contentStyle={styles.cardC} glow={Palette.neonViolet}>
-          <Text style={[styles.title, { textAlign: dir.textAlign }]}>{t("more.name.title")}</Text>
-          <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("more.name.label")}</Text>
-          <TextInput
-            value={userName}
-            onChangeText={setUserNameState}
-            editable={!loading}
-            style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
-            placeholder={t("more.name.placeholder")}
-            placeholderTextColor="#8aa0b8"
-            maxLength={20}
-          />
-
-          <View style={styles.focusBox}>
-            <Text style={[styles.focusTitle, { textAlign: dir.textAlign }]}>{t("more.focus.title")}</Text>
-            <Text style={[styles.focusSub, { textAlign: dir.textAlign }]}>
-              {t("more.focus.sub", { name: userName.trim() || "..." })}
-            </Text>
-            <View style={[styles.focusLevels, { flexDirection: dir.row }]}>
-              {FOCUS_LABELS.map((f) => {
-                const active = focusLevel === f.level;
-                return (
-                  <Pressable
-                    key={f.level}
-                    onPress={() => pickFocusLevel(f.level)}
-                    style={[styles.levelPill, active && styles.levelPillOn]}
-                  >
-                    <Text style={[styles.levelTxt, active && styles.levelTxtOn]}>{t(f.labelKey)}</Text>
-                    <Text style={[styles.levelHint, active && { color: "#0b1220" }]}>{t(f.hintKey)}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <GradientButton title={t("more.name.save")} icon="save" onPress={saveName} loading={loading} />
         </GlassCard>
 
         {/* إعدادات الخطة */}
@@ -441,19 +334,28 @@ export default function MoreScreen() {
             {t("more.reminder.help")}
           </Text>
 
-          <View style={{ flexDirection: dir.row, gap: 10 }}>
-            <GradientButton
-              title={reminderOn ? t("more.reminder.on") : t("more.reminder.off")}
-              icon={reminderOn ? "notifications" : "notifications-off"}
-              variant={reminderOn ? "solid" : "ghost"}
-              colors={Gradients.success}
-              onPress={toggleReminder}
-              style={{ flex: 1 }}
-            />
-            <Pressable onPress={cycleReminderHour} style={styles.timeChip}>
-              <Text style={styles.timeChipTxt}>🕐 {fmtHour(reminderHour)}</Text>
-            </Pressable>
-          </View>
+          {/* قائمة التذكيرات الحالية */}
+          {reminderHours.length > 0 ? (
+            <View style={[styles.remindersWrap, { flexDirection: dir.row }]}>
+              {reminderHours.map((h) => (
+                <View key={h} style={[styles.reminderChip, { flexDirection: dir.row }]}>
+                  <Text style={styles.reminderChipTxt}>🕐 {fmtHour(h)}</Text>
+                  <Pressable onPress={() => removeReminder(h)} hitSlop={8}>
+                    <Ionicons name="close-circle" size={18} color={Palette.textMuted} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={[styles.help, { textAlign: dir.textAlign }]}>{t("more.reminder.none")}</Text>
+          )}
+
+          <GradientButton
+            title={t("more.reminder.add")}
+            icon="add-circle"
+            colors={Gradients.success}
+            onPress={() => setTimePickerOpen(true)}
+          />
 
           <GradientButton
             title={t("more.reminder.sendTest")}
@@ -461,6 +363,26 @@ export default function MoreScreen() {
             colors={Gradients.neon}
             onPress={testNotification}
           />
+
+          {/* قائمة اختيار وقت التذكير للإضافة */}
+          <Modal visible={timePickerOpen} transparent animationType="fade" onRequestClose={() => setTimePickerOpen(false)}>
+            <Pressable style={styles.pickerMask} onPress={() => setTimePickerOpen(false)}>
+              <View style={styles.pickerCard}>
+                <Text style={[styles.pickerTitle, { textAlign: dir.textAlign }]}>{t("more.reminder.pickTime")}</Text>
+                <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                  {REMINDER_HOURS.map((h) => {
+                    const added = reminderHours.includes(h);
+                    return (
+                      <Pressable key={h} onPress={() => addReminder(h)} style={[styles.pickerRow, { flexDirection: dir.row }, added && styles.pickerRowOn]}>
+                        <Text style={[styles.pickerRowTxt, added && styles.pickerRowTxtOn]}>🕐 {fmtHour(h)}</Text>
+                        {added ? <Ionicons name="checkmark" size={18} color={Palette.success} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </Pressable>
+          </Modal>
         </GlassCard>
 
         {/* التعريف بالتطبيق */}
@@ -517,6 +439,9 @@ const styles = StyleSheet.create({
 
   cardC: { padding: 14, gap: 10 },
   timeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     justifyContent: "center",
     paddingHorizontal: 16,
     borderRadius: 14,
@@ -525,6 +450,42 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.16)",
   },
   timeChipTxt: { color: "#fff", fontWeight: "900" },
+  pickerMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 24 },
+  pickerCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: Palette.bgElevated,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    padding: 16,
+  },
+  pickerTitle: { color: Palette.text, fontSize: 16, fontWeight: "900", marginBottom: 10 },
+  pickerRow: {
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginVertical: 3,
+    backgroundColor: Palette.surface,
+  },
+  pickerRowOn: { backgroundColor: Palette.success + "22", borderWidth: 1, borderColor: Palette.success + "66" },
+  pickerRowTxt: { color: Palette.text, fontSize: 15, fontWeight: "800" },
+  pickerRowTxtOn: { color: Palette.success },
+  remindersWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
+  reminderChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: Palette.success + "22",
+    borderWidth: 1,
+    borderColor: Palette.success + "55",
+  },
+  reminderChipTxt: { color: Palette.text, fontWeight: "800", fontSize: 14 },
   upCard: {
     flexDirection: "row-reverse",
     alignItems: "center",

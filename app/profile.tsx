@@ -3,18 +3,25 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
 import { deleteAccountPermanently, resetAccountData } from "../lib/account";
-import { getSession, signOut } from "../lib/auth";
+import { getDisplayName, getSession, updateName } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
+import { getFocusLevel, getUserName, setFocusLevel, setUserName, type FocusLevel } from "../lib/settings";
 import { getStats, type Stats } from "../lib/stats";
-import { getCurrentPlan, type PlanKey } from "../lib/subscription";
 
 const WARN = "#f5a623"; // لون تحذير لزر إعادة الضبط
+
+const FOCUS_LABELS: { level: FocusLevel; labelKey: string; hintKey: string }[] = [
+  { level: 0, labelKey: "more.focus.level0", hintKey: "more.focus.level0Hint" },
+  { level: 1, labelKey: "more.focus.level1", hintKey: "more.focus.level1Hint" },
+  { level: 2, labelKey: "more.focus.level2", hintKey: "more.focus.level2Hint" },
+  { level: 3, labelKey: "more.focus.level3", hintKey: "more.focus.level3Hint" },
+];
 
 function formatDate(iso?: string): string {
   if (!iso) return "—";
@@ -32,33 +39,42 @@ export default function ProfileScreen() {
   const dir = useDir();
 
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [createdAt, setCreatedAt] = useState<string | undefined>();
-  const [plan, setPlan] = useState<PlanKey>("free");
   const [stats, setStats] = useState<Stats | null>(null);
   const [busy, setBusy] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [focus, setFocus] = useState<FocusLevel>(0);
+  const [savingName, setSavingName] = useState(false);
 
   useEffect(() => {
     (async () => {
       const s = await getSession().catch(() => null);
       setEmail(s?.user?.email ?? "");
       setCreatedAt(s?.user?.created_at);
-      setPlan(await getCurrentPlan().catch(() => "free" as PlanKey));
+      setDisplayName(await getDisplayName().catch(() => ""));
+      setNameInput(await getUserName().catch(() => ""));
+      setFocus(await getFocusLevel().catch((): FocusLevel => 0));
       setStats(await getStats().catch(() => null));
     })();
   }, []);
 
-  function confirmSignOut() {
-    Alert.alert(t("profile.signOut"), t("profile.signOutConfirm"), [
-      { text: t("common.cancel"), style: "cancel" },
-      {
-        text: t("profile.signOut"),
-        style: "destructive",
-        onPress: async () => {
-          await signOut().catch(() => {});
-          router.replace("/auth");
-        },
-      },
-    ]);
+  async function saveName() {
+    setSavingName(true);
+    try {
+      const n = nameInput.trim();
+      await setUserName(n);
+      await updateName(n); // يبقى مع الحساب على أي جهاز
+      setDisplayName(await getDisplayName().catch(() => ""));
+      Alert.alert("✅", t("common.done"));
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function pickFocus(level: FocusLevel) {
+    setFocus(level);
+    await setFocusLevel(level).catch(() => {});
   }
 
   function confirmReset() {
@@ -72,7 +88,6 @@ export default function ProfileScreen() {
           try {
             await resetAccountData();
             setStats(await getStats().catch(() => null));
-            setPlan("free");
             Alert.alert(t("profile.resetDone"));
           } catch {
             Alert.alert(t("profile.actionFailed"));
@@ -140,17 +155,17 @@ export default function ProfileScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.email, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                  {email || "—"}
+                  {displayName || email || "—"}
                 </Text>
+                {email ? (
+                  <Text style={[styles.memberSince, { textAlign: dir.textAlign }]} numberOfLines={1}>
+                    {email}
+                  </Text>
+                ) : null}
                 <Text style={[styles.memberSince, { textAlign: dir.textAlign }]}>
                   {t("profile.memberSince", { date: formatDate(createdAt) })}
                 </Text>
               </View>
-            </View>
-            <View style={styles.divider} />
-            <View style={[styles.planRow, { flexDirection: dir.row }]}>
-              <Text style={styles.planLabel}>{t("profile.plan")}</Text>
-              <Text style={styles.planValue}>{t(`plans.${plan}.name`)}</Text>
             </View>
           </View>
 
@@ -165,12 +180,46 @@ export default function ProfileScreen() {
             ))}
           </View>
 
+          {/* الاسم ووضع التركيز */}
+          <Text style={[styles.sectionTitle, { textAlign: dir.textAlign }]}>{t("more.name.title")}</Text>
+          <View style={styles.card}>
+            <Text style={[styles.fieldLabel, { textAlign: dir.textAlign }]}>{t("more.name.label")}</Text>
+            <TextInput
+              value={nameInput}
+              onChangeText={setNameInput}
+              style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+              placeholder={t("more.name.placeholder")}
+              placeholderTextColor={Palette.textDim}
+              maxLength={20}
+            />
+            <Text style={[styles.fieldLabel, { textAlign: dir.textAlign, marginTop: 14 }]}>{t("more.focus.title")}</Text>
+            <Text style={[styles.actionSub, { textAlign: dir.textAlign, marginBottom: 8 }]}>
+              {t("more.focus.sub", { name: nameInput.trim() || "..." })}
+            </Text>
+            <View style={[styles.focusRow, { flexDirection: dir.row }]}>
+              {FOCUS_LABELS.map((f) => {
+                const active = focus === f.level;
+                return (
+                  <Pressable key={f.level} onPress={() => pickFocus(f.level)} style={[styles.pill, active && styles.pillOn]}>
+                    <Text style={[styles.pillTxt, active && styles.pillTxtOn]}>{t(f.labelKey)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable onPress={saveName} style={styles.saveBtn} disabled={savingName}>
+              {savingName ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveTxt}>{t("more.name.save")}</Text>}
+            </Pressable>
+          </View>
+
           {/* الإجراءات */}
           <Text style={[styles.sectionTitle, { textAlign: dir.textAlign }]}>{t("profile.manage")}</Text>
 
-          <Pressable onPress={confirmSignOut} style={[styles.action, { flexDirection: dir.row }]} disabled={busy}>
-            <Ionicons name="log-out-outline" size={20} color={Palette.text} />
-            <Text style={[styles.actionTxt, { textAlign: dir.textAlign }]}>{t("profile.signOut")}</Text>
+          <Pressable onPress={() => router.push("/two-factor" as never)} style={[styles.action, { flexDirection: dir.row }]} disabled={busy}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={Palette.neonCyan} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionTxt, { textAlign: dir.textAlign }]}>{t("profile.twofa")}</Text>
+              <Text style={[styles.actionSub, { textAlign: dir.textAlign }]}>{t("profile.twofaSub")}</Text>
+            </View>
           </Pressable>
 
           <Pressable onPress={confirmReset} style={[styles.action, styles.warn, { flexDirection: dir.row }]} disabled={busy}>
@@ -256,4 +305,37 @@ const styles = StyleSheet.create({
   danger: { borderColor: Palette.danger + "55" },
   actionTxt: { flex: 1, color: Palette.text, fontWeight: "900", fontSize: 15 },
   actionSub: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
+  fieldLabel: { color: Palette.textMuted, fontSize: 13, fontWeight: "800", marginBottom: 6 },
+  input: {
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    color: Palette.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  focusRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  pill: {
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+  },
+  pillOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
+  pillTxt: { color: Palette.textMuted, fontWeight: "800", fontSize: 13 },
+  pillTxtOn: { color: "#fff" },
+  saveBtn: {
+    marginTop: 14,
+    backgroundColor: Palette.neonViolet,
+    borderRadius: Radius.md,
+    paddingVertical: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveTxt: { color: "#fff", fontWeight: "900", fontSize: 15 },
 });

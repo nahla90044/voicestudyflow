@@ -9,67 +9,19 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
 
-let ensuring: Promise<string> | null = null;
-
-const DEVICE_KEY = "vsf_device_user_id";
-
-// معرّف جهاز محلي — يُستخدم فقط كاحتياط أثناء التجربة إذا لم يُفعّل
-// "Anonymous sign-ins" بعد في Supabase. في الإنتاج تُستخدم جلسة المصادقة الحقيقية.
-function uuidv4(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-async function getLocalDeviceId(): Promise<string> {
-  const existing = await AsyncStorage.getItem(DEVICE_KEY);
-  if (existing) return existing;
-  const id = uuidv4();
-  await AsyncStorage.setItem(DEVICE_KEY, id);
-  return id;
-}
-
-// نخزّن المعرّف بعد أول حساب حتى لا نكرّر نداء الشبكة في كل مرة (يسرّع التطبيق)
-let cachedUserId: string | null = null;
-let anonDisabled = false;
-
-/** يضمن وجود جلسة (مجهولة إن لزم) ويُرجع معرّف المستخدم الحقيقي. */
+/**
+ * يُرجع معرّف المستخدم المُصادَق عليه فقط (auth.uid). يرمي خطأ إن لم توجد جلسة.
+ * حرج للأمان: لا نستخدم أبداً «معرّف جهاز» محلي مشترك بين الحسابات — وإلا
+ * اختلطت بيانات الحسابات على نفس الجهاز (إنشاء/قراءة/حذف على هوية مشتركة).
+ * كل عملية بيانات تمرّ من هنا، فتبقى مقصورة على حساب المستخدم الحقيقي + RLS.
+ */
 export async function getUserId(): Promise<string> {
-  if (cachedUserId) return cachedUserId;
-
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (session?.user?.id) {
-    cachedUserId = session.user.id;
-    return cachedUserId;
-  }
-
-  // إذا سبق وفشل الحساب المجهول، لا نكرّر نداء الشبكة — نستخدم معرّف الجهاز فورًا
-  if (!anonDisabled) {
-    if (!ensuring) {
-      ensuring = (async () => {
-        const { data, error } = await supabase.auth.signInAnonymously();
-        if (error) throw error;
-        if (!data.user?.id) throw new Error("تعذّر إنشاء جلسة");
-        return data.user.id;
-      })().finally(() => {
-        ensuring = null;
-      });
-    }
-    try {
-      cachedUserId = await ensuring;
-      return cachedUserId;
-    } catch {
-      // الحساب المجهول غير مفعّل → لا نحاول مرة أخرى هذه الجلسة
-      anonDisabled = true;
-    }
-  }
-
-  cachedUserId = await getLocalDeviceId();
-  return cachedUserId;
+  const uid = session?.user?.id;
+  if (!uid) throw new Error("لا توجد جلسة مصادقة");
+  return uid;
 }
 
 /** الجلسة الحالية (أو null). */
@@ -97,17 +49,50 @@ export async function linkEmail(email: string, password: string) {
 }
 
 /** إنشاء حساب جديد ببريد/كلمة مرور. مع تأكيد البريد، لا تُفتح جلسة حتى التأكيد. */
-export async function signUpEmail(email: string, password: string): Promise<{ needsConfirm: boolean }> {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+export async function signUpEmail(
+  email: string,
+  password: string,
+  name?: string,
+): Promise<{ needsConfirm: boolean }> {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: "https://voicestudyflow.app/confirmed",
+      // نخزّن الاسم في بيانات الحساب نفسه ليبقى مع الحساب على أي جهاز
+      data: name?.trim() ? { name: name.trim() } : undefined,
+    },
+  });
   if (error) throw error;
   return { needsConfirm: !data.session }; // لا جلسة = ينتظر تأكيد البريد
+}
+
+/** يحدّث اسم العرض في بيانات الحساب (ليبقى مع الحساب على أي جهاز). */
+export async function updateName(name: string): Promise<void> {
+  await supabase.auth.updateUser({ data: { name: name.trim() } }).catch(() => {});
+}
+
+/** اسم العرض: الاسم المحلي (الإعدادات) ثم اسم الحساب ثم جزء البريد قبل @. */
+export async function getDisplayName(): Promise<string> {
+  try {
+    const local = (await AsyncStorage.getItem("settings:user_name"))?.trim();
+    if (local) return local;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const metaName = (user?.user_metadata as { name?: string } | undefined)?.name?.trim();
+    if (metaName) return metaName;
+    if (user?.email) return user.email.split("@")[0];
+  } catch {
+    // نتجاهل — نُرجع فارغًا
+  }
+  return "";
 }
 
 /** تسجيل دخول بحساب موجود (على جهاز آخر مثلًا). */
 export async function signInWithEmail(email: string, password: string) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-  cachedUserId = null; // أعد حساب المعرّف بعد الدخول
 }
 
 /** هل المستخدم الحالي لديه حساب حقيقي (بريد مؤكَّد)؟ */
@@ -118,31 +103,111 @@ export async function hasEmailAccount(): Promise<boolean> {
   return !!user?.email && !!(user.email_confirmed_at ?? (user as User & { confirmed_at?: string }).confirmed_at);
 }
 
-/** يطالب ببيانات «معرّف الجهاز» القديمة وينقلها للحساب الحالي (مرّة بعد أول دخول). */
-export async function claimDeviceData(): Promise<{ books: number } | null> {
-  const deviceId = await AsyncStorage.getItem(DEVICE_KEY);
-  if (!deviceId) return null;
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) return null;
-  const { data, error } = await supabase.functions.invoke("claim-data", {
-    body: { deviceId, accessToken: token },
-  });
-  if (error || (data as { error?: string })?.error) return null;
-  return { books: (data as { moved?: { books?: number } })?.moved?.books ?? 0 };
+// مفاتيح تُحفظ عند تسجيل الخروج (إعدادات الجهاز لا بيانات المستخدم).
+// نُبقي فقط إعدادات الجهاز غير الشخصية (المظهر/اللغة/سرعة القراءة/علامات
+// «شوهد») — أما أي شيء يخص المستخدم (الاسم، الإحصاءات، البطاقات، الهدف،
+// المنبّه، وضع التركيز) فيُمسح حتى لا يرى مستخدمٌ جديد أثرًا من السابق.
+const PRESERVE_KEYS = new Set([
+  "settings:theme_id",
+  "settings:lang",
+  "settings:min_per_page",
+  "vsf_minutes_per_page",
+  "vsf_onboarded_v1",
+  "vsf_device_user_id",
+  "howto-tour-seen-v1",
+]);
+
+/** يمسح كل بيانات المستخدم المخزّنة محليًا (كتب/خطط/بطاقات/إحصاءات/تظليلات…)
+ *  مع الإبقاء على إعدادات الجهاز — حتى لا يرى مستخدمٌ جديد بيانات السابق. */
+export async function clearUserCache(): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const toRemove = keys.filter(
+      (k) =>
+        !PRESERVE_KEYS.has(k) &&
+        // لا تمسح جلسة Supabase نفسها (توكن الدخول) وإلا خرج المستخدم من حسابه
+        !k.startsWith("sb-") &&
+        !k.startsWith("supabase.auth."),
+    );
+    if (toRemove.length) await AsyncStorage.multiRemove(toRemove);
+  } catch {
+    // تنظيف أفضل-جهد — نتجاهل أي خطأ
+  }
 }
 
-/** تسجيل الخروج (يعود الحساب مجهولًا عند أول استخدام لاحق). */
+/** تسجيل الخروج ومسح كاش بيانات المستخدم محليًا. */
 export async function signOut() {
   await supabase.auth.signOut();
-  cachedUserId = null;
+  await clearUserCache(); // امسح كاش الحساب حتى لا يظهر للمستخدم التالي
 }
 
 /** إرسال رسالة إعادة تعيين كلمة المرور للبريد. */
 export async function resetPassword(email: string): Promise<void> {
   const e = email.trim().toLowerCase();
-  const { error } = await supabase.auth.resetPasswordForEmail(e);
+  const { error } = await supabase.auth.resetPasswordForEmail(e, {
+    redirectTo: "https://voicestudyflow.app/reset",
+  });
   if (error) throw error;
+}
+
+/* ===================== التحقق الثنائي (2FA / TOTP) ===================== */
+
+/** قائمة عوامل 2FA من نوع TOTP. */
+export async function listMfaFactors() {
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) throw error;
+  return data?.totp ?? [];
+}
+
+/** هل المستخدم مفعّل 2FA (عامل مؤكَّد)؟ */
+export async function hasMfaEnabled(): Promise<boolean> {
+  try {
+    const factors = await listMfaFactors();
+    return factors.some((f) => f.status === "verified");
+  } catch {
+    return false;
+  }
+}
+
+/** يبدأ تسجيل 2FA — يُرجع رمز QR (SVG) والمفتاح السري للإدخال اليدوي. */
+export async function enrollMfa(): Promise<{ factorId: string; qrSvg: string; secret: string }> {
+  // أزل أي عامل غير مؤكَّد قديم حتى لا تتراكم العوامل المعلّقة
+  try {
+    const existing = await listMfaFactors();
+    for (const f of existing) {
+      if (f.status !== "verified") await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+    }
+  } catch {
+    // نتجاهل
+  }
+  const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "VoiceStudyFlow" });
+  if (error) throw error;
+  return { factorId: data.id, qrSvg: data.totp.qr_code, secret: data.totp.secret };
+}
+
+/** يتحقق من رمز 2FA (يُستخدم لإكمال التسجيل وللتحدّي عند الدخول). */
+export async function verifyMfa(factorId: string, code: string): Promise<void> {
+  const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code: code.trim() });
+  if (error) throw error;
+}
+
+/** يلغي تفعيل 2FA. */
+export async function unenrollMfa(factorId: string): Promise<void> {
+  const { error } = await supabase.auth.mfa.unenroll({ factorId });
+  if (error) throw error;
+}
+
+/** هل يلزم تحدّي 2FA الآن (بعد الدخول بكلمة المرور)؟ */
+export async function mfaChallengeRequired(): Promise<boolean> {
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error || !data) return false;
+  return data.currentLevel === "aal1" && data.nextLevel === "aal2";
+}
+
+/** يحلّ تحدّي 2FA عند الدخول بأول عامل مؤكَّد. */
+export async function solveMfaChallenge(code: string): Promise<void> {
+  const factors = await listMfaFactors();
+  const verified = factors.find((f) => f.status === "verified");
+  if (!verified) throw new Error("No verified 2FA factor");
+  await verifyMfa(verified.id, code);
 }

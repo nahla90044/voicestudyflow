@@ -1,19 +1,18 @@
 // components/brand/app-drawer.tsx
 // قائمة جانبية (☰) تنفتح من اليمين، فيها: الإعدادات، الأرشيف.
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { Palette, Radius, Spacing } from "../../constants/design";
+import { signOut } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
-import { getCurrentPlan, type PlanKey } from "../../lib/subscription";
 import { LanguageSwitcher } from "./language-switcher";
 import { BrandMark } from "./logo";
 
-type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/profile" | "/paywall";
+type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/profile";
 type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: Route; color: string };
 
 const ITEMS: Item[] = [
@@ -30,16 +29,25 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
   const dir = useDir();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  const [planKey, setPlanKey] = useState<PlanKey>("free");
-
-  // نحمّل نوع الاشتراك الحالي عند فتح القائمة (ليظهر محدّثًا دائمًا)
-  useEffect(() => {
-    if (open) getCurrentPlan().then(setPlanKey).catch(() => {});
-  }, [open]);
 
   function go(route: Route) {
     setOpen(false);
     router.push(route);
+  }
+
+  function onSignOut() {
+    Alert.alert(t("profile.signOut"), t("profile.signOutConfirm"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("profile.signOut"),
+        style: "destructive",
+        onPress: async () => {
+          setOpen(false);
+          await signOut().catch(() => {});
+          router.replace("/auth");
+        },
+      },
+    ]);
   }
 
   return (
@@ -66,23 +74,6 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
               </Pressable>
             </View>
 
-            {/* الاشتراك — يظهر نوعه مباشرة (وصول سريع للترقية) */}
-            <Pressable onPress={() => go("/paywall")} style={{ marginTop: Spacing.lg }}>
-              <LinearGradient
-                colors={Gradients.brand}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.subCard, { flexDirection: dir.row }]}
-              >
-                <Ionicons name="sparkles" size={20} color="#fff" />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.subLabel, { textAlign: dir.textAlign }]}>{t("drawer.subscription")}</Text>
-                  <Text style={[styles.subPlan, { textAlign: dir.textAlign }]}>{t(`plans.${planKey}.name`)}</Text>
-                </View>
-                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color="#fff" />
-              </LinearGradient>
-            </Pressable>
-
             {/* اللغة — تبديل سريع بدون الدخول للإعدادات */}
             <View style={styles.langWrap}>
               <LanguageSwitcher />
@@ -101,6 +92,13 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
             </View>
 
             <View style={{ flex: 1 }} />
+
+            {/* تسجيل الخروج — واضح وسريع */}
+            <Pressable onPress={onSignOut} style={[styles.signOut, { flexDirection: dir.row }]}>
+              <Ionicons name="log-out-outline" size={20} color={Palette.danger} />
+              <Text style={[styles.signOutTxt, { textAlign: dir.textAlign }]}>{t("profile.signOut")}</Text>
+            </Pressable>
+
             <Text style={styles.footer}>{t("drawer.credit", { name: "Nahla" })}</Text>
             <Text style={styles.footerMail}>Nahlah@Nahlah.io</Text>
             <Text style={styles.madeIn}>{t("drawer.madeIn")}</Text>
@@ -166,6 +164,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   itemTxt: { flex: 1, color: Palette.text, fontWeight: "900", fontSize: 16, textAlign: "right" },
+  signOut: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.danger + "18",
+    borderWidth: 1,
+    borderColor: Palette.danger + "55",
+    marginBottom: Spacing.md,
+  },
+  signOutTxt: { color: Palette.danger, fontWeight: "900", fontSize: 16 },
   footer: { color: Palette.textDim, fontSize: 12, textAlign: "center", marginBottom: 2 },
   footerMail: { color: Palette.neonCyan, fontSize: 12, textAlign: "center", marginBottom: 4, fontWeight: "700" },
   madeIn: { color: Palette.textDim, fontSize: 12, textAlign: "center", marginBottom: Spacing.sm, fontWeight: "800" },

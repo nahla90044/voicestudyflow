@@ -1462,27 +1462,26 @@ export default function ReaderScreen() {
                       selectionColor="rgba(124,92,255,0.45)"
                       style={active ? styles.sentenceActive : styles.sentence}
                     >
-                      {/* فقط المقطع الجاري يُقسَّم كلمات للكاراوكي؛ الباقي نص عادي = أخفّ بكثير */}
-                      {active
-                        ? (() => {
-                            let wc = -1;
-                            return s.split(/(\s+)/).map((tok, wi) => {
-                              if (!/\S/.test(tok)) return tok;
-                              wc++;
-                              const spoken = wc === activeWord;
-                              return (
-                                <Text
-                                  key={wi}
-                                  onPress={() => onWordPress(i, tok, s)}
-                                  suppressHighlighting
-                                  style={spoken ? styles.wordSpoken : undefined}
-                                >
-                                  {tok}
-                                </Text>
-                              );
-                            });
-                          })()
-                        : s}
+                      {/* كل الكلمات قابلة للضغط (ضغطة = ترجمة/معنى، ضغطتان = قراءة من هنا)؛
+                          وتظليل الكاراوكي يظهر فقط في الكلمة الجاري نطقها بالجملة النشطة */}
+                      {(() => {
+                        let wc = -1;
+                        return s.split(/(\s+)/).map((tok, wi) => {
+                          if (!/\S/.test(tok)) return tok;
+                          wc++;
+                          const spoken = active && wc === activeWord;
+                          return (
+                            <Text
+                              key={wi}
+                              onPress={() => onWordPress(i, tok, s)}
+                              suppressHighlighting
+                              style={spoken ? styles.wordSpoken : undefined}
+                            >
+                              {tok}
+                            </Text>
+                          );
+                        });
+                      })()}
                     </Text>
                   </Pressable>
                 );

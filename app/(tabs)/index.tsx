@@ -16,7 +16,7 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { countDue } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
-import { getUserName } from "../../lib/settings";
+import { getDisplayName } from "../../lib/auth";
 import { getStats, type Stats } from "../../lib/stats";
 
 type Feature = {
@@ -71,7 +71,7 @@ export default function HomeScreen() {
     useCallback(() => {
       let on = true;
       (async () => {
-        const [s, d, n] = await Promise.all([getStats(), countDue(), getUserName()]);
+        const [s, d, n] = await Promise.all([getStats(), countDue(), getDisplayName()]);
         if (!on) return;
         setStats(s);
         setDue(d);

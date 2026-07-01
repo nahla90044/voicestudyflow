@@ -15,9 +15,31 @@ export type AiAction =
   | "tashkeel"
   | "slides"
   | "filternoise"
-  | "fixspacing";
+  | "fixspacing"
+  | "moderate";
 
 export type Slide = { emoji: string; title: string; bullets: string[] };
+
+export type Moderation = { allowed: boolean; category: string; advice: string };
+
+/** يفحص نص الكتاب ضد سياسة المحتوى. عند فشل الذكاء يسمح (طبقة أفضل-جهد، لا تعطّل الرفع). */
+export async function moderateContent(text: string): Promise<Moderation> {
+  const ok = { allowed: true, category: "", advice: "" };
+  if (!text.trim()) return ok;
+  try {
+    const raw = await aiAssist("moderate", text);
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return ok;
+    const obj = JSON.parse(m[0]);
+    return {
+      allowed: obj?.allowed !== false, // مسموح افتراضيًا إلا إذا صرّح بالرفض
+      category: String(obj?.category ?? "").trim(),
+      advice: String(obj?.advice ?? "").trim(),
+    };
+  } catch {
+    return ok; // فشل تقني → لا نمنع المستخدم
+  }
+}
 
 /** يولّد شرائح عرض تقديمي من نص (عنوان + نقاط + إيموجي). */
 export async function generateSlides(text: string): Promise<Slide[]> {
@@ -156,11 +178,16 @@ export async function defineWord(word: string, context: string): Promise<string>
   const w = word.trim();
   if (!w) return "";
   const { data, error } = await supabase.functions.invoke("ai-assist", {
-    body: { action: "define", question: w, text: context.slice(0, 600) },
+    body: { action: "define", question: w, text: context.slice(0, 240) },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  return String(data?.result ?? "").trim();
+  // نريد معنى بسيط فقط — ننظّف أي ماركداون/تنسيق قد يضيفه النموذج
+  return String(data?.result ?? "")
+    .replace(/[#*_`>]+/g, "") // رموز الماركداون
+    .replace(/^\s*[-•]\s*/gm, "") // نقاط القوائم
+    .replace(/\n{2,}/g, "\n") // أسطر فارغة زائدة
+    .trim();
 }
 
 /** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */

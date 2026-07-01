@@ -31,6 +31,13 @@ function randomId(len = 10) {
 
 const MPP_KEY = "vsf_minutes_per_page"; // إعداد عام: دقيقة/صفحة (بنضيفه لاحقًا في more)
 
+// حدود الرفع — تُعرض للمستخدم وتُفرض قبل الرفع
+const MAX_FILE_MB = 50;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const MAX_BOOKS = 3; // الخطة المجانية: ٣ كتب فقط
+const MAX_PAGES = 700; // حدّ أعلى لصفحات الكتاب (لا يُعرض الرقم للمستخدم)
+const AGREED_KEY = "vsf_upload_agreed";
+
 export default function AddBookScreen() {
   const router = useRouter();
   const { t } = useI18n();
@@ -53,6 +60,10 @@ export default function AddBookScreen() {
     const res = await DocumentPicker.getDocumentAsync({ type: "application/pdf" });
     if (!res.canceled) {
       const picked = res.assets[0];
+      if (typeof picked?.size === "number" && picked.size > MAX_FILE_BYTES) {
+        Alert.alert(t("addBook.alert.warnTitle"), t("addBook.limit.fileTooLarge", { mb: MAX_FILE_MB }));
+        return;
+      }
       setFile(picked);
 
       // عنوان تلقائي من اسم الملف إذا فاضي
@@ -104,11 +115,36 @@ export default function AddBookScreen() {
     return 0;
   }
 
+  async function ensureAgreement(): Promise<boolean> {
+    const agreed = await AsyncStorage.getItem(AGREED_KEY).catch(() => null);
+    if (agreed === "1") return true;
+    return new Promise<boolean>((resolve) => {
+      Alert.alert(
+        t("addBook.agreement.title"),
+        t("addBook.agreement.body"),
+        [
+          { text: t("common.cancel"), style: "cancel", onPress: () => resolve(false) },
+          {
+            text: t("addBook.agreement.agree"),
+            onPress: async () => {
+              await AsyncStorage.setItem(AGREED_KEY, "1").catch(() => {});
+              resolve(true);
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    });
+  }
+
   async function save(createPlanNow: boolean) {
     if (!file) {
       Alert.alert(t("addBook.alert.warnTitle"), t("addBook.alert.pickFirst"));
       return;
     }
+
+    // اتفاقية رفع المحتوى — موافقة إلزامية (مرة واحدة) قبل أول رفع
+    if (!(await ensureAgreement())) return;
 
     const dailyMinutes = Math.max(5, parseInt(minutes || "60", 10) || 60);
 
@@ -117,6 +153,16 @@ export default function AddBookScreen() {
 
       // معرّف المستخدم الحقيقي (تفرضه RLS على القاعدة والتخزين)
       const userId = await getUserId();
+
+      // حد عدد الكتب لكل مستخدم
+      const { count: bookCount } = await supabase
+        .from("books")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId);
+      if ((bookCount ?? 0) >= MAX_BOOKS) {
+        Alert.alert(t("addBook.alert.warnTitle"), t("addBook.limit.tooManyBooks", { max: MAX_BOOKS }));
+        return;
+      }
 
       // 1) upload — المسار يبدأ بمجلّد المستخدم حتى لا يصل غيره لملفاته
       const path = `${userId}/${Date.now()}_${randomId(8)}.pdf`;
@@ -146,12 +192,23 @@ export default function AddBookScreen() {
 
       if (bErr) throw bErr;
 
+      // 2.5) حدّ حجم الكتاب: نحسب عدد الصفحات ونرفض الكتاب الكبير (دون كشف الرقم)
+      const pageCount = await resolvePageCount(book.id, path);
+      if (pageCount > MAX_PAGES) {
+        await supabase.from("books").delete().eq("id", book.id);
+        await supabase.storage.from("pdfs").remove([path]);
+        Alert.alert(t("addBook.alert.warnTitle"), t("addBook.limit.bookTooLarge"));
+        setTitle("");
+        setPageCountManual("");
+        setFile(null);
+        return;
+      }
+
       // 3) create plan
       if (createPlanNow) {
         const today = new Date().toISOString().slice(0, 10);
 
         const minutesPerPage = await getMinutesPerPage();
-        const pageCount = await resolvePageCount(book.id, path);
 
         if (!pageCount || pageCount <= 0) {
           // الكتاب اتضاف فعلاً، بس ما قدرنا نحسب الصفحات للخطة
@@ -269,7 +326,7 @@ export default function AddBookScreen() {
         />
 
         <Text style={[styles.hint, { textAlign: dir.textAlign }]}>
-          {t("addBook.hint")}
+          {t("addBook.agreement.note")}
         </Text>
       </GlassCard>
     </SafeAreaView>

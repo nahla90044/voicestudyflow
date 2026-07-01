@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -111,6 +111,14 @@ export default function LibraryScreen() {
     setAssign(a);
   }
 
+  // إعادة تحميل تلقائية كلما رجعتِ للمكتبة (مثلاً بعد إضافة كتاب)
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      loadFolders();
+    }, []),
+  );
+
   useEffect(() => {
     load();
     loadFolders();
@@ -131,7 +139,15 @@ export default function LibraryScreen() {
   async function load() {
     setLoading(true);
 
-    const userId = await getUserId();
+    let userId: string;
+    try {
+      userId = await getUserId();
+    } catch {
+      // لا جلسة (مثلاً أثناء تسجيل الخروج) — لا نعرض شيئًا
+      setRows([]);
+      setLoading(false);
+      return;
+    }
 
     const { data: books, error: booksErr } = await supabase
       .from("books")
@@ -418,6 +434,10 @@ export default function LibraryScreen() {
           <Pressable onPress={cycleSort} style={styles.sortBtn}>
             <Ionicons name="swap-vertical" size={16} color={Palette.text} />
             <Text style={styles.sortTxt}>{sortLabel}</Text>
+          </Pressable>
+
+          <Pressable onPress={() => { load(); loadFolders(); }} style={styles.sortBtn} hitSlop={6}>
+            <Ionicons name="refresh" size={16} color={Palette.text} />
           </Pressable>
         </View>
 
