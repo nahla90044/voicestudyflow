@@ -83,18 +83,15 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "fire", name: "مدفأة", prompt: "cozy crackling fireplace, soft warm campfire ambience, calming, seamless loop" },
   { key: "thunder", name: "مطر ورعد", prompt: "gentle steady rain with soft distant thunder, calming, seamless loop" },
   { key: "night", name: "ليل هادئ", prompt: "peaceful summer night ambience, soft crickets and gentle breeze, calming, seamless loop" },
-  // أصوات مواضيعية حسب نوع الكتاب/الرواية
-  { key: "horror", name: "رعب", prompt: "dark eerie horror ambience, low ominous drone, distant unsettling creaks, tense and suspenseful, seamless loop" },
-  { key: "suspense", name: "تشويق", prompt: "tense suspenseful dark ambient drone, subtle unease, cinematic thriller atmosphere, seamless loop" },
-  { key: "historical", name: "تاريخي", prompt: "warm old-world historical ambience, soft distant strings and gentle wind, medieval atmosphere, calm, seamless loop" },
-  { key: "novels", name: "روايات", prompt: "warm gentle emotive ambient pad for reading novels, soft and immersive, calm, seamless loop" },
-  { key: "poetry", name: "شعر", prompt: "soft delicate ambient pad for poetry reading, gentle, airy, contemplative, seamless loop" },
-  { key: "study", name: "دراسة", prompt: "calm focused study ambience, soft steady minimal background for concentration, seamless loop" },
-  // مقطوعات ElevenLabs (أغنى) — kind: music
-  { key: "symphony", name: "سمفونية", kind: "music", lengthMs: 90000, prompt: "very calm classical symphony, soft slow strings and light woodwinds, gentle, peaceful, continuous ambient pad texture, no loud crescendos and no percussion" },
-  { key: "cinematic", name: "سينمائي", kind: "music", lengthMs: 90000, prompt: "calm cinematic ambient, warm sustained strings and soft pads, slow evolving, peaceful, continuous" },
-  { key: "lofi_long", name: "لو-فاي غني", kind: "music", lengthMs: 90000, prompt: "mellow lo-fi chillhop instrumental for studying, relaxed steady groove, warm, continuous, soft" },
-  { key: "classical", name: "كلاسيكي هادئ", kind: "music", lengthMs: 90000, prompt: "calm classical orchestral piece in a warm romantic style, gentle slow strings and soft piano, peaceful and soothing for reading, soft dynamics, no loud crescendos, continuous" },
+  // 🎬 موسيقى سينمائية أوركسترالية (ElevenLabs) — أحاسيس وميلودراما بأسلوب سكور
+  // الأفلام الملحمية، يندمج معها القارئ. (وصف أسلوب عام — بلا نسخ أعمال محمية.)
+  { key: "epic", name: "ملحمي", kind: "music", lengthMs: 90000, prompt: "epic cinematic orchestral score, sweeping strings, powerful brass and choir, grand fantasy adventure atmosphere, majestic and emotional, instrumental film score" },
+  { key: "heroic", name: "بطولي", kind: "music", lengthMs: 90000, prompt: "heroic epic orchestral score, bold brass and driving strings, noble and stirring, uplifting battle atmosphere, instrumental film score" },
+  { key: "emotional", name: "عاطفي", kind: "music", lengthMs: 90000, prompt: "sweeping emotional cinematic orchestral score, soaring strings and gentle piano, romantic, tender and touching, instrumental film score" },
+  { key: "dark", name: "مظلم", kind: "music", lengthMs: 90000, prompt: "dark tense cinematic orchestral score, ominous low strings and brass, suspenseful and dramatic thriller atmosphere, instrumental film score" },
+  { key: "historical", name: "تاريخي", kind: "music", lengthMs: 90000, prompt: "noble historical orchestral score, warm strings and soft horns, epic period-drama atmosphere, dignified and emotional, instrumental film score" },
+  { key: "classical", name: "كلاسيكي", kind: "music", lengthMs: 90000, prompt: "calm classical orchestral piece in a warm romantic style, gentle slow strings and soft piano, peaceful and soothing, instrumental" },
+  { key: "study", name: "تركيز", kind: "music", lengthMs: 90000, prompt: "calm gentle orchestral for focus and studying, soft warm strings and light piano, peaceful, steady and continuous, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣
