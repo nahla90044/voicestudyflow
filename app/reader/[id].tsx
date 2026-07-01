@@ -680,6 +680,27 @@ export default function ReaderScreen() {
     }
   }
 
+  // يحضّر تشكيل/ترجمة الصفحة **التالية** في الخلفية أثناء قراءة الحالية،
+  // فيصبح الانتقال للصفحة التالية فوريًا بلا انتظار (يعالج بطء التحميل).
+  async function warmProcessedPage(p: number) {
+    if (!pdfPath || p < 1) return;
+    try {
+      if (listenArabicRef.current) {
+        if (arTransRef.current.has(`${uiVoiceLang}:${p}`)) return;
+      } else if (tashkeelRef.current) {
+        if (tashkeelCacheRef.current.has(p)) return;
+      } else {
+        return; // لا وضع معالجة مفعّل → لا شيء نحضّره
+      }
+      const res = await extractPdfPageText(pdfPath, p);
+      if (!res.text.trim()) return;
+      if (listenArabicRef.current) await translatePage(res.page, res.text);
+      else if (tashkeelRef.current) await tashkeelPage(res.page, res.text);
+    } catch {
+      // التحضير المسبق اختياري — لا يزعج القراءة عند فشله
+    }
+  }
+
   // يقرأ صفحة جملة-بجملة، وعند انتهائها ينتقل تلقائيًا للتالية.
   // announce: يذكر رقم الصفحة مرة واحدة (عند بدء القراءة/الانتقال اليدوي فقط)
   async function playFromPage(p: number, startIdx = 0, announce = false) {
@@ -747,6 +768,10 @@ export default function ReaderScreen() {
 
       setBusy(false);
       setStatus("");
+      // حضّر الصفحة التالية (تشكيل/ترجمة) في الخلفية لانتقال فوري لاحقًا
+      if (listenArabicRef.current || tashkeelRef.current) {
+        void warmProcessedPage(res.page + 1);
+      }
       const start = Math.min(Math.max(0, startIdx), sents.length - 1);
       if (announce && start === 0) {
         // أعلن رقم الصفحة مرة واحدة ثم اقرأ المحتوى
@@ -2159,6 +2184,11 @@ export default function ReaderScreen() {
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
+
+            {/* توضيح دور «الصوت»: يقرأ النص كما هو بلغته — يُختار حسب لغة الكتاب */}
+            <Text style={[styles.notesHint, { textAlign: dir.textAlign }]}>
+              {t("reader.voice.hint")}
+            </Text>
 
             {/* تبويبات اللغة */}
             <View style={styles.langRow}>

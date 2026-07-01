@@ -59,8 +59,12 @@ const MODEL: Record<string, string> = {
   slides: "claude-haiku-4-5-20251001", // العرض التقديمي: تلخيص بسيط → نموذج سريع
   filternoise: "claude-haiku-4-5-20251001", // تنقية الضجيج: مهمة بسيطة → نموذج سريع
   fixspacing: "claude-haiku-4-5-20251001", // إصلاح المسافات: مهمة بسيطة → نموذج سريع
+  // النطق الدقيق (التشكيل) والترجمة الصوتية يُطلبان أثناء القراءة صفحةً-بصفحة،
+  // فالسرعة أهم شيء لتجربة الاستماع → نموذج سريع بدل الإبطاء.
+  tashkeel: "claude-haiku-4-5-20251001",
+  translate: "claude-haiku-4-5-20251001",
 };
-const MAX_TOKENS: Record<string, number> = { cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, slides: 1500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, translate: 4000, slides: 1500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
