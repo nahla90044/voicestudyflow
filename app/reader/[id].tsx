@@ -140,7 +140,7 @@ export default function ReaderScreen() {
   // وضع القيادة (واجهة كبيرة مبسّطة)
   const [drivingMode, setDrivingMode] = useState(false);
   // وضع ملء الشاشة للقراءة (إخفاء الأزرار وتكبير النص)
-  const [fullText, setFullText] = useState(false);
+  const [fullText, setFullText] = useState(true); // القراءة تفتح كامل الشاشة افتراضيًا
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
