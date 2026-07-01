@@ -690,7 +690,7 @@ const ar: Record<string, string> = {
   "music.heroic": "بطولي",
   "music.emotional": "عاطفي",
   "music.dark": "مظلم",
-  "music.study": "تركيز",
+  "music.study": "دراسة",
   "music.rain": "مطر",
   "music.ocean": "أمواج البحر",
   "music.forest": "غابة",
@@ -1376,7 +1376,7 @@ const en: Record<string, string> = {
   "music.heroic": "Heroic",
   "music.emotional": "Emotional",
   "music.dark": "Dark",
-  "music.study": "Focus",
+  "music.study": "Study",
   "music.meditation": "Meditation",
 };
 

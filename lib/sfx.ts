@@ -90,6 +90,7 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "dark", name: "مظلم", kind: "music", lengthMs: 90000, prompt: "dark tense cinematic orchestral score, ominous low strings and brass, suspenseful and dramatic thriller atmosphere, instrumental film score" },
   { key: "historical", name: "تاريخي", kind: "music", lengthMs: 90000, prompt: "noble historical orchestral score, warm strings and soft horns, epic period-drama atmosphere, dignified and emotional, instrumental film score" },
   { key: "classical", name: "كلاسيكي", kind: "music", lengthMs: 90000, prompt: "calm classical orchestral piece in a warm romantic style, gentle slow strings and soft piano, peaceful and soothing, instrumental" },
+  { key: "study", name: "دراسة", kind: "music", lengthMs: 90000, prompt: "warm uplifting study music, gentle soft piano with light warm strings, positive hopeful and encouraging mood, calm and relaxing yet motivating, soft steady and continuous, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣

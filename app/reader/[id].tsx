@@ -113,6 +113,7 @@ const MUSIC_EMOJI: Record<string, string> = {
   dark: "🌑",
   historical: "🏛️",
   classical: "🎼",
+  study: "📚",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
