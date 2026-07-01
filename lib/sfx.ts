@@ -5,7 +5,7 @@ import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
 
-const DIR = "sfx-cache-v2"; // v2: مقاطع أطول (٢٢ث) — نتجاهل مقاطع v1 القصيرة
+const DIR = "sfx-cache-v3"; // v3: موسيقى ElevenLabs (مقطوعات أطول) بدل مؤثّرات قصيرة
 
 function dir(): Directory {
   const d = new Directory(Paths.cache, DIR);
@@ -45,16 +45,34 @@ async function getSfxFile(key: string, prompt: string, duration: number): Promis
 
 /* ---------------- موسيقى خلفية هادئة (اختيارات متعددة، حلقة) ---------------- */
 // كل الخيارات هادئة ومريحة
+// موسيقى ElevenLabs (v1/music): مقطوعة أطول وأغنى ومرخّصة تجاريًا. عند تعذّرها
+// (خطة/شبكة) نرجع لمؤثّر الصوت القصير حتى لا تنقطع الميزة.
+async function getMusicFile(key: string, prompt: string, lengthMs: number): Promise<File | null> {
+  const f = new File(dir(), `${hash(key)}.mp3`);
+  if (f.exists && (f.size ?? 0) > 0) return f;
+  try {
+    const { data, error } = await supabase.functions.invoke("music", { body: { prompt, lengthMs } });
+    const audio = (data as { audio?: string; error?: string })?.audio;
+    if (!error && audio) {
+      f.write(b64ToBytes(audio));
+      return f;
+    }
+  } catch {
+    // نتجاهل — نجرّب مؤثّر الصوت كبديل
+  }
+  return getSfxFile(key, prompt, 22);
+}
+
 export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [
-  { key: "piano", name: "بيانو هادئ", prompt: "soft slow calm solo piano, gentle, peaceful, seamless loop" },
-  { key: "nature", name: "طبيعة", prompt: "gentle calm nature ambience, soft rain and distant birds, soothing, seamless loop" },
-  { key: "strings", name: "وتريات", prompt: "calm soft warm strings pad, soothing, slow, cinematic, seamless loop" },
-  { key: "lofi", name: "لو-فاي", prompt: "calm soft lo-fi chillhop beat for studying, mellow, relaxing, seamless loop" },
-  { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone, very soft, airy, calming, seamless loop" },
+  { key: "piano", name: "بيانو هادئ", prompt: "calm slow solo piano, gentle and warm, continuous ambient background for studying, soft dynamics, no strong intro or ending, loopable" },
+  { key: "nature", name: "طبيعة", prompt: "peaceful ambient soundscape with soft nature textures and gentle warm pads, calm and continuous, soothing background, loopable" },
+  { key: "strings", name: "وتريات", prompt: "warm soft cinematic strings pad, slow and soothing, continuous ambient background, no strong intro or ending, loopable" },
+  { key: "lofi", name: "لو-فاي", prompt: "mellow lo-fi chillhop instrumental for studying, relaxed steady groove, continuous soft background, loopable" },
+  { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone with airy warm pads, very soft and calming, continuous, loopable" },
 ];
 
-// أطول مقطع تسمح به خدمة المؤثرات (٢٢ث) → حلقة أنعم وبداية/نهاية أقل إزعاجًا
-const MUSIC_SECONDS = 22;
+// طول مقطوعة الموسيقى (ms) — ٦٠ث: أطول وأنعم من مؤثّرات ٢٢ث، وبتكلفة معقولة.
+const MUSIC_MS = 60000;
 
 let ambientPlayer: AudioPlayer | null = null;
 let ambientKey: string | null = null;
@@ -67,7 +85,7 @@ let ambientKey: string | null = null;
 export async function warmAllMusic(): Promise<void> {
   try {
     await Promise.all(
-      MUSIC_OPTIONS.map((o) => getSfxFile(`music-${o.key}`, o.prompt, MUSIC_SECONDS).catch(() => null))
+      MUSIC_OPTIONS.map((o) => getMusicFile(`music-${o.key}`, o.prompt, MUSIC_MS).catch(() => null))
     );
   } catch {
     // التحضير المسبق اختياري — لا نُزعج المستخدم عند فشله
@@ -79,7 +97,7 @@ export async function startAmbient(key: string): Promise<void> {
   if (!opt) return;
   if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
   stopAmbient();
-  const f = await getSfxFile(`music-${opt.key}`, opt.prompt, MUSIC_SECONDS);
+  const f = await getMusicFile(`music-${opt.key}`, opt.prompt, MUSIC_MS);
   if (!f) return;
   try {
     ambientPlayer = createAudioPlayer({ uri: f.uri });
