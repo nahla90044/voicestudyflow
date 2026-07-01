@@ -81,6 +81,18 @@ function wordIndexAtFraction(sentence: string, frac: number): number {
 }
 
 // يقسّم الشرائح ذات النقاط الكثيرة على شرائح متتابعة (لئلا يُقصّ المحتوى في شريحة)
+// لغات الترجمة المتاحة (يختارها المستخدم عند الضغط على «الترجمة»)
+const TRANSLATE_LANGS: { code: string; label: string }[] = [
+  { code: "ar", label: "العربية" },
+  { code: "en", label: "English" },
+  { code: "fr", label: "Français" },
+  { code: "es", label: "Español" },
+  { code: "de", label: "Deutsch" },
+  { code: "tr", label: "Türkçe" },
+  { code: "ur", label: "اردو" },
+  { code: "id", label: "Indonesia" },
+];
+
 // رمز تعبيري لكل نوع موسيقى (لبطاقات اختيار الموسيقى في العرض التقديمي)
 const MUSIC_EMOJI: Record<string, string> = {
   strings: "🎼",
@@ -1070,6 +1082,32 @@ export default function ReaderScreen() {
     } finally {
       setAiBusy(false);
     }
+  }
+
+  // ترجمة نص الصفحة إلى لغة يختارها المستخدم (بدل لغة الواجهة تلقائيًا)
+  async function runTranslate(lang: string) {
+    setAiBusy(true);
+    setAiResult("");
+    try {
+      const text = await ensurePageText();
+      if (!text.trim()) {
+        setAiResult(t("reader.ai.noPageText"));
+        return;
+      }
+      const out = await aiAssist("translate", text, undefined, lang);
+      setAiResult(out || t("reader.ai.noResult"));
+    } catch {
+      setAiResult(t("reader.ai.requestFailed"));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function openTranslatePicker() {
+    Alert.alert(t("reader.ai.translateTo"), undefined, [
+      ...TRANSLATE_LANGS.map((l) => ({ text: l.label, onPress: () => runTranslate(l.code) })),
+      { text: t("common.cancel"), style: "cancel" as const },
+    ]);
   }
 
   async function makeFlashcards() {
@@ -2102,7 +2140,7 @@ export default function ReaderScreen() {
                 <Ionicons name="albums" size={18} color={Palette.neonPink} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.cards")}</Text>
               </Pressable>
-              <Pressable style={styles.aiAction} onPress={() => runAi("translate")} disabled={aiBusy}>
+              <Pressable style={styles.aiAction} onPress={openTranslatePicker} disabled={aiBusy}>
                 <Ionicons name="language" size={18} color={Palette.neonBlue} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.translate")}</Text>
               </Pressable>

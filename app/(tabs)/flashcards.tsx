@@ -125,6 +125,13 @@ export default function FlashcardsScreen() {
     setIdx((i) => i + 1);
   }
 
+  // تنقّل حرّ بين البطاقات (بلا تقييم) — للأمام/الخلف
+  function goCard(delta: number) {
+    flip.setValue(0);
+    setFlipped(false);
+    setIdx((i) => Math.min(Math.max(0, i + delta), Math.max(0, queue.length - 1)));
+  }
+
   // حذف البطاقة الحالية (بعد تأكيد) ثم المتابعة للتالية
   function deleteCurrentCard() {
     const card = queue[idx];
@@ -279,7 +286,13 @@ export default function FlashcardsScreen() {
                 <Text style={styles.backChipTxt}>{t("flashcards.books")}</Text>
               </Pressable>
               <View style={[styles.reviewTopRight, { flexDirection: dir.row }]}>
+                <Pressable onPress={() => goCard(-1)} disabled={idx <= 0} hitSlop={8} style={styles.navChip}>
+                  <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={18} color={idx <= 0 ? Palette.textDim : Palette.text} />
+                </Pressable>
                 <Text style={styles.counter}>{idx + 1} / {queue.length}</Text>
+                <Pressable onPress={() => goCard(1)} disabled={idx >= queue.length - 1} hitSlop={8} style={styles.navChip}>
+                  <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={idx >= queue.length - 1 ? Palette.textDim : Palette.text} />
+                </Pressable>
                 <Pressable onPress={deleteCurrentCard} hitSlop={8} style={styles.trashChip}>
                   <Ionicons name="trash-outline" size={18} color={Palette.danger} />
                 </Pressable>
@@ -373,6 +386,7 @@ const styles = StyleSheet.create({
   counter: { color: Palette.textDim, fontSize: 13, fontWeight: "800" },
   reviewTopRight: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
   trashChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  navChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   trashBtn: { padding: 6, marginStart: 4 },
 
   cardArea: { flex: 1 },

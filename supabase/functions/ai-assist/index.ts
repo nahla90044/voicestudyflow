@@ -93,11 +93,17 @@ Deno.serve(async (req: Request) => {
     if (!SYSTEM[action]) return json({ error: "Unknown action" }, 400);
     if (!text.trim()) return json({ error: "Empty text" }, 400);
 
-    // الترجمة: اللغة الهدف تتبع لغة الواجهة (افتراضي العربية للتوافق الخلفي).
+    // الترجمة: اللغة الهدف يختارها المستخدم (افتراضي العربية للتوافق الخلفي).
     const TRANSLATE_TARGET: Record<string, string> = {
       ar: "العربية الفصحى",
       en: "clear, natural English",
       fr: "un français clair et naturel",
+      es: "un español claro y natural",
+      de: "klares, natürliches Deutsch",
+      tr: "açık ve doğal bir Türkçe",
+      ur: "صاف اور فطری اردو",
+      hi: "स्पष्ट और स्वाभाविक हिन्दी",
+      id: "Bahasa Indonesia yang jelas dan alami",
     };
     // كل المحتوى الموجَّه للمستخدم يُكتب بلغة واجهة التطبيق (مهم للمستخدم الأجنبي:
     // كتاب إنجليزي + واجهة إنجليزية → أسئلة/ملخّص/وحدات/بطاقات/شرائح بالإنجليزية).

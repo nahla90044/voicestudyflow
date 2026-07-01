@@ -206,7 +206,7 @@ export async function aiAssist(
   action: AiAction,
   text: string,
   question?: string,
-  targetLang?: "ar" | "en" | "fr"
+  targetLang?: string // رمز اللغة الهدف (للترجمة يختاره المستخدم؛ وإلا لغة الواجهة)
 ): Promise<string> {
   if (!text.trim()) return "";
 
