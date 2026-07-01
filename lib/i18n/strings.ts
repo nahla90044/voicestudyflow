@@ -695,6 +695,12 @@ const ar: Record<string, string> = {
   "music.fire": "مدفأة",
   "music.thunder": "مطر ورعد",
   "music.night": "ليل هادئ",
+  "music.horror": "رعب",
+  "music.suspense": "تشويق",
+  "music.historical": "تاريخي",
+  "music.novels": "روايات",
+  "music.poetry": "شعر",
+  "music.study": "دراسة",
   "music.meditation": "تأمّل",
 };
 
@@ -1365,6 +1371,12 @@ const en: Record<string, string> = {
   "music.fire": "Fireplace",
   "music.thunder": "Rain & thunder",
   "music.night": "Night",
+  "music.horror": "Horror",
+  "music.suspense": "Suspense",
+  "music.historical": "Historical",
+  "music.novels": "Novels",
+  "music.poetry": "Poetry",
+  "music.study": "Study",
   "music.meditation": "Meditation",
 };
 

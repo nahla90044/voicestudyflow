@@ -83,6 +83,13 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "fire", name: "مدفأة", prompt: "cozy crackling fireplace, soft warm campfire ambience, calming, seamless loop" },
   { key: "thunder", name: "مطر ورعد", prompt: "gentle steady rain with soft distant thunder, calming, seamless loop" },
   { key: "night", name: "ليل هادئ", prompt: "peaceful summer night ambience, soft crickets and gentle breeze, calming, seamless loop" },
+  // أصوات مواضيعية حسب نوع الكتاب/الرواية
+  { key: "horror", name: "رعب", prompt: "dark eerie horror ambience, low ominous drone, distant unsettling creaks, tense and suspenseful, seamless loop" },
+  { key: "suspense", name: "تشويق", prompt: "tense suspenseful dark ambient drone, subtle unease, cinematic thriller atmosphere, seamless loop" },
+  { key: "historical", name: "تاريخي", prompt: "warm old-world historical ambience, soft distant strings and gentle wind, medieval atmosphere, calm, seamless loop" },
+  { key: "novels", name: "روايات", prompt: "warm gentle emotive ambient pad for reading novels, soft and immersive, calm, seamless loop" },
+  { key: "poetry", name: "شعر", prompt: "soft delicate ambient pad for poetry reading, gentle, airy, contemplative, seamless loop" },
+  { key: "study", name: "دراسة", prompt: "calm focused study ambience, soft steady minimal background for concentration, seamless loop" },
   // مقطوعات ElevenLabs (أغنى) — kind: music
   { key: "symphony", name: "سمفونية", kind: "music", lengthMs: 90000, prompt: "very calm classical symphony, soft slow strings and light woodwinds, gentle, peaceful, continuous ambient pad texture, no loud crescendos and no percussion" },
   { key: "cinematic", name: "سينمائي", kind: "music", lengthMs: 90000, prompt: "calm cinematic ambient, warm sustained strings and soft pads, slow evolving, peaceful, continuous" },
@@ -108,8 +115,11 @@ const AMB_VOLUME = 0.14;
 
 let ambientPlayer: AudioPlayer | null = null;
 let ambientKey: string | null = null;
+// رمز يتغيّر مع كل إيقاف/تبديل — يُلغي أي مقطوعة كانت «قيد التوليد» فلا يشتغل اثنان معًا
+let ambientToken = 0;
 
 export function stopAmbient(): void {
+  ambientToken++; // يُبطل أي startAmbient قيد الانتظار (توليد) فلا يتراكب الصوت
   if (ambientPlayer) {
     try { ambientPlayer.pause(); } catch {}
     try { ambientPlayer.remove(); } catch {}
@@ -122,9 +132,11 @@ export async function startAmbient(key: string): Promise<void> {
   const opt = MUSIC_OPTIONS.find((o) => o.key === key);
   if (!opt) return;
   if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
-  stopAmbient();
+  stopAmbient(); // يوقف الحالي ويزيد الرمز
+  const myToken = ambientToken; // بصمة هذا الطلب بعد الإيقاف
   const f = await fileFor(opt);
-  if (!f) return;
+  // تغيّر الاختيار (أو أُوقف) أثناء التوليد → لا تشغّل هذا (يمنع تراكب صوتين)
+  if (myToken !== ambientToken || !f) return;
   try {
     ambientPlayer = createAudioPlayer({ uri: f.uri });
     ambientKey = key;

@@ -112,6 +112,12 @@ const MUSIC_EMOJI: Record<string, string> = {
   fire: "🔥",
   thunder: "⛈️",
   night: "🌙",
+  horror: "👻",
+  suspense: "🕯️",
+  historical: "🏛️",
+  novels: "📖",
+  poetry: "🕊️",
+  study: "🎓",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
