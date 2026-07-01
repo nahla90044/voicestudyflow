@@ -343,40 +343,90 @@ export default function SyllabusScreen() {
     } catch {}
   }
 
-  // طباعة الخريطة الذهنية كشجرة كاملة مرتّبة (بلا قص أو نقص)
+  // طباعة الخريطة الذهنية بشكلها **الشجري** الحقيقي (SVG): عقدة مركزية يمينًا،
+  // وفروع منحنية متفرّعة يسارًا، وتحت كل فرع نقاطه — كما تظهر على الشاشة تمامًا.
   async function printMindmap() {
     if (!mm) return;
     const esc = (s: string) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    // كل فرع بطاقة ملوّنة مرتّبة داخل شبكة عمودين — خريطة كاملة بلا قص
-    const branches = mm.branches
-      .map((b, i) => {
-        const c = MM_COLORS[i % MM_COLORS.length];
-        const pts = b.points.map((p) => `<li>${esc(p)}</li>`).join("");
-        return `<div class="br" style="border-color:${c}">
-          <div class="brh" style="background:${c}"><span class="num">${i + 1}</span>${esc(b.label)}</div>
-          ${pts ? `<ul>${pts}</ul>` : ""}
-        </div>`;
-      })
-      .join("");
-    const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8"><style>
-      * { font-family: -apple-system, 'SF Arabic', sans-serif; box-sizing: border-box; }
-      body { padding: 28px; color: #14233a; }
-      h1 { font-size: 20px; margin: 0 0 16px; text-align:center; }
-      .center { background:#5b3df5; color:#fff; font-weight:800; font-size:18px; text-align:center; padding:16px 20px; border-radius:16px; margin:0 auto 8px; max-width:460px; }
-      .stem { width:2px; height:22px; background:#c7cede; margin:0 auto 14px; }
-      .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-      .br { border:2px solid; border-radius:14px; overflow:hidden; page-break-inside: avoid; }
-      .brh { font-weight:800; font-size:15px; color:#fff; display:flex; align-items:center; gap:8px; padding:10px 14px; }
-      .num { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,0.28); font-size:13px; flex:none; }
-      ul { margin:0; padding:10px 20px; }
-      li { margin:5px 0; font-size:13.5px; line-height:1.5; }
-      @media print { .grid { gap:12px; } }
-    </style></head><body>
+    const clip = (s: string, n: number) => {
+      const x = (s || "").trim();
+      return x.length > n ? x.slice(0, n - 1) + "…" : x;
+    };
+    const centerLines = (s: string): string[] => {
+      const words = (s || "").split(/\s+/);
+      if (words.length <= 2) return [s || ""];
+      const mid = Math.ceil(words.length / 2);
+      return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
+    };
+
+    // هندسة الشجرة (وحدات SVG) — الجذر يمينًا، الفروع تتفرّع يسارًا (RTL)
+    const W = 1240;
+    const ROW = 48;
+    const BR_GAP = 32;
+    const ROOT_RX = 118;
+    const ROOT_RY = 62;
+    const X_ROOT = W - 150; // مركز العقدة الجذرية
+    const X_BRANCH = 560; // عقد الفروع
+    const X_POINT = 300; // النقاط الفرعية
+
+    let y = 80;
+    const layout = mm.branches.map((b) => {
+      const pts = b.points;
+      const startY = y;
+      const pointYs = pts.map((_, j) => startY + j * ROW);
+      const by = startY + ((Math.max(1, pts.length) - 1) / 2) * ROW;
+      y += Math.max(1, pts.length) * ROW + BR_GAP;
+      return { label: b.label, pts, pointYs, by };
+    });
+    const H = Math.max(y + 40, ROOT_RY * 2 + 160);
+    const rootY = H / 2;
+
+    const parts: string[] = [];
+    layout.forEach((b, i) => {
+      const c = MM_COLORS[i % MM_COLORS.length];
+      const rootEdge = X_ROOT - ROOT_RX;
+      // فرع منحنٍ من الجذر إلى عقدة الفرع
+      parts.push(
+        `<path d="M ${rootEdge} ${rootY} C ${(rootEdge + X_BRANCH) / 2} ${rootY} ${(rootEdge + X_BRANCH) / 2} ${b.by} ${X_BRANCH} ${b.by}" stroke="${c}" stroke-width="6" fill="none" stroke-linecap="round"/>`
+      );
+      parts.push(`<circle cx="${X_BRANCH}" cy="${b.by}" r="14" fill="${c}"/>`);
+      parts.push(
+        `<text x="${X_BRANCH + 24}" y="${b.by + 8}" fill="${c}" font-size="25" font-weight="800" text-anchor="start">${esc(clip(b.label, 32))}</text>`
+      );
+      // النقاط الفرعية — كل نقطة على سطر بمنحنى خاص
+      b.pts.forEach((p, j) => {
+        const py = b.pointYs[j];
+        parts.push(
+          `<path d="M ${X_BRANCH} ${b.by} C ${(X_POINT + X_BRANCH) / 2} ${b.by} ${(X_POINT + X_BRANCH) / 2} ${py} ${X_POINT} ${py}" stroke="${c}" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>`
+        );
+        parts.push(`<circle cx="${X_POINT}" cy="${py}" r="7" fill="${c}"/>`);
+        parts.push(
+          `<text x="${X_POINT - 18}" y="${py + 7}" fill="#20304a" font-size="22" text-anchor="end">${esc(clip(p, 34))}</text>`
+        );
+      });
+    });
+    // العقدة المركزية
+    parts.push(`<ellipse cx="${X_ROOT}" cy="${rootY}" rx="${ROOT_RX}" ry="${ROOT_RY}" fill="#5b3df5"/>`);
+    const clines = centerLines(mm.center);
+    clines.forEach((ln, k) => {
+      parts.push(
+        `<text x="${X_ROOT}" y="${rootY - (clines.length - 1) * 16 + k * 32 + 8}" fill="#ffffff" font-size="25" font-weight="800" text-anchor="middle">${esc(clip(ln, 15))}</text>`
+      );
+    });
+
+    const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'SF Arabic', sans-serif">${parts.join("")}</svg>`;
+
+    const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8">
+      <style>
+        @page { size: landscape; margin: 14px; }
+        * { font-family: -apple-system, 'SF Arabic', sans-serif; }
+        body { margin: 0; padding: 16px; color: #14233a; }
+        h1 { font-size: 20px; text-align: center; margin: 0 0 10px; }
+        .wrap { width: 100%; }
+      </style></head><body>
       <h1>🗺️ ${esc(t("syllabus.mindmap.title"))} — ${esc(bookTitle)}</h1>
-      <div class="center">${esc(mm.center)}</div>
-      <div class="stem"></div>
-      <div class="grid">${branches}</div>
+      <div class="wrap">${svg}</div>
     </body></html>`;
     try {
       await Print.printAsync({ html });
