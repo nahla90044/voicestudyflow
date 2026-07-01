@@ -43,7 +43,7 @@ import {
   setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
-import { MUSIC_OPTIONS, startAmbient, stopAmbient } from "../../lib/sfx";
+import { MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { isOwner } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
@@ -80,6 +80,15 @@ function wordIndexAtFraction(sentence: string, frac: number): number {
 }
 
 // يقسّم الشرائح ذات النقاط الكثيرة على شرائح متتابعة (لئلا يُقصّ المحتوى في شريحة)
+// رمز تعبيري لكل نوع موسيقى (لبطاقات اختيار الموسيقى في العرض التقديمي)
+const MUSIC_EMOJI: Record<string, string> = {
+  piano: "🎹",
+  nature: "🌿",
+  strings: "🎻",
+  lofi: "🎧",
+  meditation: "🧘",
+};
+
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
   const out: Slide[] = [];
   for (const s of slides) {
@@ -1776,6 +1785,7 @@ export default function ReaderScreen() {
           <Pressable
             onPress={() => {
               presUsedRef.current = true;
+              warmAllMusic(); // حضّر كل المقطوعات مرة واحدة → تبديل فوري بلا توليد متكرر
               setPresentOpen(true);
             }}
             style={styles.aidWrap}
@@ -2376,21 +2386,25 @@ export default function ReaderScreen() {
             </Pressable>
           </View>
 
-          {/* اختيارات الموسيقى الهادئة */}
+          {/* اختيارات الموسيقى الهادئة — بطاقات مرتّبة أفقيًا (بارتفاع ثابت) */}
           {showMusicPicker ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.musicRow}
+              style={styles.musicScroll}
+              contentContainerStyle={styles.musicScrollContent}
             >
               <Pressable
                 onPress={() => {
                   setPresMusicKey(null);
                   stopAmbient();
                 }}
-                style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
+                style={[styles.musicCard, !presMusicKey && styles.musicCardOn]}
               >
-                <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>{t("reader.music.none")}</Text>
+                <Ionicons name="volume-mute" size={20} color={!presMusicKey ? "#0b1220" : Palette.textMuted} />
+                <Text style={[styles.musicCardTxt, !presMusicKey && styles.musicCardTxtOn]} numberOfLines={1}>
+                  {t("reader.music.none")}
+                </Text>
               </Pressable>
               {MUSIC_OPTIONS.map((m) => {
                 const on = presMusicKey === m.key;
@@ -2401,9 +2415,12 @@ export default function ReaderScreen() {
                       setPresMusicKey(m.key);
                       startAmbient(m.key); // معاينة فورية + تشغيل
                     }}
-                    style={[styles.musicChip, on && styles.musicChipOn]}
+                    style={[styles.musicCard, on && styles.musicCardOn]}
                   >
-                    <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>🎵 {t(`music.${m.key}`)}</Text>
+                    <Text style={styles.musicCardEmoji}>{MUSIC_EMOJI[m.key] ?? "🎵"}</Text>
+                    <Text style={[styles.musicCardTxt, on && styles.musicCardTxtOn]} numberOfLines={1}>
+                      {t(`music.${m.key}`)}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -3078,6 +3095,25 @@ const styles = StyleSheet.create({
   musicChipOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
   musicChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
   musicChipTxtOn: { color: "#0b1220" },
+  // بطاقات موسيقى العرض التقديمي (ارتفاع ثابت — لا تتمدّد لأشرطة طويلة)
+  musicScroll: { flexGrow: 0, marginTop: 6 },
+  musicScrollContent: { alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  musicCard: {
+    width: 92,
+    height: 76,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.surface,
+    borderWidth: 1,
+    borderColor: Palette.glassBorder,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 6,
+  },
+  musicCardOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
+  musicCardEmoji: { fontSize: 24 },
+  musicCardTxt: { color: Palette.text, fontSize: 12, fontWeight: "800", textAlign: "center" },
+  musicCardTxtOn: { color: "#0b1220" },
   slideBulletsScroll: { alignSelf: "stretch", maxHeight: 320, flexGrow: 0 },
   presStage: { flex: 1, justifyContent: "center" },
   presCenter: { alignItems: "center", gap: 12 },

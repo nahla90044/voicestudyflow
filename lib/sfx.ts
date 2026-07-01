@@ -5,7 +5,7 @@ import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
 
-const DIR = "sfx-cache-v1";
+const DIR = "sfx-cache-v2"; // v2: مقاطع أطول (٢٢ث) — نتجاهل مقاطع v1 القصيرة
 
 function dir(): Directory {
   const d = new Directory(Paths.cache, DIR);
@@ -53,15 +53,33 @@ export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [
   { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone, very soft, airy, calming, seamless loop" },
 ];
 
+// أطول مقطع تسمح به خدمة المؤثرات (٢٢ث) → حلقة أنعم وبداية/نهاية أقل إزعاجًا
+const MUSIC_SECONDS = 22;
+
 let ambientPlayer: AudioPlayer | null = null;
 let ambientKey: string | null = null;
+
+/**
+ * يحضّر **كل** مقطوعات الموسيقى مرة واحدة ويخزّنها محليًا (بالتوازي)، فيصير
+ * التبديل بينها فوريًا بلا أي توليد لاحق ولا استهلاك ذكاء. آمن للاستدعاء المتكرر
+ * (يتخطّى المخزَّن). يُستدعى عند فتح العرض التقديمي أو عند تحميل الكتاب.
+ */
+export async function warmAllMusic(): Promise<void> {
+  try {
+    await Promise.all(
+      MUSIC_OPTIONS.map((o) => getSfxFile(`music-${o.key}`, o.prompt, MUSIC_SECONDS).catch(() => null))
+    );
+  } catch {
+    // التحضير المسبق اختياري — لا نُزعج المستخدم عند فشله
+  }
+}
 
 export async function startAmbient(key: string): Promise<void> {
   const opt = MUSIC_OPTIONS.find((o) => o.key === key);
   if (!opt) return;
   if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
   stopAmbient();
-  const f = await getSfxFile(`music-${opt.key}`, opt.prompt, 12); // أقصر = رصيد أقل
+  const f = await getSfxFile(`music-${opt.key}`, opt.prompt, MUSIC_SECONDS);
   if (!f) return;
   try {
     ambientPlayer = createAudioPlayer({ uri: f.uri });
