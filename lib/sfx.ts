@@ -93,6 +93,22 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "historical", name: "تاريخي", kind: "music", lengthMs: 90000, prompt: "noble historical orchestral score, warm strings and soft horns, epic period-drama atmosphere, dignified and emotional, instrumental film score" },
   { key: "classical", name: "كلاسيكي", kind: "music", lengthMs: 90000, prompt: "calm classical orchestral piece in a warm romantic style, gentle slow strings and soft piano, peaceful and soothing, instrumental" },
   { key: "study", name: "دراسة", kind: "music", lengthMs: 90000, prompt: "warm uplifting study music, gentle soft piano with light warm strings, positive hopeful and encouraging mood, calm and relaxing yet motivating, soft steady and continuous, instrumental" },
+  // 🎹 بيانو متنوّع (٣)
+  { key: "piano_dream", name: "بيانو حالم", kind: "music", lengthMs: 90000, prompt: "gentle calm solo piano, slow soft dreamy melody, peaceful warm and flowing, instrumental" },
+  { key: "piano_emotive", name: "بيانو عاطفي", kind: "music", lengthMs: 90000, prompt: "reflective emotional solo piano, tender slow melancholic melody, contemplative and touching, instrumental" },
+  { key: "piano_bright", name: "بيانو مشرق", kind: "music", lengthMs: 90000, prompt: "bright uplifting soft piano, gentle flowing hopeful melody, light and positive, instrumental" },
+  // 🎻 كمان متنوّع (٣)
+  { key: "violin_calm", name: "كمان هادئ", kind: "music", lengthMs: 90000, prompt: "solo violin, warm slow expressive melody, calm and soothing, soft gentle strings, instrumental" },
+  { key: "violin_emotive", name: "كمان عاطفي", kind: "music", lengthMs: 90000, prompt: "emotional solo violin, tender melancholic flowing melody, gentle and moving, instrumental" },
+  { key: "violin_classical", name: "كمان كلاسيكي", kind: "music", lengthMs: 90000, prompt: "elegant classical violin, graceful warm flowing melody, refined and calm, instrumental" },
+  // 🥁 إيقاع هادئ متنوّع (٣)
+  { key: "drum_calm", name: "إيقاع هادئ", kind: "music", lengthMs: 90000, prompt: "soft calm hand percussion, gentle steady frame drum rhythm, warm and soothing, minimal, instrumental" },
+  { key: "drum_meditative", name: "طبول تأمّلية", kind: "music", lengthMs: 90000, prompt: "gentle meditative tribal drums, slow soft rhythmic percussion, hypnotic and calming, instrumental" },
+  { key: "drum_warm", name: "إيقاع دافئ", kind: "music", lengthMs: 90000, prompt: "calm world percussion, soft mellow warm rhythm, relaxing gentle groove, instrumental" },
+  // 🎷 ساكسفون هادئ متنوّع (٣)
+  { key: "sax_calm", name: "ساكسفون هادئ", kind: "music", lengthMs: 90000, prompt: "smooth calm saxophone, soft slow jazzy melody, warm and relaxing, gentle, instrumental" },
+  { key: "sax_romantic", name: "ساكسفون رومانسي", kind: "music", lengthMs: 90000, prompt: "gentle romantic saxophone, tender smooth flowing melody, soothing and warm, instrumental" },
+  { key: "sax_night", name: "ساكسفون ليلي", kind: "music", lengthMs: 90000, prompt: "soft mellow late-night saxophone, calm smooth relaxed jazz, laid-back and warm, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣

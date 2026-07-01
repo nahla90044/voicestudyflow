@@ -114,6 +114,18 @@ const MUSIC_EMOJI: Record<string, string> = {
   historical: "🏛️",
   classical: "🎼",
   study: "📚",
+  piano_dream: "🎹",
+  piano_emotive: "🎹",
+  piano_bright: "🎹",
+  violin_calm: "🎻",
+  violin_emotive: "🎻",
+  violin_classical: "🎻",
+  drum_calm: "🥁",
+  drum_meditative: "🥁",
+  drum_warm: "🥁",
+  sax_calm: "🎷",
+  sax_romantic: "🎷",
+  sax_night: "🎷",
 };
 
 function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
