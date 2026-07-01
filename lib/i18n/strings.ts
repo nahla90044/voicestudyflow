@@ -676,9 +676,9 @@ const ar: Record<string, string> = {
   // خطط الاشتراك (Plans)
   // الموسيقى الخلفية (Background music)
   "music.piano": "بيانو هادئ",
-  "music.nature": "مطر وطيور",
-  "music.strings": "وتريات هادئة",
-  "music.lofi": "أمواج البحر",
+  "music.nature": "طبيعة",
+  "music.strings": "وتريات",
+  "music.lofi": "لو-فاي",
   "music.meditation": "تأمّل",
 };
 
@@ -1330,9 +1330,9 @@ const en: Record<string, string> = {
   "themes.ocean": "Ocean",
   "themes.sand": "Warm Sand",
   "music.piano": "Calm piano",
-  "music.nature": "Rain & birds",
-  "music.strings": "Calm strings",
-  "music.lofi": "Ocean waves",
+  "music.nature": "Nature",
+  "music.strings": "Strings",
+  "music.lofi": "Lo-fi",
   "music.meditation": "Meditation",
 };
 

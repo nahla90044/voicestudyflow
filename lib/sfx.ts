@@ -5,7 +5,7 @@ import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
 
-const DIR = "sfx-cache-v6"; // v6: مؤثّرات ١٢ث ذات تكرار سلس (تفضيل المستخدمة)
+const DIR = "sfx-cache-v1"; // نفس تخزين رفع ٣ → نفس المقاطع الصوتية بالضبط
 
 function dir(): Directory {
   const d = new Directory(Paths.cache, DIR);
@@ -45,17 +45,17 @@ async function getSfxFile(key: string, prompt: string, duration: number): Promis
 
 /* ---------------- موسيقى خلفية هادئة (اختيارات متعددة، حلقة) ---------------- */
 // كل الخيارات هادئة ومريحة
-// مؤثّرات صوت قصيرة ذات **تكرار سلس** (seamless loop) — تتكرّر بلا «قطعة»،
-// على عكس مقطوعات ElevenLabs الطويلة التي لها بداية/نهاية واضحة عند التكرار.
+// نفس مؤثّرات رفع ٣ بالضبط (الأنعم في التكرار بلا أي «قطعة») — نفس التعليمات
+// ونفس التخزين (sfx-cache-v1) فتُستخدم نفس المقاطع الصوتية تمامًا.
 export const MUSIC_OPTIONS: { key: string; name: string; prompt: string }[] = [
-  { key: "strings", name: "وتريات هادئة", prompt: "calm soft warm orchestral strings pad, soothing, slow, gentle, seamless loop" },
   { key: "piano", name: "بيانو هادئ", prompt: "soft slow calm solo piano, gentle, peaceful, seamless loop" },
-  { key: "nature", name: "مطر وطيور", prompt: "gentle calm nature ambience, soft rain and distant birds, soothing, seamless loop" },
-  { key: "lofi", name: "أمواج البحر", prompt: "gentle calm ocean waves ambience, soft and soothing, seamless loop" },
+  { key: "nature", name: "طبيعة", prompt: "gentle calm nature ambience, soft rain and distant birds, soothing, seamless loop" },
+  { key: "strings", name: "وتريات", prompt: "calm soft warm strings pad, soothing, slow, cinematic, seamless loop" },
+  { key: "lofi", name: "لو-فاي", prompt: "calm soft lo-fi chillhop beat for studying, mellow, relaxing, seamless loop" },
   { key: "meditation", name: "تأمّل", prompt: "peaceful meditative ambient drone, very soft, airy, calming, seamless loop" },
 ];
 
-// طول مقطع المؤثّر (ث) — ١٢ث: الأنعم في التكرار بلا أي «قطعة» (تفضيل المستخدمة).
+// طول مقطع المؤثّر (ث) — ١٢ث كما في رفع ٣.
 const MUSIC_SECONDS = 12;
 
 let ambientPlayer: AudioPlayer | null = null;
@@ -87,7 +87,7 @@ export async function startAmbient(key: string): Promise<void> {
     ambientPlayer = createAudioPlayer({ uri: f.uri });
     ambientKey = key;
     ambientPlayer.loop = true;
-    ambientPlayer.volume = 0.1; // خفيفة — أقل من صوت القارئ
+    ambientPlayer.volume = 0.14; // نفس مستوى رفع ٣
     ambientPlayer.play();
   } catch {}
 }

@@ -94,10 +94,10 @@ const TRANSLATE_LANGS: { code: string; label: string }[] = [
 
 // رمز تعبيري لكل نوع موسيقى (لبطاقات اختيار الموسيقى في العرض التقديمي)
 const MUSIC_EMOJI: Record<string, string> = {
-  strings: "🎼",
   piano: "🎹",
-  nature: "🌧️",
-  lofi: "🌊",
+  nature: "🌿",
+  strings: "🎻",
+  lofi: "🎧",
   meditation: "🧘",
 };
 
