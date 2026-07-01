@@ -46,8 +46,10 @@ async function getSfxFile(key: string, prompt: string, duration: number): Promis
 /* ---------------- موسيقى خلفية هادئة (اختيارات متعددة، حلقة متواصلة) ---------------- */
 
 // موسيقى ElevenLabs (v1/music): مقطوعة أطول وأغنى. عند تعذّرها نرجع لمؤثّر قصير.
+// **مهم:** اسم الملف مبني على «التعليمات» (prompt) لا المفتاح — فأي تغيير في النغمة
+// يولّد ملفًا جديدًا بدل إرجاع القديم من الكاش (يحلّ رجوع النغمة القديمة).
 async function getMusicFile(key: string, prompt: string, lengthMs: number): Promise<File | null> {
-  const f = new File(dir(), `${hash(key)}.mp3`);
+  const f = new File(dir(), `m-${hash(prompt)}.mp3`);
   if (f.exists && (f.size ?? 0) > 0) return f;
   try {
     const { data, error } = await supabase.functions.invoke("music", { body: { prompt, lengthMs } });
