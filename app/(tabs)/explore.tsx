@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -30,9 +31,16 @@ export default function ArchiveScreen() {
   const [rows, setRows] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    load();
+  // نُعيد التحميل في كل مرة تُفتح فيها الشاشة (هذا تبويب يبقى محمّلًا، فلا نكتفي
+  // بالتحميل مرة واحدة) — فيظهر أي كتاب أرشفتِه فورًا عند فتح الأرشيف.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [])
+  );
 
+  // تحديث لحظي إضافي إن كان Realtime مفعّلًا (لا نعتمد عليه وحده)
+  useEffect(() => {
     const ch = supabase
       .channel("vsf-archive")
       .on(
@@ -41,7 +49,6 @@ export default function ArchiveScreen() {
         () => load()
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(ch);
     };
