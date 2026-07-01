@@ -325,7 +325,9 @@ export default function LibraryScreen() {
     return sorted;
   }, [rows, query, filter, sortBy, selectedFolder, assign]);
 
-  const folderCount = (id: string) => Object.values(assign).filter((v) => v === id).length;
+  // نعدّ الكتب **النشطة فقط** (rows تستبعد المؤرشفة) — فالكتاب المؤرشف يختفي من
+  // الملف وعدّاده، ويبقى تعيينه محفوظًا ليعود لملفه عند الاسترجاع (إن كان موجودًا).
+  const folderCount = (id: string) => rows.filter((b) => assign[b.id] === id).length;
 
   function createFolder() {
     Alert.prompt?.(t("library.folder.newTitle"), t("library.folder.newPrompt"), async (name?: string) => {
