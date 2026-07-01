@@ -87,7 +87,6 @@ const VOICE_IDS: Record<VoiceGender, string> = {
 
 let currentPlayer: AudioPlayer | null = null;
 let currentVoiceRate = 1; // سرعة الصوت الجاري الداخلية (لتطبيق سرعة المستخدم فورًا)
-let currentFileUri: string | null = null;
 let audioModeReady = false;
 // مشغّل المقطع التالي مُحمّل مسبقًا (لتشغيل متواصل بلا فجوة بين المقاطع)
 let warmPlayer: { uri: string; player: AudioPlayer } | null = null;
@@ -178,7 +177,6 @@ function disposePlayer() {
     currentPlayer = null;
   }
   // لا نحذف الملف: صار مخبّأً (cache) لإعادة استخدامه بدون تكلفة جديدة
-  currentFileUri = null;
 }
 
 /* ---------------- تخزين الصوت محليًا (cache) ---------------- */
@@ -502,7 +500,6 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     step = "وضع الصوت";
     await ensureAudioMode();
     if (myToken !== playToken) return;
-    currentFileUri = file.uri;
 
     step = "إنشاء المشغّل";
     // المشغّل المُحمّل مسبقًا (warm) إن توفّر → تشغيل فوري بلا فجوة، وإلا ننشئ واحدًا

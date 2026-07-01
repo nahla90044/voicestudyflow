@@ -17,8 +17,6 @@ import {
   View,
 } from "react-native";
 
-// أوقات التذكير المتاحة (٥ صباحًا حتى ١١ مساءً)
-const REMINDER_HOURS = Array.from({ length: 19 }, (_, i) => i + 5);
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../../components/brand/glass-card";
 import { LanguageSwitcher } from "../../components/brand/language-switcher";
@@ -41,6 +39,9 @@ import {
   stopSpeaking,
 } from "../../lib/voice";
 import { ONBOARDING_KEY } from "../onboarding";
+
+// أوقات التذكير المتاحة (٥ صباحًا حتى ١١ مساءً)
+const REMINDER_HOURS = Array.from({ length: 19 }, (_, i) => i + 5);
 
 const ACC_ID = "kbd-more";
 

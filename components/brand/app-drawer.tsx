@@ -2,7 +2,7 @@
 // قائمة جانبية (☰) تنفتح من اليمين، فيها: الإعدادات، الأرشيف.
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

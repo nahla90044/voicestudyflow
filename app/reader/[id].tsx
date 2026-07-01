@@ -180,7 +180,7 @@ export default function ReaderScreen() {
   const [activeWord, setActiveWord] = useState(-1); // الكلمة المنطوقة داخل المقطع (كاراوكي)
   const [skipMult, setSkipMult] = useState(1); // مضاعف سرعة التخطّي الحالي (×2 ×3…)
   const [skipDir, setSkipDir] = useState(1); // اتجاه آخر تخطّي (لإظهار الشارة على الزر الصحيح)
-  const [status, setStatus] = useState(""); // رسالة حالة ظاهرة للمستخدم
+  const [, setStatus] = useState(""); // رسالة حالة داخلية (تُحدَّث أثناء التشغيل)
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
 
   // قاموس: معنى الكلمة عند لمسها

@@ -937,13 +937,6 @@ function Empty() {
   );
 }
 
-function EmptySlot() {
-  return (
-    <View style={styles.emptyIconWrap}>
-      <Text style={styles.emptyIcon}>—</Text>
-    </View>
-  );
-}
 
 function BlockCard({
   b,
@@ -1020,7 +1013,7 @@ function MonthList({
       if (!m.has(b.dateISO)) m.set(b.dateISO, []);
       m.get(b.dateISO)!.push(b);
     }
-    for (const [k, arr] of m.entries()) arr.sort((a, b) => compareTime(a.time, b.time));
+    for (const arr of m.values()) arr.sort((a, b) => compareTime(a.time, b.time));
     return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [blocks]);
 
@@ -1277,17 +1270,6 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   emptyTxt: { color: "#9fb3c8", textAlign: "right", fontWeight: "800" },
-
-  emptyIconWrap: {
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyIcon: { color: "rgba(201,212,226,0.55)", fontWeight: "900", fontSize: 22 },
 
   // fullscreen modal
   modalSafe: { flex: 1, backgroundColor: "#0b1220" },

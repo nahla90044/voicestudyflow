@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
-import { useDir, useI18n } from "../../lib/i18n";
+import { useI18n } from "../../lib/i18n";
 
 type Step = { emoji: string; titleKey: string; bodyKey: string };
 
@@ -23,7 +23,6 @@ const STEPS: Step[] = [
 
 export function HowToTour({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useI18n();
-  const dir = useDir();
   const [step, setStep] = useState(0);
   const isLast = step === STEPS.length - 1;
   const s = STEPS[step];
