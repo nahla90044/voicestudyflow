@@ -32,6 +32,21 @@ export async function getSession(): Promise<Session | null> {
   return session;
 }
 
+// حساب المالك (نهلة): يفتح ميزات خاصة (كتب غير محدودة، خانة سؤال الصفحة…)
+const OWNER_EMAIL = "nahlah@hotmail.com";
+
+/** هل الحساب الحالي هو حساب المالك؟ (لإظهار ميزات مقيّدة عليه فقط) */
+export async function isOwner(): Promise<boolean> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user?.email?.trim().toLowerCase() === OWNER_EMAIL;
+  } catch {
+    return false;
+  }
+}
+
 /** هل المستخدم الحالي مجهول (لم يربط بريدًا بعد)؟ */
 export async function isAnonymous(): Promise<boolean> {
   const {

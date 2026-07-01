@@ -6,7 +6,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getCurrentLang } from "./i18n";
 
-export type UnitContentKind = "summary" | "quiz" | "mindmap";
+// summary/quiz/mindmap: لوحدات المنهج · pagesummary/pagequiz: لصفحة القارئ الحالية
+export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz";
 
 // تجزئة FNV-1a لاسم مفتاح ثابت قصير من مسار الـPDF
 function hashKey(s: string): string {

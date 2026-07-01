@@ -45,6 +45,7 @@ import {
 } from "../../lib/readerPrefs";
 import { MUSIC_OPTIONS, startAmbient, stopAmbient } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
+import { isOwner } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 import {
   DEFAULT_VOICE_ID,
@@ -204,6 +205,11 @@ export default function ReaderScreen() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiQuestion, setAiQuestion] = useState("");
+  // خانة «اسأل عن الصفحة» تُعرض لحساب المالك فقط (تفتح مجالًا لاستخدامات أخرى)
+  const [owner, setOwner] = useState(false);
+  useEffect(() => {
+    isOwner().then(setOwner).catch(() => setOwner(false));
+  }, []);
 
   // مراجع
   const playingRef = useRef(false);
@@ -2035,11 +2041,29 @@ export default function ReaderScreen() {
             </View>
 
             <View style={styles.aiActions}>
-              <Pressable style={styles.aiAction} onPress={() => runAi("summarize")} disabled={aiBusy}>
+              <Pressable
+                style={styles.aiAction}
+                onPress={() => {
+                  setAiOpen(false);
+                  router.push({
+                    pathname: "/unit-summary",
+                    params: { pdf_path: pdfPath, page: String(page), title: t("reader.ai.pageTitle", { page }) },
+                  });
+                }}
+              >
                 <Ionicons name="list" size={18} color={Palette.neonCyan} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.summarize")}</Text>
               </Pressable>
-              <Pressable style={styles.aiAction} onPress={() => runAi("quiz")} disabled={aiBusy}>
+              <Pressable
+                style={styles.aiAction}
+                onPress={() => {
+                  setAiOpen(false);
+                  router.push({
+                    pathname: "/unit-quiz",
+                    params: { pdf_path: pdfPath, page: String(page), title: t("reader.ai.pageTitle", { page }) },
+                  });
+                }}
+              >
                 <Ionicons name="help-circle" size={18} color={Palette.neonViolet} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.quiz")}</Text>
               </Pressable>
@@ -2053,19 +2077,22 @@ export default function ReaderScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.aiAskRow}>
-              <TextInput
-                value={aiQuestion}
-                onChangeText={setAiQuestion}
-                placeholder={t("reader.ai.askPlaceholder")}
-                placeholderTextColor={Palette.placeholder}
-                style={[styles.aiInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
-                editable={!aiBusy}
-              />
-              <Pressable style={styles.aiSend} onPress={() => runAi("ask")} disabled={aiBusy || !aiQuestion.trim()}>
-                <Ionicons name="send" size={18} color="#fff" />
-              </Pressable>
-            </View>
+            {/* خانة السؤال الحر عن الصفحة: لحساب المالك فقط (تُقلّل سوء الاستخدام) */}
+            {owner ? (
+              <View style={styles.aiAskRow}>
+                <TextInput
+                  value={aiQuestion}
+                  onChangeText={setAiQuestion}
+                  placeholder={t("reader.ai.askPlaceholder")}
+                  placeholderTextColor={Palette.placeholder}
+                  style={[styles.aiInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+                  editable={!aiBusy}
+                />
+                <Pressable style={styles.aiSend} onPress={() => runAi("ask")} disabled={aiBusy || !aiQuestion.trim()}>
+                  <Ionicons name="send" size={18} color="#fff" />
+                </Pressable>
+              </View>
+            ) : null}
 
             <ScrollView style={styles.aiResultBox} contentContainerStyle={{ padding: 14 }}>
               {aiBusy ? (

@@ -11,6 +11,7 @@ import { GradientButton } from "../components/brand/gradient-button";
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
+import { extractPdfPageText } from "../lib/pdfText";
 import { generateUnitQuiz, getSyllabus, type QuizQ } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 
@@ -23,9 +24,13 @@ const LEVEL_COLOR: Record<"easy" | "medium" | "hard", string> = {
 export default function UnitQuizScreen() {
   const { t } = useI18n();
   const dir = useDir();
-  const { pdf_path, unit, title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; title?: string }>();
+  const { pdf_path, unit, page, title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
+  const pageNum = Number(page);
+  const pageMode = Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة) بدل وحدة منهج
+  const srcId = pageMode ? pageNum : unitIdx;
+  const kind = pageMode ? "pagequiz" : "quiz";
   const unitTitle = typeof title === "string" ? title : "";
 
   const [loading, setLoading] = useState(true);
@@ -40,24 +45,30 @@ export default function UnitQuizScreen() {
     let on = true;
     (async () => {
       try {
-        const cached = await getUnitContent<QuizQ[]>(pdfPath, unitIdx, "quiz");
+        const cached = await getUnitContent<QuizQ[]>(pdfPath, srcId, kind);
         if (cached && cached.length) {
           if (on) setQuiz(cached);
           return;
         }
-        const r = await getSyllabus(pdfPath);
-        const u = r?.data.units[unitIdx];
-        if (!u) {
+        let ctx = "";
+        if (pageMode) {
+          const res = await extractPdfPageText(pdfPath, pageNum);
+          ctx = (res.text || "").slice(0, 4000);
+        } else {
+          const r = await getSyllabus(pdfPath);
+          const u = r?.data.units[unitIdx];
+          if (u) ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
+        }
+        if (!ctx.trim()) {
           if (on) setErr(t("syllabus.err.quiz"));
           return;
         }
-        const ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
         const qs = await generateUnitQuiz(ctx);
         if (qs.length === 0) {
           if (on) setErr(t("syllabus.err.quiz"));
           return;
         }
-        setUnitContent(pdfPath, unitIdx, "quiz", qs);
+        setUnitContent(pdfPath, srcId, kind, qs);
         if (on) setQuiz(qs);
       } catch {
         if (on) setErr(t("syllabus.err.quiz"));
@@ -68,7 +79,7 @@ export default function UnitQuizScreen() {
     return () => {
       on = false;
     };
-  }, [pdfPath, unitIdx, t]);
+  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, t]);
 
   function pick(opt: number) {
     if (picked !== null) return;

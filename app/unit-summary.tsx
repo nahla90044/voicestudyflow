@@ -12,6 +12,7 @@ import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
 import { aiAssist } from "../lib/ai";
 import { useDir, useI18n } from "../lib/i18n";
+import { extractPdfPageText } from "../lib/pdfText";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../lib/voice";
@@ -32,9 +33,13 @@ function stripMarkdown(s: string): string {
 export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
-  const { pdf_path, unit, title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; title?: string }>();
+  const { pdf_path, unit, page, title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
+  const pageNum = Number(page);
+  const pageMode = Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة) بدل وحدة منهج
+  const srcId = pageMode ? pageNum : unitIdx;
+  const kind = pageMode ? "pagesummary" : "summary";
   const unitTitle = typeof title === "string" ? title : "";
 
   const [loading, setLoading] = useState(true);
@@ -47,26 +52,35 @@ export default function UnitSummaryScreen() {
     (async () => {
       try {
         // مخزَّن مسبقًا؟ اعرضه فورًا بلا ذكاء
-        const cached = await getUnitContent<string>(pdfPath, unitIdx, "summary");
+        const cached = await getUnitContent<string>(pdfPath, srcId, kind);
         if (cached) {
           if (on) setText(stripMarkdown(cached));
           return;
         }
-        const r = await getSyllabus(pdfPath);
-        const u = r?.data.units[unitIdx];
-        if (!u) {
+        // نصّ المصدر: صفحة القارئ الحالية، أو محتوى وحدة المنهج
+        let ctx = "";
+        if (pageMode) {
+          const res = await extractPdfPageText(pdfPath, pageNum);
+          ctx = (res.text || "").slice(0, 4000);
+        } else {
+          const r = await getSyllabus(pdfPath);
+          const u = r?.data.units[unitIdx];
+          if (u) {
+            ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${
+              u.outcome ? ` الهدف: ${u.outcome}.` : ""
+            } اشرح هذه النقاط بإيجاز في فقرة متصلة مناسبة للاستماع.`;
+          }
+        }
+        if (!ctx.trim()) {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
-        const ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${
-          u.outcome ? ` الهدف: ${u.outcome}.` : ""
-        } اشرح هذه النقاط بإيجاز في فقرة متصلة مناسبة للاستماع.`;
         const out = (await aiAssist("summarize", ctx)).trim();
         if (!out) {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
-        setUnitContent(pdfPath, unitIdx, "summary", out);
+        setUnitContent(pdfPath, srcId, kind, out);
         if (on) setText(stripMarkdown(out));
       } catch {
         if (on) setErr(t("syllabus.err.summary"));
@@ -78,7 +92,7 @@ export default function UnitSummaryScreen() {
       on = false;
       stopSpeaking();
     };
-  }, [pdfPath, unitIdx, t]);
+  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, t]);
 
   function togglePlay() {
     if (playing) {
