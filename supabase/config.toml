@@ -25,9 +25,29 @@ verify_jwt = true
 enabled = true
 verify_jwt = true
 import_map = "./functions/pdf-pagecount/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/pdf-pagecount/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/pdf-pagecount/*.html" ]
+
+# دوال تُكلّف مالًا (ElevenLabs) أو تعالج بيانات المستخدم — نثبّت التحقق من الهوية صراحةً
+[functions.music]
+enabled = true
+verify_jwt = true
+
+[functions.sfx]
+enabled = true
+verify_jwt = true
+
+[functions.quran-correct]
+enabled = true
+verify_jwt = true
+
+[functions.ocr-page]
+enabled = true
+verify_jwt = true
+
+[functions.page-image]
+enabled = true
+verify_jwt = true
+
+[functions.claim-data]
+enabled = true
+verify_jwt = true
