@@ -359,6 +359,14 @@ export default function FlashcardsScreen() {
             )}
           </View>
         )}
+
+        {/* زر عائم: توليد مخصّص (اختيار الجزء/النوع/العدد) — يظهر خارج وضع المراجعة */}
+        {mode !== "review" ? (
+          <Pressable onPress={() => router.push("/generate-study")} style={styles.fab}>
+            <Ionicons name="sparkles" size={22} color="#fff" />
+            <Text style={styles.fabTxt}>{t("generate.fab")}</Text>
+          </Pressable>
+        ) : null}
       </SafeAreaView>
     </ScreenBackground>
   );
@@ -413,6 +421,24 @@ const styles = StyleSheet.create({
   reviewTopRight: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
   trashChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   navChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    alignSelf: "center",
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 22,
+    borderRadius: Radius.pill,
+    backgroundColor: Palette.neonViolet,
+    shadowColor: Palette.neonViolet,
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  fabTxt: { color: "#fff", fontSize: 15, fontWeight: "900" },
   trashBtn: { padding: 6, marginStart: 4 },
 
   cardArea: { flex: 1 },

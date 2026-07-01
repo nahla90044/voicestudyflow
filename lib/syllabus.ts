@@ -87,9 +87,9 @@ function normLevel(v: any): QuizLevel {
   return s === "hard" ? "hard" : s === "medium" ? "medium" : "easy";
 }
 
-/** يولّد كويز اختيار من متعدد متدرّج الصعوبة من محتوى وحدة (بالذكاء). */
-export async function generateUnitQuiz(context: string): Promise<QuizQ[]> {
-  const raw = await aiAssist("unitquiz", context);
+/** يولّد كويز اختيار من متعدد متدرّج الصعوبة من محتوى وحدة (بعدد اختياري). */
+export async function generateUnitQuiz(context: string, count?: number): Promise<QuizQ[]> {
+  const raw = await aiAssist("unitquiz", context, undefined, undefined, count);
   const m = raw.match(/\[[\s\S]*\]/);
   if (!m) return [];
   try {

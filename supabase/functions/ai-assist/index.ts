@@ -89,6 +89,8 @@ Deno.serve(async (req: Request) => {
     const text: string = (body.text ?? "").toString().slice(0, 12000); // حد أمان
     const question: string = (body.question ?? "").toString();
     const targetLang: string = (body.targetLang ?? "ar").toString();
+    // عدد مطلوب من البطاقات/الأسئلة (اختياري) — يحدّده المستخدم في التوليد المخصّص
+    const count: number = Math.min(25, Math.max(0, Math.round(Number(body.count ?? 0))));
 
     if (!SYSTEM[action]) return json({ error: "Unknown action" }, 400);
     if (!text.trim()) return json({ error: "Empty text" }, 400);
@@ -123,6 +125,13 @@ Deno.serve(async (req: Request) => {
       if (LANG_ENFORCED.has(action)) {
         systemPrompt += `\n\nمهم جدًا: اكتب كل المخرجات الموجَّهة للمستخدم (العناوين والنصوص وقيم JSON) بـ${OUT_LANG[targetLang] ?? OUT_LANG.ar} حصرًا لتطابق لغة واجهة التطبيق، مهما كانت لغة النص الأصلي. حافظ على بنية JSON ومفاتيحه الإنجليزية كما هي إن وُجدت.`;
       }
+      // عدد مخصّص للبطاقات/الأسئلة (يتجاوز العدد الافتراضي في التعليمات)
+      if (count > 0 && action === "flashcards") {
+        systemPrompt += `\n\nأنشئ بالضبط ${count} بطاقة (لا أكثر ولا أقل).`;
+      }
+      if (count > 0 && action === "unitquiz") {
+        systemPrompt += `\n\nأنشئ بالضبط ${count} سؤالًا، متدرّجة الصعوبة من الأسهل إلى الأصعب، موزَّعة بين easy وmedium وhard.`;
+      }
     }
 
     const userContent =
@@ -135,9 +144,14 @@ Deno.serve(async (req: Request) => {
     const client = new Anthropic({ apiKey });
 
     const model = MODEL[action] ?? "claude-sonnet-4-6";
+    // ميزانية المخرجات: تكبر مع العدد المطلوب (كل بطاقة/سؤال يحتاج مساحة)
+    const baseTok = MAX_TOKENS[action] ?? 1500;
+    const maxTok = count > 0 && (action === "flashcards" || action === "unitquiz")
+      ? Math.min(8000, Math.max(baseTok, count * 320))
+      : baseTok;
     const params: Record<string, unknown> = {
       model,
-      max_tokens: MAX_TOKENS[action] ?? 1500,
+      max_tokens: maxTok,
       system: GUARD + systemPrompt,
       messages: [{ role: "user", content: userContent }],
     };

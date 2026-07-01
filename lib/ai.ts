@@ -206,7 +206,8 @@ export async function aiAssist(
   action: AiAction,
   text: string,
   question?: string,
-  targetLang?: string // رمز اللغة الهدف (للترجمة يختاره المستخدم؛ وإلا لغة الواجهة)
+  targetLang?: string, // رمز اللغة الهدف (للترجمة يختاره المستخدم؛ وإلا لغة الواجهة)
+  count?: number // عدد مطلوب من البطاقات/الأسئلة (للتوليد المخصّص)
 ): Promise<string> {
   if (!text.trim()) return "";
 
@@ -216,7 +217,7 @@ export async function aiAssist(
   // مهلة قصوى 60ث: إن لم يردّ السيرفر نرمي خطأً بدل ترك الواجهة معلّقة للأبد.
   const { data, error } = await withTimeout(
     supabase.functions.invoke("ai-assist", {
-      body: { action, text, question, targetLang: lang },
+      body: { action, text, question, targetLang: lang, count },
     }),
     60000,
     action
@@ -228,11 +229,12 @@ export async function aiAssist(
   return String(data?.result ?? "");
 }
 
-/** يولّد بطاقات مراجعة (سؤال/إجابة) من نص عبر الذكاء. */
+/** يولّد بطاقات مراجعة (سؤال/إجابة) من نص عبر الذكاء (بعدد اختياري). */
 export async function generateFlashcards(
-  text: string
+  text: string,
+  count?: number
 ): Promise<{ front: string; back: string }[]> {
-  const raw = await aiAssist("flashcards", text);
+  const raw = await aiAssist("flashcards", text, undefined, undefined, count);
   // استخرج مصفوفة JSON حتى لو لفّها الموديل بنص أو ```json
   const match = raw.match(/\[[\s\S]*\]/);
   if (!match) return [];
