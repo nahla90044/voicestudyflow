@@ -113,8 +113,8 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "saveroom", name: "غرفة الأمان", kind: "music", lengthMs: 120000, prompt: "warm nostalgic safe-room piano piece that opens immediately with a gentle heartfelt solo piano melody from the very first note, no slow intro or fade-in, soft warm ambient pad enters underneath, calm soothing and reassuring with a faint bittersweet melancholy, slow and comforting, a feeling of safety rest and quiet relief, intimate and cozy, instrumental" },
   // 🌫️ «ضباب حزين» — بطابع Silent Hill 2 / The Room الحزين المؤثر (مقطوعة أصلية بنفس الإحساس، بلا نسخ)
   { key: "melancholy", name: "ضباب حزين", kind: "music", lengthMs: 120000, prompt: "deeply emotional melancholic ballad, tender expressive lead acoustic guitar with warm reverb over a soft mellow piano and hazy ambient pad, aching bittersweet longing and heartfelt sadness, slow dreamy trip-hop groove with a gentle laid-back beat, beautiful cinematic and introspective, foggy nostalgic and moving, instrumental" },
-  // ☀️ «تفاؤل» — مبتهجة دافئة بس هادئة ومريحة للدراسة (لا إيقاع حفلات/رقص)
-  { key: "optimistic", name: "تفاؤل", kind: "music", lengthMs: 120000, prompt: "warm cheerful uplifting feel-good instrumental, bright hopeful and positive yet gentle calm and relaxed, soft warm piano with light acoustic guitar and mellow strings over a soft easy laid-back rhythm, sunny optimistic cozy and encouraging, soothing and study-friendly, absolutely not a party dance club or EDM track, instrumental" },
+  // ☀️ «تفاؤل» — بنفس أسلوب «ضباب حزين» لكن دافئ متفائل بدل الحزن (لا إيقاع حفلات/رقص)
+  { key: "optimistic", name: "تفاؤل", kind: "music", lengthMs: 120000, prompt: "warm emotional uplifting instrumental, tender expressive lead acoustic guitar with warm reverb over a soft mellow piano and dreamy ambient pad, hopeful heartwarming and gently optimistic, slow dreamy trip-hop groove with a gentle laid-back beat, beautiful cinematic and introspective, sunny tender and quietly joyful, soothing and study-friendly, not a party or dance track, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣
