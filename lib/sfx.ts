@@ -111,8 +111,8 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "sax_night", name: "ساكسفون ليلي", kind: "music", lengthMs: 30000, prompt: "soft mellow late-night saxophone, calm smooth relaxed jazz, laid-back and warm, instrumental" },
   // 🕯️ «غرفة الأمان» — بإحساس موسيقى الحفظ في Resident Evil 2/3 (مقطوعة أصلية بنفس الجو، بلا نسخ)
   { key: "saveroom", name: "غرفة الأمان", kind: "music", lengthMs: 90000, prompt: "warm nostalgic safe-room piano piece, a gentle heartfelt piano melody over a soft warm ambient pad, calm soothing and reassuring with a faint bittersweet melancholy, slow and comforting, a feeling of safety rest and quiet relief, intimate and cozy, instrumental" },
-  // 🌫️ «ضباب حزين» — بطابع موسيقى Silent Hill الحالمة الحزينة (مقطوعة أصلية بنفس الإحساس، بلا نسخ)
-  { key: "melancholy", name: "ضباب حزين", kind: "music", lengthMs: 90000, prompt: "melancholic atmospheric music, soft acoustic guitar and warm mellow piano over a hazy ambient pad, emotional haunting and beautiful, slow dreamy trip-hop mood with a gentle soft rhythm, moody foggy and introspective, instrumental" },
+  // 🌫️ «ضباب حزين» — بطابع Silent Hill 2 / The Room الحزين المؤثر (مقطوعة أصلية بنفس الإحساس، بلا نسخ)
+  { key: "melancholy", name: "ضباب حزين", kind: "music", lengthMs: 120000, prompt: "deeply emotional melancholic ballad, tender expressive lead acoustic guitar with warm reverb over a soft mellow piano and hazy ambient pad, aching bittersweet longing and heartfelt sadness, slow dreamy trip-hop groove with a gentle laid-back beat, beautiful cinematic and introspective, foggy nostalgic and moving, instrumental" },
 ];
 
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣
