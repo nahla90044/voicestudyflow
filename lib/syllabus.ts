@@ -79,9 +79,15 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
   return syl;
 }
 
-export type QuizQ = { q: string; options: string[]; answer: number };
+export type QuizLevel = "easy" | "medium" | "hard";
+export type QuizQ = { q: string; options: string[]; answer: number; level: QuizLevel };
 
-/** يولّد كويز اختيار من متعدد من محتوى وحدة (بالذكاء). */
+function normLevel(v: any): QuizLevel {
+  const s = String(v ?? "").toLowerCase();
+  return s === "hard" ? "hard" : s === "medium" ? "medium" : "easy";
+}
+
+/** يولّد كويز اختيار من متعدد متدرّج الصعوبة من محتوى وحدة (بالذكاء). */
 export async function generateUnitQuiz(context: string): Promise<QuizQ[]> {
   const raw = await aiAssist("unitquiz", context);
   const m = raw.match(/\[[\s\S]*\]/);
@@ -94,11 +100,25 @@ export async function generateUnitQuiz(context: string): Promise<QuizQ[]> {
         q: String(x?.q ?? "").trim(),
         options: Array.isArray(x?.options) ? x.options.map((o: any) => String(o).trim()).filter(Boolean) : [],
         answer: Number(x?.answer ?? 0),
+        level: normLevel(x?.level),
       }))
-      .filter((x: QuizQ) => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length);
+      .filter((x: QuizQ) => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length)
+      // النموذج يميل لجعل الإجابة الصحيحة أولًا دائمًا → نخلط الخيارات لكسر النمط
+      .map((x: QuizQ) => shuffleOptions(x));
   } catch {
     return [];
   }
+}
+
+/** يخلط ترتيب خيارات السؤال ويعيد حساب موضع الإجابة الصحيحة (كسر نمط «دائمًا أ»). */
+function shuffleOptions(q: QuizQ): QuizQ {
+  const correct = q.options[q.answer];
+  const opts = [...q.options];
+  for (let i = opts.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [opts[i], opts[j]] = [opts[j], opts[i]];
+  }
+  return { ...q, options: opts, answer: opts.indexOf(correct) };
 }
 
 export type MindBranch = { label: string; points: string[] };

@@ -11,6 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../../components/brand/glass-card";
 import { BuzanMindMap } from "../../components/brand/mindmap";
 import { aiAssist } from "../../lib/ai";
+import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../../lib/voice";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
@@ -30,6 +31,13 @@ import {
 } from "../../lib/syllabus";
 
 const MM_COLORS = ["#7c5cff", "#4f8cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d"];
+
+// ألوان درجات صعوبة أسئلة الاختبار (سهل → صعب)
+const LEVEL_COLOR: Record<"easy" | "medium" | "hard", string> = {
+  easy: "#2ecc71",
+  medium: "#f5a623",
+  hard: "#ff6b9d",
+};
 
 const AR_MONTHS = [
   "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
@@ -91,6 +99,13 @@ export default function SyllabusScreen() {
     }
   }
 
+  // أوقف أي قراءة صوتية عند مغادرة الشاشة (يمنع بقاء الصوت/التعليق بعد الخروج)
+  useEffect(() => {
+    return () => {
+      stopSpeaking();
+    };
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -136,6 +151,12 @@ export default function SyllabusScreen() {
     setMmLoading(true);
     setMm(null);
     try {
+      // مخزَّن مسبقًا لهذه الوحدة؟ اعرضه فورًا بلا استهلاك ذكاء
+      const cached = await getUnitContent<MindMap>(pdfPath, i, "mindmap");
+      if (cached) {
+        setMm(cached);
+        return;
+      }
       // محتوى الوحدة المختصر = توليد سريع (الوحدات أصلًا مستخرَجة من الكتاب)
       const ctx = `الفكرة المركزية: ${u.title}\nالفروع الرئيسية:\n${u.topics
         .map((t) => "- " + t)
@@ -146,9 +167,11 @@ export default function SyllabusScreen() {
         setErr(t("syllabus.err.mindmap"));
       } else {
         setMm(map);
+        setUnitContent(pdfPath, i, "mindmap", map);
       }
     } catch {
       setMmUnit(null);
+      setErr(t("syllabus.err.mindmap"));
     } finally {
       setMmLoading(false);
     }
@@ -162,6 +185,12 @@ export default function SyllabusScreen() {
     setSumText("");
     setSumPlaying(false);
     try {
+      // مخزَّن مسبقًا؟ افتح صفحة الملخّص فورًا بلا استهلاك ذكاء (يقرأ ثم يستمع إن شاء)
+      const cached = await getUnitContent<string>(pdfPath, i, "summary");
+      if (cached) {
+        setSumText(cached);
+        return;
+      }
       const ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${
         u.outcome ? ` الهدف: ${u.outcome}.` : ""
       } اشرح هذه النقاط بإيجاز في فقرة متصلة مناسبة للاستماع.`;
@@ -172,9 +201,10 @@ export default function SyllabusScreen() {
         return;
       }
       setSumText(text);
-      playSummary(text);
+      setUnitContent(pdfPath, i, "summary", text);
     } catch {
       setSumUnit(null);
+      setErr(t("syllabus.err.summary"));
     } finally {
       setSumLoading(false);
     }
@@ -215,6 +245,12 @@ export default function SyllabusScreen() {
     setQScore(0);
     setQuizDone(false);
     try {
+      // مخزَّن مسبقًا؟ استخدمه فورًا بلا استهلاك ذكاء
+      const cached = await getUnitContent<QuizQ[]>(pdfPath, i, "quiz");
+      if (cached && cached.length) {
+        setQuiz(cached);
+        return;
+      }
       const ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
       const qs = await generateUnitQuiz(ctx);
       if (qs.length === 0) {
@@ -222,9 +258,11 @@ export default function SyllabusScreen() {
         setQuizUnit(null);
       } else {
         setQuiz(qs);
+        setUnitContent(pdfPath, i, "quiz", qs);
       }
     } catch {
       setQuizUnit(null);
+      setErr(t("syllabus.err.quiz"));
     } finally {
       setQuizLoading(false);
     }
@@ -550,26 +588,63 @@ export default function SyllabusScreen() {
               </View>
 
               {quizDone ? (
-                <View style={styles.quizResult}>
-                  <Text style={styles.quizScoreBig}>
-                    {qScore} / {quiz.length}
-                  </Text>
-                  <Text style={styles.quizResultMsg}>
-                    {qScore === quiz.length
-                      ? t("syllabus.quiz.perfect")
-                      : qScore >= Math.ceil(quiz.length / 2)
-                      ? t("syllabus.quiz.good")
-                      : t("syllabus.quiz.review")}
-                  </Text>
-                  <GradientButton
-                    title={t("common.done")}
-                    icon="checkmark"
-                    onPress={closeQuiz}
-                    style={{ alignSelf: "stretch", marginTop: Spacing.md }}
-                  />
-                </View>
+                (() => {
+                  const pctScore = Math.round((qScore / Math.max(1, quiz.length)) * 100);
+                  const lvl = pctScore >= 85 ? "advanced" : pctScore >= 55 ? "intermediate" : "beginner";
+                  const lvlColor = lvl === "advanced" ? Palette.success : lvl === "intermediate" ? Palette.neonCyan : Palette.warn;
+                  return (
+                    <View style={styles.quizResult}>
+                      <Text style={styles.quizScoreBig}>
+                        {qScore} / {quiz.length}
+                      </Text>
+                      {/* مستوى الطالب حسب نتيجته عبر الأسئلة المتدرّجة */}
+                      <View style={[styles.levelPill, { borderColor: lvlColor, backgroundColor: lvlColor + "1f" }]}>
+                        <Text style={[styles.levelPillTxt, { color: lvlColor }]}>
+                          {t("syllabus.quiz.yourLevel")}: {t(`syllabus.quiz.levelResult.${lvl}`)}
+                        </Text>
+                      </View>
+                      <Text style={styles.quizResultMsg}>
+                        {qScore === quiz.length
+                          ? t("syllabus.quiz.perfect")
+                          : qScore >= Math.ceil(quiz.length / 2)
+                          ? t("syllabus.quiz.good")
+                          : t("syllabus.quiz.review")}
+                      </Text>
+                      <GradientButton
+                        title={t("common.done")}
+                        icon="checkmark"
+                        onPress={closeQuiz}
+                        style={{ alignSelf: "stretch", marginTop: Spacing.md }}
+                      />
+                    </View>
+                  );
+                })()
               ) : quiz[qStep] ? (
                 <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
+                  {/* شارة الصعوبة + نقاط التقدّم (تدرّج من الأسهل إلى الأصعب) */}
+                  <View style={[styles.diffRow, { flexDirection: dir.row }]}>
+                    <View
+                      style={[
+                        styles.diffBadge,
+                        { borderColor: LEVEL_COLOR[quiz[qStep].level], backgroundColor: LEVEL_COLOR[quiz[qStep].level] + "22" },
+                      ]}
+                    >
+                      <Text style={[styles.diffBadgeTxt, { color: LEVEL_COLOR[quiz[qStep].level] }]}>
+                        {t(`syllabus.quiz.level.${quiz[qStep].level}`)}
+                      </Text>
+                    </View>
+                    <View style={[styles.dotsRow, { flexDirection: dir.row }]}>
+                      {quiz.map((qq, di) => (
+                        <View
+                          key={di}
+                          style={[
+                            styles.qDot,
+                            { backgroundColor: di <= qStep ? LEVEL_COLOR[qq.level] : Palette.glassBorder },
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
                   <Text style={[styles.quizQ, { textAlign: dir.textAlign }]}>{quiz[qStep].q}</Text>
                   {quiz[qStep].options.map((opt, oi) => {
                     const isCorrect = oi === quiz[qStep].answer;
@@ -661,20 +736,15 @@ export default function SyllabusScreen() {
               </View>
 
               <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
-                {/* خريطة شعاعية (توني بوزان) — قابلة للتكبير بإصبعين */}
+                {/* خريطة شعاعية (توني بوزان) — عرض ثابت داخل حاوية عادية.
+                    أزلنا التكبير المتداخل (ScrollView داخل ScrollView) لأنه كان
+                    يُوقف الإيماءات ويجمّد الصفحة؛ التفاصيل الكاملة في القائمة بالأسفل. */}
                 {mm ? (
-                  <ScrollView
-                    maximumZoomScale={3}
-                    minimumZoomScale={1}
-                    showsHorizontalScrollIndicator={false}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.mmCanvas}
-                    style={styles.mmCanvasWrap}
-                  >
+                  <View style={[styles.mmCanvasWrap, styles.mmCanvas]}>
                     <BuzanMindMap map={mm} size={320} />
-                  </ScrollView>
+                  </View>
                 ) : null}
-                <Text style={styles.mmHint}>{t("syllabus.mindmap.hint")}</Text>
+                <Text style={styles.mmHint}>{t("syllabus.mindmap.hintList")}</Text>
 
                 {/* العقدة المركزية (قائمة) */}
                 <View style={styles.mmCenter}>
@@ -881,7 +951,14 @@ const styles = StyleSheet.create({
   quizOptCorrect: { backgroundColor: "rgba(46,204,113,0.18)", borderColor: Palette.success },
   quizOptWrong: { backgroundColor: "rgba(231,76,60,0.16)", borderColor: Palette.danger },
   quizOptTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "700", textAlign: "right" },
-  quizResult: { alignItems: "center", paddingVertical: Spacing.lg, gap: 8 },
+  quizResult: { alignItems: "center", paddingVertical: Spacing.lg, gap: 10 },
   quizScoreBig: { color: Palette.neonCyan, fontSize: 44, fontWeight: "900" },
   quizResultMsg: { color: Palette.textMuted, fontSize: 15, fontWeight: "700", textAlign: "center" },
+  levelPill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: Radius.pill, borderWidth: 1.5 },
+  levelPillTxt: { fontSize: 15, fontWeight: "900" },
+  diffRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  diffBadge: { paddingVertical: 5, paddingHorizontal: 14, borderRadius: Radius.pill, borderWidth: 1.5 },
+  diffBadgeTxt: { fontSize: 13, fontWeight: "900" },
+  dotsRow: { flexDirection: "row-reverse", alignItems: "center", gap: 6 },
+  qDot: { width: 8, height: 8, borderRadius: 4 },
 });

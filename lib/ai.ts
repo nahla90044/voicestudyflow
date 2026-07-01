@@ -190,6 +190,16 @@ export async function defineWord(word: string, context: string): Promise<string>
     .trim();
 }
 
+/** سباق بين وعد وبين مهلة زمنية — يمنع بقاء الواجهة معلّقة إن تأخّر السيرفر/الشبكة. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`TIMEOUT: ${label}`)), ms)
+    ),
+  ]);
+}
+
 /** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */
 export async function aiAssist(
   action: AiAction,
@@ -199,9 +209,14 @@ export async function aiAssist(
 ): Promise<string> {
   if (!text.trim()) return "";
 
-  const { data, error } = await supabase.functions.invoke("ai-assist", {
-    body: { action, text, question, targetLang },
-  });
+  // مهلة قصوى 60ث: إن لم يردّ السيرفر نرمي خطأً بدل ترك الواجهة معلّقة للأبد.
+  const { data, error } = await withTimeout(
+    supabase.functions.invoke("ai-assist", {
+      body: { action, text, question, targetLang },
+    }),
+    60000,
+    action
+  );
 
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
