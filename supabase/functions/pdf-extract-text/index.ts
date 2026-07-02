@@ -31,6 +31,7 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing Supabase env vars");
     }
 
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const body = await req.json().catch(() => ({}));
@@ -38,6 +39,17 @@ Deno.serve(async (req: Request) => {
     const requestedPage = Math.max(1, Number(body.page ?? 1) || 1);
 
     if (!pdfPath) return json({ error: "Missing pdfPath" }, 400);
+
+    // تفويض: المتصل يصل فقط لملفاته (المجلّد باسم uid) أو ملفات العيّنات المشتركة —
+    // نمنع قراءة ملفات مستخدم آخر عبر تمرير مساره (service_role يتجاوز RLS).
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const userClient = createClient(SUPABASE_URL, ANON_KEY ?? SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: uErr } = await userClient.auth.getUser();
+    if (uErr || !user) return json({ error: "Unauthorized" }, 401);
+    const owner = pdfPath.split("/")[0];
+    if (owner !== user.id && owner !== "samples") return json({ error: "Forbidden" }, 403);
 
     const { data: file, error: dErr } = await supabase.storage
       .from("pdfs")

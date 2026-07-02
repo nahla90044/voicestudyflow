@@ -21,6 +21,7 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing Supabase env vars");
     }
 
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const body = await req.json();
@@ -40,6 +41,26 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // تفويض: المتصل يصل فقط لملفاته أو ملفات العيّنات (service_role يتجاوز RLS)
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const userClient = createClient(SUPABASE_URL, ANON_KEY ?? SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: uErr } = await userClient.auth.getUser();
+    if (uErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const owner = String(pdfPath).split("/")[0];
+    if (owner !== user.id && owner !== "samples") {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: file, error: downloadError } =
       await supabase.storage.from("pdfs").download(pdfPath);
 
@@ -54,7 +75,8 @@ Deno.serve(async (req: Request) => {
     const { error: updateError } = await supabase
       .from("books")
       .update({ page_count: pageCount })
-      .eq("id", bookId);
+      .eq("id", bookId)
+      .eq("user_id", user.id);
 
     if (updateError) throw updateError;
 

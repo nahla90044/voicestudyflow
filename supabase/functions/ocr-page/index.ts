@@ -70,7 +70,18 @@ Deno.serve(async (req: Request) => {
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     if (!SUPABASE_URL || !SERVICE_ROLE_KEY) throw new Error("Missing Supabase env");
+
+    // تفويض: المتصل يصل فقط لملفاته أو ملفات العيّنات (service_role يتجاوز RLS)
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const userClient = createClient(SUPABASE_URL, ANON_KEY ?? SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: uErr } = await userClient.auth.getUser();
+    if (uErr || !user) return json({ error: "Unauthorized" }, 401);
+    const owner = pdfPath.split("/")[0];
+    if (owner !== user.id && owner !== "samples") return json({ error: "Forbidden" }, 403);
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const { data: file, error: dErr } = await sb.storage.from("pdfs").download(pdfPath);
