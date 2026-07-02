@@ -25,7 +25,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://jhfufoltmjhauqvgqezv.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_aAy9udj4VG2ZL0DS4S8pgw_dGrixZki"
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_aAy9udj4VG2ZL0DS4S8pgw_dGrixZki",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true"
       }
     }
   },
