@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import { Platform } from "react-native";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -10,10 +11,12 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
+// على الجهاز (iOS/Android) نستخدم AsyncStorage لحفظ الجلسة. على الويب/بيئة Node
+// (بناء static أو التقديم المسبق للنفق) AsyncStorage يستدعي window ويسقط الخادم،
+// فنترك التخزين الافتراضي لـsupabase-js لأنه يتعامل مع غياب window بأمان.
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    // حفظ الجلسة على الجهاز حتى تبقى بعد إغلاق التطبيق
-    storage: AsyncStorage,
+    storage: Platform.OS === "web" ? undefined : AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
     // React Native لا يستخدم عناوين URL لاسترجاع الجلسة
