@@ -47,7 +47,3 @@ verify_jwt = true
 [functions.page-image]
 enabled = true
 verify_jwt = true
-
-[functions.claim-data]
-enabled = true
-verify_jwt = true
