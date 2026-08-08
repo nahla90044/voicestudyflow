@@ -18,6 +18,7 @@ import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
+import { FREE_BOOKS_BASE, FREE_BOOKS_UNLOCKED, getBookLimit } from "../../lib/perks";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
@@ -34,9 +35,8 @@ const MPP_KEY = "vsf_minutes_per_page"; // إعداد عام: دقيقة/صفح�
 // حدود الرفع — تُعرض للمستخدم وتُفرض قبل الرفع
 const MAX_FILE_MB = 50;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
-const MAX_BOOKS = 3; // الخطة المجانية: ٣ كتب فقط
-// حساب المالك الوحيد: كتب غير محدودة (باقي الحسابات محدودة بـMAX_BOOKS)
-const OWNER_EMAILS = new Set(["nahlah@hotmail.com"]);
+// حد الكتب صار ديناميكيًا في lib/perks.ts:
+// ٣ أساسًا → ١٠ بعد إنهاء أول كتاب → بلا حد للمالك.
 const MAX_PAGES = 700; // حدّ أعلى لصفحات الكتاب (لا يُعرض الرقم للمستخدم)
 const AGREED_KEY = "vsf_upload_agreed";
 
@@ -156,18 +156,26 @@ export default function AddBookScreen() {
       // معرّف المستخدم الحقيقي (تفرضه RLS على القاعدة والتخزين)
       const userId = await getUserId();
 
-      // حساب المالك: عدد كتب غير محدود (باقي الحسابات محدودة بـMAX_BOOKS)
-      const { data: { user } } = await supabase.auth.getUser();
-      const isOwner = OWNER_EMAILS.has(user?.email?.trim().toLowerCase() ?? "");
-
-      // حد عدد الكتب لكل مستخدم (يُتجاوز للمالك)
-      if (!isOwner) {
+      // حد عدد الكتب: ٣ أساسًا، و١٠ بعد إنهاء أول كتاب، وبلا حد للمالك
+      const limit = await getBookLimit();
+      if (Number.isFinite(limit)) {
+        // نحسب المؤرشف أيضًا: الكتاب المؤرشف ما زال مخزّنًا ويكلّف فعليًا،
+        // ولو استثنيناه لصار بالإمكان تجاوز الحد بالأرشفة المتكرّرة.
         const { count: bookCount } = await supabase
           .from("books")
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId);
-        if ((bookCount ?? 0) >= MAX_BOOKS) {
-          Alert.alert(t("addBook.alert.warnTitle"), t("addBook.limit.tooManyBooks", { max: MAX_BOOKS }));
+
+        if ((bookCount ?? 0) >= limit) {
+          // عند الحد الأساسي نعرض طريق المكافأة بدل طريق مسدود
+          if (limit === FREE_BOOKS_BASE) {
+            Alert.alert(
+              t("addBook.limit.lockedTitle"),
+              t("addBook.limit.lockedBody", { max: FREE_BOOKS_BASE, next: FREE_BOOKS_UNLOCKED }),
+            );
+          } else {
+            Alert.alert(t("addBook.alert.warnTitle"), t("addBook.limit.tooManyBooks", { max: limit }));
+          }
           return;
         }
       }
