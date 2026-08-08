@@ -46,6 +46,12 @@ import {
 } from "../../lib/readerPrefs";
 import { MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
+import { FREE_BOOKS_UNLOCKED, markBookCompleted } from "../../lib/perks";
+import { askForReviewOnce } from "../../lib/review";
+import { UnlockModal } from "../../components/brand/unlock-modal";
+import { PlayButton } from "../../components/brand/play-button";
+import { PageScrubber } from "../../components/brand/page-scrubber";
+import { alignSpokenToBoxes, boxIndexAtProgress } from "../../lib/alignWords";
 import { isOwner } from "../../lib/auth";
 import {
   DEFAULT_VOICE_ID,
@@ -55,6 +61,7 @@ import {
   speakText,
   stopSpeaking,
   VOICE_CATALOG,
+  voiceLangOf,
   warmNext,
 } from "../../lib/voice";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
@@ -62,7 +69,10 @@ import { focusEvery, getFocusLevel, getUserName } from "../../lib/settings";
 import { useDir, useI18n } from "../../lib/i18n";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-const SLEEP_OPTIONS = [0, 5, 15, 30] as const; // 0 = مطفأ (بالدقائق)
+// دقائق مؤقّت النوم. 0 = مطفأ، و-1 = «حتى نهاية الكتاب» (بلا توقيت).
+// أُضيف 10 لأنه أكثر مدة يطلبها من يستمع قبل النوم، و-1 لمن يريد إكمال الكتاب.
+const SLEEP_OPTIONS = [0, 5, 10, 15, 30, -1] as const;
+const SLEEP_UNTIL_END = -1;
 
 // أي كلمة (حسب ترتيبها في الجملة) تُقرأ عند نسبة تقدّم frac (0..1)،
 // بتوزيع زمني تقريبي مرجّح بطول الكلمة.
@@ -183,6 +193,18 @@ export default function ReaderScreen() {
   const [skipDir, setSkipDir] = useState(1); // اتجاه آخر تخطّي (لإظهار الشارة على الزر الصحيح)
   const [, setStatus] = useState(""); // رسالة حالة داخلية (تُحدَّث أثناء التشغيل)
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
+
+  // مكافأة إنهاء أول كتاب (ترفع الحد المجاني إلى ١٠ كتب)
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const finishedRef = useRef(false); // لا نسجّل الإنهاء مرتين في نفس الجلسة
+
+  // هل شُغّل الصوت مرة في هذه الجلسة؟ (تنبض أيقونة التشغيل قبلها فقط)
+  const [everPlayed, setEverPlayed] = useState(false);
+
+  // أحدث صوت مختار — تقرأه pickVoice فورًا بلا انتظار إعادة الرسم
+  const voiceIdRef = useRef(uiVoiceId);
+  // هل اختار المستخدم الصوت صراحةً؟ عندها نكفّ عن مطابقته بلغة الكتاب تلقائيًا
+  const voiceChosenRef = useRef(false);
 
   // قاموس: معنى الكلمة عند لمسها
   const [dictOpen, setDictOpen] = useState(false);
@@ -368,10 +390,12 @@ export default function ReaderScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // أوقف موسيقى الخلفية عند مغادرة التطبيق (لا تستمر في الخلفية ولا تعلَق)
+  // خروج التطبيق للخلفية: نُبقي الموسيقى ما دام السرد شغّالًا — قفل الشاشة
+  // أثناء الاستماع يجب ألّا يقطع الجوّ الصوتي. أما إن كان السرد متوقّفًا فلا
+  // معنى لموسيقى تعزف وحدها بعد مغادرة المستخدم، فنوقفها كما كان سابقًا.
   useEffect(() => {
     const sub = AppState.addEventListener("change", (s) => {
-      if (s !== "active") stopAmbient();
+      if (s !== "active" && !playingRef.current) stopAmbient();
     });
     return () => sub.remove();
   }, []);
@@ -380,6 +404,14 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (prefsLoadedRef.current && bookId && page >= 1) setLastPage(bookId, page);
   }, [bookId, page]);
+
+  // بلوغ الصفحة الأخيرة = إنهاء الكتاب أيضًا — حتى يستحق المكافأةَ من يقرأ
+  // بعينه لا بالاستماع فقط (المسار الآخر داخل playSentence عند نهاية النص).
+  useEffect(() => {
+    if (!prefsLoadedRef.current || !bookId) return;
+    if (totalPages > 0 && page >= totalPages) void onBookFinished();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId, page, totalPages]);
 
   // حفظ آخر جملة مقروءة لاستئناف دقيق (لا نكتب -1 عند الإيقاف)
   useEffect(() => {
@@ -560,6 +592,7 @@ export default function ReaderScreen() {
       clearTimeout(sleepTimerRef.current);
       sleepTimerRef.current = null;
     }
+    // «حتى نهاية الكتاب» لا يحتاج مؤقّتًا — القراءة تتوقّف بانتهاء آخر صفحة
     if (next > 0) {
       sleepTimerRef.current = setTimeout(() => {
         stop();
@@ -678,7 +711,32 @@ export default function ReaderScreen() {
 
   // الصوت المستخدم للقراءة: عند الترجمة نستخدم الصوت العربي المختار في لوحة الترجمة
   function pickVoice(): string {
-    return listenArabicRef.current ? translateVoiceIdRef.current : voiceId;
+    // نقرأ من المرجع لا من الحالة: عند تبديل الصوت نبدأ التشغيل فورًا في نفس
+    // النبضة، وقيمة الحالة لا تكون قد طُبّقت بعد فيُقرأ بالصوت القديم.
+    return listenArabicRef.current ? translateVoiceIdRef.current : voiceIdRef.current;
+  }
+
+  /**
+   * اختيار قارئ من القائمة: نطبّقه ونبدأ الاستماع فورًا بصوته — بلا ضغطة
+   * إضافية على زر التشغيل. إن كان السرد شغّالًا نُكمل من نفس الجملة.
+   */
+  function chooseVoice(newVoiceId: string) {
+    voiceIdRef.current = newVoiceId;
+    voiceChosenRef.current = true; // اختيار صريح → لا نبدّله تلقائيًا بعد الآن
+    setVoiceId(newVoiceId);
+    setVoiceModal(false);
+
+    const resumeAt = playingRef.current ? Math.max(0, activeSentence) : resumeIdxRef.current;
+    stop();
+    setVoiceWarn("");
+    setStatus("");
+    setEverPlayed(true);
+    playingRef.current = true;
+    setSpeaking(true);
+    playStartRef.current = Date.now();
+    recordActivity({});
+    playFromPage(page, resumeAt, false);
+    resumeIdxRef.current = 0;
   }
 
   // تفعيل/إيقاف الترجمة بصوت عربي مختار (من لوحة الترجمة)
@@ -877,6 +935,20 @@ export default function ReaderScreen() {
     }
   }
 
+  /**
+   * أنهى المستخدم الكتاب. يسجّل الإنجاز على السيرفر، وإن كان أول كتاب يُنهيه
+   * يعرض نافذة المكافأة. المكافأة تُمنح داخل markBookCompleted بلا أي شرط —
+   * طلب التقييم يأتي لاحقًا ومنفصلًا عند إغلاق النافذة.
+   */
+  async function onBookFinished() {
+    if (finishedRef.current) return; // مرة واحدة لكل جلسة قراءة
+    finishedRef.current = true;
+
+    recordBookCompleted(); // الإحصائية المحلية (السلسلة والعدّاد)
+    const { justUnlocked } = await markBookCompleted(bookId);
+    if (justUnlocked) setUnlockOpen(true);
+  }
+
   // يقرأ جملة واحدة ثم ينتقل للتالية (أو للصفحة التالية)
   function playSentence(sents: string[], i: number, p: number, total: number) {
     if (!playingRef.current) return;
@@ -886,7 +958,7 @@ export default function ReaderScreen() {
       if (p < total) {
         playFromPage(p + 1);
       } else {
-        recordBookCompleted(); // أنهى الكتاب
+        void onBookFinished(); // أنهى الكتاب → يسجّل الإنجاز ويفتح المكافأة
         stop();
       }
       return;
@@ -1044,6 +1116,7 @@ export default function ReaderScreen() {
     }
     setStatus("");
     setVoiceWarn("");
+    setEverPlayed(true); // أول تشغيل → توقف نبضة الزر
     // نحترم وضع العرض الحالي: في «نص» يتحرّك التظليل، وفي «PDF» تتابع الصفحات القراءة
     playingRef.current = true;
     setSpeaking(true);
@@ -1324,6 +1397,21 @@ export default function ReaderScreen() {
     }
   }, [isArabicText]);
 
+  // مطابقة الصوت للغة الكتاب: الكتاب الإنجليزي يُقرأ بصوت إنجليزي لا بصوت عربي
+  // بلكنة. نفعلها مرة واحدة وقبل أول تشغيل فقط، ونتوقّف نهائيًا متى اختار
+  // المستخدم صوتًا بنفسه — قراره أولى من التخمين.
+  useEffect(() => {
+    if (voiceChosenRef.current || everPlayed) return;
+    if (sentences.length === 0) return;
+    const wanted: "ar" | "en" = isArabicText ? "ar" : "en";
+    if (voiceLangOf(voiceIdRef.current) === wanted) return;
+    const match = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === wanted);
+    if (!match) return;
+    voiceIdRef.current = match.voiceId;
+    setVoiceId(match.voiceId);
+    setVoiceLang(wanted);
+  }, [isArabicText, sentences.length, everPlayed]);
+
   // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
   type Line = { x: number; y: number; w: number; h: number; start: number; end: number };
   const lines = useMemo<Line[]>(() => {
@@ -1349,10 +1437,19 @@ export default function ReaderScreen() {
     return ls;
   }, [pageWords]);
 
+  // محاذاة الكلمات المنطوقة بصناديق كلمات الصفحة. تُبنى مرة لكل صفحة/نص،
+  // وبدونها كان التظليل يُسقَط خطّيًا على الصناديق فينزاح عن الصوت تدريجيًا
+  // (المنطوق يحذف الترويسات والاستشهادات ويوسّع الأرقام).
+  const spokenToBox = useMemo(() => {
+    if (pageWords.length === 0 || sentences.length === 0) return [];
+    const spoken = sentences.flatMap((s) => s.match(/\S+/g) ?? []);
+    return alignSpokenToBoxes(spoken, pageWords.map((w) => w.t));
+  }, [sentences, pageWords]);
+
   // نقطة القراءة المتصلة — تتحرك يمين→يسار داخل السطر ثم تنزل (كحركة العين)
   const readPoint = useMemo<{ cx: number; cy: number; idx: number } | null>(() => {
     if (pageWords.length === 0) return null;
-    const f = Math.min(pageWords.length - 1, Math.max(0, readProgress * (pageWords.length - 1)));
+    const f = boxIndexAtProgress(readProgress, spokenToBox, pageWords.length);
     const i0 = Math.floor(f);
     const i1 = Math.min(pageWords.length - 1, i0 + 1);
     const t = f - i0;
@@ -1363,7 +1460,7 @@ export default function ReaderScreen() {
       cy: (a.y + a.h / 2) * (1 - t) + (b.y + b.h / 2) * t,
       idx: Math.round(f),
     };
-  }, [readProgress, pageWords]);
+  }, [readProgress, pageWords, spokenToBox]);
 
   // السطر المقروء حاليًا — نظلّل السطر كامل (أنعم وأدق من كلمة مفردة)
   const lineBox = useMemo<WordBox | null>(() => {
@@ -1782,13 +1879,14 @@ export default function ReaderScreen() {
             <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
               <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
-            <Pressable onPress={togglePlay} style={styles.floatPlay}>
-              {busy ? (
-                <ActivityIndicator color="#0b1220" />
-              ) : (
-                <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
-              )}
-            </Pressable>
+            <PlayButton
+              playing={speaking}
+              busy={busy}
+              onPress={togglePlay}
+              size={60}
+              showLabel={false}
+              hint={!everPlayed}
+            />
             <Pressable onPress={() => goPage(1)} style={styles.floatBtn} hitSlop={8} disabled={!!totalPages && page >= totalPages}>
               <Ionicons name="chevron-back" size={22} color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text} />
             </Pressable>
@@ -1899,13 +1997,13 @@ export default function ReaderScreen() {
             <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>{t("reader.nav.prevPage")}</Text>
           </Pressable>
 
-          <Pressable onPress={togglePlay} style={styles.playBtn}>
-            {busy ? (
-              <ActivityIndicator color="#0b1220" />
-            ) : (
-              <Ionicons name={speaking ? "pause" : "play"} size={28} color="#0b1220" />
-            )}
-          </Pressable>
+          <PlayButton
+            playing={speaking}
+            busy={busy}
+            onPress={togglePlay}
+            size={76}
+            hint={!everPlayed}
+          />
 
           <Pressable
             onPress={() => goPage(1)}
@@ -1957,12 +2055,22 @@ export default function ReaderScreen() {
           <View style={styles.tool}>
             <Pressable
               onPress={cycleSleep}
-              style={[styles.toolBtn, sleepMin > 0 && styles.toolBtnActive]}
+              style={[styles.toolBtn, sleepMin !== 0 && styles.toolBtnActive]}
               hitSlop={4}
             >
-              <Ionicons name="moon-outline" size={17} color={sleepMin > 0 ? "#fff" : Palette.text} />
+              <Ionicons
+                name={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
+                size={17}
+                color={sleepMin !== 0 ? "#fff" : Palette.text}
+              />
             </Pressable>
-            <Text style={styles.toolCap}>{sleepMin > 0 ? t("reader.tool.sleepMinutes", { minutes: sleepMin }) : t("reader.tool.sleep")}</Text>
+            <Text style={styles.toolCap}>
+              {sleepMin === SLEEP_UNTIL_END
+                ? t("reader.tool.sleepUntilEnd")
+                : sleepMin > 0
+                  ? t("reader.tool.sleepMinutes", { minutes: sleepMin })
+                  : t("reader.tool.sleep")}
+            </Text>
           </View>
           <View style={styles.tool}>
             <Pressable
@@ -2016,6 +2124,10 @@ export default function ReaderScreen() {
             {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
           </Text>
         </Pressable>
+
+        {/* تنقّل سريع باللمس أو السحب. أثناء القراءة يتتبّع الصفحة المقروءة،
+            و gotoPage تُكمل السرد من الصفحة الجديدة إن كان شغّالًا. */}
+        <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
         {ingesting && ingestTotal > 0 ? (
           <View style={styles.ingestBarBg}>
             <View
@@ -2261,13 +2373,14 @@ export default function ReaderScreen() {
               <Ionicons name="play-forward" size={36} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
 
-            <Pressable onPress={togglePlay} style={styles.drivePlay}>
-              {busy ? (
-                <ActivityIndicator size="large" color="#0b1220" />
-              ) : (
-                <Ionicons name={speaking ? "pause" : "play"} size={64} color="#0b1220" />
-              )}
-            </Pressable>
+            <PlayButton
+              playing={speaking}
+              busy={busy}
+              onPress={togglePlay}
+              size={120}
+              showLabel={false}
+              hint={!everPlayed}
+            />
 
             <Pressable
               onPress={() => goPage(1)}
@@ -2383,10 +2496,7 @@ export default function ReaderScreen() {
                 return (
                   <Pressable
                     key={v.id}
-                    onPress={() => {
-                      setVoiceId(v.voiceId);
-                      setVoiceModal(false);
-                    }}
+                    onPress={() => chooseVoice(v.voiceId)}
                     style={[styles.voiceRowItem, active && styles.voiceRowItemOn]}
                   >
                     <Text style={[styles.voiceRowTxt, active && { color: Palette.neonCyan }]}>{v.name}</Text>
@@ -2646,6 +2756,18 @@ export default function ReaderScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* مكافأة إنهاء أول كتاب — تُمنح بلا شرط، وطلب التقييم يأتي بعد إغلاقها */}
+      <UnlockModal
+        visible={unlockOpen}
+        bookTitle={typeof title === "string" ? title : undefined}
+        newLimit={FREE_BOOKS_UNLOCKED}
+        onClose={() => {
+          setUnlockOpen(false);
+          // مهلة قصيرة حتى تُغلق النافذة فعليًا قبل ظهور نافذة آبل
+          setTimeout(() => void askForReviewOnce(), 700);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -2989,7 +3111,6 @@ const styles = StyleSheet.create({
   drivePage: { color: Palette.textDim, fontSize: 15, fontWeight: "800", marginTop: 18, marginBottom: 18 },
   driveControls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 36, marginBottom: 24 },
   driveNav: { width: 76, height: 76, borderRadius: 38, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface },
-  drivePlay: { width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
   driveSpeed: { paddingVertical: 12, paddingHorizontal: 28, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
   driveSpeedTxt: { color: Palette.text, fontSize: 18, fontWeight: "800" },
 
@@ -3029,7 +3150,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  floatPlay: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", backgroundColor: Palette.success },
   floatSpeed: { color: Palette.text, fontSize: 15, fontWeight: "900" },
 
   toast: {
@@ -3408,15 +3528,6 @@ const styles = StyleSheet.create({
   gateSecondary: { marginTop: 14, padding: 6 },
   gateSecondaryTxt: { color: Palette.textDim, fontSize: 14, fontWeight: "700" },
   toolTxt: { color: Palette.text, fontSize: 11, fontWeight: "900", paddingHorizontal: 2 },
-  playBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Palette.success,
-  },
-
   extraRow: { flexDirection: "row", justifyContent: "center", gap: 10 },
   chip: {
     flexDirection: "row-reverse",

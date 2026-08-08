@@ -274,6 +274,25 @@ const ar: Record<string, string> = {
   "addBook.alert.pickFirst": "اختر ملف PDF أولاً",
   "addBook.limit.fileTooLarge": "الملف كبير جدًا — الحد الأقصى {mb} ميجابايت.",
   "addBook.limit.tooManyBooks": "وصلت الحد الأقصى لعدد الكتب ({max}). احذف كتابًا لإضافة جديد.",
+  // عند بلوغ الحد الأساسي: نعرض الطريق للمكافأة بدل طريق مسدود
+  "addBook.limit.lockedTitle": "أنهِ كتابًا واحدًا 🔓",
+  "addBook.limit.lockedBody":
+    "مكتبتك ممتلئة ({max} كتب). أنهِ قراءة أي كتاب عندك ويرتفع حدك فورًا إلى {next} كتب — هدية مجانية، بلا اشتراك.",
+  "addBook.limit.lockedCta": "أكمل كتابًا",
+  "addBook.slots.left": "باقي لك {n} من {max}",
+  "addBook.slots.unlockHint": "أنهِ كتابًا واحدًا ويصير حدك {next} كتب 🎁",
+
+  // زر التشغيل الرئيسي
+  "reader.play.listen": "استمع",
+  "reader.play.pause": "إيقاف",
+
+  // نافذة مكافأة إنهاء أول كتاب
+  "unlock.title": "أنهيت كتابك الأول! 🎉",
+  "unlock.prize.label": "كتب صارت متاحة لك",
+  "unlock.prize.sub": "بدل ٣ — مجانًا وللأبد",
+  "unlock.body":
+    "إنجاز يستحق الاحتفال. رفعنا حدّك لأنك أثبتّ أنك تُكمل ما تبدأه — استمتع بمكتبة أوسع 📚",
+  "unlock.cta": "يعطيك العافية!",
   "addBook.limit.bookTooLarge": "حجم الكتاب كبير. جرّبي كتابًا أصغر.",
   "addBook.moderation.checking": "جارٍ فحص المحتوى…",
   "addBook.moderation.blockedTitle": "محتوى مخالف ⛔",
@@ -605,6 +624,7 @@ const ar: Record<string, string> = {
   "reader.tool.nextSegment": "مقطع تالٍ",
   "reader.tool.speed": "السرعة",
   "reader.tool.sleep": "النوم",
+  "reader.tool.sleepUntilEnd": "حتى النهاية",
   "reader.tool.sleepMinutes": "{minutes}د",
   "reader.tool.goto": "انتقال",
   "reader.tool.loaded": "محمّل",
@@ -982,6 +1002,22 @@ const en: Record<string, string> = {
   "addBook.alert.pickFirst": "Choose a PDF file first",
   "addBook.limit.fileTooLarge": "File is too large — maximum {mb} MB.",
   "addBook.limit.tooManyBooks": "You've reached the maximum number of books ({max}). Delete a book to add a new one.",
+  "addBook.limit.lockedTitle": "Finish one book 🔓",
+  "addBook.limit.lockedBody":
+    "Your library is full ({max} books). Finish reading any book you have and your limit jumps to {next} — free, no subscription.",
+  "addBook.limit.lockedCta": "Finish a book",
+  "addBook.slots.left": "{n} of {max} left",
+  "addBook.slots.unlockHint": "Finish one book and your limit becomes {next} 🎁",
+
+  "reader.play.listen": "Listen",
+  "reader.play.pause": "Pause",
+
+  "unlock.title": "You finished your first book! 🎉",
+  "unlock.prize.label": "books now available to you",
+  "unlock.prize.sub": "up from 3 — free, forever",
+  "unlock.body":
+    "That deserves a celebration. We raised your limit because you proved you finish what you start — enjoy the bigger library 📚",
+  "unlock.cta": "Awesome!",
   "addBook.limit.bookTooLarge": "This book is too large. Please try a smaller one.",
   "addBook.moderation.checking": "Checking content…",
   "addBook.moderation.blockedTitle": "Content not allowed ⛔",
@@ -1302,6 +1338,7 @@ const en: Record<string, string> = {
   "reader.tool.nextSegment": "Next segment",
   "reader.tool.speed": "Speed",
   "reader.tool.sleep": "Sleep",
+  "reader.tool.sleepUntilEnd": "To the end",
   "reader.tool.sleepMinutes": "{minutes}m",
   "reader.tool.goto": "Go to",
   "reader.tool.loaded": "Loaded",
