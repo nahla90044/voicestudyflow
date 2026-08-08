@@ -11,6 +11,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { Animated, PanResponder, StyleSheet, Text, View } from "react-native";
 
 import { Palette, Radius } from "../../constants/design";
+import { fractionForPage, pageAtX } from "../../lib/scrubberMath";
 
 type Props = {
   page: number;
@@ -32,15 +33,9 @@ export function PageScrubber({ page, totalPages, onSeek, rtl = true }: Props) {
 
   // نسبة الصفحة المعروضة: أثناء السحب نتبع الإصبع، وإلا نتبع القارئ
   const shown = dragPage ?? page;
-  const frac = totalPages > 1 ? (shown - 1) / (totalPages - 1) : 0;
+  const frac = fractionForPage(shown, totalPages);
 
-  const pageAtX = (x: number): number => {
-    const w = widthRef.current;
-    if (w <= 0 || totalPages < 1) return 1;
-    let f = Math.min(1, Math.max(0, x / w));
-    if (rtl) f = 1 - f; // في العربية يبدأ الشريط من اليمين
-    return Math.min(totalPages, Math.max(1, Math.round(f * (totalPages - 1)) + 1));
-  };
+  const atX = (x: number): number => pageAtX(x, widthRef.current, totalPages, rtl);
 
   const pan = useMemo(
     () =>
@@ -50,14 +45,14 @@ export function PageScrubber({ page, totalPages, onSeek, rtl = true }: Props) {
         // نمنع ScrollView الأب من خطف الإيماءة أثناء السحب الأفقي
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => {
-          setDragPage(pageAtX(e.nativeEvent.locationX));
+          setDragPage(atX(e.nativeEvent.locationX));
           Animated.timing(bubble, { toValue: 1, duration: 120, useNativeDriver: true }).start();
         },
         onPanResponderMove: (e) => {
-          setDragPage(pageAtX(e.nativeEvent.locationX));
+          setDragPage(atX(e.nativeEvent.locationX));
         },
         onPanResponderRelease: (e) => {
-          const target = pageAtX(e.nativeEvent.locationX);
+          const target = atX(e.nativeEvent.locationX);
           setDragPage(null);
           Animated.timing(bubble, { toValue: 0, duration: 160, useNativeDriver: true }).start();
           onSeek(target); // التحميل يحدث مرة واحدة عند الرفع
