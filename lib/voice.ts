@@ -12,6 +12,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
 import { numbersToArabicWords } from "./arabicNumbers";
+import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
 import { supabase } from "./supabase";
 
 export type VoiceGender = "male" | "female";
@@ -142,7 +143,7 @@ function clearLockScreen(player: AudioPlayer | null): void {
   } catch {}
 }
 
-async function ensureAudioMode() {
+export async function ensureAudioMode() {
   if (audioModeReady) return;
   // يشغّل الصوت حتى لو الجهاز على الصامت، ويكمل في الخلفية / عند قفل الشاشة.
   // مهم: لا نسمح لفشل ضبط الوضع بإسقاط التشغيل (في Expo Go قد لا تتوفر
@@ -151,7 +152,10 @@ async function ensureAudioMode() {
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
-      interruptionMode: "doNotMix",
+      // "mixWithOthers" لا "doNotMix": التطبيق يشغّل مشغّلَين معًا (السرد +
+      // الموسيقى الخلفية)، و"doNotMix" كان يجعل جلسة الصوت حصرية فتُكتم
+      // الموسيقى — وبوضوح عند قفل الشاشة حيث يبقى السرد وحده.
+      interruptionMode: "mixWithOthers",
     });
   } catch {
     try {
@@ -369,17 +373,24 @@ function expandEraMarkers(text: string): string {
 // تنظيف النص للنطق مع **حماية آيات القرآن الكريم**: أي نص بين القوسين المزخرفين
 // ﴿ ﴾ يُقرأ حرفيًا بتشكيله كاملًا بلا أي تحويل (أرقام/إحالات/مصادر)، حتى لا يُخطئ
 // القارئ في كلام الله. باقي النص يمرّ بالتنظيف المعتاد.
-function cleanForSpeech(text: string, lang: "ar" | "en" | "fr" = "ar"): string {
+function cleanForSpeech(text: string, voiceLang: "ar" | "en" | "fr" = "ar"): string {
   const src = text?.trim() ?? "";
   if (!src) return "";
+
+  // اللغة تُؤخذ من النص المنطوق نفسه لا من الصوت المختار: الصوت الافتراضي عربي،
+  // وكان ذلك يُمرّر الكتب الإنجليزية على تحويل الأرقام العربي («In ألف وتسعمئة…»).
+  // ولأن المنطوق عند الترجمة هو النصّ المترجَم، تُقرأ الترجمة بلغتها تلقائيًا.
+  // لغة الصوت تبقى المرجع حين يخلو النص من الحروف (سطر أرقام فقط).
+  const lang = detectSpeechLang(src, voiceLang);
+
   // كتب اللغات (إنجليزي/فرنسي): لا نحوّل الأرقام إلى كلمات عربية ولا نطبّق التوسّعات
-  // العربية (هجري/ميلادي، المراجع القانونية). نحوّل فقط الأرقام العربية الهندية إلى
-  // لاتينية ليقرأها الصوت الأجنبي بلغته الصحيحة (٢٠٢٤ → 2024 → «twenty twenty-four»).
+  // العربية (هجري/ميلادي، المراجع القانونية). نحوّل الأرقام العربية الهندية إلى
+  // لاتينية، ثم نطبّع التواريخ والسنوات لتُقرأ نطق السنوات لا نطق الأعداد.
   if (lang !== "ar") {
-    return stripCitations(src)
-      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
-      .replace(/\s{2,}/g, " ")
-      .trim();
+    const latin = stripCitations(src).replace(/[٠-٩]/g, (d) =>
+      String("٠١٢٣٤٥٦٧٨٩".indexOf(d)),
+    );
+    return normalizeLatinDates(latin, lang).replace(/\s{2,}/g, " ").trim();
   }
   return src
     .split(/([﴾﴿][^﴾﴿]*[﴾﴿])/) // نفصل الآيات المزخرفة كمقاطع مستقلة

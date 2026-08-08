@@ -4,6 +4,7 @@ import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import { Directory, File, Paths } from "expo-file-system";
 
 import { supabase } from "./supabase";
+import { ensureAudioMode } from "./voice";
 
 const DIR = "sfx-cache-v1"; // نفس تخزين رفع ٣ → نفس المقاطع الصوتية بالضبط
 
@@ -154,6 +155,9 @@ export async function startAmbient(key: string): Promise<void> {
   if (ambientPlayer && ambientKey === key) return; // نفس المقطع شغّال
   stopAmbient(); // يوقف الحالي ويزيد الرمز
   const myToken = ambientToken; // بصمة هذا الطلب بعد الإيقاف
+  // ضبط جلسة الصوت قبل التشغيل. كان يُضبط في voice.ts وحده، فمن شغّل الموسيقى
+  // قبل السرد كانت جلسته غير مهيّأة وتتوقّف موسيقاه عند قفل الشاشة.
+  await ensureAudioMode().catch(() => {});
   const f = await fileFor(opt);
   // تغيّر الاختيار (أو أُوقف) أثناء التوليد → لا تشغّل هذا (يمنع تراكب صوتين)
   if (myToken !== ambientToken || !f) return;

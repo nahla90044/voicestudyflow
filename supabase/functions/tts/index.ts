@@ -33,7 +33,12 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-// بصمة المحتوى (نص + صوت + تعبيري) — مفتاح الكاش المشترك
+// بصمة المحتوى (نص + صوت + تعبيري) — مفتاح الكاش المشترك.
+//
+// الموديل عمدًا خارج المفتاح: الكاش يحوي ~٩١٦ ميجابايت صوتًا مدفوعًا سلفًا،
+// وإضافة الموديل للمفتاح تُبطله كله وتُجبرنا على إعادة توليده بتكلفة جديدة.
+// نتيجة ذلك أن الصفحات المخبّأة تبقى بالموديل القديم والجديدة بالحديث — ونفس
+// الصوت (voiceId) في الحالتين، فالفرق في النبرة لا في هويّة المتحدّث.
 async function contentKey(voiceId: string, expressive: boolean, text: string): Promise<string> {
   const data = new TextEncoder().encode(`${voiceId}|${expressive ? 1 : 0}|${text}`);
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -43,6 +48,10 @@ async function contentKey(voiceId: string, expressive: boolean, text: string): P
 }
 
 const SHARED_BUCKET = "tts-shared";
+
+// موديل التوليد. نبقى على multilingual_v2: جُرّب flash_v2_5 ولم تُرضِ نبرته.
+// يبقى قابلًا للتبديل من أسرار المشروع (ELEVENLABS_MODEL_ID) بلا إعادة نشر.
+const MODEL_ID = Deno.env.get("ELEVENLABS_MODEL_ID") || "eleven_multilingual_v2";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -97,7 +106,7 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({
           text,
-          model_id: "eleven_multilingual_v2",
+          model_id: MODEL_ID,
           voice_settings: voiceSettings,
         }),
       }
