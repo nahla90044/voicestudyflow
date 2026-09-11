@@ -10,8 +10,11 @@
 /** موضع اللمس الأفقي → رقم الصفحة. */
 export function pageAtX(x: number, width: number, totalPages: number, rtl: boolean): number {
   if (width <= 0 || totalPages < 1) return 1;
-  let f = Math.min(1, Math.max(0, x / width));
-  if (rtl) f = 1 - f;
+  // نقيس المسافة بالبكسل من طرف «الصفحة الأولى» ثم نقسم مرة واحدة:
+  // حساب f ثم عكسه بـ 1-f يُدخل خطأ تقريب عشريًا يجعل RTL يختلف عن مرآة LTR
+  // عند حدود منتصف الصفحة بالضبط.
+  const px = Math.min(width, Math.max(0, x));
+  const f = (rtl ? width - px : px) / width;
   return Math.min(totalPages, Math.max(1, Math.round(f * (totalPages - 1)) + 1));
 }
 
