@@ -3,7 +3,7 @@
 //  1) إن كان نص الصفحة مخزّنًا → نُرجعه فورًا (سريع، بدون تكلفة).
 //  2) وإلا: نستخرج من الطبقة النصية (pdf-extract-text)، وإن كانت الصفحة
 //     بلا نص حقيقي (كتاب مصوّر) → OCR عبر ocr-page، ثم نخزّن النتيجة.
-import { fixArabicSpacing } from "./ai";
+import { aiAssist, fixArabicSpacing } from "./ai";
 import { supabase } from "./supabase";
 
 // تنقية ضجيج فورية (بلا إنترنت/ذكاء) — أسرع بكثير. تحذف الأسطر غير المحتوى فقط
@@ -130,6 +130,58 @@ export async function getPageWords(pdfPath: string, page: number): Promise<WordB
 
 // أقل من هذا الطول يعني أن الصفحة بلا نص حقيقي (غالبًا صورة ممسوحة أو علامة مائية)
 const MIN_REAL_TEXT = 40;
+
+// «النطق الدقيق» الدائم — إصدار المعالجة (تغييره يبطل المخزّن ويعيد المعالجة)
+const PRECISE_VER = "v1";
+
+/** نص الصفحة «الدقيق» للقراءة الآلية: تشكيل كامل، وللصفحات الممسوحة (OCR)
+ *  تصحيح أخطاء المسح الواضحة أولًا ثم التشكيل — في مرور ذكاء واحد.
+ *  الناتج يُخزَّن في page_cache فتُدفع تكلفة الذكاء مرة واحدة لكل صفحة
+ *  (لا كل جلسة). عند أي فشل يُعاد النص الأصلي — القراءة لا تنكسر أبدًا. */
+export async function getPreciseText(
+  pdfPath: string,
+  page: number,
+  rawText: string,
+  ocr: boolean
+): Promise<string> {
+  if (!pdfPath || !rawText.trim()) return rawText;
+  const ver = (ocr ? "ocr-" : "plain-") + PRECISE_VER;
+
+  // 1) مخزّن مسبقًا بنفس الإصدار؟ أرجعه فورًا (بلا تكلفة)
+  try {
+    const { data } = await supabase
+      .from("page_cache")
+      .select("tashkeel,tashkeel_ver")
+      .eq("pdf_path", pdfPath)
+      .eq("page", page)
+      .maybeSingle();
+    if (data?.tashkeel?.trim() && data.tashkeel_ver === ver) return data.tashkeel;
+  } catch {
+    // تعذّر القراءة من المخزّن — نكمل بالمعالجة
+  }
+
+  // 2) معالجة بالذكاء: الصفحات الممسوحة → تصحيح OCR + تشكيل؛ وإلا تشكيل فقط
+  let out = rawText;
+  try {
+    out = (await aiAssist(ocr ? "ocrtashkeel" : "tashkeel", rawText)).trim() || rawText;
+  } catch {
+    return rawText; // فشل الذكاء غير حرج — نقرأ النص الأصلي
+  }
+
+  // 3) خزّن الناتج (صف الصفحة موجود مسبقًا من الاستخراج)
+  if (out !== rawText) {
+    try {
+      await supabase
+        .from("page_cache")
+        .update({ tashkeel: out, tashkeel_ver: ver })
+        .eq("pdf_path", pdfPath)
+        .eq("page", page);
+    } catch {
+      // التخزين اختياري
+    }
+  }
+  return out;
+}
 
 /** يجلب نص صفحة محددة (تبدأ من 1) من ملف PDF مخزّن في bucket: pdfs */
 export async function extractPdfPageText(

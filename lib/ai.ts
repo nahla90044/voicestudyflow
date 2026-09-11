@@ -14,6 +14,7 @@ export type AiAction =
   | "translate"
   | "mindmap"
   | "tashkeel"
+  | "ocrtashkeel"
   | "slides"
   | "filternoise"
   | "fixspacing"

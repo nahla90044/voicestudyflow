@@ -34,7 +34,7 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
-import { extractPdfPageText, getPageWords, type WordBox } from "../../lib/pdfText";
+import { extractPdfPageText, getPageWords, getPreciseText, type WordBox } from "../../lib/pdfText";
 import { splitForReading, splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
@@ -791,16 +791,13 @@ export default function ReaderScreen() {
     }
   }
 
-  // يشكّل نص الصفحة (مع تخزين مؤقت) لنطق صحيح
-  async function tashkeelPage(p: number, text: string): Promise<string> {
+  // يشكّل نص الصفحة لنطق صحيح — وللصفحات الممسوحة (OCR) يصحّح أخطاء المسح
+  // أيضًا. الناتج مخزّن دائمًا في page_cache (تكلفة مرة واحدة لكل صفحة).
+  async function tashkeelPage(p: number, text: string, ocr = false): Promise<string> {
     if (tashkeelCacheRef.current.has(p)) return tashkeelCacheRef.current.get(p)!;
-    try {
-      const out = (await aiAssist("tashkeel", text)).trim() || text;
-      tashkeelCacheRef.current.set(p, out);
-      return out;
-    } catch {
-      return text;
-    }
+    const out = await getPreciseText(pdfPath, p, text, ocr);
+    tashkeelCacheRef.current.set(p, out);
+    return out;
   }
 
   // يترجم نص الصفحة إلى العربية (مع تخزين مؤقت)
@@ -825,15 +822,14 @@ export default function ReaderScreen() {
     try {
       if (listenArabicRef.current) {
         if (arTransRef.current.has(`${uiVoiceLang}:${p}`)) return;
-      } else if (tashkeelRef.current) {
-        if (tashkeelCacheRef.current.has(p)) return;
-      } else {
-        return; // لا وضع معالجة مفعّل → لا شيء نحضّره
+      } else if (tashkeelCacheRef.current.has(p)) {
+        return;
       }
       const res = await extractPdfPageText(pdfPath, p);
       if (!res.text.trim()) return;
       if (listenArabicRef.current) await translatePage(res.page, res.text);
-      else if (tashkeelRef.current) await tashkeelPage(res.page, res.text);
+      // الصفحات الممسوحة (OCR) تمرّ على المسار الدقيق تلقائيًا حتى بلا تفعيل يدوي
+      else if (tashkeelRef.current || res.ocr) await tashkeelPage(res.page, res.text, !!res.ocr);
     } catch {
       // التحضير المسبق اختياري — لا يزعج القراءة عند فشله
     }
@@ -882,16 +878,22 @@ export default function ReaderScreen() {
       if (res.totalPages) setTotalPages(res.totalPages);
       setPage(res.page);
 
+      // الصفحات الممسوحة (OCR) تمرّ تلقائيًا على المسار الدقيق (تصحيح + تشكيل)
+      // حتى بلا تفعيل يدوي — نص الـOCR الخام فيه أخطاء مسح تُقرأ غلط.
+      const precise = tashkeelRef.current || !!res.ocr;
       let pageText = res.text;
       if (listenArabicRef.current && pageText.trim()) {
         pageText = await translatePage(res.page, pageText);
-      } else if (tashkeelRef.current && pageText.trim()) {
-        pageText = await tashkeelPage(res.page, pageText);
+      } else if (precise && pageText.trim()) {
+        if (!tashkeelRef.current && !tashkeelCacheRef.current.has(res.page)) {
+          setStatus(`جارٍ تحسين نص الصفحة ${res.page} الممسوحة…`);
+        }
+        pageText = await tashkeelPage(res.page, pageText, !!res.ocr);
       }
       if (!playingRef.current) return;
       // الترجمة/التشكيل تغيّر النص → تقسيم بسيط؛ وإلا معالجة الترويسة (عنوان+صفحة مرة واحدة)
       const sents =
-        listenArabicRef.current || tashkeelRef.current
+        listenArabicRef.current || precise
           ? splitSentences(pageText)
           : getReadingSentences(pageText, res.page);
       setSentences(sents);
@@ -913,7 +915,7 @@ export default function ReaderScreen() {
       setBusy(false);
       setStatus("");
       // حضّر الصفحة التالية (تشكيل/ترجمة) في الخلفية لانتقال فوري لاحقًا
-      if (listenArabicRef.current || tashkeelRef.current) {
+      if (listenArabicRef.current || precise) {
         void warmProcessedPage(res.page + 1);
       }
       const start = Math.min(Math.max(0, startIdx), sents.length - 1);
