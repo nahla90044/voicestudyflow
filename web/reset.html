@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VoiceStudyFlow — Reset Password</title>
+<!--
+  صفحة إعادة تعيين كلمة المرور — تُنشر على voicestudyflow.app/reset
+
+  ما الذي أُصلح:
+  النسخة السابقة كانت تستدعي updateUser مباشرة. ومن فعّل التحقق الثنائي (TOTP)
+  تكون جلسة رابط الاستعادة بمستوى aal1، بينما يشترط Supabase مستوى aal2 لتغيير
+  كلمة المرور — فيظهر خطأ خام: «AAL2 session is required…» ويعلق المستخدم
+  نهائيًا بلا أي طريق للخروج.
+
+  الحل: نفحص مستوى التوثيق أولًا. فإن كان التحقق الثنائي مطلوبًا نطلب الرمز
+  السداسي، ونرفع الجلسة عبر challengeAndVerify، ثم نحدّث كلمة المرور.
+-->
+<style>
+  body{margin:0;background:#0b1220;color:#eaf0ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}
+  .card{background:#121a2e;border:1px solid #243150;border-radius:16px;padding:28px 24px;max-width:380px;width:90%;text-align:center}
+  h1{color:#5f7bf5;margin:0 0 4px;font-size:22px}
+  h2{font-size:16px;font-weight:500;color:#9fb0d0;margin:0 0 20px}
+  input{width:100%;box-sizing:border-box;background:#0b1220;border:1px solid #243150;border-radius:10px;padding:13px;color:#fff;font-size:15px;margin:8px 0}
+  button{width:100%;background:#5f7bf5;color:#fff;border:0;border-radius:10px;padding:14px;font-size:16px;font-weight:600;margin-top:12px;cursor:pointer}
+  button:disabled{opacity:.55;cursor:default}
+  #msg{margin-top:14px;font-size:14px;line-height:1.5;min-height:20px}
+  #mfaBox{display:none;margin-top:6px;padding-top:14px;border-top:1px solid #243150}
+  #mfaBox p{margin:0 0 6px;font-size:13.5px;color:#9fb0d0;line-height:1.6}
+  #code{letter-spacing:6px;text-align:center;font-size:20px}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>VoiceStudyFlow</h1>
+    <h2>Reset your password · إعادة تعيين كلمة المرور</h2>
+
+    <input id="pw" type="password" placeholder="New password · كلمة المرور الجديدة" autocomplete="new-password" />
+    <input id="pw2" type="password" placeholder="Confirm · تأكيد كلمة المرور" autocomplete="new-password" />
+
+    <div id="mfaBox">
+      <p>Two-factor is on. Enter the 6-digit code from your authenticator app.<br>
+         التحقق الثنائي مفعّل — أدخل الرمز السداسي من تطبيق المصادقة.</p>
+      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="6" placeholder="000000" />
+    </div>
+
+    <button id="btn">Update password · تحديث</button>
+    <p id="msg"></p>
+  </div>
+
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+  const supabase = createClient(
+    "https://jhfufoltmjhauqvgqezv.supabase.co",
+    "sb_publishable_aAy9udj4VG2ZL0DS4S8pgw_dGrixZki",
+    { auth: { detectSessionInUrl: true, flowType: "implicit", persistSession: false } }
+  );
+
+  const msg    = document.getElementById("msg");
+  const btn    = document.getElementById("btn");
+  const mfaBox = document.getElementById("mfaBox");
+  const codeEl = document.getElementById("code");
+
+  const say = (text, color) => { msg.style.color = color; msg.textContent = text; };
+  const bad  = (t) => say(t, "#ffb4b4");
+  const note = (t) => say(t, "#9fb0d0");
+  const good = (t) => say(t, "#7ee787");
+
+  let ready = false;
+  supabase.auth.onAuthStateChange((_e, session) => { if (session) ready = true; });
+  (async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) { ready = true; return; }
+    setTimeout(async () => {
+      const r = await supabase.auth.getSession();
+      ready = !!r.data.session;
+      if (!ready) bad("This link has expired. Request a new one from the app. · انتهت صلاحية الرابط، اطلب رابطًا جديدًا من التطبيق.");
+    }, 800);
+  })();
+
+  /** هل تتطلّب هذه الجلسة رفعًا إلى aal2 قبل تغيير كلمة المرور؟ */
+  async function needsSecondFactor() {
+    try {
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      return !!data && data.currentLevel === "aal1" && data.nextLevel === "aal2";
+    } catch { return false; }
+  }
+
+  /** يرفع الجلسة إلى aal2 بالرمز السداسي. يرجع رسالة خطأ أو null عند النجاح. */
+  async function elevateWithCode(code) {
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (error) return "Could not read your security settings. · تعذّر قراءة إعدادات الأمان.";
+    const totp = (data?.totp ?? []).find((f) => f.status === "verified");
+    if (!totp) return "No authenticator is registered on this account. · لا يوجد تطبيق مصادقة مسجّل.";
+    const res = await supabase.auth.mfa.challengeAndVerify({ factorId: totp.id, code });
+    if (res.error) return "Incorrect or expired code — try the newest one. · رمز غير صحيح أو منتهٍ، جرّب الأحدث.";
+    return null;
+  }
+
+  btn.addEventListener("click", async () => {
+    const pw  = document.getElementById("pw").value;
+    const pw2 = document.getElementById("pw2").value;
+
+    if (pw.length < 6) return bad("Password must be at least 6 characters · ٦ أحرف على الأقل");
+    if (pw !== pw2)    return bad("Passwords do not match · غير متطابقة");
+    if (!ready)        return bad("This link has expired. Request a new one from the app. · انتهت صلاحية الرابط، اطلب رابطًا جديدًا من التطبيق.");
+
+    btn.disabled = true;
+    try {
+      // التحقق الثنائي أولًا — بدونه يرفض الخادم التحديث برسالة تقنية مبهمة
+      if (await needsSecondFactor()) {
+        const code = codeEl.value.trim();
+        if (!/^\d{6}$/.test(code)) {
+          mfaBox.style.display = "block";
+          codeEl.focus();
+          return note("Enter the 6-digit code to continue. · أدخل الرمز السداسي للمتابعة.");
+        }
+        note("Verifying code… · جارٍ التحقق من الرمز…");
+        const err = await elevateWithCode(code);
+        if (err) return bad(err);
+      }
+
+      note("Updating… · جارٍ التحديث…");
+      const { error } = await supabase.auth.updateUser({ password: pw });
+      if (error) return bad("Error · خطأ: " + error.message);
+
+      mfaBox.style.display = "none";
+      good("✅ Password updated! Return to the app and log in. · تم التحديث! ارجعي للتطبيق وسجّلي الدخول.");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  codeEl.addEventListener("input", () => {
+    codeEl.value = codeEl.value.replace(/\D/g, "").slice(0, 6);
+  });
+</script>
+</body>
+</html>
