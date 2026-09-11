@@ -156,12 +156,47 @@ export async function signOut() {
   await clearUserCache(); // امسح كاش الحساب حتى لا يظهر للمستخدم التالي
 }
 
-/** إرسال رسالة إعادة تعيين كلمة المرور للبريد. */
-export async function resetPassword(email: string): Promise<void> {
+/* ===================== استعادة الدخول برمز (بلا متصفح) =====================
+ * كانت الاستعادة ترسل رابطًا يفتح صفحة ويب خارجية لتعيين كلمة المرور. ذلك
+ * يُخرج المستخدم من التطبيق مرتين، ويفشل كليًا مع التحقق الثنائي: جلسة الرابط
+ * بمستوى aal1 وتغيير كلمة المرور يشترط aal2 («AAL2 session is required»).
+ *
+ * البديل: رمز سداسي بالبريد يُكتب داخل التطبيق فيُدخل المستخدم مباشرة. ولأنه
+ * دخول عادي، يمرّ على تحدّي التحقق الثنائي الموجود في شاشة الدخول، فتصبح
+ * الجلسة aal2 قبل تعيين كلمة المرور — فتختفي المشكلة من أصلها.
+ *
+ * شرط في لوحة Supabase: قالب «Magic Link» يجب أن يحوي {{ .Token }} ليصل الرمز.
+ */
+
+/**
+ * يرسل رمز دخول للبريد. لا ينشئ حسابًا لبريد غير مسجّل (shouldCreateUser: false).
+ * خطأ «البريد غير مسجّل» يُبتلع عمدًا: إظهاره يكشف لأي أحد أيّ البُرُد مسجّلة
+ * عندنا. الواجهة تعرض رسالة محايدة في الحالتين.
+ */
+export async function sendLoginCode(email: string): Promise<void> {
   const e = email.trim().toLowerCase();
-  const { error } = await supabase.auth.resetPasswordForEmail(e, {
-    redirectTo: "https://voicestudyflow.app/reset",
+  const { error } = await supabase.auth.signInWithOtp({
+    email: e,
+    options: { shouldCreateUser: false },
   });
+  if (!error) return;
+  if (/signups? not allowed|not found|user not found/i.test(error.message)) return;
+  throw error;
+}
+
+/** يتحقق من رمز الدخول ويُنشئ الجلسة (بمستوى aal1). */
+export async function verifyLoginCode(email: string, code: string): Promise<void> {
+  const { error } = await supabase.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: code.trim(),
+    type: "email",
+  });
+  if (error) throw error;
+}
+
+/** يعيّن كلمة مرور جديدة للجلسة الحالية (تتطلّب aal2 إن كان التحقق الثنائي مفعّلًا). */
+export async function setNewPassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password });
   if (error) throw error;
 }
 

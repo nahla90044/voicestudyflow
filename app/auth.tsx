@@ -6,12 +6,21 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
-import { clearUserCache, mfaChallengeRequired, resetPassword, signInWithEmail, signUpEmail, solveMfaChallenge } from "../lib/auth";
+import {
+  clearUserCache,
+  mfaChallengeRequired,
+  sendLoginCode,
+  setNewPassword,
+  signInWithEmail,
+  signUpEmail,
+  solveMfaChallenge,
+  verifyLoginCode,
+} from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
 import { setUserName } from "../lib/settings";
 import { ONBOARDING_KEY } from "./onboarding";
@@ -35,12 +44,28 @@ export default function AuthScreen() {
   const [mfaMode, setMfaMode] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
 
+  // استعادة الدخول برمز البريد (بديل رابط إعادة التعيين)
+  const [otpMode, setOtpMode] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [resendIn, setResendIn] = useState(0); // Supabase يسمح برمز كل ٦٠ ثانية
+  const [recovering, setRecovering] = useState(false); // دخل بالرمز → نعرض كلمة مرور جديدة بعد 2FA
+  const [newPwMode, setNewPwMode] = useState(false);
+  const [newPw, setNewPw] = useState("");
+
   // عدّاد تنازلي للقفل
   useEffect(() => {
     if (lockSeconds <= 0) return;
     const id = setInterval(() => setLockSeconds((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(id);
   }, [lockSeconds > 0]);
+
+  // عدّاد إعادة إرسال الرمز — يتبع «هل العدّ جارٍ» لا القيمة، فلا يُعاد إنشاؤه كل ثانية
+  const resending = resendIn > 0;
+  useEffect(() => {
+    if (!resending) return;
+    const id = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resending]);
 
   const MAX_TRIES = 5;
   const LOCK_SECONDS = 30;
@@ -118,15 +143,59 @@ export default function AuthScreen() {
     }
   }
 
+  // «نسيت كلمة المرور؟» → رمز دخول بالبريد، يُكتب هنا بلا متصفح ولا صفحة خارجية
   async function onForgot() {
     const e = email.trim().toLowerCase();
     if (!e || !e.includes("@")) return setErr(t("auth.err.emailFirst"));
+    if (resendIn > 0) return;
     setErr("");
+    setBusy(true);
     try {
-      await resetPassword(e);
-      Alert.alert(t("auth.forgot.sentTitle"), t("auth.forgot.sentBody", { email: e }));
+      await sendLoginCode(e);
+      setOtpCode("");
+      setOtpMode(true);
+      setResendIn(60);
+    } catch (ex: any) {
+      const m = String(ex?.message ?? "");
+      setErr(/rate ?limit|too many|429|seconds/i.test(m) ? t("auth.err.rateLimit") : t("auth.err.generic"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onVerifyCode() {
+    if (otpCode.length < 6) return;
+    setErr("");
+    setBusy(true);
+    try {
+      await verifyLoginCode(email, otpCode);
+      await clearUserCache(); // كالدخول العادي: لا تتسرّب بيانات حساب سابق على الجهاز
+      setRecovering(true);
+      setOtpMode(false);
+      // التحقق الثنائي أولًا: تعيين كلمة المرور بعده يتطلّب جلسة aal2
+      if (await mfaChallengeRequired().catch(() => false)) {
+        setMfaMode(true);
+      } else {
+        setNewPwMode(true);
+      }
     } catch {
-      setErr(t("auth.err.generic"));
+      setErr(t("auth.code.invalid"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onSaveNewPw() {
+    if (newPw.length < 6) return setErr(t("auth.err.password"));
+    setErr("");
+    setBusy(true);
+    try {
+      await setNewPassword(newPw);
+      await finishLogin();
+    } catch {
+      setErr(t("auth.newPw.failed"));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -136,7 +205,13 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       await solveMfaChallenge(mfaCode);
-      await finishLogin();
+      if (recovering) {
+        // جاء من الاستعادة → الجلسة صارت aal2، فتعيين كلمة المرور سيقبل الآن
+        setMfaMode(false);
+        setNewPwMode(true);
+      } else {
+        await finishLogin();
+      }
     } catch {
       setErr(t("twofa.invalidCode"));
     } finally {
@@ -154,7 +229,77 @@ export default function AuthScreen() {
             </LinearGradient>
             <Text style={styles.title}>VoiceStudyFlow</Text>
 
-            {mfaMode ? (
+            {newPwMode ? (
+              <View style={styles.card}>
+                <Ionicons name="key" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
+                <Text style={styles.confirmTitle}>{t("auth.newPw.title")}</Text>
+                <Text style={styles.confirmBody}>{t("auth.newPw.body")}</Text>
+                <View style={[styles.pwWrap, { marginTop: 14 }]}>
+                  <TextInput
+                    value={newPw}
+                    onChangeText={setNewPw}
+                    placeholder={t("auth.passwordHint")}
+                    placeholderTextColor={Palette.textDim}
+                    secureTextEntry={!showPw}
+                    autoFocus
+                    style={[
+                      styles.input,
+                      { textAlign: dir.textAlign, writingDirection: dir.writingDirection },
+                      dir.isRTL ? { paddingLeft: 46 } : { paddingRight: 46 },
+                    ]}
+                  />
+                  <Pressable
+                    onPress={() => setShowPw((v) => !v)}
+                    style={[styles.eyeBtn, dir.isRTL ? { left: 6 } : { right: 6 }]}
+                    hitSlop={8}
+                  >
+                    <Ionicons name={showPw ? "eye-outline" : "eye-off-outline"} size={20} color={Palette.textDim} />
+                  </Pressable>
+                </View>
+                {!!err && <Text style={styles.err}>{err}</Text>}
+                <Pressable onPress={onSaveNewPw} style={styles.submit} disabled={busy || newPw.length < 6}>
+                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
+                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.newPw.cta")}</Text>}
+                  </LinearGradient>
+                </Pressable>
+                {/* التخطّي آمن: يمكن الدخول برمز البريد في أي وقت لاحق */}
+                <Pressable onPress={finishLogin} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }} disabled={busy}>
+                  <Text style={styles.switchTxt}>{t("auth.newPw.skip")}</Text>
+                </Pressable>
+              </View>
+            ) : otpMode ? (
+              <View style={styles.card}>
+                <Ionicons name="mail-open" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
+                <Text style={styles.confirmTitle}>{t("auth.code.title")}</Text>
+                <Text style={styles.confirmBody}>{t("auth.code.body", { email: email.trim() })}</Text>
+                <TextInput
+                  value={otpCode}
+                  onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, "").slice(0, 8))}
+                  placeholder="••••••"
+                  placeholderTextColor={Palette.textDim}
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={8}
+                  style={[styles.input, { textAlign: "center", letterSpacing: 6, marginTop: 14 }]}
+                />
+                {!!err && <Text style={styles.err}>{err}</Text>}
+                <Pressable onPress={onVerifyCode} style={styles.submit} disabled={busy || otpCode.length < 6}>
+                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
+                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.code.cta")}</Text>}
+                  </LinearGradient>
+                </Pressable>
+                <Pressable onPress={onForgot} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }} disabled={busy || resendIn > 0}>
+                  <Text style={[styles.switchTxt, resendIn > 0 && { color: Palette.textDim }]}>
+                    {resendIn > 0 ? t("auth.code.resendIn", { sec: resendIn }) : t("auth.code.resend")}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => { setOtpMode(false); setOtpCode(""); setErr(""); }} hitSlop={6} style={{ marginTop: 10, alignSelf: "center" }}>
+                  <Text style={styles.switchTxt}>{t("common.back")}</Text>
+                </Pressable>
+              </View>
+            ) : mfaMode ? (
               <View style={styles.card}>
                 <Ionicons name="shield-checkmark" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
                 <Text style={styles.confirmTitle}>{t("twofa.challengeTitle")}</Text>
@@ -174,7 +319,7 @@ export default function AuthScreen() {
                     {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("twofa.challengeCta")}</Text>}
                   </LinearGradient>
                 </Pressable>
-                <Pressable onPress={() => { setMfaMode(false); setMfaCode(""); setErr(""); }} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }}>
+                <Pressable onPress={() => { setMfaMode(false); setMfaCode(""); setErr(""); setRecovering(false); }} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }}>
                   <Text style={styles.switchTxt}>{t("common.back")}</Text>
                 </Pressable>
               </View>

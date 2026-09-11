@@ -1,0 +1,22 @@
+<!--
+  قالب بريد «Magic Link» في Supabase — يُلصق في:
+  Authentication → Emails → Magic Link  (الموضوع + المحتوى)
+
+  لماذا: التطبيق صار يستعيد الدخول برمز سداسي يُكتب داخله (بدل رابط يفتح المتصفح).
+  القالب الافتراضي يرسل رابطًا فقط، و {{ .Token }} هو ما يضع الرمز في الرسالة.
+
+  الموضوع المقترح:  رمز الدخول إلى VoiceStudyFlow · Your sign-in code
+-->
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;max-width:420px;margin:0 auto;padding:24px;background:#0b1220;color:#eaf0ff;border-radius:16px;text-align:center">
+  <h2 style="color:#5f7bf5;margin:0 0 6px">VoiceStudyFlow</h2>
+  <p style="margin:0 0 18px;color:#9fb0d0">رمز الدخول · Your sign-in code</p>
+  <div style="font-size:34px;letter-spacing:10px;font-weight:700;background:#121a2e;border:1px solid #243150;border-radius:12px;padding:16px 8px;color:#fff">{{ .Token }}</div>
+  <p style="margin:18px 0 0;font-size:14px;line-height:1.7;color:#c9d4e2">
+    اكتب هذا الرمز في التطبيق. صالح لمدة ساعة.<br>
+    Enter this code in the app. It expires in one hour.
+  </p>
+  <p style="margin:14px 0 0;font-size:12px;color:#8aa0b8">
+    لم تطلب الرمز؟ تجاهل هذه الرسالة — لن يتغيّر شيء في حسابك.<br>
+    Didn't request it? Ignore this email — nothing changes on your account.
+  </p>
+</div>
