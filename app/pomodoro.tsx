@@ -9,7 +9,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GlassCard } from "../components/brand/glass-card";
 import { ScreenBackground } from "../components/brand/screen-background";
 import { Palette, Radius, Spacing } from "../constants/design";
-import { useDir, useI18n } from "../lib/i18n";
+import { dropEmptyVocative, useDir, useI18n } from "../lib/i18n";
 import { getUserName } from "../lib/settings";
 import { recordActivity } from "../lib/stats";
 
@@ -79,7 +79,7 @@ export default function PomodoroScreen() {
   const accent = phase === "focus" ? Palette.neonCyan : Palette.success;
   const phaseMsg =
     phase === "focus"
-      ? t("pomodoro.focusMsg", { name: name || t("pomodoro.championFallback") })
+      ? dropEmptyVocative(t("pomodoro.focusMsg", { name }))
       : t("pomodoro.breakMsg");
 
   return (

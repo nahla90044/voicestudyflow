@@ -38,6 +38,7 @@ import { extractPdfPageText, getPageWords, getPreciseText, type WordBox } from "
 import { splitForReading, splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
+  setLastOpenedBook,
   getLastSentence,
   getReadingRate,
   setLastPage,
@@ -52,7 +53,7 @@ import { UnlockModal } from "../../components/brand/unlock-modal";
 import { PlayButton } from "../../components/brand/play-button";
 import { PageScrubber } from "../../components/brand/page-scrubber";
 import { alignSpokenToBoxes, boxIndexAtProgress } from "../../lib/alignWords";
-import { isOwner } from "../../lib/auth";
+import { getSpokenName, isOwner } from "../../lib/auth";
 import {
   DEFAULT_VOICE_ID,
   prefetchText,
@@ -65,7 +66,7 @@ import {
   warmNext,
 } from "../../lib/voice";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
-import { focusEvery, getFocusLevel, getUserName } from "../../lib/settings";
+import { focusEvery, getFocusLevel } from "../../lib/settings";
 import { useDir, useI18n } from "../../lib/i18n";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
@@ -373,6 +374,9 @@ export default function ReaderScreen() {
       ]);
       setPage(savedPage);
       setRate(savedRate);
+      if (bookId) {
+        setLastOpenedBook({ id: bookId, title: typeof title === "string" ? title : "", pdf_path: pdfPath }).catch(() => {});
+      }
       rateRef.current = savedRate;
       resumeIdxRef.current = savedSent; // يستأنف من نفس الجملة بالضبط
       prefsLoadedRef.current = true;
@@ -688,7 +692,7 @@ export default function ReaderScreen() {
   // وضع التركيز: حمّل الاسم ودرجة المناداة
   useEffect(() => {
     (async () => {
-      const [level, name] = await Promise.all([getFocusLevel(), getUserName()]);
+      const [level, name] = await Promise.all([getFocusLevel(), getSpokenName()]);
       focusEveryRef.current = focusEvery(level);
       focusNameRef.current = focusEveryRef.current > 0 ? name.trim() : "";
     })();
@@ -1023,9 +1027,8 @@ export default function ReaderScreen() {
     if (name && every > 0 && focusCountRef.current % every === 0) {
       const phrases = [
         `معاي يا ${name}؟`,
-        `فاهمة عليّ يا ${name}؟`,
-        `منتبهة معاي يا ${name}؟`,
-        `أحسنتِ يا ${name}، نكمل.`,
+        `نكمل يا ${name}؟`,
+        `رائع يا ${name}، نكمل.`,
       ];
       const phrase = phrases[Math.floor(focusCountRef.current / every) % phrases.length];
       speakText(phrase, { voiceId, rate: rateRef.current, onDone: speakCurrent, onError: speakCurrent });

@@ -104,6 +104,23 @@ export async function getDisplayName(): Promise<string> {
   return "";
 }
 
+/**
+ * الاسم الذي يُنادى به المستخدم صوتيًا (وضع التركيز): الاسم المحفوظ في الإعدادات،
+ * وإلا الاسم المسجَّل في الحساب. لا نستخدم بادئة البريد هنا — نطقها يبدو آليًا.
+ */
+export async function getSpokenName(): Promise<string> {
+  try {
+    const local = (await AsyncStorage.getItem("settings:user_name"))?.trim();
+    if (local) return local;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return (user?.user_metadata as { name?: string } | undefined)?.name?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /** تسجيل دخول بحساب موجود (على جهاز آخر مثلًا). */
 export async function signInWithEmail(email: string, password: string) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });

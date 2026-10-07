@@ -43,3 +43,23 @@ export async function setReadingRate(rate: number): Promise<void> {
   if (!Number.isFinite(rate) || rate <= 0) return;
   await AsyncStorage.setItem(RATE_KEY, String(rate));
 }
+
+// آخر كتاب فُتح — لبطاقة «تابع القراءة» في الرئيسية
+const LAST_BOOK_KEY = "reader:lastBook";
+
+export type LastBook = { id: string; title: string; pdf_path: string };
+
+export async function setLastOpenedBook(book: LastBook): Promise<void> {
+  if (!book.id) return;
+  await AsyncStorage.setItem(LAST_BOOK_KEY, JSON.stringify(book));
+}
+
+export async function getLastOpenedBook(): Promise<LastBook | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_BOOK_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return v && typeof v.id === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}

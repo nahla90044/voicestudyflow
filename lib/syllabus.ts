@@ -64,12 +64,12 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
     .join("\n")
     .slice(0, 16000);
   if (text.trim().length < 100) {
-    throw new Error("لا يوجد نص كافٍ. افتحي الكتاب واقرئي أول صفحاته أولًا.");
+    throw new Error("لا يوجد نص كافٍ. يلزم فتح الكتاب وقراءة أول صفحاته أولًا.");
   }
 
   const raw = await aiAssist("syllabus", text);
   const syl = parseSyllabus(raw);
-  if (!syl) throw new Error("تعذّر إنشاء المنهج. حاولي مرة أخرى.");
+  if (!syl) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
 
   await supabase.from("book_syllabus").upsert({
     pdf_path: pdfPath,

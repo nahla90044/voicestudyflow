@@ -38,7 +38,7 @@ export function AnimatedSplash() {
               <BrandMark size={108} />
             </View>
             <Text style={styles.title}>VoiceStudyFlow</Text>
-            <Text style={styles.tag}>اقرأ، استمع، وأنجز ✨</Text>
+            <Text style={styles.tag}>قراءة، استماع، وإنجاز ✨</Text>
           </Animated.View>
         </View>
       </ScreenBackground>
