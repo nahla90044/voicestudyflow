@@ -10,6 +10,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
+import { BrandMark } from "../components/brand/logo";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
 import {
   clearUserCache,
@@ -224,9 +225,9 @@ export default function AuthScreen() {
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logo}>
-              <Ionicons name="headset" size={38} color="#fff" />
-            </LinearGradient>
+            <View style={styles.logo}>
+              <BrandMark size={78} />
+            </View>
             <Text style={styles.title}>VoiceStudyFlow</Text>
 
             {newPwMode ? (
