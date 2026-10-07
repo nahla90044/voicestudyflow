@@ -14,12 +14,16 @@ type PressProps = {
   haptic?: boolean;
 };
 
+// Pressable نفسه متحرّك: الأبعاد (flex/width) والانكماش على نفس العنصر،
+// حتى يأخذ الزر مساحته الصحيحة داخل الصفوف والشبكات.
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 /** زر ينكمش قليلًا ويرتدّ بنابض — إحساس ملموس بدل تغيير الشفافية فقط. */
 export function PressableScale({ onPress, disabled, style, children, haptic = true }: PressProps) {
   const s = useRef(new Animated.Value(1)).current;
   const to = (v: number) => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 7 }).start();
   return (
-    <Pressable
+    <AnimatedPressable
       disabled={disabled}
       onPressIn={() => to(0.965)}
       onPressOut={() => to(1)}
@@ -27,9 +31,10 @@ export function PressableScale({ onPress, disabled, style, children, haptic = tr
         if (haptic && Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
         onPress?.();
       }}
+      style={[style, { transform: [{ scale: s }] }]}
     >
-      <Animated.View style={[style, { transform: [{ scale: s }] }]}>{children}</Animated.View>
-    </Pressable>
+      {children}
+    </AnimatedPressable>
   );
 }
 

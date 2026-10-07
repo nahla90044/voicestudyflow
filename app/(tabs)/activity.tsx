@@ -84,7 +84,7 @@ export default function ActivityScreen() {
   return (
     <ScreenBackground>
       <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <ScreenHeader icon="stats-chart" title={t("activity.header.title")} subtitle={t("activity.header.subtitle")} color={Palette.neonCyan} />
+        <ScreenHeader icon="stats-chart" title={t("nav.progress")} subtitle={t("activity.header.subtitle")} color={Palette.neonCyan} />
 
         <ScrollView contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingBottom: 110, gap: Spacing.lg }} showsVerticalScrollIndicator={false}>
           <FadeIn delay={0}>
