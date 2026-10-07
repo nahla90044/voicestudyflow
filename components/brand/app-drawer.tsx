@@ -1,5 +1,5 @@
 // components/brand/app-drawer.tsx
-// قائمة جانبية (☰) تنفتح من اليمين، فيها: الإعدادات، الأرشيف.
+// قائمة جانبية (☰): الملف الشخصي، الخطة، مؤقت التركيز، الإعدادات، الأرشيف، المساعدة.
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -12,12 +12,13 @@ import { useDir, useI18n } from "../../lib/i18n";
 import { LanguageSwitcher } from "./language-switcher";
 import { BrandMark } from "./logo";
 
-type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/profile";
+type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/profile" | "/calendar";
 type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: Route; color: string };
 
 const ITEMS: Item[] = [
   { icon: "person-circle", labelKey: "drawer.profile", route: "/profile", color: Palette.neonBlue },
-  { icon: "timer", labelKey: "drawer.focusTimer", route: "/pomodoro", color: Palette.neonCyan },
+  { icon: "calendar", labelKey: "tabs.plan", route: "/calendar", color: Palette.neonCyan },
+  { icon: "timer", labelKey: "drawer.focusTimer", route: "/pomodoro", color: Palette.success },
   { icon: "settings", labelKey: "drawer.settings", route: "/more", color: Palette.neonViolet },
   { icon: "file-tray-full", labelKey: "drawer.archive", route: "/explore", color: Palette.neonPink },
   { icon: "help-circle", labelKey: "drawer.help", route: "/help", color: Palette.neonCyan },

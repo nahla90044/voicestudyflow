@@ -3,57 +3,56 @@
 // استخدمي هذه التوكنز بدل تكرار الألوان والقياسات داخل كل شاشة.
 
 export const Palette = {
-  // الخلفيات
-  bg: "#0b1220",
-  bgElevated: "#0f172a",
-  surface: "rgba(255,255,255,0.06)",
-  surfaceStrong: "rgba(255,255,255,0.10)",
-  border: "rgba(255,255,255,0.12)",
+  // الخلفيات — تصميم 2.0: أسود حبري هادئ بدل الأزرق الداكن
+  bg: "#07080D",
+  bgElevated: "#10121B",
+  surface: "rgba(255,255,255,0.05)",
+  surfaceStrong: "rgba(255,255,255,0.09)",
+  border: "rgba(255,255,255,0.07)",
 
   // النصوص
-  text: "#ffffff",
-  textMuted: "#c9d4e2",
-  textDim: "#9fb3c8",
-  placeholder: "#8aa0b8",
+  text: "#F3F4F8",
+  textMuted: "#C4C9D8",
+  textDim: "#8E95AB",
+  placeholder: "#6F7690",
 
-  // ألوان العلامة
-  primary: "#4f8cff",
-  primaryDark: "#2f6bdc",
-  accent: "#7c5cff",
-  success: "#2ecc71",
-  warn: "#f1c40f",
-  danger: "#ff5d6c",
+  // ألوان العلامة (تدرّج «الشفق»: بنفسجي ← سماوي ← نعناعي)
+  primary: "#7C6CFF",
+  primaryDark: "#5B4BD6",
+  accent: "#3FD0FF",
+  success: "#6CF3C5",
+  warn: "#FFB38A",
+  danger: "#FF6B81",
 
   // شفافيات مفيدة
-  primarySoft: "rgba(79,140,255,0.16)",
-  accentSoft: "rgba(124,92,255,0.16)",
-  successSoft: "rgba(46,204,113,0.16)",
+  primarySoft: "rgba(124,108,255,0.16)",
+  accentSoft: "rgba(63,208,255,0.14)",
+  successSoft: "rgba(108,243,197,0.14)",
 
-  // ألوان نيون (طابع Web3)
-  neonCyan: "#22d3ee",
-  neonViolet: "#a855f7",
-  neonPink: "#ec4899",
-  neonBlue: "#3b82f6",
+  // ألوان مميّزة للأدوات (الأسماء القديمة باقية حتى لا تنكسر الشاشات)
+  neonCyan: "#5ED9FF",
+  neonViolet: "#B9AFFF",
+  neonPink: "#F79ACB",
+  neonBlue: "#7C9CFF",
 
-  // زجاج (glassmorphism)
-  glass: "rgba(255,255,255,0.07)",
-  glassBorder: "rgba(255,255,255,0.16)",
-  glassHighlight: "rgba(255,255,255,0.22)",
+  // البطاقات: سطح مسطّح بحافة شعرية (بدل الزجاج المتوهّج)
+  glass: "#10121B",
+  glassBorder: "rgba(255,255,255,0.07)",
+  glassHighlight: "rgba(255,255,255,0.05)",
 } as const;
 
 // تدرجات (للاستخدام مع expo-linear-gradient)
 export const Gradients = {
-  bg: ["#0b1220", "#0d1730", "#0b1220"] as const,
-  brand: ["#4f8cff", "#7c5cff"] as const,
-  brandSoft: ["rgba(79,140,255,0.22)", "rgba(124,92,255,0.18)"] as const,
-  success: ["#2ecc71", "#1fa463"] as const,
-  hero: ["#15213f", "#0b1220"] as const,
-  // تدرّجات نيون (Web3)
-  neon: ["#22d3ee", "#a855f7", "#ec4899"] as const,
-  neonBlue: ["#3b82f6", "#22d3ee"] as const,
-  neonViolet: ["#7c5cff", "#a855f7"] as const,
-  // حافة زجاجية لامعة
-  glassEdge: ["rgba(255,255,255,0.25)", "rgba(255,255,255,0.04)"] as const,
+  bg: ["#07080D", "#0A0B12", "#07080D"] as const,
+  brand: ["#7C6CFF", "#3FD0FF"] as const,
+  brandSoft: ["rgba(124,108,255,0.20)", "rgba(63,208,255,0.12)"] as const,
+  success: ["#6CF3C5", "#3FD0FF"] as const,
+  hero: ["#141629", "#07080D"] as const,
+  // «الشفق» — يُستخدم للعناصر المهمة فقط (زر رئيسي، حلقة، شريط تقدّم)
+  neon: ["#7C6CFF", "#3FD0FF", "#6CF3C5"] as const,
+  neonBlue: ["#7C6CFF", "#3FD0FF"] as const,
+  neonViolet: ["#7C6CFF", "#B9AFFF"] as const,
+  glassEdge: ["rgba(255,255,255,0.08)", "rgba(255,255,255,0.04)"] as const,
 } as const;
 
 export const Spacing = {
@@ -68,8 +67,8 @@ export const Spacing = {
 export const Radius = {
   sm: 10,
   md: 14,
-  lg: 18,
-  xl: 24,
+  lg: 20,
+  xl: 26,
   pill: 999,
 } as const;
 

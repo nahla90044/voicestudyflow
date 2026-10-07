@@ -1,5 +1,5 @@
 // components/brand/screen-background.tsx
-// خلفية متدرّجة مع "بقع" ضوئية ناعمة تعطي إحساس احترافي عميق.
+// خلفية متدرّجة مع "بقع" ضوئية ناعمة — خافتة في تصميم 2.0 حتى لا تنافس المحتوى.
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
@@ -26,15 +26,15 @@ export function ScreenBackground({ children, style }: Props) {
       <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
         <Defs>
           <RadialGradient id="glowA" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={theme.glow1} stopOpacity="0.40" />
+            <Stop offset="0" stopColor={theme.glow1} stopOpacity="0.24" />
             <Stop offset="1" stopColor={theme.glow1} stopOpacity="0" />
           </RadialGradient>
           <RadialGradient id="glowB" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={theme.glow2} stopOpacity="0.34" />
+            <Stop offset="0" stopColor={theme.glow2} stopOpacity="0.16" />
             <Stop offset="1" stopColor={theme.glow2} stopOpacity="0" />
           </RadialGradient>
           <RadialGradient id="glowC" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={theme.glow3} stopOpacity="0.22" />
+            <Stop offset="0" stopColor={theme.glow3} stopOpacity="0.10" />
             <Stop offset="1" stopColor={theme.glow3} stopOpacity="0" />
           </RadialGradient>
         </Defs>

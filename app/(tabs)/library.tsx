@@ -297,15 +297,9 @@ export default function LibraryScreen() {
   function onPressBook(item: BookRow) {
     setActiveBookId(item.id);
 
-    // الدخول للكتاب مباشرة. المنهج يُفتح من الضغط المطوّل → «📋 المنهج الدراسي».
-    router.push({
-      pathname: "/reader/[id]",
-      params: {
-        id: item.id,
-        title: item.title,
-        pdf_path: item.pdf_path,
-      },
-    });
+    // تصميم 2.0: الكتاب يفتح «صفحة الكتاب» (متابعة الاستماع + الوحدات + كل الأدوات).
+    // الضغط المطوّل ما زال يعرض قائمة الإجراءات (مجلد، منهج، أرشفة، حذف).
+    router.push({ pathname: "/book/[id]", params: { id: item.id } });
   }
 
   const data = useMemo(() => {
@@ -411,7 +405,12 @@ export default function LibraryScreen() {
   return (
     <ScreenBackground>
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader icon="library" title={t("library.header.title")} subtitle={t("library.header.subtitle")} color={Palette.neonBlue} />
+      <ScreenHeader
+        icon="library"
+        title={t("nav.library")}
+        subtitle={t("library.header.subtitle")}
+        actions={[{ icon: "add", label: t("cmd.addBook"), primary: true, onPress: () => router.push("/add-book") }]}
+      />
 
       <View style={styles.header}>
         {/* شريط البحث */}

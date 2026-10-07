@@ -14,13 +14,13 @@ export type AppTheme = {
 export const THEMES: AppTheme[] = [
   {
     id: "web3",
-    name: "نيون بنفسجي",
+    name: "الشفق",
     emoji: "🟣",
-    bg: ["#0a0e1a", "#0f1424", "#0a0e1a"],
-    glow1: "#4f8cff",
-    glow2: "#7c5cff",
-    glow3: "#22d3ee",
-    accent: "#7c5cff",
+    bg: ["#07080D", "#0A0B12", "#07080D"],
+    glow1: "#7C6CFF",
+    glow2: "#3FD0FF",
+    glow3: "#6CF3C5",
+    accent: "#B9AFFF",
   },
   {
     id: "sunset",

@@ -65,6 +65,9 @@ export default function RootLayout() {
           <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="reader/[id]" />
+          <Stack.Screen name="book/[id]" />
+          {/* «بحث وأوامر» تُفتح كورقة من الأسفل فوق الشاشة الحالية */}
+          <Stack.Screen name="command" options={{ presentation: "modal" }} />
         </Stack>
         {booting ? <AnimatedSplash /> : null}
       </SafeAreaProvider>
