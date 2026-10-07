@@ -66,6 +66,7 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="reader/[id]" />
           <Stack.Screen name="book/[id]" />
+          <Stack.Screen name="ask/[id]" />
           {/* «بحث وأوامر» تُفتح كورقة من الأسفل فوق الشاشة الحالية */}
           <Stack.Screen name="command" options={{ presentation: "modal" }} />
         </Stack>

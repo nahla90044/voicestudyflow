@@ -100,7 +100,7 @@ export default function BookHubScreen() {
 
   const tools: { key: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; color: string; badge?: string; go: () => void }[] = [
     { key: "read", labelKey: "book.tool.read", icon: "headset", color: Palette.neonCyan, go: openReader },
-    { key: "ask", labelKey: "book.tool.ask", icon: "chatbubble-ellipses", color: Palette.primary, go: openReader },
+    { key: "ask", labelKey: "book.tool.ask", icon: "chatbubble-ellipses", color: Palette.primary, go: () => router.push({ pathname: "/ask/[id]", params: { id: book.id } }) },
     { key: "syllabus", labelKey: "book.tool.syllabus", icon: "list", color: Palette.neonViolet, go: openSyllabus },
     { key: "mindmap", labelKey: "book.tool.mindmap", icon: "git-network", color: Palette.success, go: openSyllabus },
     { key: "cards", labelKey: "book.tool.cards", icon: "albums", color: Palette.neonPink, badge: cards ? String(cards) : undefined, go: () => router.push("/flashcards") },
