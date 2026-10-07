@@ -32,8 +32,9 @@ export async function getSession(): Promise<Session | null> {
   return session;
 }
 
-// حساب المالك (نهلة): يفتح ميزات خاصة (كتب غير محدودة، خانة سؤال الصفحة…)
-const OWNER_EMAIL = "nahlah@hotmail.com";
+// حسابات المالكة (نهلة — المطوّرة): مجانية دائمًا بكل المزايا (كتب غير محدودة، خانة سؤال الصفحة…).
+// عند إضافة الاشتراكات: تُستثنى هذه الحسابات من صفحة الدفع ومن حدود الاستخدام على السيرفر أيضًا.
+const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com"]);
 
 /** هل الحساب الحالي هو حساب المالك؟ (لإظهار ميزات مقيّدة عليه فقط) */
 export async function isOwner(): Promise<boolean> {
@@ -41,7 +42,7 @@ export async function isOwner(): Promise<boolean> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    return user?.email?.trim().toLowerCase() === OWNER_EMAIL;
+    return OWNER_EMAILS.has(user?.email?.trim().toLowerCase() ?? "");
   } catch {
     return false;
   }
