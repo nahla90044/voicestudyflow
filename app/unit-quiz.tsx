@@ -228,6 +228,7 @@ export default function UnitQuizScreen() {
           <View style={styles.center}>
             <ActivityIndicator color={Palette.neonViolet} />
             <Text style={styles.dim}>{t("quiz2.preparing")}</Text>
+            <Text style={[styles.dim, { fontSize: 12.5, opacity: 0.8 }]}>{t("quiz2.preparingHint")}</Text>
           </View>
         ) : err ? (
           <View style={styles.center}>

@@ -121,6 +121,7 @@ export type BookReadiness = {
   weakTitle: string;
   weakUntested: boolean;
   answered: number;
+  correct: number; // آخر إجابة صحيحة (لدقة الاختبارات في «التقدّم»)
   dueMistakes: number;
   examISO: string | null;
   daysLeft: number | null;
@@ -179,6 +180,7 @@ export async function getBookReadiness(pdfPath: string): Promise<BookReadiness |
       weakTitle: r.weakUnit !== null ? unitTitles[r.weakUnit] ?? "" : "",
       weakUntested: r.weakUntested,
       answered: questions.length,
+      correct: questions.filter((q) => q.lastCorrect).length,
       dueMistakes: dueQuestions(questions, Date.now()).length,
       examISO,
       daysLeft: examISO ? daysUntil(examISO, today) : null,
