@@ -67,6 +67,7 @@ import {
 } from "../../lib/voice";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel } from "../../lib/settings";
+import { handoff, takeOver } from "../../lib/player";
 import { useDir, useI18n } from "../../lib/i18n";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
@@ -318,6 +319,12 @@ export default function ReaderScreen() {
   const focusEveryRef = useRef(0); // كل كم جملة يُنادى الاسم (0 = أبدًا)
   const focusCountRef = useRef(0); // عدّاد الجُمل لمناداة الاسم دوريًا
   const playStartRef = useRef<number | null>(null);
+  // نسخ حيّة للموضع — دالة التنظيف عند المغادرة ترى القيم الأولى فقط بدونها
+  const livePageRef = useRef(1);
+  const liveSentRef = useRef(-1);
+  const liveTotalRef = useRef(0);
+  // الرجوع من الشريط العائم والصوت شغّال → نكمل القراءة هنا تلقائيًا من نفس الجملة
+  const autoResumeRef = useRef(false);
 
   // صورة الصفحة الحالية (عالية الدقة، قابلة للتكبير، تتابع القراءة)
   const [pageImg, setPageImg] = useState<string | null>(null);
@@ -366,6 +373,8 @@ export default function ReaderScreen() {
 
   // تحميل التفضيلات: آخر صفحة + السرعة
   useEffect(() => {
+    // المشغّل العام كان يقرأ هذا الكتاب؟ يتوقف هو، ونكمل نحن من موضعه المحفوظ
+    autoResumeRef.current = takeOver(bookId).wasPlaying;
     (async () => {
       const [savedPage, savedRate, savedSent] = await Promise.all([
         getLastPage(bookId),
@@ -384,10 +393,30 @@ export default function ReaderScreen() {
     })();
 
     return () => {
+      // تصميم 2.0: المغادرة والصوت شغّال لا توقف القراءة — نسلّم الموضع للمشغّل العام
+      // فيظهر الشريط العائم ويكمل. (وضع «الاستماع بالعربية» يحتاج الترجمة الكاملة → يتوقف.)
+      const keepPlaying = playingRef.current && !listenArabicRef.current && !!pdfPath && !!bookId;
       playingRef.current = false;
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
       if (toastTimer.current) clearTimeout(toastTimer.current);
       stopSpeaking();
+      if (playStartRef.current) {
+        recordActivity({ minutes: (Date.now() - playStartRef.current) / 60000 });
+        playStartRef.current = null;
+      }
+      if (keepPlaying && bookId) {
+        handoff({
+          bookId,
+          title: typeof title === "string" && title.trim() ? title : "VoiceStudyFlow",
+          pdfPath,
+          page: livePageRef.current,
+          totalPages: liveTotalRef.current,
+          idx: Math.max(0, liveSentRef.current),
+          voiceId: pickVoice(),
+          rate: rateRef.current,
+          precise: tashkeelRef.current,
+        });
+      }
       stopAmbient(); // أوقف موسيقى الخلفية عند مغادرة الكتاب
       // ملاحظة: لا نوقف تحميل الكتاب عند الخروج — يكمل في الخلفية عبر المدير العام
     };
@@ -1607,10 +1636,29 @@ export default function ReaderScreen() {
     };
   }, [pdfPath, totalPages]);
 
+  useEffect(() => {
+    livePageRef.current = page;
+  }, [page]);
+  useEffect(() => {
+    liveSentRef.current = activeSentence;
+  }, [activeSentence]);
+  useEffect(() => {
+    liveTotalRef.current = totalPages;
+  }, [totalPages]);
+  // استلام من الشريط العائم: بعد تحميل الموضع المحفوظ نكمل التشغيل تلقائيًا
+  useEffect(() => {
+    if (!prefsLoaded || !autoResumeRef.current) return;
+    autoResumeRef.current = false;
+    togglePlay();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoaded]);
+
   function goBack() {
-    stop();
+    // لا نوقف القراءة هنا: إن كانت شغّالة تنتقل للشريط العائم عند المغادرة (انظر التنظيف)
     // التحميل يكمل في الخلفية — لا نوقفه عند الرجوع
-    router.back();
+    if (router.canGoBack()) router.back();
+    else router.replace("/"); // فُتح القارئ مباشرة (رابط/إشعار) بلا شاشة قبله
+
   }
 
   return (

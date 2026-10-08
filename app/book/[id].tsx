@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BookCover, coverColors } from "../../components/brand/book-cover";
 import { GlassCard } from "../../components/brand/glass-card";
 import { PressableScale } from "../../components/brand/motion";
+import { NowPlayingDock } from "../../components/brand/now-playing-dock";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { getCards } from "../../lib/flashcards";
@@ -116,7 +117,7 @@ export default function BookHubScreen() {
       <SafeAreaView edges={["top", "left", "right"]} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={[styles.topBar, { flexDirection: dir.row }]}>
-            <PressableScale onPress={() => router.back()} style={styles.ghost}>
+            <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={styles.ghost}>
               <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} />
             </PressableScale>
           </View>
@@ -217,6 +218,10 @@ export default function BookHubScreen() {
             </View>
           )}
         </ScrollView>
+        {/* الشريط العائم يرافق المستخدم هنا أيضًا */}
+        <View style={styles.dockWrap}>
+          <NowPlayingDock />
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -227,7 +232,8 @@ const styles = StyleSheet.create({
   center: { alignItems: "center", justifyContent: "center" },
   dim: { color: Palette.textDim, fontSize: 14 },
   headerGlow: { position: "absolute", top: 0, left: 0, right: 0, height: 340 },
-  scroll: { padding: Spacing.lg, paddingBottom: 60, gap: 14 },
+  scroll: { padding: Spacing.lg, paddingBottom: 110, gap: 14 },
+  dockWrap: { position: "absolute", left: 12, right: 12, bottom: 18 },
   topBar: { justifyContent: "flex-start" },
   ghost: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
   hero: { alignItems: "flex-end", gap: 16, marginTop: 4 },

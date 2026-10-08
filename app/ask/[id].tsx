@@ -111,7 +111,7 @@ export default function AskScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {/* الرأس */}
         <View style={[styles.head, { flexDirection: dir.row }]}>
-          <PressableScale onPress={() => router.back()} style={styles.ghost}>
+          <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={styles.ghost}>
             <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} />
           </PressableScale>
           <View style={{ flex: 1 }}>

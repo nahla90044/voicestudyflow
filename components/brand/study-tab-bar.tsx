@@ -14,6 +14,7 @@ import { Gradients, Palette } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useTheme } from "../../lib/themeContext";
 import { PressableScale } from "./motion";
+import { NowPlayingDock } from "./now-playing-dock";
 
 type Dest = { route: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; iconOn: keyof typeof Ionicons.glyphMap };
 
@@ -57,6 +58,8 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      {/* الشريط العائم: الكتاب المسموع فوق التنقّل (يظهر فقط أثناء القراءة في الخلفية) */}
+      <NowPlayingDock />
       <View style={[styles.pill, { flexDirection: dir.row }]}>
         {LEFT.map(item)}
         <PressableScale onPress={() => router.push("/command")} style={styles.orbWrap}>

@@ -34,7 +34,8 @@ type Props = { title: string; width?: number; height?: number };
 
 export function BookCover({ title, width = 64, height = 88 }: Props) {
   const colors = coverColors(title);
-  const initial = (title || "?").trim().charAt(0).toUpperCase();
+  // نتخطّى رموز الاتجاه الخفية (U+200E…U+2069) التي تسبق بعض العناوين، فنأخذ أول حرف فعلي
+  const initial = (Array.from((title || "").replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, "").trim())[0] || "?").toUpperCase();
   return (
     <View style={[styles.wrap, { width, height }]}>
       <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
