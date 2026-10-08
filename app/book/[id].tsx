@@ -20,6 +20,7 @@ import { getCards } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getLastPage } from "../../lib/readerPrefs";
 import { getBookReadiness, setExamDate, type BookReadiness } from "../../lib/readiness";
+import { getCachedUnitRanges, getUnitRanges, type UnitRange } from "../../lib/glossary";
 import { supabase } from "../../lib/supabase";
 import { getSyllabus, type Syllabus } from "../../lib/syllabus";
 
@@ -41,6 +42,7 @@ export default function BookHubScreen() {
   const [tab, setTab] = useState<Tab>("units");
   const [ready, setReady] = useState<BookReadiness | null>(null);
   const [examOpen, setExamOpen] = useState(false);
+  const [ranges, setRanges] = useState<UnitRange[] | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,6 +68,16 @@ export default function BookHubScreen() {
           if (!on) return;
           setPage(p);
           setReady(r);
+          // صفحات كل وحدة: فوريًا من آخر حساب، وإن لم يوجد نحسبها بالخلفية
+          const titles = s?.data.units.map((u) => u.title) ?? [];
+          if (titles.length) {
+            const cached = await getCachedUnitRanges(data.pdf_path);
+            if (on && cached?.length === titles.length) setRanges(cached);
+            else
+              getUnitRanges(data.pdf_path, titles, Number(data.page_count) || 0)
+                .then((rr) => on && setRanges(rr))
+                .catch(() => {});
+          }
           setSyl(s);
           setCards(all.filter((c) => c.bookId === bookId && !c.archived).length);
         } catch {
@@ -107,11 +119,17 @@ export default function BookHubScreen() {
   const openSyllabus = () =>
     router.push({ pathname: "/syllabus/[id]", params: { id: book.id, title: book.title, pdf_path: book.pdf_path } });
   const unitParams = (i: number, title: string) => ({ pdf_path: book.pdf_path, unit: String(i), title, book_title: book.title });
+  const openGlossary = (i: number) =>
+    router.push({
+      pathname: "/glossary",
+      params: { pdf_path: book.pdf_path, book_id: book.id, book_title: book.title, unit: String(i), page_count: String(pages) },
+    });
 
   const tools: { key: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; color: string; badge?: string; go: () => void }[] = [
     { key: "read", labelKey: "book.tool.read", icon: "headset", color: Palette.neonCyan, go: openReader },
     { key: "ask", labelKey: "book.tool.ask", icon: "chatbubble-ellipses", color: Palette.primary, go: () => router.push({ pathname: "/ask/[id]", params: { id: book.id } }) },
     { key: "syllabus", labelKey: "book.tool.syllabus", icon: "list", color: Palette.neonViolet, go: openSyllabus },
+    { key: "glossary", labelKey: "book.tool.glossary", icon: "book", color: "#6CF3C5", go: () => (units.length ? openGlossary(0) : openSyllabus()) },
     { key: "mindmap", labelKey: "book.tool.mindmap", icon: "git-network", color: Palette.success, go: openSyllabus },
     { key: "cards", labelKey: "book.tool.cards", icon: "albums", color: Palette.neonPink, badge: cards ? String(cards) : undefined, go: () => router.push("/flashcards") },
     { key: "translate", labelKey: "book.tool.translate", icon: "language", color: Palette.warn, go: openReader },
@@ -217,6 +235,12 @@ export default function BookHubScreen() {
                         <Text style={[styles.unitTitle, { textAlign: dir.textAlign }, done && { color: Palette.textDim }]} numberOfLines={2}>
                           {u.title}
                         </Text>
+                        {ranges?.[i] && (
+                          <Text style={[styles.unitRange, { textAlign: dir.textAlign }]}>
+                            {t("glossary.pages", { from: ranges[i].from, to: ranges[i].to })}
+                            {ranges[i].found ? "" : " " + t("glossary.approx")}
+                          </Text>
+                        )}
                         {acc !== null && (
                           <View style={[styles.accRow, { flexDirection: dir.row }]}>
                             <View style={styles.accTrack}>
@@ -232,6 +256,9 @@ export default function BookHubScreen() {
                           </View>
                         )}
                       </View>
+                      <PressableScale onPress={() => openGlossary(i)} style={styles.mini}>
+                        <Ionicons name="book" size={16} color="#6CF3C5" accessibilityLabel={t("book.unit.glossary")} />
+                      </PressableScale>
                       <PressableScale
                         onPress={() => router.push({ pathname: "/unit-summary", params: unitParams(i, u.title) })}
                         style={styles.mini}
@@ -325,6 +352,7 @@ const styles = StyleSheet.create({
   mistakesTxt: { flex: 1, color: Palette.text, fontSize: 14.5, fontWeight: "700" },
   unitWeak: { backgroundColor: "rgba(255,179,138,0.06)" },
   accRow: { alignItems: "center", gap: 8, marginTop: 6 },
+  unitRange: { color: Palette.textDim, fontSize: 11.5, marginTop: 3 },
   accTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
   accFill: { height: 4, borderRadius: 2 },
   accTxt: { fontSize: 11.5, fontWeight: "700" },

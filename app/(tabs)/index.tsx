@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -11,7 +10,6 @@ import { BookCover } from "../../components/brand/book-cover";
 import { DownloadIndicator } from "../../components/brand/download-indicator";
 import { FadeIn } from "../../components/brand/fade-in";
 import { GlassCard } from "../../components/brand/glass-card";
-import { HowToTour } from "../../components/brand/howto-tour";
 import { CountUp, PressableScale } from "../../components/brand/motion";
 import { ProgressRing } from "../../components/brand/progress-ring";
 import { ScreenBackground } from "../../components/brand/screen-background";
@@ -28,7 +26,6 @@ import { buildDailyPath, type PathStep, type PathStepId } from "../../lib/readin
 import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
 import { useTheme } from "../../lib/themeContext";
 
-const HOWTO_KEY = "howto-tour-seen-v1";
 
 // شكل كل اقتراح ذكي: أيقونة + لون (النص يُبنى في الشاشة لأنه يحتاج بيانات)
 const ACTION_LOOK: Record<NextActionId, { icon: keyof typeof Ionicons.glyphMap; color: string }> = {
@@ -54,22 +51,8 @@ export default function HomeScreen() {
   const [goal, setGoal] = useState(20);
   const [cont, setCont] = useState<ContinueBook | null>(null);
   const [plan, setPlan] = useState<TodayPlan | null>(null);
-  const [tour, setTour] = useState(false);
   const [ready, setReady] = useState<BookReadiness | null>(null);
   const [cardsToday, setCardsToday] = useState(false);
-
-  // جولة تعريفية أول مرة فقط
-  useEffect(() => {
-    (async () => {
-      const seen = await AsyncStorage.getItem(HOWTO_KEY);
-      if (seen !== "1") setTour(true);
-    })();
-  }, []);
-
-  async function closeTour() {
-    setTour(false);
-    await AsyncStorage.setItem(HOWTO_KEY, "1").catch(() => {});
-  }
 
   useFocusEffect(
     useCallback(() => {
@@ -486,7 +469,6 @@ export default function HomeScreen() {
 
         </ScrollView>
       </SafeAreaView>
-      <HowToTour visible={tour} onClose={closeTour} />
     </ScreenBackground>
   );
 }

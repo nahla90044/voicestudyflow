@@ -1,86 +1,22 @@
 // app/onboarding.tsx
-// توتوريال ترحيبي يظهر أول مرة فقط.
+// الجولة التعريفية (تصميم 2.0): أربع شاشات بمشاهد متحرّكة من الواجهة الحقيقية.
+// تظهر مرة واحدة بعد التسجيل (وبعد تحديث 2.0 للمستخدمين الحاليين)، ومتاحة من المساعدة.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
-import {
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from "react-native";
+import React from "react";
+import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ScreenBackground } from "../components/brand/screen-background";
-import {
-  PlanArt,
-  ReadListenArt,
-  SecureArt,
-  VoiceWaveArt,
-} from "../components/brand/illustrations";
-import { Gradients, Palette, Radius, Spacing } from "../constants/design";
+import { TourPager } from "../components/brand/tour-pager";
 import { useI18n } from "../lib/i18n";
 
-export const ONBOARDING_KEY = "vsf_onboarded_v1";
-
-const { width } = Dimensions.get("window");
-
-type Slide = {
-  key: string;
-  titleKey: string;
-  bodyKey: string;
-  Art: React.ComponentType<{ size?: number }>;
-};
-
-const SLIDES: Slide[] = [
-  {
-    key: "read",
-    titleKey: "onboarding.read.title",
-    bodyKey: "onboarding.read.body",
-    Art: ReadListenArt,
-  },
-  {
-    key: "voice",
-    titleKey: "onboarding.voice.title",
-    bodyKey: "onboarding.voice.body",
-    Art: VoiceWaveArt,
-  },
-  {
-    key: "plan",
-    titleKey: "onboarding.plan.title",
-    bodyKey: "onboarding.plan.body",
-    Art: PlanArt,
-  },
-  {
-    key: "secure",
-    titleKey: "onboarding.secure.title",
-    bodyKey: "onboarding.secure.body",
-    Art: SecureArt,
-  },
-];
+// v2: الجولة الجديدة تظهر مرة لكل المستخدمين بعد التحديث
+export const ONBOARDING_KEY = "vsf_onboarded_v2";
 
 export default function Onboarding() {
   const router = useRouter();
   const { t } = useI18n();
-  const scrollRef = useRef<ScrollView>(null);
-  const [index, setIndex] = useState(0);
-
-  const isLast = index === SLIDES.length - 1;
-
-  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== index) setIndex(i);
-  }
-
-  function goNext() {
-    if (isLast) return finish();
-    scrollRef.current?.scrollTo({ x: (index + 1) * width, animated: true });
-  }
 
   async function finish() {
     await AsyncStorage.setItem(ONBOARDING_KEY, "1");
@@ -88,111 +24,16 @@ export default function Onboarding() {
   }
 
   return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe}>
-        {/* تخطّي */}
-        <View style={styles.topBar}>
-          <Pressable onPress={finish} hitSlop={12}>
-            <Text style={styles.skip}>{t("onboarding.skip")}</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          ref={scrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-        >
-          {SLIDES.map(({ key, titleKey, bodyKey, Art }) => (
-            <View key={key} style={[styles.slide, { width }]}>
-              <View style={styles.artWrap}>
-                <Art size={240} />
-              </View>
-              <Text style={styles.title}>{t(titleKey)}</Text>
-              <Text style={styles.body}>{t(bodyKey)}</Text>
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* النقاط */}
-        <View style={styles.dots}>
-          {SLIDES.map((s, i) => (
-            <View
-              key={s.key}
-              style={[styles.dot, i === index && styles.dotActive]}
-            />
-          ))}
-        </View>
-
-        {/* زر المتابعة */}
-        <View style={styles.footer}>
-          <Pressable onPress={goNext} style={styles.cta}>
-            <LinearGradient
-              colors={Gradients.neon}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.ctaGrad}
-            >
-              <Text style={styles.ctaTxt}>
-                {isLast ? t("onboarding.start") : t("common.next")}
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
+    <View style={styles.root}>
+      <LinearGradient colors={["rgba(124,108,255,0.30)", "rgba(7,8,13,0)"]} style={styles.glow} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <TourPager onDone={finish} doneLabel={t("onboarding.start")} />
       </SafeAreaView>
-    </ScreenBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.sm,
-  },
-  skip: { color: Palette.textDim, fontWeight: "800", fontSize: 14 },
-
-  slide: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: Spacing.xxl,
-  },
-  artWrap: { marginBottom: Spacing.xxl },
-  title: {
-    color: Palette.text,
-    fontSize: 26,
-    fontWeight: "900",
-    textAlign: "center",
-    marginBottom: Spacing.md,
-  },
-  body: {
-    color: Palette.textDim,
-    fontSize: 15,
-    lineHeight: 26,
-    textAlign: "center",
-  },
-
-  dots: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-    marginBottom: Spacing.lg,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.surfaceStrong,
-  },
-  dotActive: { width: 22, backgroundColor: Palette.primary },
-
-  footer: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.lg },
-  cta: { borderRadius: Radius.lg, overflow: "hidden" },
-  ctaGrad: { height: 54, alignItems: "center", justifyContent: "center" },
-  ctaTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  root: { flex: 1, backgroundColor: "#07080D" },
+  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 420 },
 });

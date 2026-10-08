@@ -21,7 +21,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const router = useRouter();
-  const [booting, setBooting] = useState(true);
+  const [booting, setBooting] = useState(true); // السبلاش ظاهرة
+  const [bootReady, setBootReady] = useState(false); // انتهى الإقلاع → تبدأ السبلاش بالتلاشي
 
   useEffect(() => {
     // التطبيق عموديّ افتراضيًا؛ نسمح بالعرض (landscape) فقط داخل عدسة القارئ.
@@ -45,8 +46,8 @@ export default function RootLayout() {
         // أكمل أي تحميل كتاب لم يكتمل (يستأنف تلقائيًا حتى لو سُكِّر التطبيق سابقًا)
         resumePendingDownload();
       } finally {
-        // سبلاش قصير جدًا فقط (لا نؤخّر فتح التطبيق)
-        setTimeout(() => setBooting(false), 250);
+        // السبلاش تتلاشى بنفسها بعد حدّ أدنى قصير (انظر AnimatedSplash)
+        setBootReady(true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,12 +79,13 @@ export default function RootLayout() {
           <Stack.Screen name="reader/[id]" />
           <Stack.Screen name="book/[id]" />
           <Stack.Screen name="ask/[id]" />
+          <Stack.Screen name="glossary" />
           {/* «بحث وأوامر» تُفتح كورقة من الأسفل فوق الشاشة الحالية */}
           <Stack.Screen name="command" options={{ presentation: "modal" }} />
           <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
         </Stack>
-        {booting ? <AnimatedSplash /> : null}
+        {booting ? <AnimatedSplash ready={bootReady} onHidden={() => setBooting(false)} /> : null}
       </SafeAreaProvider>
       </ThemeProvider>
       </LanguageProvider>
