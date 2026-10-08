@@ -63,3 +63,25 @@ export async function getLastOpenedBook(): Promise<LastBook | null> {
     return null;
   }
 }
+
+const PAPER_KEY = "reader:paper";
+const FONT_KEY = "reader:fontScale";
+
+/** مظهر القارئ: ورقي فاتح (true) أو ليلي (false). الافتراضي ليلي. */
+export async function getReaderPaper(): Promise<boolean> {
+  return (await AsyncStorage.getItem(PAPER_KEY)) === "1";
+}
+
+export async function setReaderPaper(on: boolean): Promise<void> {
+  await AsyncStorage.setItem(PAPER_KEY, on ? "1" : "0");
+}
+
+/** حجم خط وضع النص (مضاعف: 1 / 1.15 / 1.3). */
+export async function getReaderFontScale(): Promise<number> {
+  const n = Number(await AsyncStorage.getItem(FONT_KEY));
+  return n === 1.15 || n === 1.3 ? n : 1;
+}
+
+export async function setReaderFontScale(n: number): Promise<void> {
+  await AsyncStorage.setItem(FONT_KEY, String(n));
+}

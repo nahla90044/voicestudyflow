@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
+import { StatusBar } from "expo-status-bar";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
@@ -41,6 +42,10 @@ import {
   setLastOpenedBook,
   getLastSentence,
   getReadingRate,
+  getReaderFontScale,
+  getReaderPaper,
+  setReaderFontScale,
+  setReaderPaper,
   setLastPage,
   setLastSentence,
   setReadingRate,
@@ -78,6 +83,15 @@ const SLEEP_UNTIL_END = -1;
 
 // أي كلمة (حسب ترتيبها في الجملة) تُقرأ عند نسبة تقدّم frac (0..1)،
 // بتوزيع زمني تقريبي مرجّح بطول الكلمة.
+/** لغة النص الغالبة: عربي أو إنجليزي، أو null إن لم يكفِ النص للحكم. */
+function textLang(text: string): "ar" | "en" | null {
+  const sample = text.slice(0, 600);
+  const ar = (sample.match(/[\u0600-\u06FF]/g) || []).length;
+  const latin = (sample.match(/[A-Za-z]/g) || []).length;
+  if (ar + latin < 4) return null;
+  return ar >= latin ? "ar" : "en";
+}
+
 function wordIndexAtFraction(sentence: string, frac: number): number {
   const words = sentence.split(/\s+/).filter(Boolean);
   if (words.length === 0) return -1;
@@ -161,6 +175,49 @@ function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
   return out;
 }
 
+// ألوان المظهر الورقي للقارئ
+const PAPER = "#F6F1E7";
+const INK = "#2A2622";
+
+/** زر صغير في لوحة «أدوات القراءة»: أيقونة (أو نص) + تسمية، ويتلوّن عند التفعيل */
+function ToolTile({
+  icon,
+  text,
+  label,
+  onPress,
+  on,
+  disabled,
+  badge,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  text?: string;
+  label: string;
+  onPress: () => void;
+  on?: boolean;
+  disabled?: boolean;
+  badge?: string;
+}) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.tile, on && styles.tileOn, disabled && { opacity: 0.45 }]}>
+      <View>
+        {icon ? (
+          <Ionicons name={icon} size={20} color={on ? Palette.neonCyan : Palette.text} />
+        ) : (
+          <Text style={[styles.tileTxt, on && { color: Palette.neonCyan }]}>{text}</Text>
+        )}
+        {badge ? (
+          <View style={styles.tileBadge}>
+            <Text style={styles.tileBadgeTxt}>{badge}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text style={styles.tileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function ReaderScreen() {
   const router = useRouter();
   const { t, lang } = useI18n();
@@ -174,6 +231,11 @@ export default function ReaderScreen() {
     pdf_path?: string;
   }>();
 
+  // تخمين أولي من عنوان الكتاب (عنوان عربي → صوت عربي) إلى أن يصل نص الصفحة
+  const titleLang = textLang(typeof title === "string" ? title : "");
+  const initialVoiceLang = titleLang ?? uiVoiceLang;
+  const initialVoiceId = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === initialVoiceLang)?.voiceId ?? uiVoiceId;
+
   const bookId = typeof id === "string" ? id : undefined;
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
 
@@ -181,8 +243,8 @@ export default function ReaderScreen() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [voiceId, setVoiceId] = useState(uiVoiceId);
-  const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">(uiVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
+  const [voiceId, setVoiceId] = useState(initialVoiceId);
+  const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">(initialVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
   const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
   const [rate, setRate] = useState(1);
   const rateRef = useRef(1); // أحدث سرعة (لتقرأها الجملة التالية بلا إغلاق قديم)
@@ -204,9 +266,19 @@ export default function ReaderScreen() {
   const [everPlayed, setEverPlayed] = useState(false);
 
   // أحدث صوت مختار — تقرأه pickVoice فورًا بلا انتظار إعادة الرسم
-  const voiceIdRef = useRef(uiVoiceId);
+  const voiceIdRef = useRef(initialVoiceId);
   // هل اختار المستخدم الصوت صراحةً؟ عندها نكفّ عن مطابقته بلغة الكتاب تلقائيًا
   const voiceChosenRef = useRef(false);
+
+  // تصميم 2.0: مظهر ورقي/ليلي + حجم خط النص + لوحة «أدوات القراءة»
+  const [paper, setPaper] = useState(false);
+  const [fontScale, setFontScale] = useState(1);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  // نداء التركيز التفاعلي: بطاقة تظهر مع النداء الصوتي وتنتظر لمسة (معك / إعادة / شرح أبسط)
+  type CheckIn = { phase: "ask" | "done" | "explaining" | "explained"; title: string; body?: string };
+  const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
+  const checkInTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const explainAtRef = useRef(0); // الجملة التي طُلب شرحها — نكمل بعدها (stop يصفّر الموضع الحي)
 
   // قاموس: معنى الكلمة عند لمسها
   const [dictOpen, setDictOpen] = useState(false);
@@ -718,6 +790,96 @@ export default function ReaderScreen() {
     }
   }
 
+  useEffect(() => {
+    getReaderPaper().then(setPaper).catch(() => {});
+    getReaderFontScale().then(setFontScale).catch(() => {});
+  }, []);
+
+  function togglePaper() {
+    setPaper((v) => {
+      void setReaderPaper(!v);
+      return !v;
+    });
+  }
+
+  function cycleFontScale() {
+    const next = fontScale === 1 ? 1.15 : fontScale === 1.15 ? 1.3 : 1;
+    setFontScale(next);
+    void setReaderFontScale(next);
+  }
+
+  /** يغلق لوحة الأدوات ثم ينفّذ (نوافذ iOS لا تُفتح فوق نافذة تُغلق) */
+  function fromTools(fn: () => void) {
+    setToolsOpen(false);
+    setTimeout(fn, 350);
+  }
+
+  // ===== نداء التركيز التفاعلي =====
+  function hideCheckInLater(ms: number) {
+    if (checkInTimer.current) clearTimeout(checkInTimer.current);
+    checkInTimer.current = setTimeout(() => setCheckIn(null), ms);
+  }
+
+  /** يعيد التشغيل من جملة معيّنة في الصفحة الحالية */
+  function restartAt(idx: number) {
+    stop();
+    setEverPlayed(true);
+    playingRef.current = true;
+    setSpeaking(true);
+    playStartRef.current = Date.now();
+    playFromPage(livePageRef.current, Math.max(0, idx), false);
+  }
+
+  function checkInWith() {
+    const name = focusNameRef.current;
+    setCheckIn({ phase: "done", title: name ? t("reader.check.great", { name }) : t("reader.check.greatNoName") });
+    hideCheckInLater(1800);
+  }
+
+  function checkInRepeat() {
+    const back = Math.max(0, liveSentRef.current - Math.max(1, focusEveryRef.current));
+    setCheckIn({ phase: "done", title: t("reader.check.repeating") });
+    hideCheckInLater(1800);
+    restartAt(back);
+  }
+
+  async function checkInExplain() {
+    if (checkInTimer.current) clearTimeout(checkInTimer.current);
+    const at = Math.max(0, liveSentRef.current);
+    explainAtRef.current = at;
+    const from = Math.max(0, at - Math.max(1, focusEveryRef.current));
+    const passage = sentences.slice(from, at + 1).join(" ");
+    stop();
+    setCheckIn({ phase: "explaining", title: t("reader.check.explaining") });
+    try {
+      const out = await aiAssist(
+        "ask",
+        passage,
+        "اشرح هذه الفقرة بأبسط عبارة ممكنة في جملتين أو ثلاث، مع مثال من الحياة اليومية. خاطب القارئ بصيغة محايدة.",
+        voiceLangOf(pickVoice())
+      );
+      const body = out.trim() || t("reader.ai.noResult");
+      setCheckIn({ phase: "explained", title: t("reader.check.explainedTitle"), body });
+      speakText(body, {
+        voiceId: pickVoice(),
+        rate: rateRef.current,
+        onDone: () => {
+          setCheckIn(null);
+          restartAt(at + 1);
+        },
+        onError: () => {},
+      });
+    } catch {
+      setCheckIn({ phase: "explained", title: t("reader.check.explainedTitle"), body: t("reader.ai.requestFailed") });
+    }
+  }
+
+  function checkInBack() {
+    stopSpeaking();
+    setCheckIn(null);
+    restartAt(explainAtRef.current + 1);
+  }
+
   // وضع التركيز: حمّل الاسم ودرجة المناداة
   useEffect(() => {
     (async () => {
@@ -740,6 +902,21 @@ export default function ReaderScreen() {
     headerLines.forEach((h) => seenHeadersRef.current.add(h));
     processedRef.current.set(p, chunks);
     return chunks;
+  }
+
+  /**
+   * مطابقة الصوت للغة نص الكتاب (عربي ↔ إنجليزي) قبل نطق أول جملة.
+   * تُستدعى عند وصول نص الصفحة؛ تتوقّف متى اختار المستخدم صوتًا بنفسه.
+   */
+  function matchVoiceToText(sample: string) {
+    if (voiceChosenRef.current || listenArabicRef.current) return;
+    const wanted = textLang(sample);
+    if (!wanted || voiceLangOf(voiceIdRef.current) === wanted) return;
+    const match = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === wanted);
+    if (!match) return;
+    voiceIdRef.current = match.voiceId;
+    setVoiceId(match.voiceId);
+    setVoiceLang(wanted);
   }
 
   // الصوت المستخدم للقراءة: عند الترجمة نستخدم الصوت العربي المختار في لوحة الترجمة
@@ -931,6 +1108,7 @@ export default function ReaderScreen() {
           : getReadingSentences(pageText, res.page);
       setSentences(sents);
       offsetsRef.current = [];
+      matchVoiceToText(sents.slice(0, 8).join(" "));
 
       if (!playingRef.current) return; // أُوقف أثناء التحميل
 
@@ -1060,7 +1238,9 @@ export default function ReaderScreen() {
         `رائع يا ${name}، نكمل.`,
       ];
       const phrase = phrases[Math.floor(focusCountRef.current / every) % phrases.length];
-      speakText(phrase, { voiceId, rate: rateRef.current, onDone: speakCurrent, onError: speakCurrent });
+      setCheckIn({ phase: "ask", title: phrase });
+      hideCheckInLater(20000); // وقت كافٍ للرد بلمسة دون إيقاف القراءة
+      speakText(phrase, { voiceId: pickVoice(), rate: rateRef.current, onDone: speakCurrent, onError: speakCurrent });
     } else {
       speakCurrent();
     }
@@ -1435,16 +1615,9 @@ export default function ReaderScreen() {
   // بلكنة. نفعلها مرة واحدة وقبل أول تشغيل فقط، ونتوقّف نهائيًا متى اختار
   // المستخدم صوتًا بنفسه — قراره أولى من التخمين.
   useEffect(() => {
-    if (voiceChosenRef.current || everPlayed) return;
-    if (sentences.length === 0) return;
-    const wanted: "ar" | "en" = isArabicText ? "ar" : "en";
-    if (voiceLangOf(voiceIdRef.current) === wanted) return;
-    const match = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === wanted);
-    if (!match) return;
-    voiceIdRef.current = match.voiceId;
-    setVoiceId(match.voiceId);
-    setVoiceLang(wanted);
-  }, [isArabicText, sentences.length, everPlayed]);
+    if (everPlayed || sentences.length === 0) return;
+    matchVoiceToText(sentences.slice(0, 8).join(" "));
+  }, [sentences, everPlayed]);
 
   // اجمع الكلمات في أسطر (حسب الإحداثي العمودي) لتحديد السطر كاملًا
   type Line = { x: number; y: number; w: number; h: number; start: number; end: number };
@@ -1662,63 +1835,84 @@ export default function ReaderScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      {/* الهيدر */}
+    <SafeAreaView style={[styles.safe, paper && !fullText && { backgroundColor: PAPER }]} edges={["top", "left", "right"]}>
+      <StatusBar style={paper && !fullText ? "dark" : "light"} />
+      {/* الشريط العلوي (تصميم 2.0): رجوع · الكتاب والصفحة · المظهر */}
       {!fullText && (
-      <View style={styles.header}>
-        <Pressable onPress={goBack} style={styles.backBtn} hitSlop={8}>
-          <Ionicons name="chevron-forward" size={20} color={Palette.textMuted} />
+      <View style={[styles.topBar, { flexDirection: dir.row }]}>
+        <Pressable onPress={goBack} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("common.back")}>
+          <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={paper ? INK : Palette.text} />
         </Pressable>
-        <Text style={[styles.hTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>
-          {typeof title === "string" && title.trim() ? title : t("reader.book")}
-        </Text>
-
-        <Pressable onPress={() => setFullText(true)} style={styles.iconBtn} hitSlop={8}>
-          <Ionicons name="expand" size={18} color={Palette.text} />
+        <Pressable
+          style={{ flex: 1, alignItems: "center" }}
+          onPress={() => {
+            setGotoValue(String(page));
+            setGotoOpen(true);
+          }}
+        >
+          <Text style={[styles.topSub, paper && { color: INK }]} numberOfLines={1}>
+            {typeof title === "string" && title.trim() ? title : t("reader.book")}
+          </Text>
+          <Text style={[styles.topTitle, paper && { color: INK }]} numberOfLines={1}>
+            {totalPages ? t("reader.pageOf", { page, total: totalPages }) : t("reader.pageInfo.page", { page })}
+            {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
+          </Text>
         </Pressable>
-
-        <Pressable onPress={() => setDrivingMode(true)} style={styles.iconBtn} hitSlop={8}>
-          <Ionicons name="car-sport" size={18} color={Palette.neonCyan} />
-        </Pressable>
-
-        <Pressable onPress={onToggleBookmark} style={styles.iconBtn} hitSlop={8}>
-          <Ionicons
-            name={isBookmarked ? "bookmark" : "bookmark-outline"}
-            size={18}
-            color={isBookmarked ? Palette.warn : Palette.text}
-          />
-        </Pressable>
-
-        <Pressable onPress={() => setNotesOpen(true)} style={styles.iconBtn} hitSlop={8}>
-          <Ionicons name="list" size={18} color={Palette.text} />
-          {bookmarks.length + highlights.length > 0 ? (
-            <View style={styles.countDot}>
-              <Text style={styles.countDotTxt}>{bookmarks.length + highlights.length}</Text>
-            </View>
-          ) : null}
-        </Pressable>
-
-        <Pressable onPress={() => setAiOpen(true)} style={styles.aiBtn} hitSlop={8}>
-          <Ionicons name="sparkles" size={15} color="#fff" />
-        </Pressable>
-
-        <Pressable onPress={toggleViewMode} style={styles.modeToggle} hitSlop={8}>
-          <Ionicons
-            name={viewMode === "pdf" ? "text" : "document"}
-            size={16}
-            color={Palette.text}
-          />
-          <Text style={styles.modeToggleTxt}>{viewMode === "pdf" ? t("reader.viewToggle.text") : "PDF"}</Text>
+        <Pressable onPress={togglePaper} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("reader.theme.toggle")}>
+          <Ionicons name={paper ? "moon-outline" : "sunny-outline"} size={19} color={paper ? INK : Palette.text} />
         </Pressable>
       </View>
       )}
 
       {/* العارض: PDF أو نص بتظليل الجملة المقروءة */}
       <View style={[styles.viewer, fullText && styles.viewerFull]}>
+        {checkIn ? (
+          <View style={styles.checkCard}>
+            <View style={[styles.checkHead, { flexDirection: dir.row }]}>
+              <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.checkOrb}>
+                {checkIn.phase === "explaining" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Ionicons name={checkIn.phase === "done" ? "checkmark" : "sparkles"} size={16} color="#fff" />
+                )}
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.checkTitle, { textAlign: dir.textAlign }]}>{checkIn.title}</Text>
+                {checkIn.phase === "ask" ? (
+                  <Text style={[styles.checkSub, { textAlign: dir.textAlign }]}>{t("reader.check.sub")}</Text>
+                ) : null}
+              </View>
+              <Pressable onPress={() => setCheckIn(null)} hitSlop={10}>
+                <Ionicons name="close" size={18} color={Palette.textDim} />
+              </Pressable>
+            </View>
+            {checkIn.phase === "ask" ? (
+              <View style={[styles.checkRow, { flexDirection: dir.row }]}>
+                <Pressable onPress={checkInWith} style={[styles.checkBtn, styles.checkBtnMain]}>
+                  <Text style={styles.checkBtnMainTxt}>{t("reader.check.with")}</Text>
+                </Pressable>
+                <Pressable onPress={checkInRepeat} style={styles.checkBtn}>
+                  <Text style={styles.checkBtnTxt}>{t("reader.check.repeat")}</Text>
+                </Pressable>
+                <Pressable onPress={checkInExplain} style={[styles.checkBtn, styles.checkBtnAlt]}>
+                  <Text style={[styles.checkBtnTxt, { color: "#D9D3FF" }]}>{t("reader.check.explain")}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {checkIn.phase === "explained" && checkIn.body ? (
+              <>
+                <Text style={[styles.checkBody, { textAlign: dir.textAlign }]}>{checkIn.body}</Text>
+                <Pressable onPress={checkInBack} style={[styles.checkBtn, styles.checkBtnMain, { alignSelf: "stretch" }]}>
+                  <Text style={styles.checkBtnMainTxt}>{t("reader.check.back")}</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        ) : null}
         {viewMode === "text" ? (
           <ScrollView
             ref={scrollRef}
-            style={styles.textScroll}
+            style={[styles.textScroll, paper && { backgroundColor: PAPER }]}
             contentContainerStyle={styles.textContent}
             onLayout={(e) => (textViewH.current = e.nativeEvent.layout.height)}
             onContentSizeChange={(_w, h) => (textContentH.current = h)}
@@ -1728,16 +1922,16 @@ export default function ReaderScreen() {
             <View style={styles.hlBar}>
               <Pressable
                 onPress={() => setHighlightMode((m) => !m)}
-                style={[styles.hlToggle, highlightMode && styles.hlToggleOn]}
+                style={[styles.hlToggle, paper && styles.hlTogglePaper, highlightMode && styles.hlToggleOn]}
               >
-                <Ionicons name="brush" size={15} color={highlightMode ? "#0b1220" : Palette.text} />
-                <Text style={[styles.hlToggleTxt, highlightMode && { color: "#0b1220" }]}>
+                <Ionicons name="brush" size={15} color={highlightMode ? "#0b1220" : paper ? INK : Palette.text} />
+                <Text style={[styles.hlToggleTxt, paper && { color: INK }, highlightMode && { color: "#0b1220" }]}>
                   {highlightMode ? t("reader.highlight.modeOn") : t("reader.highlight.modeOff")}
                 </Text>
               </Pressable>
-              <Pressable onPress={() => setNotesOpen(true)} style={styles.hlToggle}>
-                <Ionicons name="bookmarks-outline" size={15} color={Palette.text} />
-                <Text style={styles.hlToggleTxt}>{t("reader.highlight.myExcerpts")}</Text>
+              <Pressable onPress={() => setNotesOpen(true)} style={[styles.hlToggle, paper && styles.hlTogglePaper]}>
+                <Ionicons name="bookmarks-outline" size={15} color={paper ? INK : Palette.text} />
+                <Text style={[styles.hlToggleTxt, paper && { color: INK }]}>{t("reader.highlight.myExcerpts")}</Text>
               </Pressable>
             </View>
 
@@ -1763,7 +1957,11 @@ export default function ReaderScreen() {
                     <Text
                       selectable
                       selectionColor="rgba(124,92,255,0.45)"
-                      style={active ? styles.sentenceActive : styles.sentence}
+                      style={[
+                        active ? styles.sentenceActive : styles.sentence,
+                        paper && (active ? { color: INK } : { color: "rgba(42,38,34,0.62)" }),
+                        { fontSize: (active ? 22 : 21) * fontScale, lineHeight: (active ? 42 : 40) * fontScale },
+                      ]}
                     >
                       {/* كل الكلمات قابلة للضغط (ضغطة = ترجمة/معنى، ضغطتان = قراءة من هنا)؛
                           وتظليل الكاراوكي يظهر فقط في الكلمة الجاري نطقها بالجملة النشطة */}
@@ -1950,249 +2148,213 @@ export default function ReaderScreen() {
         )}
       </View>
 
-      {/* لوحة التحكم بالصوت */}
+      {/* أسفل القارئ (تصميم 2.0): شريط الصفحات + كبسولة الأدوات الخمس */}
       {!fullText && (
-      <View style={styles.player}>
-        {/* زر واحد لاختيار الصوت */}
-        <Pressable onPress={() => setVoiceModal(true)} style={styles.voicePickBtn}>
-          <Ionicons name="chevron-down" size={16} color={Palette.textMuted} />
-          <Text style={[styles.voicePickTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
-            {t("reader.voice.label", { name: VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? t("reader.voice.choose") })}
-          </Text>
-        </Pressable>
-
-        {/* موسيقى خلفية هادئة (للقصص والروايات) — تستمر أثناء القراءة */}
-        <Pressable
-          onPress={() => setShowMusicPicker((v) => !v)}
-          style={[styles.voicePickBtn, !!presMusicKey && { borderColor: Palette.neonCyan }]}
-        >
-          <Ionicons
-            name={presMusicKey ? "musical-notes" : "musical-notes-outline"}
-            size={16}
-            color={presMusicKey ? Palette.neonCyan : Palette.textMuted}
-          />
-          <Text style={[styles.voicePickTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
-            {presMusicKey
-              ? t("reader.music.label", { name: t(`music.${presMusicKey}`) })
-              : t("reader.music.background")}
-          </Text>
-        </Pressable>
-        {showMusicPicker ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.musicRow}>
-            <Pressable
-              onPress={() => {
-                setPresMusicKey(null);
-                stopAmbient();
-              }}
-              style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
-            >
-              <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>{t("reader.music.none")}</Text>
-            </Pressable>
-            {MUSIC_OPTIONS.map((m) => {
-              const on = presMusicKey === m.key;
-              const loading = musicLoading === m.key;
-              return (
-                <Pressable
-                  key={m.key}
-                  onPress={() => selectMusic(m.key)}
-                  style={[styles.musicChip, on && styles.musicChipOn]}
-                >
-                  {loading ? (
-                    <ActivityIndicator size="small" color={on ? "#0b1220" : Palette.text} />
-                  ) : null}
-                  <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>
-                    {loading ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        ) : null}
-        {showMusicPicker ? (
-          <Text style={[styles.musicNote, { textAlign: dir.textAlign }]}>{t("reader.music.aiNote")}</Text>
-        ) : null}
-
-        {/* أدوات القراءة — أزرار متماثلة، يتغيّر لون الزر عند تفعيله */}
-        <View style={[styles.aidsRow, { flexDirection: dir.row }]}>
-          {/* النطق الدقيق (التشكيل) خاصٌّ بالنص العربي فقط — نخفيه للكتب الأجنبية */}
-          {isArabicText ? (
-            <Pressable onPress={toggleTashkeel} style={styles.aidWrap}>
-              <LinearGradient colors={tashkeelMode ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-                <Text style={styles.aidGradTxt} numberOfLines={1}>{tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}</Text>
-              </LinearGradient>
-            </Pressable>
-          ) : null}
-
-          <Pressable onPress={() => setTranslateModal(true)} style={styles.aidWrap}>
-            <LinearGradient colors={listenArabic ? Gradients.success : Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>{listenArabic ? t("reader.aids.translateOn") : t("reader.aids.translateOff")}</Text>
-            </LinearGradient>
-          </Pressable>
-
-          <Pressable
-            onPress={() => {
-              presUsedRef.current = true;
-              warmAllMusic(); // حضّر كل المقطوعات مرة واحدة → تبديل فوري بلا توليد متكرر
-              setPresentOpen(true);
-            }}
-            style={styles.aidWrap}
-          >
-            <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.aidGrad}>
-              <Text style={styles.aidGradTxt} numberOfLines={1}>{t("reader.aids.present")}</Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
-
-        {/* التحكم: السابقة — تشغيل — التالية (يتبع اتجاه الواجهة) */}
-        <View style={[styles.controls, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => goPage(-1)} style={styles.navBtn} disabled={page <= 1} hitSlop={6}>
-            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={page <= 1 ? Palette.textDim : Palette.text} />
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.navTxt, page <= 1 && { color: Palette.textDim }]}>{t("reader.nav.prevPage")}</Text>
-          </Pressable>
-
-          <PlayButton
-            playing={speaking}
-            busy={busy}
-            onPress={togglePlay}
-            size={76}
-            hint={!everPlayed}
-          />
-
-          <Pressable
-            onPress={() => goPage(1)}
-            style={styles.navBtn}
-            disabled={!!totalPages && page >= totalPages}
-            hitSlop={6}
-          >
-            <Ionicons
-              name={dir.isRTL ? "chevron-back" : "chevron-forward"}
-              size={22}
-              color={!!totalPages && page >= totalPages ? Palette.textDim : Palette.text}
-            />
-            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.navTxt, !!totalPages && page >= totalPages && { color: Palette.textDim }]}>
-              {t("reader.nav.nextPage")}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* أدوات مدمجة (أيقونة + كلمة توضيحية) */}
-        <View style={[styles.toolsRow, { flexDirection: dir.row }]}>
-          <View style={styles.tool}>
-            <Pressable onPress={() => skipSentence(-1)} style={styles.toolBtn} hitSlop={4}>
-              <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={17} color={Palette.text} />
-              {skipMult > 1 && skipDir < 0 ? (
-                <View style={styles.skipBadge}>
-                  <Text style={styles.skipBadgeTxt}>×{skipMult}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-            <Text style={styles.toolCap}>{t("reader.tool.prevSegment")}</Text>
-          </View>
-          <View style={styles.tool}>
-            <Pressable onPress={() => skipSentence(1)} style={styles.toolBtn} hitSlop={4}>
-              <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={17} color={Palette.text} />
-              {skipMult > 1 && skipDir > 0 ? (
-                <View style={styles.skipBadge}>
-                  <Text style={styles.skipBadgeTxt}>×{skipMult}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-            <Text style={styles.toolCap}>{t("reader.tool.nextSegment")}</Text>
-          </View>
-          <View style={styles.tool}>
-            <Pressable onPress={cycleSpeed} style={styles.toolBtn} hitSlop={4}>
-              <Text style={styles.toolTxt} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{rate}x</Text>
-            </Pressable>
-            <Text style={styles.toolCap}>{t("reader.tool.speed")}</Text>
-          </View>
-          <View style={styles.tool}>
-            <Pressable
-              onPress={cycleSleep}
-              style={[styles.toolBtn, sleepMin !== 0 && styles.toolBtnActive]}
-              hitSlop={4}
-            >
-              <Ionicons
-                name={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
-                size={17}
-                color={sleepMin !== 0 ? "#fff" : Palette.text}
-              />
-            </Pressable>
-            <Text style={styles.toolCap}>
-              {sleepMin === SLEEP_UNTIL_END
-                ? t("reader.tool.sleepUntilEnd")
-                : sleepMin > 0
-                  ? t("reader.tool.sleepMinutes", { minutes: sleepMin })
-                  : t("reader.tool.sleep")}
-            </Text>
-          </View>
-          <View style={styles.tool}>
-            <Pressable
-              onPress={() => {
-                setGotoValue(String(page));
-                setGotoOpen(true);
-              }}
-              style={styles.toolBtn}
-              hitSlop={4}
-            >
-              <Ionicons name="keypad-outline" size={17} color={Palette.text} />
-            </Pressable>
-            <Text style={styles.toolCap}>{t("reader.tool.goto")}</Text>
-          </View>
-          <View style={styles.tool}>
-            <Pressable
-              onPress={startIngest}
-              style={styles.toolBtn}
-              disabled={fullyLoaded && !ingesting}
-              hitSlop={4}
-            >
-              <Ionicons
-                name={
-                  fullyLoaded && !ingesting
-                    ? "checkmark-circle"
-                    : ingesting
-                    ? "stop-circle"
-                    : "cloud-download-outline"
-                }
-                size={18}
-                color={fullyLoaded && !ingesting ? Palette.success : Palette.text}
-              />
-            </Pressable>
-            <Text style={styles.toolCap}>{fullyLoaded ? t("reader.tool.loaded") : t("reader.tool.download")}</Text>
-          </View>
-        </View>
-
-        {/* سطر الحالة: الصفحة (قابل للانتقال) + تقدّم التحميل.
-            محصور بعرض النص فقط (alignSelf) حتى لا يفتح لمسُ الفراغ حوله «الانتقال». */}
-        <Pressable
-          onPress={() => {
-            setGotoValue(String(page));
-            setGotoOpen(true);
-          }}
-          hitSlop={6}
-          style={{ alignSelf: "center" }}
-        >
-          <Text style={styles.pageInfo}>
-            {t("reader.pageInfo.page", { page })}
-            {totalPages ? ` / ${totalPages}` : ""}
-            {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
-          </Text>
-        </Pressable>
-
-        {/* تنقّل سريع باللمس أو السحب. أثناء القراءة يتتبّع الصفحة المقروءة،
-            و gotoPage تُكمل السرد من الصفحة الجديدة إن كان شغّالًا. */}
-        <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
-        {ingesting && ingestTotal > 0 ? (
-          <View style={styles.ingestBarBg}>
-            <View
-              style={[styles.ingestBarFill, { width: `${Math.round((ingestDone / ingestTotal) * 100)}%` }]}
-            />
-          </View>
-        ) : null}
+      <View style={styles.bottom}>
         {voiceWarn ? (
           <Text style={styles.warnTxt}>{t("reader.voice.humanFailed", { reason: voiceWarn })}</Text>
         ) : null}
+        {ingesting && ingestTotal > 0 ? (
+          <View style={styles.ingestBarBg}>
+            <View style={[styles.ingestBarFill, { width: `${Math.round((ingestDone / ingestTotal) * 100)}%` }]} />
+          </View>
+        ) : null}
+        <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
+
+        <View style={[styles.capsule, { flexDirection: dir.row }]}>
+          <Pressable
+            onPress={() => bookId && router.push({ pathname: "/ask/[id]", params: { id: bookId } })}
+            style={styles.capBtn}
+            accessibilityLabel={t("reader.cap.ask")}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={22} color={Palette.text} />
+          </Pressable>
+          <Pressable onPress={() => setTranslateModal(true)} style={styles.capBtn} accessibilityLabel={t("reader.cap.translate")}>
+            <Ionicons name="language-outline" size={23} color={listenArabic ? Palette.neonCyan : Palette.text} />
+            {listenArabic ? <View style={styles.capDot} /> : null}
+          </Pressable>
+          <Pressable onPress={togglePlay} accessibilityLabel={speaking ? t("dock.pause") : t("dock.play")}>
+            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.capPlay}>
+              {busy && speaking ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name={speaking ? "pause" : "play"} size={26} color="#fff" style={speaking ? null : { marginLeft: 3 }} />
+              )}
+            </LinearGradient>
+          </Pressable>
+          {viewMode === "pdf" ? (
+            <Pressable
+              onPress={() => setLensOpen((v) => !v)}
+              style={styles.capBtn}
+              accessibilityLabel={t("reader.cap.lens")}
+            >
+              <Ionicons name="search-outline" size={22} color={lensOpen ? Palette.neonCyan : Palette.text} />
+            </Pressable>
+          ) : (
+            <Pressable onPress={cycleFontScale} style={styles.capBtn} accessibilityLabel={t("reader.cap.textSize")}>
+              <Text style={[styles.capAa, fontScale > 1 && { color: Palette.neonCyan }]}>Aa</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={() => setToolsOpen(true)} style={styles.capBtn} accessibilityLabel={t("reader.tools.title")}>
+            <Ionicons name="grid-outline" size={21} color={Palette.text} />
+          </Pressable>
+        </View>
       </View>
       )}
+
+      {/* لوحة «أدوات القراءة»: كل ما كان في لوحة التحكم القديمة، مرتّبًا في مجموعات */}
+      <Modal visible={toolsOpen} transparent animationType="slide" onRequestClose={() => setToolsOpen(false)}>
+        <Pressable style={styles.aiMask} onPress={() => setToolsOpen(false)}>
+          <Pressable style={styles.toolsSheet} onPress={() => {}}>
+            <View style={styles.sheetGrip} />
+            <Text style={[styles.toolsTitle, { textAlign: dir.textAlign }]}>{t("reader.tools.title")}</Text>
+            <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={{ gap: 14, paddingBottom: 12 }}>
+              {/* الاستماع */}
+              <Text style={[styles.toolsSection, { textAlign: dir.textAlign }]}>{t("reader.tools.listen")}</Text>
+              <Pressable onPress={() => fromTools(() => setVoiceModal(true))} style={[styles.toolsWide, { flexDirection: dir.row }]}>
+                <Ionicons name="mic-outline" size={18} color={Palette.neonViolet} />
+                <Text style={[styles.toolsWideTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
+                  {t("reader.voice.label", { name: VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? t("reader.voice.choose") })}
+                </Text>
+                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={16} color={Palette.textDim} />
+              </Pressable>
+              <View style={[styles.toolsGrid, { flexDirection: dir.row }]}>
+                <ToolTile icon={dir.isRTL ? "play-skip-forward" : "play-skip-back"} label={t("reader.tool.prevSegment")} onPress={() => skipSentence(-1)} badge={skipMult > 1 && skipDir < 0 ? `×${skipMult}` : undefined} />
+                <ToolTile icon={dir.isRTL ? "play-skip-back" : "play-skip-forward"} label={t("reader.tool.nextSegment")} onPress={() => skipSentence(1)} badge={skipMult > 1 && skipDir > 0 ? `×${skipMult}` : undefined} />
+                <ToolTile text={`${rate}x`} label={t("reader.tool.speed")} onPress={cycleSpeed} />
+                <ToolTile
+                  icon={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
+                  label={
+                    sleepMin === SLEEP_UNTIL_END
+                      ? t("reader.tool.sleepUntilEnd")
+                      : sleepMin > 0
+                        ? t("reader.tool.sleepMinutes", { minutes: sleepMin })
+                        : t("reader.tool.sleep")
+                  }
+                  on={sleepMin !== 0}
+                  onPress={cycleSleep}
+                />
+                <ToolTile icon={dir.isRTL ? "chevron-forward" : "chevron-back"} label={t("reader.nav.prevPage")} onPress={() => goPage(-1)} disabled={page <= 1} />
+                <ToolTile icon={dir.isRTL ? "chevron-back" : "chevron-forward"} label={t("reader.nav.nextPage")} onPress={() => goPage(1)} disabled={!!totalPages && page >= totalPages} />
+                <ToolTile
+                  icon="keypad-outline"
+                  label={t("reader.tool.goto")}
+                  onPress={() =>
+                    fromTools(() => {
+                      setGotoValue(String(page));
+                      setGotoOpen(true);
+                    })
+                  }
+                />
+                <ToolTile
+                  icon={presMusicKey ? "musical-notes" : "musical-notes-outline"}
+                  label={presMusicKey ? t(`music.${presMusicKey}`) : t("reader.music.background")}
+                  on={!!presMusicKey || showMusicPicker}
+                  onPress={() => setShowMusicPicker((v) => !v)}
+                />
+              </View>
+              {showMusicPicker ? (
+                <>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.musicRow}>
+                    <Pressable
+                      onPress={() => {
+                        setPresMusicKey(null);
+                        stopAmbient();
+                      }}
+                      style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
+                    >
+                      <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>{t("reader.music.none")}</Text>
+                    </Pressable>
+                    {MUSIC_OPTIONS.map((m) => {
+                      const on = presMusicKey === m.key;
+                      const loading = musicLoading === m.key;
+                      return (
+                        <Pressable key={m.key} onPress={() => selectMusic(m.key)} style={[styles.musicChip, on && styles.musicChipOn]}>
+                          {loading ? <ActivityIndicator size="small" color={on ? "#0b1220" : Palette.text} /> : null}
+                          <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>
+                            {loading ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <Text style={[styles.musicNote, { textAlign: dir.textAlign }]}>{t("reader.music.aiNote")}</Text>
+                </>
+              ) : null}
+
+              {/* الفهم والدراسة */}
+              <Text style={[styles.toolsSection, { textAlign: dir.textAlign }]}>{t("reader.tools.study")}</Text>
+              <View style={[styles.toolsGrid, { flexDirection: dir.row }]}>
+                <ToolTile icon="sparkles-outline" label={t("reader.tools.ai")} onPress={() => fromTools(() => setAiOpen(true))} />
+                <ToolTile
+                  icon="language-outline"
+                  label={listenArabic ? t("reader.aids.translateOn") : t("reader.aids.translateOff")}
+                  on={listenArabic}
+                  onPress={() => fromTools(() => setTranslateModal(true))}
+                />
+                {isArabicText ? (
+                  <ToolTile
+                    icon="text-outline"
+                    label={tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}
+                    on={tashkeelMode}
+                    onPress={toggleTashkeel}
+                  />
+                ) : null}
+                <ToolTile
+                  icon="easel-outline"
+                  label={t("reader.aids.present")}
+                  onPress={() =>
+                    fromTools(() => {
+                      presUsedRef.current = true;
+                      warmAllMusic();
+                      setPresentOpen(true);
+                    })
+                  }
+                />
+                <ToolTile
+                  icon={isBookmarked ? "bookmark" : "bookmark-outline"}
+                  label={isBookmarked ? t("reader.tools.bookmarked") : t("reader.tools.bookmark")}
+                  on={isBookmarked}
+                  onPress={onToggleBookmark}
+                />
+                <ToolTile
+                  icon="list-outline"
+                  label={t("reader.tools.notes")}
+                  badge={bookmarks.length + highlights.length > 0 ? String(bookmarks.length + highlights.length) : undefined}
+                  onPress={() => fromTools(() => setNotesOpen(true))}
+                />
+                <ToolTile
+                  icon="library-outline"
+                  label={t("reader.tools.bookPage")}
+                  onPress={() => fromTools(() => bookId && router.push({ pathname: "/book/[id]", params: { id: bookId } }))}
+                />
+              </View>
+
+              {/* العرض */}
+              <Text style={[styles.toolsSection, { textAlign: dir.textAlign }]}>{t("reader.tools.view")}</Text>
+              <View style={[styles.toolsGrid, { flexDirection: dir.row }]}>
+                <ToolTile
+                  icon={viewMode === "pdf" ? "reader-outline" : "document-outline"}
+                  label={viewMode === "pdf" ? t("reader.tools.viewText") : t("reader.tools.viewPdf")}
+                  onPress={() => {
+                    toggleViewMode();
+                    setToolsOpen(false);
+                  }}
+                />
+                <ToolTile icon="expand-outline" label={t("reader.tools.fullscreen")} onPress={() => fromTools(() => setFullText(true))} />
+                <ToolTile icon="car-sport-outline" label={t("reader.tools.driving")} onPress={() => fromTools(() => setDrivingMode(true))} />
+                <ToolTile
+                  icon={fullyLoaded && !ingesting ? "checkmark-circle" : ingesting ? "stop-circle-outline" : "cloud-download-outline"}
+                  label={fullyLoaded ? t("reader.tool.loaded") : t("reader.tool.download")}
+                  on={fullyLoaded && !ingesting}
+                  disabled={fullyLoaded && !ingesting}
+                  onPress={startIngest}
+                />
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* رسالة تأكيد عابرة */}
       {toast ? (
@@ -2829,6 +2991,138 @@ const MM_PRES_COLORS = ["#7c5cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d", "
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Palette.bg },
+  topBar: { alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 },
+  topBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topBtnPaper: { backgroundColor: "rgba(42,38,34,0.07)" },
+  topSub: { color: Palette.textDim, fontSize: 12, maxWidth: "100%" },
+  topTitle: { color: Palette.text, fontSize: 14, fontWeight: "700", marginTop: 1 },
+
+  checkCard: {
+    position: "absolute",
+    top: 8,
+    left: 12,
+    right: 12,
+    zIndex: 20,
+    padding: 12,
+    gap: 10,
+    borderRadius: 20,
+    backgroundColor: "#161826",
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.4)",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  checkHead: { alignItems: "center", gap: 10 },
+  checkOrb: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  checkTitle: { color: "#F3F4F8", fontSize: 15, fontWeight: "700" },
+  checkSub: { color: "#8E95AB", fontSize: 12, marginTop: 2 },
+  checkRow: { gap: 6 },
+  checkBtn: {
+    flex: 1,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkBtnMain: { backgroundColor: "#F3F4F8" },
+  checkBtnAlt: { flex: 1.3, backgroundColor: "rgba(124,108,255,0.2)" },
+  checkBtnTxt: { color: "#F3F4F8", fontSize: 13, fontWeight: "600" },
+  checkBtnMainTxt: { color: "#07080D", fontSize: 13, fontWeight: "800" },
+  checkBody: { color: "#C4C9D8", fontSize: 14, lineHeight: 24 },
+
+  bottom: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 6, gap: 6 },
+  capsule: {
+    height: 72,
+    borderRadius: 30,
+    backgroundColor: "rgba(18,20,31,0.96)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  capBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  capDot: { position: "absolute", top: 8, right: 9, width: 7, height: 7, borderRadius: 4, backgroundColor: Palette.neonCyan },
+  capPlay: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#3FD0FF",
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  capAa: { color: Palette.text, fontSize: 19, fontWeight: "700" },
+
+  toolsSheet: {
+    backgroundColor: "#10121B",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 34,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+  sheetGrip: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.18)", marginBottom: 10 },
+  toolsTitle: { color: Palette.text, fontSize: 18, fontWeight: "800", marginBottom: 6 },
+  toolsSection: { color: Palette.textDim, fontSize: 12, fontWeight: "700" },
+  toolsWide: {
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  toolsWideTxt: { flex: 1, color: Palette.text, fontSize: 14, fontWeight: "700" },
+  toolsGrid: { flexWrap: "wrap", gap: 8 },
+  tile: {
+    width: "23.5%",
+    minHeight: 76,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingHorizontal: 4,
+  },
+  tileOn: { backgroundColor: "rgba(63,208,255,0.10)", borderColor: "rgba(63,208,255,0.45)" },
+  tileTxt: { color: Palette.text, fontSize: 16, fontWeight: "800" },
+  tileLabel: { color: Palette.textMuted, fontSize: 11.5, fontWeight: "600", textAlign: "center" },
+  tileBadge: {
+    position: "absolute",
+    top: -8,
+    right: -14,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: Palette.neonViolet,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tileBadgeTxt: { color: "#fff", fontSize: 10, fontWeight: "800" },
   header: {
     paddingTop: 10,
     paddingHorizontal: 14,
@@ -3046,9 +3340,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "rgba(124,92,255,0.14)", // تظليل السطر خفيف
   },
-  pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "#1a1f2e" },
+  pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "transparent" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
-  textScroll: { flex: 1, backgroundColor: Palette.bgElevated },
+  textScroll: { flex: 1, backgroundColor: "transparent" },
   hlBar: { flexDirection: "row-reverse", justifyContent: "space-between", gap: 8, marginBottom: 10 },
   hlToggle: {
     flexDirection: "row-reverse",
@@ -3062,6 +3356,7 @@ const styles = StyleSheet.create({
     borderColor: Palette.glassBorder,
   },
   hlToggleOn: { backgroundColor: Palette.warn, borderColor: Palette.warn },
+  hlTogglePaper: { backgroundColor: "rgba(42,38,34,0.06)", borderColor: "rgba(42,38,34,0.14)" },
   hlToggleTxt: { color: Palette.text, fontSize: 12, fontWeight: "800" },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
   // ثبات التخطيط: نفس الحشو والحدود دائمًا (لون الحد فقط يتغيّر) فلا تتزحزح المواضع
@@ -3090,7 +3385,7 @@ const styles = StyleSheet.create({
   },
   sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
   sentenceActive: { color: Palette.text, fontSize: 22, lineHeight: 42, textAlign: "right", fontWeight: "700" },
-  wordSpoken: { color: "#0b1220", backgroundColor: Palette.neonCyan, fontWeight: "900" },
+  wordSpoken: { color: "#fff", backgroundColor: "#7C6CFF", fontWeight: "800" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   ingestTxt: { color: Palette.neonCyan, fontSize: 12, fontWeight: "800" },
@@ -3232,13 +3527,10 @@ const styles = StyleSheet.create({
 
   viewer: {
     flex: 1,
-    marginHorizontal: 10,
-    marginTop: 6,
-    borderRadius: Radius.lg,
+    marginHorizontal: 0,
+    marginTop: 2,
     overflow: "hidden",
-    backgroundColor: "#000",
-    borderWidth: 1,
-    borderColor: Palette.border,
+    backgroundColor: "transparent",
   },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, gap: 8 },
   emptyText: { color: Palette.textDim, fontWeight: "800" },
