@@ -16,13 +16,15 @@ import { CountUp, PressableScale } from "../../components/brand/motion";
 import { ProgressRing } from "../../components/brand/progress-ring";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { WeekBars } from "../../components/brand/week-bars";
-import { Palette, Radius, Spacing } from "../../constants/design";
+import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getDisplayName } from "../../lib/auth";
-import { countDue } from "../../lib/flashcards";
+import { countDue, reviewedToday } from "../../lib/flashcards";
 import { getDailyGoal } from "../../lib/goals";
 import { getContinueBook, getTodayPlan, type ContinueBook, type TodayPlan } from "../../lib/home";
 import { dropEmptyVocative, useDir, useI18n } from "../../lib/i18n";
 import { goalProgress, lastSevenDays, pickNextActions, type NextActionId } from "../../lib/nextActions";
+import { getBookReadiness, type BookReadiness } from "../../lib/readiness";
+import { buildDailyPath, type PathStep, type PathStepId } from "../../lib/readinessCore";
 import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
 import { useTheme } from "../../lib/themeContext";
 
@@ -53,6 +55,8 @@ export default function HomeScreen() {
   const [cont, setCont] = useState<ContinueBook | null>(null);
   const [plan, setPlan] = useState<TodayPlan | null>(null);
   const [tour, setTour] = useState(false);
+  const [ready, setReady] = useState<BookReadiness | null>(null);
+  const [cardsToday, setCardsToday] = useState(false);
 
   // جولة تعريفية أول مرة فقط
   useEffect(() => {
@@ -71,7 +75,7 @@ export default function HomeScreen() {
     useCallback(() => {
       let on = true;
       (async () => {
-        const [s, d, n, b, g, c, p] = await Promise.all([
+        const [s, d, n, b, g, c, p, rv] = await Promise.all([
           getStats(),
           countDue(),
           getDisplayName(),
@@ -79,8 +83,12 @@ export default function HomeScreen() {
           getDailyGoal(),
           getContinueBook(),
           getTodayPlan(),
+          reviewedToday(),
         ]);
         if (!on) return;
+        setCardsToday(rv);
+        // جاهزية الكتاب الحالي (لبطاقة الجاهزية ومسار اليوم)
+        getBookReadiness(c?.pdf_path ?? "").then((r) => on && setReady(r));
         setStats(s);
         setDue(d);
         setName(n.trim());
@@ -163,6 +171,63 @@ export default function HomeScreen() {
     }
   }
 
+  // تظهر بطاقة الجاهزية متى كان للكتاب منهج أو اختبارات أو موعد اختبار
+  const showReady = !!ready && (ready.unitCount > 0 || ready.answered > 0 || !!ready.examISO);
+  const path = useMemo(
+    () =>
+      buildDailyPath({
+        hasBook: !!cont,
+        todayMinutes,
+        goalMinutes: goal,
+        dueCards: due,
+        reviewedCardsToday: cardsToday,
+        dueMistakes: ready?.dueMistakes ?? 0,
+        quizzedToday: !!ready?.quizzedToday,
+        hasSyllabus: (ready?.unitCount ?? 0) > 0,
+        weakUnit: ready?.weakUnit ?? null,
+        summaryToday: !!ready?.summaryToday,
+      }),
+    [cont, todayMinutes, goal, due, cardsToday, ready]
+  );
+  const firstOpen = path.steps.findIndex((s) => !s.done);
+
+  function runStep(id: PathStepId) {
+    if (!cont) return;
+    const unitParams = ready && ready.weakUnit !== null
+      ? { pdf_path: cont.pdf_path, unit: String(ready.weakUnit), title: ready.weakTitle, book_title: cont.title }
+      : null;
+    switch (id) {
+      case "listen":
+        return openBook(cont);
+      case "cards":
+        return router.push("/flashcards");
+      case "mistakes":
+        return router.push({ pathname: "/unit-quiz", params: { pdf_path: cont.pdf_path, mode: "mistakes", book_title: cont.title } });
+      case "quiz":
+        return unitParams && router.push({ pathname: "/unit-quiz", params: unitParams });
+      case "summary":
+        return unitParams && router.push({ pathname: "/unit-summary", params: unitParams });
+    }
+  }
+
+  function stepText(s: PathStep): { title: string; sub: string } {
+    const unitN = (ready?.weakUnit ?? 0) + 1;
+    switch (s.id) {
+      case "listen":
+        return { title: t("path.listen.title", { book: cont?.title ?? "" }), sub: t("path.listen.sub", { min: s.minutes, page: cont?.page ?? 1 }) };
+      case "cards":
+        return s.done
+          ? { title: t("path.cards.done"), sub: "" }
+          : { title: t("path.cards.title", { n: due }), sub: t("path.cards.sub", { min: s.minutes }) };
+      case "mistakes":
+        return { title: t("path.mistakes.title", { n: ready?.dueMistakes ?? 0 }), sub: t("path.mistakes.sub", { min: s.minutes }) };
+      case "quiz":
+        return { title: t("path.quiz.title", { n: unitN }), sub: t("path.quiz.sub", { min: s.minutes }) };
+      case "summary":
+        return { title: t("path.summary.title", { n: unitN }), sub: t("path.summary.sub", { min: s.minutes }) };
+    }
+  }
+
   const dayIndex = Math.floor(Date.now() / 86_400_000) % 10;
   const dailyCheer = dropEmptyVocative(t(`home.cheer.${dayIndex}`, { name }));
   const dayLabels = t("home.days").split(",");
@@ -191,7 +256,53 @@ export default function HomeScreen() {
 
           <DownloadIndicator />
 
+          {/* بطاقة الجاهزية (تصميم 2.0) — تحلّ محلّ بطاقة الهدف متى توفّرت بيانات */}
+          {showReady && ready && cont && (
+            <FadeIn delay={0}>
+              <PressableScale onPress={() => router.push({ pathname: "/book/[id]", params: { id: cont.id } })}>
+                <GlassCard radius={Radius.xl} glow={Palette.primary} style={styles.block}>
+                  <LinearGradient
+                    colors={["rgba(124,108,255,0.16)", "rgba(16,18,27,0)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0.6, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={[styles.todayRow, { flexDirection: dir.row }]}>
+                    <ProgressRing progress={ready.score / 100} colors={[Gradients.neon[0], Gradients.neon[2]]} size={112}>
+                      <Text style={styles.readyNum}>{ready.score}%</Text>
+                      <Text style={styles.ringUnit}>{t("ready.title")}</Text>
+                    </ProgressRing>
+                    <View style={styles.todayInfo}>
+                      <Text style={[styles.sectionLabel, { textAlign: dir.textAlign }]} numberOfLines={2}>
+                        {ready.daysLeft == null || ready.daysLeft < 0
+                          ? t("ready.noExam", { book: cont.title })
+                          : ready.daysLeft === 0
+                            ? t("ready.examToday", { book: cont.title })
+                            : t("ready.exam", { book: cont.title, n: ready.daysLeft })}
+                      </Text>
+                      <Text style={[styles.readyHeadline, { textAlign: dir.textAlign }]}>
+                        {ready.delta && ready.delta > 0
+                          ? t("ready.up", { n: ready.delta })
+                          : ready.delta && ready.delta < 0
+                            ? t("ready.down", { n: -ready.delta })
+                            : t("ready.flat")}
+                      </Text>
+                      {ready.weakUnit !== null && (
+                        <View style={[styles.weakChip, { alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
+                          <Text style={styles.weakChipTxt}>
+                            {t(ready.weakUntested ? "ready.untested" : "ready.weak", { n: ready.weakUnit + 1 })}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                </GlassCard>
+              </PressableScale>
+            </FadeIn>
+          )}
+
           {/* بطاقة اليوم: حلقة الهدف + أعمدة الأسبوع */}
+          {!showReady && (
           <FadeIn delay={0}>
             <PressableScale onPress={() => router.push("/activity")}>
             <GlassCard radius={Radius.xl} glow={theme.accent} style={styles.block}>
@@ -212,9 +323,73 @@ export default function HomeScreen() {
             </GlassCard>
             </PressableScale>
           </FadeIn>
+          )}
 
-          {/* تابع القراءة */}
-          {cont && (
+          {/* مسار اليوم (تصميم 2.0): خطوات اليوم بالترتيب — يحلّ محلّ «تابع القراءة» والاقتراحات */}
+          {cont && path.steps.length > 0 && (
+            <FadeIn delay={70}>
+              <View style={[styles.pathHead, { flexDirection: dir.row }]}>
+                <Text style={styles.sectionTitle}>{t("path.title")}</Text>
+                <Text style={styles.pathMeta}>
+                  {path.done === path.steps.length
+                    ? t("path.complete")
+                    : t("path.progress", { done: path.done, total: path.steps.length, min: path.minutesLeft })}
+                </Text>
+              </View>
+              <GlassCard radius={Radius.xl} style={styles.block}>
+                {path.steps.map((st, i) => {
+                  const txt = stepText(st);
+                  const current = i === firstOpen;
+                  return (
+                    <PressableScale
+                      key={st.id}
+                      onPress={() => runStep(st.id)}
+                      style={[
+                        styles.stepRow,
+                        { flexDirection: dir.row },
+                        i > 0 && styles.actionDivider,
+                        current && styles.stepCurrent,
+                        st.done && { opacity: 0.55 },
+                      ]}
+                    >
+                      {st.done ? (
+                        <View style={styles.stepDone}>
+                          <Ionicons name="checkmark" size={16} color="#6CF3C5" />
+                        </View>
+                      ) : current ? (
+                        <View style={styles.stepRing}>
+                          <View style={styles.stepDot} />
+                        </View>
+                      ) : (
+                        <View style={styles.stepEmpty} />
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[styles.stepTitle, { textAlign: dir.textAlign }, current && { fontWeight: "800" }, st.done && styles.strike]}
+                          numberOfLines={1}
+                        >
+                          {txt.title}
+                        </Text>
+                        {!!txt.sub && !st.done && (
+                          <Text style={[styles.actionSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
+                            {txt.sub}
+                          </Text>
+                        )}
+                      </View>
+                      {current && (
+                        <View style={styles.startPill}>
+                          <Text style={styles.startTxt}>{t("path.start")}</Text>
+                        </View>
+                      )}
+                    </PressableScale>
+                  );
+                })}
+              </GlassCard>
+            </FadeIn>
+          )}
+
+          {/* تابع القراءة (حين لا يوجد مسار) */}
+          {cont && path.steps.length === 0 && (
             <FadeIn delay={70}>
               <PressableScale onPress={() => openBook(cont)}>
                 <GlassCard radius={Radius.xl} style={styles.block}>
@@ -252,7 +427,8 @@ export default function HomeScreen() {
             </FadeIn>
           )}
 
-          {/* اقتراحات ذكية */}
+          {/* اقتراحات ذكية — حين لا يوجد كتاب حالي (مثل: إضافة أول كتاب) */}
+          {!cont && (
           <FadeIn delay={140}>
             <View style={[styles.sectionHead, { flexDirection: dir.row }]}>
               <Ionicons name="sparkles" size={16} color={theme.accent} />
@@ -287,8 +463,10 @@ export default function HomeScreen() {
               })}
             </GlassCard>
           </FadeIn>
+          )}
 
           {/* أرقامك */}
+          {!showReady && (
           <FadeIn delay={210}>
             <View style={[styles.statsRow, { flexDirection: dir.row }]}>
               <StatTile icon="book" color={Palette.neonBlue} value={books} label={t("home.stat.books")} onPress={() => router.push("/library")} />
@@ -304,6 +482,7 @@ export default function HomeScreen() {
               />
             </View>
           </FadeIn>
+          )}
 
         </ScrollView>
       </SafeAreaView>
@@ -395,4 +574,21 @@ const styles = StyleSheet.create({
 
 
   pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+
+  readyNum: { color: "#D9D3FF", fontSize: 30, fontWeight: "900", lineHeight: 34 },
+  readyHeadline: { color: Palette.text, fontSize: 16.5, fontWeight: "800", lineHeight: 23 },
+  weakChip: { marginTop: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: Radius.pill, backgroundColor: "rgba(255,179,138,0.12)" },
+  weakChipTxt: { color: "#FFB38A", fontSize: 12, fontWeight: "700" },
+  pathHead: { alignItems: "baseline", justifyContent: "space-between", marginBottom: Spacing.sm, marginTop: Spacing.xs },
+  pathMeta: { color: Palette.textDim, fontSize: 11.5, fontWeight: "700" },
+  stepRow: { alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
+  stepCurrent: { backgroundColor: "rgba(124,108,255,0.08)" },
+  stepDone: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(108,243,197,0.16)", alignItems: "center", justifyContent: "center" },
+  stepRing: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: "#B9AFFF", alignItems: "center", justifyContent: "center" },
+  stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#B9AFFF" },
+  stepEmpty: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.18)" },
+  stepTitle: { color: Palette.text, fontSize: 14.5, fontWeight: "600" },
+  strike: { textDecorationLine: "line-through" },
+  startPill: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: Radius.pill, backgroundColor: "#F3F4F8" },
+  startTxt: { color: "#07080D", fontSize: 12.5, fontWeight: "800" },
 });

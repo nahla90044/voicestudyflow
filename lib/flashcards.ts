@@ -98,6 +98,14 @@ export async function reviewCard(id: string, rating: Rating): Promise<void> {
   const interval = INTERVALS[c.box] ?? 1;
   c.due = addDays(todayISO(), Math.max(rating === "again" ? 0 : 1, interval));
   await save(cards);
+  await AsyncStorage.setItem(LAST_REVIEW_KEY, todayISO()).catch(() => {});
+}
+
+const LAST_REVIEW_KEY = "vsf:flashcards:lastReviewDay";
+
+/** هل رُوجعت بطاقات اليوم؟ (لمسار اليوم: خطوة المراجعة تظهر منجزة) */
+export async function reviewedToday(): Promise<boolean> {
+  return (await AsyncStorage.getItem(LAST_REVIEW_KEY).catch(() => null)) === todayISO();
 }
 
 export async function removeCard(id: string): Promise<void> {

@@ -26,12 +26,13 @@ export default function AskScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, q } = useLocalSearchParams<{ id?: string; q?: string }>();
 
   const [books, setBooks] = useState<QABook[]>([]);
   const [scope, setScope] = useState<Scope>("book");
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [input, setInput] = useState("");
+  // سؤال جاهز قادم من شاشة أخرى (مثل «سؤال عنها» في الاختبار) — يُكتب في الخانة ولا يُرسل تلقائيًا
+  const [input, setInput] = useState(typeof q === "string" ? q : "");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState<number | null>(null);
   const [dl, setDl] = useState<DownloadState | null>(getDownloadState());

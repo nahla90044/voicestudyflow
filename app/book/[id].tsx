@@ -10,6 +10,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BookCover, coverColors } from "../../components/brand/book-cover";
+import { ExamDateSheet } from "../../components/brand/exam-date-sheet";
 import { GlassCard } from "../../components/brand/glass-card";
 import { PressableScale } from "../../components/brand/motion";
 import { NowPlayingDock } from "../../components/brand/now-playing-dock";
@@ -18,6 +19,7 @@ import { getUserId } from "../../lib/auth";
 import { getCards } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getLastPage } from "../../lib/readerPrefs";
+import { getBookReadiness, setExamDate, type BookReadiness } from "../../lib/readiness";
 import { supabase } from "../../lib/supabase";
 import { getSyllabus, type Syllabus } from "../../lib/syllabus";
 
@@ -37,6 +39,8 @@ export default function BookHubScreen() {
   const [syl, setSyl] = useState<{ data: Syllabus; done: boolean[] } | null>(null);
   const [cards, setCards] = useState(0);
   const [tab, setTab] = useState<Tab>("units");
+  const [ready, setReady] = useState<BookReadiness | null>(null);
+  const [examOpen, setExamOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -53,13 +57,15 @@ export default function BookHubScreen() {
           if (!on) return;
           if (error || !data) return setFailed(true);
           setBook(data as Book);
-          const [p, s, all] = await Promise.all([
+          const [p, s, all, r] = await Promise.all([
             getLastPage(bookId),
             getSyllabus(data.pdf_path).catch(() => null),
             getCards().catch(() => []),
+            getBookReadiness(data.pdf_path),
           ]);
           if (!on) return;
           setPage(p);
+          setReady(r);
           setSyl(s);
           setCards(all.filter((c) => c.bookId === bookId && !c.archived).length);
         } catch {
@@ -133,11 +139,29 @@ export default function BookHubScreen() {
                   ? t("book.metaUnits", { pages: pages || "—", units: units.length })
                   : t("book.meta", { pages: pages || "—" })}
               </Text>
-              {pages > 0 && (
-                <View style={[styles.chip, { alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
-                  <Text style={styles.chipTxt}>{t("book.progress", { pct })}</Text>
-                </View>
-              )}
+              <View style={[styles.chips, { flexDirection: dir.row }]}>
+                {pages > 0 && (
+                  <View style={styles.chip}>
+                    <Text style={styles.chipTxt}>{t("book.progress", { pct })}</Text>
+                  </View>
+                )}
+                {ready && (ready.unitCount > 0 || ready.answered > 0) && (
+                  <View style={styles.chip}>
+                    <Text style={styles.chipTxt}>{t("book.ready", { n: ready.score })}</Text>
+                  </View>
+                )}
+                <PressableScale onPress={() => setExamOpen(true)} style={[styles.chip, styles.chipExam]}>
+                  <Text style={[styles.chipTxt, { color: "#FFB38A" }]}>
+                    {ready?.daysLeft == null
+                      ? t("book.examSet")
+                      : ready.daysLeft > 0
+                        ? t("book.examIn", { n: ready.daysLeft })
+                        : ready.daysLeft === 0
+                          ? t("book.examToday")
+                          : t("book.examPast")}
+                  </Text>
+                </PressableScale>
+              </View>
             </View>
           </View>
 
@@ -155,13 +179,30 @@ export default function BookHubScreen() {
             ))}
           </View>
 
+          {tab === "units" && !!ready?.dueMistakes && (
+            <PressableScale
+              onPress={() => router.push({ pathname: "/unit-quiz", params: { pdf_path: book.pdf_path, mode: "mistakes", book_title: book.title } })}
+              style={[styles.mistakes, { flexDirection: dir.row }]}
+            >
+              <Ionicons name="refresh-circle" size={22} color="#FFB38A" />
+              <Text style={[styles.mistakesTxt, { textAlign: dir.textAlign }]}>{t("book.mistakes", { n: ready.dueMistakes })}</Text>
+              <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />
+            </PressableScale>
+          )}
+
           {tab === "units" &&
             (units.length ? (
               <GlassCard>
                 {units.map((u, i) => {
                   const done = !!syl?.done[i];
+                  const acc = ready?.accuracy[i] ?? null;
+                  const accColor = acc === null ? Palette.textDim : acc >= 0.75 ? "#6CF3C5" : acc >= 0.5 ? "#FFB38A" : "#FF6B81";
+                  const weak = ready?.weakUnit === i && !ready.weakUntested;
                   return (
-                    <View key={i} style={[styles.unit, { flexDirection: dir.row }, i > 0 && styles.divider]}>
+                    <View
+                      key={i}
+                      style={[styles.unit, { flexDirection: dir.row }, i > 0 && styles.divider, weak && styles.unitWeak]}
+                    >
                       <View style={[styles.unitNum, done && styles.unitNumDone]}>
                         {done ? (
                           <Ionicons name="checkmark" size={15} color={Palette.success} />
@@ -169,9 +210,25 @@ export default function BookHubScreen() {
                           <Text style={styles.unitNumTxt}>{i + 1}</Text>
                         )}
                       </View>
-                      <Text style={[styles.unitTitle, { textAlign: dir.textAlign }, done && { color: Palette.textDim }]} numberOfLines={2}>
-                        {u.title}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.unitTitle, { textAlign: dir.textAlign }, done && { color: Palette.textDim }]} numberOfLines={2}>
+                          {u.title}
+                        </Text>
+                        {acc !== null && (
+                          <View style={[styles.accRow, { flexDirection: dir.row }]}>
+                            <View style={styles.accTrack}>
+                              <View
+                                style={[
+                                  styles.accFill,
+                                  { width: `${Math.max(4, Math.round(acc * 100))}%`, backgroundColor: accColor },
+                                  dir.isRTL ? { alignSelf: "flex-end" } : null,
+                                ]}
+                              />
+                            </View>
+                            <Text style={[styles.accTxt, { color: accColor }]}>{t("book.unit.accuracy", { n: Math.round(acc * 100) })}</Text>
+                          </View>
+                        )}
+                      </View>
                       <PressableScale
                         onPress={() => router.push({ pathname: "/unit-summary", params: unitParams(i, u.title) })}
                         style={styles.mini}
@@ -218,6 +275,16 @@ export default function BookHubScreen() {
             </View>
           )}
         </ScrollView>
+        <ExamDateSheet
+          visible={examOpen}
+          value={ready?.examISO ?? null}
+          onClose={() => setExamOpen(false)}
+          onSave={async (iso) => {
+            setExamOpen(false);
+            await setExamDate(book.id, iso);
+            setReady(await getBookReadiness(book.pdf_path));
+          }}
+        />
         {/* الشريط العائم يرافق المستخدم هنا أيضًا */}
         <View style={styles.dockWrap}>
           <NowPlayingDock />
@@ -239,7 +306,25 @@ const styles = StyleSheet.create({
   hero: { alignItems: "flex-end", gap: 16, marginTop: 4 },
   title: { color: Palette.text, fontSize: 22, fontWeight: "800", lineHeight: 30 },
   meta: { color: Palette.textMuted, fontSize: 13 },
+  chips: { flexWrap: "wrap", gap: 6, marginTop: 2 },
   chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.12)" },
+  chipExam: { backgroundColor: "rgba(255,179,138,0.16)" },
+  mistakes: {
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,179,138,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,179,138,0.30)",
+  },
+  mistakesTxt: { flex: 1, color: Palette.text, fontSize: 14.5, fontWeight: "700" },
+  unitWeak: { backgroundColor: "rgba(255,179,138,0.06)" },
+  accRow: { alignItems: "center", gap: 8, marginTop: 6 },
+  accTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
+  accFill: { height: 4, borderRadius: 2 },
+  accTxt: { fontSize: 11.5, fontWeight: "700" },
   chipTxt: { color: Palette.text, fontSize: 11.5, fontWeight: "700" },
   cta: {
     height: 54,
@@ -261,7 +346,7 @@ const styles = StyleSheet.create({
   unitNum: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
   unitNumDone: { borderColor: Palette.success, backgroundColor: Palette.successSoft },
   unitNumTxt: { color: Palette.textMuted, fontSize: 12, fontWeight: "700" },
-  unitTitle: { flex: 1, color: Palette.text, fontSize: 14.5, fontWeight: "600", lineHeight: 21 },
+  unitTitle: { color: Palette.text, fontSize: 14.5, fontWeight: "600", lineHeight: 21 },
   mini: { width: 36, height: 36, borderRadius: 11, backgroundColor: "rgba(255,255,255,0.06)", alignItems: "center", justifyContent: "center" },
   create: { height: 46, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   createTxt: { color: "#fff", fontWeight: "800", fontSize: 14.5 },

@@ -16,6 +16,7 @@ import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
+import { markSummaryHeard } from "../lib/readiness";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../lib/voice";
 
 // يزيل رموز الماركداون إن ظهرت (عنوان #، عريض **، خطوط ---، شفرة `) → نص نظيف
@@ -118,6 +119,7 @@ export default function UnitSummaryScreen() {
       setPlaying(false);
     } else if (text) {
       setPlaying(true);
+      void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
       speakText(text, {
         voiceId: DEFAULT_VOICE_ID,
         onDone: () => setPlaying(false),
