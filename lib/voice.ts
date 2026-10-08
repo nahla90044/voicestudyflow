@@ -143,6 +143,37 @@ function clearLockScreen(player: AudioPlayer | null): void {
   } catch {}
 }
 
+/**
+ * بعد استخدام الميكروفون (التعرّف على الكلام) يتغيّر وضع الصوت في iOS إلى
+ * تسجيل+تشغيل؛ هذا يجبر ensureAudioMode على إعادة ضبط وضع التشغيل المعتاد.
+ */
+export function invalidateAudioMode(): void {
+  audioModeReady = false;
+}
+
+/**
+ * وضع المشي: السرد والميكروفون معًا. نسمح بالتسجيل في جلسة الصوت (تشغيل+تسجيل)
+ * ونُبقي التشغيل بالخلفية؛ وعند الإيقاف نعيد وضع التشغيل المعتاد.
+ */
+export async function setRecordingAudioMode(on: boolean): Promise<void> {
+  if (!on) {
+    audioModeReady = false;
+    await ensureAudioMode();
+    return;
+  }
+  try {
+    await setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: "mixWithOthers",
+      allowsRecording: true,
+    });
+    audioModeReady = true; // لا تُعِد speakText ضبطه لوضع تشغيل فقط فيُقطع الميكروفون
+  } catch {
+    // نتجاهل: الاستماع يعمل بإعدادات التعرّف الافتراضية
+  }
+}
+
 export async function ensureAudioMode() {
   if (audioModeReady) return;
   // يشغّل الصوت حتى لو الجهاز على الصامت، ويكمل في الخلفية / عند قفل الشاشة.

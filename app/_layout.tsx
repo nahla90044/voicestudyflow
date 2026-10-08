@@ -69,6 +69,7 @@ export default function RootLayout() {
           <Stack.Screen name="ask/[id]" />
           {/* «بحث وأوامر» تُفتح كورقة من الأسفل فوق الشاشة الحالية */}
           <Stack.Screen name="command" options={{ presentation: "modal" }} />
+          <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
         </Stack>
         {booting ? <AnimatedSplash /> : null}
       </SafeAreaProvider>

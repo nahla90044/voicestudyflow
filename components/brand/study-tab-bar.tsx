@@ -62,7 +62,8 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
       <NowPlayingDock />
       <View style={[styles.pill, { flexDirection: dir.row }]}>
         {LEFT.map(item)}
-        <PressableScale onPress={() => router.push("/command")} style={styles.orbWrap}>
+        {/* ضغطة: بحث وأوامر · ضغطة مطوّلة: المساعد الصوتي مباشرة */}
+        <PressableScale onPress={() => router.push("/command")} onLongPress={() => router.push("/voice")} style={styles.orbWrap}>
           <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.orb}>
             <Ionicons name="sparkles" size={24} color="#fff" accessibilityLabel={t("nav.orb")} />
           </LinearGradient>

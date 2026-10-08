@@ -69,10 +69,13 @@ import {
   VOICE_CATALOG,
   voiceLangOf,
   warmNext,
+  setRecordingAudioMode,
 } from "../../lib/voice";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel } from "../../lib/settings";
 import { handoff, takeOver } from "../../lib/player";
+import { useDictation } from "../../lib/stt";
+import { parseWalkCommand, type WalkCommand } from "../../lib/voiceIntents";
 import { useDir, useI18n } from "../../lib/i18n";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
@@ -278,7 +281,14 @@ export default function ReaderScreen() {
   type CheckIn = { phase: "ask" | "done" | "explaining" | "explained"; title: string; body?: string };
   const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
   const checkInTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const explainAtRef = useRef(0); // الجملة التي طُلب شرحها — نكمل بعدها (stop يصفّر الموضع الحي)
+  const explainAtRef = useRef(0);
+  // وضع المشي: استماع مستمر لأوامر قصيرة أثناء القراءة (بلا لمس للشاشة)
+  const [walkMode, setWalkMode] = useState(false);
+  const walkModeRef = useRef(false);
+  const [walkHeard, setWalkHeard] = useState("");
+  const walkHandledRef = useRef(0); // طول النص الذي عولج — حتى لا يُنفَّذ الأمر مرتين
+  const walkStartAtRef = useRef(0); // متى بدأت جلسة الاستماع الحالية
+  const walkQuickFailsRef = useRef(0); // جلسات انتهت فور بدئها (ميكروفون معطّل) — نوقف بعد ٣ // الجملة التي طُلب شرحها — نكمل بعدها (stop يصفّر الموضع الحي)
 
   // قاموس: معنى الكلمة عند لمسها
   const [dictOpen, setDictOpen] = useState(false);
@@ -879,6 +889,124 @@ export default function ReaderScreen() {
     setCheckIn(null);
     restartAt(explainAtRef.current + 1);
   }
+
+  // ===== الأوامر الصوتية (رد نداء التركيز + وضع المشي) =====
+  const speechLang = lang === "en" || lang === "fr" ? lang : "ar";
+
+  /** «بطاقة»: يحوّل الجملة المسموعة الآن (مع سابقتها) إلى بطاقة مراجعة */
+  async function saveSentenceCard() {
+    const i = Math.max(0, liveSentRef.current);
+    const ctx = sentences.slice(Math.max(0, i - 1), i + 1).join(" ");
+    if (!ctx.trim()) return;
+    showToast(t("reader.walk.cardMaking"));
+    try {
+      const cards = await generateFlashcards(ctx, 1);
+      const bookTitle = typeof title === "string" ? title : undefined;
+      const n = await addCards(cards.slice(0, 1).map((c) => ({ ...c, bookId, bookTitle })));
+      showToast(n ? t("reader.walk.cardSaved") : t("reader.ai.cardsFailed"));
+    } catch {
+      showToast(t("reader.ai.requestFailed"));
+    }
+  }
+
+  function runVoiceCommand(cmd: WalkCommand | null) {
+    switch (cmd) {
+      case "with":
+        return checkInWith();
+      case "repeat":
+        return checkInRepeat();
+      case "explain":
+        return void checkInExplain();
+      case "card":
+        return void saveSentenceCard();
+      case "pause":
+        if (playingRef.current) togglePlay();
+        return;
+      case "resume":
+        if (!playingRef.current) togglePlay();
+        return;
+    }
+  }
+
+  // رد نداء التركيز بالصوت: ضغطة مطوّلة على الميكروفون في البطاقة
+  const replyDict = useDictation({
+    lang: speechLang,
+    onEnd: (text) => runVoiceCommand(parseWalkCommand(text)),
+  });
+
+  // وضع المشي: استماع مستمر مع إلغاء صدى صوت القراءة
+  const walkDict = useDictation({
+    lang: speechLang,
+    continuous: true,
+    echoCancel: true,
+    restoreAudio: false,
+    hints: ["إعادة", "شرح", "بطاقة", "وقّف", "كمّل", "معك", "repeat", "explain", "card", "pause", "continue"],
+    onText: (tx) => {
+      const fresh = tx.slice(walkHandledRef.current);
+      const cmd = parseWalkCommand(fresh);
+      if (!cmd) return;
+      walkHandledRef.current = tx.length;
+      setWalkHeard(fresh.trim());
+      runVoiceCommand(cmd);
+    },
+    onEnd: () => {
+      // آبل تنهي الجلسة المستمرة بعد مدة — نعيد الاستماع ما دام الوضع مفعّلًا
+      walkHandledRef.current = 0;
+      if (!walkModeRef.current) return;
+      walkQuickFailsRef.current = Date.now() - walkStartAtRef.current < 1500 ? walkQuickFailsRef.current + 1 : 0;
+      if (walkQuickFailsRef.current >= 3) {
+        // الميكروفون لا يعمل → نوقف الوضع بدل حلقة إعادة لا تنتهي
+        walkModeRef.current = false;
+        setWalkMode(false);
+        void setRecordingAudioMode(false);
+        showToast(t("reader.walk.failed"));
+        return;
+      }
+      setTimeout(() => {
+        if (!walkModeRef.current) return;
+        walkStartAtRef.current = Date.now();
+        void walkDict.start();
+      }, 250);
+    },
+  });
+
+  async function toggleWalk() {
+    const next = !walkModeRef.current;
+    walkModeRef.current = next;
+    setWalkMode(next);
+    setWalkHeard("");
+    walkHandledRef.current = 0;
+    if (next) {
+      await setRecordingAudioMode(true);
+      walkQuickFailsRef.current = 0;
+      walkStartAtRef.current = Date.now();
+      const ok = await walkDict.start();
+      if (!ok) {
+        walkModeRef.current = false;
+        setWalkMode(false);
+        await setRecordingAudioMode(false);
+        showToast(t("va.denied"));
+        return;
+      }
+      showToast(t("reader.walk.on"));
+    } else {
+      walkDict.cancel();
+      await setRecordingAudioMode(false);
+    }
+  }
+
+  // إغلاق القارئ يوقف الاستماع ويعيد وضع الصوت
+  useEffect(
+    () => () => {
+      if (walkModeRef.current) {
+        walkModeRef.current = false;
+        walkDict.cancel();
+        void setRecordingAudioMode(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   // وضع التركيز: حمّل الاسم ودرجة المناداة
   useEffect(() => {
@@ -1866,6 +1994,15 @@ export default function ReaderScreen() {
 
       {/* العارض: PDF أو نص بتظليل الجملة المقروءة */}
       <View style={[styles.viewer, fullText && styles.viewerFull]}>
+        {walkMode && !checkIn ? (
+          <Pressable onPress={toggleWalk} style={[styles.walkChip, { flexDirection: dir.row }]}>
+            <Ionicons name="walk" size={16} color="#6CF3C5" />
+            <Text style={styles.walkChipTxt} numberOfLines={1}>
+              {walkHeard ? t("reader.walk.heard", { text: walkHeard }) : t("reader.walk.listening")}
+            </Text>
+            <Ionicons name="close" size={15} color={Palette.textDim} />
+          </Pressable>
+        ) : null}
         {checkIn ? (
           <View style={styles.checkCard}>
             <View style={[styles.checkHead, { flexDirection: dir.row }]}>
@@ -1882,6 +2019,17 @@ export default function ReaderScreen() {
                   <Text style={[styles.checkSub, { textAlign: dir.textAlign }]}>{t("reader.check.sub")}</Text>
                 ) : null}
               </View>
+              {checkIn.phase === "ask" && (
+                <Pressable
+                  onPressIn={() => void replyDict.start()}
+                  onPressOut={() => replyDict.stop()}
+                  style={[styles.checkMic, replyDict.listening && { backgroundColor: "#6CF3C5" }]}
+                  accessibilityLabel={t("reader.check.voice")}
+                  hitSlop={6}
+                >
+                  <Ionicons name="mic" size={17} color={replyDict.listening ? "#07080D" : "#F3F4F8"} />
+                </Pressable>
+              )}
               <Pressable onPress={() => setCheckIn(null)} hitSlop={10}>
                 <Ionicons name="close" size={18} color={Palette.textDim} />
               </Pressable>
@@ -2245,6 +2393,12 @@ export default function ReaderScreen() {
                       setGotoOpen(true);
                     })
                   }
+                />
+                <ToolTile
+                  icon="walk-outline"
+                  label={t("reader.walk.title")}
+                  on={walkMode}
+                  onPress={() => fromTools(() => void toggleWalk())}
                 />
                 <ToolTile
                   icon={presMusicKey ? "musical-notes" : "musical-notes-outline"}
@@ -3022,6 +3176,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
   },
   checkHead: { alignItems: "center", gap: 10 },
+  checkMic: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
+  walkChip: {
+    position: "absolute",
+    top: 8,
+    alignSelf: "center",
+    zIndex: 19,
+    alignItems: "center",
+    gap: 8,
+    maxWidth: "88%",
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "rgba(16,18,27,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(108,243,197,0.45)",
+  },
+  walkChipTxt: { color: "#F3F4F8", fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
   checkOrb: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   checkTitle: { color: "#F3F4F8", fontSize: 15, fontWeight: "700" },
   checkSub: { color: "#8E95AB", fontSize: 12, marginTop: 2 },

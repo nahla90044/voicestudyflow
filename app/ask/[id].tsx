@@ -7,7 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PressableScale } from "../../components/brand/motion";
@@ -17,6 +17,7 @@ import { getDownloadState, startDownload, subscribeDownload, type DownloadState 
 import { addCards } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { setLastPage } from "../../lib/readerPrefs";
+import { useDictation } from "../../lib/stt";
 import { speakText, stopSpeaking } from "../../lib/voice";
 
 type Turn = { id: number; q: string; a?: QAAnswer; error?: boolean; saved?: boolean };
@@ -24,7 +25,7 @@ type Scope = "book" | "all";
 
 export default function AskScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const dir = useDir();
   const { id, q } = useLocalSearchParams<{ id?: string; q?: string }>();
 
@@ -56,6 +57,14 @@ export default function AskScreen() {
   useEffect(() => {
     if (book) coverage(book.pdf_path).then(setReady).catch(() => setReady(null));
   }, [book, dl?.done]);
+
+  const dict = useDictation({
+    lang: lang === "en" || lang === "fr" ? lang : "ar",
+    onText: (tx) => setInput(tx),
+    onEnd: (finalText) => {
+      if (finalText) void ask(finalText);
+    },
+  });
 
   async function ask(question: string) {
     const q = question.trim();
@@ -223,6 +232,16 @@ export default function AskScreen() {
             blurOnSubmit
             returnKeyType="send"
           />
+          {/* سؤال بالصوت: ضغطة مطوّلة، والإفلات يرسل السؤال */}
+          <Pressable
+            onPressIn={() => void dict.start()}
+            onPressOut={() => dict.stop()}
+            disabled={busy}
+            style={[styles.mic, dict.listening && styles.micOn]}
+            accessibilityLabel={t("ask.voice")}
+          >
+            <Ionicons name="mic" size={21} color={dict.listening ? "#07080D" : Palette.text} />
+          </Pressable>
           <PressableScale onPress={() => ask(input)} disabled={busy || !input.trim()}>
             <LinearGradient
               colors={Gradients.neon}
@@ -310,4 +329,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   send: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center" },
+  mic: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  micOn: { backgroundColor: "#6CF3C5" },
 });

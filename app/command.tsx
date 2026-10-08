@@ -1,6 +1,6 @@
 // app/command.tsx
 // «بحث وأوامر» — يُفتح من الزر الأوسط في الشريط. مكان واحد للوصول لأي كتاب أو أي شاشة
-// بضغطة، بدل التنقّل بين التبويبات. (البحث داخل صفحات الكتب والسؤال بالصوت: مراحل لاحقة.)
+// بضغطة، بدل التنقّل بين التبويبات. زر الميكروفون أسفلها يفتح المساعد الصوتي.
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -9,7 +9,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BookCover } from "../components/brand/book-cover";
 import { PressableScale } from "../components/brand/motion";
-import { Palette } from "../constants/design";
+import { LinearGradient } from "expo-linear-gradient";
+
+import { Gradients, Palette } from "../constants/design";
 import { getUserId } from "../lib/auth";
 import { getContinueBook, type ContinueBook } from "../lib/home";
 import { useDir, useI18n } from "../lib/i18n";
@@ -101,7 +103,6 @@ export default function CommandScreen() {
           <TextInput
             value={q}
             onChangeText={setQ}
-            autoFocus
             placeholder={t("cmd.placeholder")}
             placeholderTextColor={Palette.placeholder}
             style={[styles.input, { textAlign: dir.textAlign }]}
@@ -124,6 +125,7 @@ export default function CommandScreen() {
       )}
 
       <FlatList
+        style={{ flex: 1 }}
         data={rows}
         keyExtractor={(r) => r.key}
         keyboardShouldPersistTaps="handled"
@@ -151,6 +153,16 @@ export default function CommandScreen() {
           );
         }}
       />
+
+      {/* المساعد الصوتي: زر يتنفّس أسفل الشاشة */}
+      <View style={styles.voiceWrap}>
+        <PressableScale onPress={go(() => router.push("/voice"))} style={styles.voiceBtnWrap}>
+          <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.voiceBtn}>
+            <Ionicons name="mic" size={30} color="#fff" accessibilityLabel={t("ask.voice")} />
+          </LinearGradient>
+        </PressableScale>
+        <Text style={styles.voiceHint}>{t("cmd.voice")}</Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -187,4 +199,8 @@ const styles = StyleSheet.create({
   rowTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "500" },
   icon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   empty: { color: Palette.textDim, textAlign: "center", marginTop: 40 },
+  voiceWrap: { alignItems: "center", gap: 10, paddingTop: 8, paddingBottom: 26 },
+  voiceBtnWrap: { borderRadius: 37, shadowColor: "#3FD0FF", shadowOpacity: 0.4, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+  voiceBtn: { width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center", borderWidth: 6, borderColor: "rgba(124,108,255,0.25)" },
+  voiceHint: { color: "#8E95AB", fontSize: 12.5 },
 });

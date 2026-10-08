@@ -60,7 +60,17 @@
       "expo-localization",
       "expo-asset",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "VoiceStudyFlow uses the microphone only while you hold the voice button, so you can ask about your books, answer quizzes and reply to focus check-ins by voice.",
+          "speechRecognitionPermission": "Speech is recognized by Apple to turn your voice requests into text. Recordings are not stored.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -72,6 +82,9 @@
         "projectId": "c1c47712-e163-4649-bc74-79d45519e09f"
       }
     },
-    "owner": "nahla900"
+    "owner": "nahla900",
+    "locales": {
+      "ar": "./locales/ar.json"
+    }
   }
 }

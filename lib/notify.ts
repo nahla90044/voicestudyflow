@@ -50,7 +50,13 @@ export async function setReminders(hours: number[]): Promise<boolean> {
   if (!(await ensurePermission())) return false;
   await ensureAndroidChannel();
   const uniq = [...new Set(hours)].filter((h) => h >= 0 && h <= 23).sort((a, b) => a - b);
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  // نلغي التنبيهات اليومية فقط — تذكيرات المساعد الصوتية لمرة واحدة تبقى
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const n of scheduled) {
+    if ((n.content.data as { kind?: string } | null)?.kind !== "once") {
+      await Notifications.cancelScheduledNotificationAsync(n.identifier);
+    }
+  }
   for (const hour of uniq) {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -95,4 +101,21 @@ export async function sendTestNotification(): Promise<boolean> {
     },
   });
   return true;
+}
+
+/**
+ * تذكير لمرة واحدة في أقرب موعد قادم للساعة المطلوبة (اليوم، أو غدًا إن مضت).
+ * يُستخدم من المساعد الصوتي: «ذكّرني بالمراجعة الساعة تسع». يُرجع موعده أو null.
+ */
+export async function scheduleOnce(hour: number, minute: number, title: string, body: string): Promise<Date | null> {
+  if (!(await ensurePermission())) return null;
+  await ensureAndroidChannel();
+  const when = new Date();
+  when.setHours(hour, minute, 0, 0);
+  if (when.getTime() <= Date.now() + 30_000) when.setDate(when.getDate() + 1);
+  await Notifications.scheduleNotificationAsync({
+    content: { title, body, sound: "default", data: { kind: "once" } },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when, channelId: "default" },
+  });
+  return when;
 }

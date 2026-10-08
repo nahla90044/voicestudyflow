@@ -7,6 +7,7 @@ import { Animated, Easing, Platform, Pressable, Text, type StyleProp, type TextS
 
 type PressProps = {
   onPress?: () => void;
+  onLongPress?: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
@@ -19,7 +20,7 @@ type PressProps = {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** زر ينكمش قليلًا ويرتدّ بنابض — إحساس ملموس بدل تغيير الشفافية فقط. */
-export function PressableScale({ onPress, disabled, style, children, haptic = true }: PressProps) {
+export function PressableScale({ onPress, onLongPress, disabled, style, children, haptic = true }: PressProps) {
   const s = useRef(new Animated.Value(1)).current;
   const to = (v: number) => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 7 }).start();
   return (
@@ -31,6 +32,14 @@ export function PressableScale({ onPress, disabled, style, children, haptic = tr
         if (haptic && Platform.OS !== "web") Haptics.selectionAsync().catch(() => {});
         onPress?.();
       }}
+      onLongPress={
+        onLongPress
+          ? () => {
+              if (haptic && Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              onLongPress();
+            }
+          : undefined
+      }
       style={[style, { transform: [{ scale: s }] }]}
     >
       {children}
