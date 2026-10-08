@@ -80,8 +80,11 @@ export default function BookHubScreen() {
 
   if (failed) {
     return (
-      <SafeAreaView style={[styles.safe, styles.center]}>
+      <SafeAreaView style={[styles.safe, styles.center, { gap: 16 }]}>
         <Text style={styles.dim}>{t("book.notFound")}</Text>
+        <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={styles.ghost}>
+          <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} accessibilityLabel={t("common.back")} />
+        </PressableScale>
       </SafeAreaView>
     );
   }

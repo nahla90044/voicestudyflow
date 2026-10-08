@@ -98,3 +98,77 @@ export function boxIndexAtProgress(
   const v = map[i0] * (1 - t) + map[i1] * t;
   return Math.min(boxCount - 1, Math.max(0, v));
 }
+
+export type Rect = { x: number; y: number; w: number; h: number };
+type Box = { t: string } & Rect;
+
+/**
+ * مستطيلات كل جملة على الصفحة (سطر لكل مستطيل) — هايلايتر الجملة كاملة مثل «حاكي»
+ * بدل تقدير سطر واحد من تقدّم الصوت. confidence = نسبة الكلمات المنطوقة التي وُجد لها
+ * مقابل حرفي في الصفحة؛ إن كانت ضعيفة فالأفضل عدم الرسم من رسمه في مكان خاطئ.
+ */
+export type SentenceLayout = {
+  rects: Rect[][]; // مستطيلات أسطر كل جملة
+  confidence: number; // ٠..١
+  map: number[]; // لكل كلمة منطوقة: فهرس صندوقها في الصفحة
+  starts: number[]; // فهرس أول كلمة لكل جملة في map
+};
+
+export function sentenceRects(sentences: string[], boxes: Box[]): SentenceLayout {
+  const words = sentences.map((s) => s.match(/\S+/g) ?? []);
+  const spoken = words.flat();
+  if (!spoken.length || !boxes.length) return { rects: sentences.map(() => []), confidence: 0, map: [], starts: [] };
+
+  const map = alignSpokenToBoxes(spoken, boxes.map((b) => b.t));
+  // الثقة: كم كلمة منطوقة تطابق نص صندوقها حرفيًا
+  let matched = 0;
+  spoken.forEach((w, i) => {
+    if (norm(w) && norm(w) === norm(boxes[map[i]]?.t ?? "")) matched++;
+  });
+  const confidence = matched / spoken.length;
+
+  const rects: Rect[][] = [];
+  const starts: number[] = [];
+  let k = 0;
+  for (const ws of words) {
+    starts.push(k);
+    if (!ws.length) {
+      rects.push([]);
+      continue;
+    }
+    const from = map[k];
+    const to = Math.max(from, map[k + ws.length - 1]);
+    k += ws.length;
+    rects.push(groupLines(boxes.slice(from, to + 1)));
+  }
+  return { rects, confidence, map, starts };
+}
+
+/** فجوة أفقية تفصل عمودين في نفس السطر (جداول/أعمدة) — كنسبة من عرض الصفحة */
+const COLUMN_GAP = 0.03;
+
+/**
+ * يجمع صناديق الكلمات في أسطر (حسب المركز العمودي) — مستطيل لكل سطر، ويفصل أجزاء
+ * السطر التي بينها فجوة عمود حتى لا يمتد الهايلايتر عبر عمودين.
+ */
+function groupLines(bs: Box[]): Rect[] {
+  const lines: { x0: number; x1: number; y0: number; y1: number; cy: number; h: number }[] = [];
+  for (const b of bs) {
+    const cy = b.y + b.h / 2;
+    const ln = lines.find(
+      (l) =>
+        Math.abs(l.cy - cy) < Math.max(l.h, b.h) * 0.6 &&
+        b.x <= l.x1 + COLUMN_GAP &&
+        b.x + b.w >= l.x0 - COLUMN_GAP
+    );
+    if (ln) {
+      ln.x0 = Math.min(ln.x0, b.x);
+      ln.x1 = Math.max(ln.x1, b.x + b.w);
+      ln.y0 = Math.min(ln.y0, b.y);
+      ln.y1 = Math.max(ln.y1, b.y + b.h);
+    } else {
+      lines.push({ x0: b.x, x1: b.x + b.w, y0: b.y, y1: b.y + b.h, cy, h: b.h });
+    }
+  }
+  return lines.sort((a, b) => a.y0 - b.y0).map((l) => ({ x: l.x0, y: l.y0, w: l.x1 - l.x0, h: l.y1 - l.y0 }));
+}

@@ -35,7 +35,7 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
-import { extractPdfPageText, getPageWords, getPreciseText, type WordBox } from "../../lib/pdfText";
+import { extractPdfPageText, getPageWords, getPageWordsFromText, getPreciseText, type WordBox } from "../../lib/pdfText";
 import { splitForReading, splitSentences } from "../../lib/textUtils";
 import {
   getLastPage,
@@ -57,7 +57,7 @@ import { askForReviewOnce } from "../../lib/review";
 import { UnlockModal } from "../../components/brand/unlock-modal";
 import { PlayButton } from "../../components/brand/play-button";
 import { PageScrubber } from "../../components/brand/page-scrubber";
-import { alignSpokenToBoxes, boxIndexAtProgress } from "../../lib/alignWords";
+import { alignSpokenToBoxes, boxIndexAtProgress, sentenceRects } from "../../lib/alignWords";
 import { getSpokenName, isOwner } from "../../lib/auth";
 import {
   DEFAULT_VOICE_ID,
@@ -427,6 +427,16 @@ export default function ReaderScreen() {
   const lensOpenRef = useRef(false);
   const pdfFollowRef = useRef(false); // نتتبّع موضع القراءة (للهايلايتر/العدسة) في وضع PDF أو العدسة
   const [pdfImgW2, setPdfImgW2] = useState(0); // عرض صورة الصفحة المعروضة (لتظليل الكلمة)
+  const prefetchedRef = useRef(new Set<number>()); // صفحات حُمّلت صورها مسبقًا
+  const totalPagesRef = useRef(0);
+  const pdfZoomRef = useRef(1); // تكبير الصفحة الحالي (السحب للتقليب يعمل بلا تكبير فقط)
+  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  // متابعة القارئ: لو سحب المستخدم الصفحة بنفسه أثناء القراءة نوقف التمرير التلقائي
+  // ٥ ثوانٍ ونُظهر زر «تابع القارئ» (نفس سلوك «حاكي»)
+  const detachedAtRef = useRef(0);
+  const [detached, setDetached] = useState(false);
+  const [lensZoom, setLensZoom] = useState(2); // تكبير العدسة
+  const wordsSrcRef = useRef(new Map<number, "text" | "vision">()); // مصدر كلمات كل صفحة
   useEffect(() => {
     // نحمّل صورة الصفحة في وضع PDF أو عند فتح العدسة (تحتاج الصورة)
     if ((viewMode !== "pdf" && !lensOpen) || !pdfPath || !prefsLoaded) return;
@@ -443,6 +453,17 @@ export default function ReaderScreen() {
       pageImgForRef.current = target;
       setPageImg(uri);
       setPageImgLoading(false);
+      // تحميل مسبق للصفحات المجاورة بالخلفية (التالية مرتين والسابقة) → التقليب يصبح فوريًا.
+      // وتجهيز نص التالية أيضًا حتى يبدأ صوتها بلا انتظار.
+      void (async () => {
+        for (const n of [target + 1, target + 2, target - 1]) {
+          if (n < 1 || (totalPagesRef.current && n > totalPagesRef.current)) continue;
+          if (prefetchedRef.current.has(n)) continue;
+          prefetchedRef.current.add(n);
+          await getPageImage(pdfPath, n).catch(() => null);
+        }
+        void extractPdfPageText(pdfPath, target + 1).catch(() => null);
+      })();
       if (uri) {
         Image.getSize(
           uri,
@@ -559,6 +580,9 @@ export default function ReaderScreen() {
   }, [pdfPath, totalPages]);
 
   const isBookmarked = bookmarks.includes(page);
+  useEffect(() => {
+    totalPagesRef.current = totalPages;
+  }, [totalPages]);
 
   async function onToggleBookmark() {
     const was = bookmarks.includes(page);
@@ -666,12 +690,6 @@ export default function ReaderScreen() {
   }, [activeSentence, activeWord, viewMode]);
 
   // تمرير تلقائي «تيليبرومبتر» لصورة الصفحة في وضع PDF أثناء القراءة
-  useEffect(() => {
-    if (viewMode !== "pdf" || !speaking || activeSentence < 0 || sentences.length === 0) return;
-    const frac = sentences.length > 1 ? activeSentence / (sentences.length - 1) : 0;
-    const scrollable = Math.max(0, pdfContentH.current - pdfViewH.current);
-    pdfScrollRef.current?.scrollTo({ y: frac * scrollable, animated: true });
-  }, [activeSentence, viewMode, speaking, sentences.length]);
 
   // عند فتح الكتاب: حمّل نص صفحة الاستئناف فورًا (حتى في وضع PDF) → يجهّز أول
   // جملة صوتيًا فيبدأ التشغيل سريعًا بلا دوران طويل.
@@ -1694,34 +1712,48 @@ export default function ReaderScreen() {
     setReadProgress(0);
   }, [page]);
 
-  // جلب صناديق كلمات الصفحة (مصدرها Vision الثقيل) — فقط عند فتح العدسة
-  // حتى لا نثقّل القراءة العادية بطلبات OCR لكل صفحة
+  // صناديق كلمات الصفحة للهايلايتر والعدسة: أولًا من طبقة نص الـPDF (مجانية وفورية)،
+  // وإن لم توجد (صفحة مصوّرة) أو لم تطابق النص المقروء → التعرّف الضوئي (أدق لكنه أثقل).
+  const cleanWords = (ws: WordBox[]) =>
+    ws.filter((w) => {
+      const t = (w.t || "").trim();
+      if (!t) return false;
+      if (/:{3,}/.test(t)) return false;
+      if (/restricted|confidential/i.test(t)) return false;
+      if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
+      if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
+      return true;
+    });
+  async function loadVisionWords(p: number) {
+    wordsSrcRef.current.set(p, "vision");
+    const ws = cleanWords(await getPageWords(pdfPath, p));
+    if (!ws.length) return;
+    wordsCacheRef.current.set(p, ws);
+    if (p === livePageRef.current) setPageWords(ws);
+  }
   useEffect(() => {
-    if (!lensOpen || !pdfPath) return;
+    if ((viewMode !== "pdf" && !lensOpen) || !pdfPath) return;
     const p = page;
     const cached = wordsCacheRef.current.get(p);
-    if (cached) {
-      setPageWords(cached);
-      return;
-    }
+    setPageWords(cached ?? []); // لا نُبقي كلمات صفحة سابقة أبدًا (سبب الهايلايتر الخاطئ سابقًا)
+    if (cached) return;
     let on = true;
-    getPageWords(pdfPath, p).then((ws) => {
-      const clean = ws.filter((w) => {
-        const t = (w.t || "").trim();
-        if (!t) return false;
-        if (/:{3,}/.test(t)) return false;
-        if (/restricted|confidential/i.test(t)) return false;
-        if (/^[\d٠-٩.\-|]+$/.test(t)) return false;
-        if (/^(مقيّ?د|سرّي|مقيد)$/.test(t)) return false;
-        return true;
-      });
-      wordsCacheRef.current.set(p, clean);
-      if (on) setPageWords(clean);
-    });
+    (async () => {
+      const ws = cleanWords(await getPageWordsFromText(pdfPath, p));
+      if (!on) return;
+      if (ws.length >= 8) {
+        wordsSrcRef.current.set(p, "text");
+        wordsCacheRef.current.set(p, ws);
+        setPageWords(ws);
+      } else {
+        await loadVisionWords(p);
+      }
+    })();
     return () => {
       on = false;
     };
-  }, [lensOpen, pdfPath, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lensOpen, viewMode, pdfPath, page]);
 
   // هل نص الكتاب عربي؟ (النطق الدقيق/التشكيل خاصٌّ بالعربية فقط — نخفيه لغير العربي)
   const isArabicText = useMemo(() => {
@@ -1781,6 +1813,76 @@ export default function ReaderScreen() {
     return alignSpokenToBoxes(spoken, pageWords.map((w) => w.t));
   }, [sentences, pageWords]);
 
+  // هايلايتر الجملة كاملة على صفحة الـPDF (أسطرها كلها) + الكلمة المنطوقة داخلها
+  const hl = useMemo(() => sentenceRects(sentences, pageWords), [sentences, pageWords]);
+  const hlOk = hl.confidence >= 0.5;
+  const curWordBox = useMemo<WordBox | null>(() => {
+    if (!speaking || !hlOk || activeSentence < 0 || activeWord < 0) return null;
+    const idx = hl.map[(hl.starts[activeSentence] ?? 0) + activeWord];
+    return idx === undefined ? null : pageWords[idx] ?? null;
+  }, [speaking, hlOk, activeSentence, activeWord, hl, pageWords]);
+  // جملة طويلة جدًا (جداول/قوائم بلا نقاط) → نظلّل سطر الكلمة الحالية فقط بدل كتلة كاملة
+  const curRects = useMemo(() => {
+    if (!speaking || !hlOk || activeSentence < 0) return [];
+    const all = hl.rects[activeSentence] ?? [];
+    if (all.length <= 3 || !curWordBox) return all;
+    const cy = curWordBox.y + curWordBox.h / 2;
+    const line = all.find((r) => cy >= r.y - r.h * 0.3 && cy <= r.y + r.h * 1.3);
+    return line ? [line] : all.slice(0, 1);
+  }, [speaking, hlOk, activeSentence, hl, curWordBox]);
+
+  // طبقة النص لم تطابق المقروء (ترتيب كلمات معطوب في بعض ملفات PDF) → نجرّب التعرّف الضوئي مرة
+  useEffect(() => {
+    if (viewMode !== "pdf" && !lensOpen) return;
+    if (!pageWords.length || !sentences.length || hlOk) return;
+    if (wordsSrcRef.current.get(page) !== "text") return;
+    void loadVisionWords(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hlOk, pageWords, sentences, page, viewMode, lensOpen]);
+
+  // الجملة المقروءة تبقى في الثلث العلوي؛ وإن لم تتوفر مواضعها نتقدّم بنسبة الجمل
+  const followTop = curRects.length ? Math.min(...curRects.map((r) => r.y)) : -1;
+  useEffect(() => {
+    if (viewMode !== "pdf" || !speaking || activeSentence < 0 || sentences.length === 0) return;
+    if (detachedAtRef.current && Date.now() - detachedAtRef.current < 5000) return;
+    if (detached) setDetached(false);
+    const scrollable = Math.max(0, pdfContentH.current - pdfViewH.current);
+    const imgH = pdfImgW2 / (pageImgAspect || 0.7);
+    const y =
+      followTop >= 0 && imgH > 0
+        ? followTop * imgH - pdfViewH.current * 0.3
+        : (sentences.length > 1 ? activeSentence / (sentences.length - 1) : 0) * scrollable;
+    pdfScrollRef.current?.scrollTo({ y: Math.max(0, Math.min(scrollable, y)), animated: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSentence, followTop, viewMode, speaking, sentences.length]);
+
+  function followReader() {
+    detachedAtRef.current = 0;
+    setDetached(false);
+    const imgH = pdfImgW2 / (pageImgAspect || 0.7);
+    if (followTop >= 0) pdfScrollRef.current?.scrollTo({ y: Math.max(0, followTop * imgH - pdfViewH.current * 0.3), animated: true });
+  }
+
+  /**
+   * السحب الأفقي يقلّب الصفحات ما دام القارئ متوقفًا. أثناء القراءة الصفحة ثابتة
+   * والقارئ يقرأ فيها. الكتاب العربي: السحب لليمين = الصفحة التالية (مثل الورقي).
+   */
+  function onPageTouchEnd(x: number, y: number) {
+    const st = touchRef.current;
+    touchRef.current = null;
+    if (!st) return;
+    const dx = x - st.x;
+    const dy = y - st.y;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - st.t > 700) return;
+    if (pdfZoomRef.current > 1.05) return;
+    if (playingRef.current) {
+      showToast(t("reader.swipe.locked"));
+      return;
+    }
+    const next = isArabicText ? dx > 0 : dx < 0;
+    goPage(next ? 1 : -1);
+  }
+
   // نقطة القراءة المتصلة — تتحرك يمين→يسار داخل السطر ثم تنزل (كحركة العين)
   const readPoint = useMemo<{ cx: number; cy: number; idx: number } | null>(() => {
     if (pageWords.length === 0) return null;
@@ -1797,12 +1899,6 @@ export default function ReaderScreen() {
     };
   }, [readProgress, pageWords, spokenToBox]);
 
-  // السطر المقروء حاليًا — نظلّل السطر كامل (أنعم وأدق من كلمة مفردة)
-  const lineBox = useMemo<WordBox | null>(() => {
-    if (!readPoint || lines.length === 0) return null;
-    const ln = lines.find((l) => readPoint.idx >= l.start && readPoint.idx <= l.end) ?? null;
-    return ln ? { t: "", x: ln.x, y: ln.y, w: ln.w, h: ln.h } : null;
-  }, [readPoint, lines]);
 
   // عمود النص الفعلي للصفحة (أقصى يمين/يسار للكلمات) — لحصر العدسة داخله
   // فلا تعرض هوامش الصفحة الفاضية إطلاقًا.
@@ -1833,16 +1929,21 @@ export default function ReaderScreen() {
     return { L: Math.max(0, L), R: Math.min(1, Math.max(L + 0.2, R)) };
   }, [lines, textCol]);
 
-  // الكلمة المقروءة حاليًا (صندوقها) — لتظليل متحرّك يمين→يسار عبر السطر الظاهر
-  const wordBox = useMemo<WordBox | null>(() => {
-    if (!readPoint || pageWords.length === 0) return null;
-    const w = pageWords[Math.min(pageWords.length - 1, Math.max(0, readPoint.idx))];
-    return w ? { t: "", x: w.x, y: w.y, w: w.w, h: w.h } : null;
-  }, [readPoint, pageWords]);
 
   // العدسة مغناطيس **متحرّك** يكبّر جزءًا من السطر ثم ينزلق مع القراءة فيغطّي السطر
   // كاملًا يمينًا→يسارًا (وليست لقطة ثابتة للسطر كله). 1.7x = تكبير واضح ومريح.
-  const lensScale = 1.7;
+  const lensScale = lensZoom;
+
+  // مركز العدسة: الكلمة المنطوقة الآن (دقيق بتوقيت الصوت)، ثم أول سطر الجملة، ثم التقدير القديم
+  const lensTarget = useMemo<{ cx: number; cy: number } | null>(() => {
+    if (curWordBox) return { cx: curWordBox.x + curWordBox.w / 2, cy: curWordBox.y + curWordBox.h / 2 };
+    // بلا كلمة حالية: نبدأ من أول السطر (يمينه للعربي، يساره للأجنبي) لا من منتصفه
+    const half = 1 / lensScale / 2;
+    const r = curRects[0] ?? lines[0];
+    if (!r) return readPoint ? { cx: readPoint.cx, cy: readPoint.cy } : null;
+    const cx = isArabicText ? Math.min(r.x + r.w, fitCol.R) - half : Math.max(r.x, fitCol.L) + half;
+    return { cx, cy: r.y + r.h / 2 };
+  }, [curWordBox, curRects, lines, readPoint, isArabicText, fitCol, lensScale]);
 
   // العدسة تمسح السطر الحالي **كاملًا** مع تقدّم القراءة، محصورةً دائمًا داخل حدود
   // السطر/عمود النص (فلا تُظهر هامش الصفحة الفاضي أبدًا)، وتصل لطرف السطر مضمونًا:
@@ -1850,7 +1951,7 @@ export default function ReaderScreen() {
   //   • النص الأجنبي (LTR): تبدأ يسار السطر وتنتهي عند أقصى يمينه.
   // وعموديًا تتمركز على السطر فتنزل سطرًا بسطر. الاتجاه يُضبط تلقائيًا (pageRTL).
   useEffect(() => {
-    if (!lensOpen || lensW <= 0 || lensH <= 0 || !readPoint) return;
+    if (!lensOpen || lensW <= 0 || lensH <= 0 || !lensTarget) return;
     const imgH = lensW / (pageImgAspect || 0.7);
     const scaledW = lensW * lensScale; // عرض الصورة المكبّرة
     const scaledH = imgH * lensScale; // ارتفاع الصورة المكبّرة
@@ -1873,17 +1974,17 @@ export default function ReaderScreen() {
       // يمين→يسار في العربي و يسار→يمين في الأجنبي تلقائيًا (cx يتبع موضع الكلمة).
       // لا نحصره بحواف النص، فعند طرفَي السطر يظهر **هامش أبيض نظيف متساوٍ** (خلفية
       // العدسة) بدل التصاق الكلمة بالحافة أو قصّها. الهامش داخل العدسة فقط لا في الكتاب.
-      const a = readPoint.cx - win / 2;
+      const a = lensTarget.cx - win / 2;
       tX = -a * scaledW;
     }
 
     // ── عموديًا: تمركز على السطر الحالي فتنزل مع كل سطر ──
-    const lineCY = lineBox ? lineBox.y + lineBox.h / 2 : readPoint.cy;
+    const lineCY = lensTarget.cy;
     const tY = Math.min(0, Math.max(minY, lensH / 2 - lineCY * scaledH));
 
     Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, readPoint, fitCol, lineBox, lensScale, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, lensTarget, fitCol, lensScale, pageImgAspect, lensX, lensY]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -1981,10 +2082,13 @@ export default function ReaderScreen() {
           <Text style={[styles.topSub, paper && { color: INK }]} numberOfLines={1}>
             {typeof title === "string" && title.trim() ? title : t("reader.book")}
           </Text>
-          <Text style={[styles.topTitle, paper && { color: INK }]} numberOfLines={1}>
-            {totalPages ? t("reader.pageOf", { page, total: totalPages }) : t("reader.pageInfo.page", { page })}
-            {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
-          </Text>
+          <View style={[styles.topTitleRow, { flexDirection: dir.row }]}>
+            <Text style={[styles.topTitle, paper && { color: INK }]} numberOfLines={1}>
+              {totalPages ? t("reader.pageOf", { page, total: totalPages }) : t("reader.pageInfo.page", { page })}
+              {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
+            </Text>
+            <Ionicons name="keypad-outline" size={13} color={paper ? INK : Palette.textDim} />
+          </View>
         </Pressable>
         <Pressable onPress={togglePaper} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("reader.theme.toggle")}>
           <Ionicons name={paper ? "moon-outline" : "sunny-outline"} size={19} color={paper ? INK : Palette.text} />
@@ -2061,6 +2165,8 @@ export default function ReaderScreen() {
           <ScrollView
             ref={scrollRef}
             style={[styles.textScroll, paper && { backgroundColor: PAPER }]}
+            onTouchStart={(e) => (touchRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, t: Date.now() })}
+            onTouchEnd={(e) => onPageTouchEnd(e.nativeEvent.pageX, e.nativeEvent.pageY)}
             contentContainerStyle={styles.textContent}
             onLayout={(e) => (textViewH.current = e.nativeEvent.layout.height)}
             onContentSizeChange={(_w, h) => (textContentH.current = h)}
@@ -2153,24 +2259,51 @@ export default function ReaderScreen() {
                 onLayout={(e) => (pdfViewH.current = e.nativeEvent.layout.height)}
                 onContentSizeChange={(_w, h) => (pdfContentH.current = h)}
                 onScrollEndDrag={onPdfSwipeEnd}
+                onScroll={(e) => (pdfZoomRef.current = e.nativeEvent.zoomScale ?? 1)}
+                scrollEventThrottle={64}
+                onScrollBeginDrag={() => {
+                  if (!playingRef.current) return;
+                  detachedAtRef.current = Date.now();
+                  setDetached(true);
+                }}
               >
-                <View onLayout={(e) => setPdfImgW2(e.nativeEvent.layout.width)}>
+                <View
+                  // إحداثيات الصفحة من اليسار دائمًا (بدونها تنقلب يمين↔يسار في الواجهة العربية)
+                  style={{ direction: "ltr" }}
+                  onLayout={(e) => setPdfImgW2(e.nativeEvent.layout.width)}
+                  onTouchStart={(e) => (touchRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, t: Date.now() })}
+                  onTouchEnd={(e) => onPageTouchEnd(e.nativeEvent.pageX, e.nativeEvent.pageY)}
+                >
                   <Image
                     source={{ uri: pageImg }}
                     style={{ width: "100%", aspectRatio: pageImgAspect }}
                     resizeMode="contain"
                   />
-                  {/* تظليل الكلمة المقروءة على صورة الصفحة */}
-                  {lineBox && speaking && pdfImgW2 > 0 ? (
+                  {/* هايلايتر الجملة المقروءة (كل أسطرها) + الكلمة المنطوقة الآن */}
+                  {pdfImgW2 > 0 &&
+                    curRects.map((r, i) => {
+                      const H = pdfImgW2 / (pageImgAspect || 0.7);
+                      return (
+                        <View
+                          key={i}
+                          pointerEvents="none"
+                          style={[
+                            styles.sentHL,
+                            { left: (r.x - 0.006) * pdfImgW2, top: (r.y - 0.003) * H, width: (r.w + 0.012) * pdfImgW2, height: (r.h + 0.006) * H },
+                          ]}
+                        />
+                      );
+                    })}
+                  {pdfImgW2 > 0 && curWordBox ? (
                     <View
                       pointerEvents="none"
                       style={[
-                        styles.wordHL,
+                        styles.wordNow,
                         {
-                          left: lineBox.x * pdfImgW2,
-                          top: lineBox.y * (pdfImgW2 / (pageImgAspect || 0.7)),
-                          width: lineBox.w * pdfImgW2,
-                          height: lineBox.h * (pdfImgW2 / (pageImgAspect || 0.7)),
+                          left: (curWordBox.x - 0.003) * pdfImgW2,
+                          top: (curWordBox.y - 0.002) * (pdfImgW2 / (pageImgAspect || 0.7)),
+                          width: (curWordBox.w + 0.006) * pdfImgW2,
+                          height: (curWordBox.h + 0.004) * (pdfImgW2 / (pageImgAspect || 0.7)),
                         },
                       ]}
                     />
@@ -2192,63 +2325,85 @@ export default function ReaderScreen() {
                 )}
               </View>
             )}
-            {/* العدسة: شريط مكبّر عائم وسط الصفحة يتابع القراءة (الصفحة تبان فوقه وتحته) */}
+            {/* زر «تابع القارئ» بعد سحب الصفحة يدويًا أثناء القراءة */}
+            {detached && speaking && !lensOpen ? (
+              <Pressable onPress={followReader} style={styles.followPill}>
+                <Ionicons name="locate" size={15} color="#07080D" />
+                <Text style={styles.followTxt}>{t("reader.follow")}</Text>
+              </Pressable>
+            ) : null}
+
+            {/* العدسة: بطاقة مكبّرة عائمة تتابع الكلمة المنطوقة، والصفحة خلفها معتمة قليلًا */}
             {lensOpen && pageImg ? (
               <View pointerEvents="box-none" style={styles.lensBandWrap}>
-                <View
-                  style={styles.lensBand}
-                  onLayout={(e) => {
-                    setLensW(e.nativeEvent.layout.width);
-                    setLensH(e.nativeEvent.layout.height);
-                  }}
-                >
-                  {lensW > 0 ? (
-                    <Animated.View
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        top: 0,
-                        width: lensW * lensScale,
-                        height: (lensW / (pageImgAspect || 0.7)) * lensScale,
-                        transform: [{ translateX: lensX }, { translateY: lensY }],
-                      }}
-                    >
-                      <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-                      {/* تظليل السطر (خفيف) */}
-                      {lineBox && speaking ? (
-                        <View
-                          pointerEvents="none"
-                          style={[
-                            styles.lensLineHL,
-                            {
-                              left: lineBox.x * lensW * lensScale,
-                              top: lineBox.y * (lensW / (pageImgAspect || 0.7)) * lensScale,
-                              width: lineBox.w * lensW * lensScale,
-                              height: lineBox.h * (lensW / (pageImgAspect || 0.7)) * lensScale,
-                            },
-                          ]}
-                        />
-                      ) : null}
-                      {/* تظليل الكلمة المقروءة — يتحرّك يمين→يسار عبر السطر الظاهر */}
-                      {wordBox && speaking ? (
-                        <View
-                          pointerEvents="none"
-                          style={[
-                            styles.wordHL,
-                            {
-                              left: wordBox.x * lensW * lensScale,
-                              top: wordBox.y * (lensW / (pageImgAspect || 0.7)) * lensScale,
-                              width: wordBox.w * lensW * lensScale,
-                              height: wordBox.h * (lensW / (pageImgAspect || 0.7)) * lensScale,
-                            },
-                          ]}
-                        />
-                      ) : null}
-                    </Animated.View>
-                  ) : null}
-                  <Pressable onPress={() => setLensOpen(false)} style={styles.lensCloseBtn} hitSlop={8}>
-                    <Ionicons name="close" size={18} color="#fff" />
-                  </Pressable>
+                <View pointerEvents="none" style={styles.lensDim} />
+                <View style={styles.lensCard}>
+                  <View style={[styles.lensHead, { flexDirection: dir.row }]}>
+                    <Ionicons name="search" size={15} color="#D9D3FF" />
+                    <Text style={styles.lensTitle}>{t("reader.lens.title")}</Text>
+                    <View style={{ flex: 1 }} />
+                    {[1.5, 2, 2.5].map((z) => (
+                      <Pressable key={z} onPress={() => setLensZoom(z)} style={[styles.zoomChip, lensZoom === z && styles.zoomChipOn]} hitSlop={4}>
+                        <Text style={[styles.zoomTxt, lensZoom === z && styles.zoomTxtOn]}>{z}×</Text>
+                      </Pressable>
+                    ))}
+                    <Pressable onPress={() => setLensOpen(false)} style={styles.lensClose} hitSlop={8} accessibilityLabel={t("common.close")}>
+                      <Ionicons name="close" size={16} color="#F3F4F8" />
+                    </Pressable>
+                  </View>
+                  <View
+                    style={styles.lensView}
+                    onLayout={(e) => {
+                      setLensW(e.nativeEvent.layout.width);
+                      setLensH(e.nativeEvent.layout.height);
+                    }}
+                  >
+                    {lensW > 0 ? (
+                      <Animated.View
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: 0,
+                          direction: "ltr",
+                          width: lensW * lensScale,
+                          height: (lensW / (pageImgAspect || 0.7)) * lensScale,
+                          transform: [{ translateX: lensX }, { translateY: lensY }],
+                        }}
+                      >
+                        <Image source={{ uri: pageImg }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+                        {curRects.map((r, i) => {
+                          const W = lensW * lensScale;
+                          const H = (lensW / (pageImgAspect || 0.7)) * lensScale;
+                          return (
+                            <View
+                              key={i}
+                              pointerEvents="none"
+                              style={[styles.sentHL, { left: (r.x - 0.006) * W, top: (r.y - 0.003) * H, width: (r.w + 0.012) * W, height: (r.h + 0.006) * H }]}
+                            />
+                          );
+                        })}
+                        {curWordBox ? (
+                          <View
+                            pointerEvents="none"
+                            style={[
+                              styles.wordNow,
+                              {
+                                left: (curWordBox.x - 0.003) * lensW * lensScale,
+                                top: (curWordBox.y - 0.002) * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                                width: (curWordBox.w + 0.006) * lensW * lensScale,
+                                height: (curWordBox.h + 0.004) * (lensW / (pageImgAspect || 0.7)) * lensScale,
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </Animated.View>
+                    ) : null}
+                    {!speaking ? (
+                      <View pointerEvents="none" style={styles.lensHint}>
+                        <Text style={styles.lensHintTxt}>{t("reader.lens.hint")}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               </View>
             ) : null}
@@ -2307,7 +2462,28 @@ export default function ReaderScreen() {
             <View style={[styles.ingestBarFill, { width: `${Math.round((ingestDone / ingestTotal) * 100)}%` }]} />
           </View>
         ) : null}
-        <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
+        {/* التنقّل بين الصفحات: السابقة · شريط السحب · التالية (الرقم المباشر من العنوان أعلاه) */}
+        <View style={[styles.navRow, { flexDirection: dir.row }]}>
+          <Pressable onPress={() => goPage(-1)} disabled={page <= 1} style={[styles.navArrow, paper && styles.topBtnPaper]} hitSlop={6} accessibilityLabel={t("reader.nav.prevPage")}>
+            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={page <= 1 ? Palette.textDim : paper ? INK : Palette.text} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
+          </View>
+          <Pressable
+            onPress={() => goPage(1)}
+            disabled={!!totalPages && page >= totalPages}
+            style={[styles.navArrow, paper && styles.topBtnPaper]}
+            hitSlop={6}
+            accessibilityLabel={t("reader.nav.nextPage")}
+          >
+            <Ionicons
+              name={dir.isRTL ? "chevron-back" : "chevron-forward"}
+              size={20}
+              color={!!totalPages && page >= totalPages ? Palette.textDim : paper ? INK : Palette.text}
+            />
+          </Pressable>
+        </View>
 
         <View style={[styles.capsule, { flexDirection: dir.row }]}>
           <Pressable
@@ -3155,6 +3331,49 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   topBtnPaper: { backgroundColor: "rgba(42,38,34,0.07)" },
+  topTitleRow: { alignItems: "center", gap: 5, marginTop: 1 },
+  navRow: { alignItems: "center", gap: 8 },
+  navArrow: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  sentHL: { position: "absolute", borderRadius: 5, backgroundColor: "rgba(233,179,95,0.32)" },
+  wordNow: { position: "absolute", borderRadius: 4, backgroundColor: "rgba(124,108,255,0.30)", borderBottomWidth: 2.5, borderBottomColor: "#7C6CFF" },
+  followPill: {
+    position: "absolute",
+    bottom: 14,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#E9B35F",
+  },
+  followTxt: { color: "#07080D", fontSize: 13, fontWeight: "800" },
+  lensDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(5,6,10,0.45)" },
+  lensCard: {
+    height: "48%",
+    marginHorizontal: 10,
+    borderRadius: 22,
+    backgroundColor: "#10121B",
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.45)",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 14,
+  },
+  lensHead: { alignItems: "center", gap: 8, paddingHorizontal: 12, height: 44 },
+  lensTitle: { color: "#F3F4F8", fontSize: 13.5, fontWeight: "700" },
+  zoomChip: { paddingHorizontal: 9, height: 28, borderRadius: 14, justifyContent: "center", backgroundColor: "rgba(255,255,255,0.06)" },
+  zoomChipOn: { backgroundColor: "#F3F4F8" },
+  zoomTxt: { color: "#C4C9D8", fontSize: 12, fontWeight: "700" },
+  zoomTxtOn: { color: "#07080D" },
+  lensClose: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
+  lensView: { flex: 1, marginHorizontal: 6, marginBottom: 6, borderRadius: 16, overflow: "hidden", backgroundColor: "#FFFFFF" },
+  lensHint: { position: "absolute", bottom: 10, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: "rgba(16,18,27,0.85)" },
+  lensHintTxt: { color: "#F3F4F8", fontSize: 12 },
   topSub: { color: Palette.textDim, fontSize: 12, maxWidth: "100%" },
   topTitle: { color: Palette.text, fontSize: 14, fontWeight: "700", marginTop: 1 },
 

@@ -299,3 +299,19 @@ export async function extractPdfPageText(
 
   return { page: resolvedPage, totalPages, text, ocr: usedOcr };
 }
+
+/**
+ * صناديق كلمات الصفحة من طبقة نص الـPDF فقط (مجانية وسريعة) — للهايلايتر أثناء القراءة.
+ * الصفحات المصوّرة بلا طبقة نص تُرجع [] ، وعندها يُستخدم getPageWords (التعرّف الضوئي).
+ */
+export async function getPageWordsFromText(pdfPath: string, page: number): Promise<WordBox[]> {
+  if (!pdfPath) return [];
+  try {
+    const { data, error } = await supabase.functions.invoke("pdf-extract-text", { body: { pdfPath, page } });
+    if (error || data?.error) return [];
+    const ws = (data as { words?: WordBox[] })?.words;
+    return Array.isArray(ws) ? ws : [];
+  } catch {
+    return [];
+  }
+}
