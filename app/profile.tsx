@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ScreenBackground } from "../components/brand/screen-background";
+import { SubscriptionCard } from "../components/brand/subscription-card";
 import { Palette, Radius, Spacing } from "../constants/design";
 import { deleteAccountPermanently, resetAccountData } from "../lib/account";
 import { getDisplayName, getSession, updateName } from "../lib/auth";
@@ -181,6 +182,10 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
+
+          {/* الاشتراك والاستهلاك */}
+          <Text style={[styles.sectionTitle, { textAlign: dir.textAlign }]}>{t("sub.title")}</Text>
+          <SubscriptionCard />
 
           {/* الاسم ووضع التركيز */}
           <Text style={[styles.sectionTitle, { textAlign: dir.textAlign }]}>{t("more.name.title")}</Text>

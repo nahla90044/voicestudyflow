@@ -1341,12 +1341,12 @@ export default function ReaderScreen() {
           setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
         },
-        onFallback: (reason) => setVoiceWarn(reason),
+        onFallback: (reason) => setVoiceWarn(/USER_QUOTA/.test(reason) ? "" : reason),
         onError: (e) => {
           const msg = (e as any)?.message ?? "خطأ";
           if (msg === "QUOTA") {
             setVoiceWarn("");
-            setStatus("⏸️ نفد رصيد الصوت الطبيعي — جدّدي باقة الصوت لمواصلة الاستماع.");
+            setStatus("⏸️ الصوت البشري غير متاح مؤقتًا. المحاولة لاحقًا ممكنة.");
           } else {
             setStatus(`تعذّر تشغيل الصوت: ${msg}`);
           }

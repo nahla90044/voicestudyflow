@@ -17,6 +17,7 @@ import { getDownloadState, startDownload, subscribeDownload, type DownloadState 
 import { addCards } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { setLastPage } from "../../lib/readerPrefs";
+import { canUseVoiceAsk, requestPaywall } from "../../lib/plan";
 import { useDictation } from "../../lib/stt";
 import { speakText, stopSpeaking } from "../../lib/voice";
 
@@ -234,7 +235,10 @@ export default function AskScreen() {
           />
           {/* سؤال بالصوت: ضغطة مطوّلة، والإفلات يرسل السؤال */}
           <Pressable
-            onPressIn={() => void dict.start()}
+            onPressIn={async () => {
+              if (!(await canUseVoiceAsk())) return void requestPaywall("voiceAsk", true);
+              void dict.start();
+            }}
             onPressOut={() => dict.stop()}
             disabled={busy}
             style={[styles.mic, dict.listening && styles.micOn]}

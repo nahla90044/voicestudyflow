@@ -19,6 +19,7 @@ import { Gradients, Palette } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
 import { FREE_BOOKS_BASE, FREE_BOOKS_UNLOCKED, getBookLimit } from "../../lib/perks";
+import { requestPaywall } from "../../lib/plan";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
@@ -167,6 +168,8 @@ export default function AddBookScreen() {
           .eq("user_id", userId);
 
         if ((bookCount ?? 0) >= limit) {
+          // الاشتراك متاح → شاشة الاشتراك (كتب بلا حد للعدد) بدل رسالة مسدودة
+          if (requestPaywall("books", true)) return;
           // عند الحد الأساسي نعرض طريق المكافأة بدل طريق مسدود
           if (limit === FREE_BOOKS_BASE) {
             Alert.alert(

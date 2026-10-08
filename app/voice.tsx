@@ -18,6 +18,7 @@ import { countDue } from "../lib/flashcards";
 import { getContinueBook, type ContinueBook } from "../lib/home";
 import { dropEmptyVocative, useDir, useI18n } from "../lib/i18n";
 import { scheduleOnce } from "../lib/notify";
+import { canUseVoiceAsk, requestPaywall } from "../lib/plan";
 import { setLastPage } from "../lib/readerPrefs";
 import { getBookReadiness, type BookReadiness } from "../lib/readiness";
 import { useDictation, type SttLang } from "../lib/stt";
@@ -240,6 +241,11 @@ export default function VoiceAssistant() {
           return;
         }
         case "ask": {
+          if (!(await canUseVoiceAsk())) {
+            parts.push(t("pay.reason.voiceAsk"));
+            out.push({ key: "pro", icon: "sparkles", color: "#D9D3FF", title: t("sub.upgrade"), sub: t("pay.pro"), tag: "", go: () => requestPaywall("voiceAsk", true) });
+            return;
+          }
           try {
             const books = (await myBooks()).filter((b) => b.id === cont!.id);
             const ans = await askBooks(books, it.question);

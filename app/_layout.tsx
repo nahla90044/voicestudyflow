@@ -10,6 +10,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AnimatedSplash } from "../components/brand/animated-splash";
 import { Palette } from "../constants/design";
 import { getSession } from "../lib/auth";
+import { initPurchases } from "../lib/purchases";
+import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
 import { LanguageProvider } from "../lib/i18n";
 import { ThemeProvider } from "../lib/themeContext";
@@ -34,6 +36,7 @@ export default function RootLayout() {
         const session = await getSession().catch(() => null);
         const authed = !!session?.user?.email;
         await SplashScreen.hideAsync().catch(() => {});
+        if (session?.user?.id) void initPurchases(session.user.id);
         if (!authed) {
           router.replace("/auth"); // الصفحة الأولى بعد السبلاش = التسجيل/الدخول
         } else if (seen !== "1") {
@@ -47,6 +50,14 @@ export default function RootLayout() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // بعد تسجيل الدخول لاحقًا: نربط مشتريات المتجر بهوية المستخدم
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (s?.user?.id) void initPurchases(s.user.id);
+    });
+    return () => data.subscription.unsubscribe();
   }, []);
 
   return (
@@ -70,6 +81,7 @@ export default function RootLayout() {
           {/* «بحث وأوامر» تُفتح كورقة من الأسفل فوق الشاشة الحالية */}
           <Stack.Screen name="command" options={{ presentation: "modal" }} />
           <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+          <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
         </Stack>
         {booting ? <AnimatedSplash /> : null}
       </SafeAreaProvider>

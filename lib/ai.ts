@@ -1,6 +1,7 @@
 // lib/ai.ts
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
 import { getCurrentLang } from "./i18n";
+import { requestPaywall } from "./plan";
 import { supabase } from "./supabase";
 
 export type AiAction =
@@ -226,6 +227,11 @@ export async function aiAssist(
   );
 
   if (error) throw error;
+  if (data?.userQuota) {
+    // انتهت طلبات الشهر لهذا المستخدم → عرض الاشتراك (إن كان الشراء متاحًا)
+    requestPaywall("ai");
+    throw new Error("USER_QUOTA");
+  }
   if (data?.error) throw new Error(data.error);
 
   return String(data?.result ?? "");

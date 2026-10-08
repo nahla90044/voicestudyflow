@@ -11,6 +11,8 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
+import { requestPaywall } from "./plan";
+
 import { numbersToArabicWords } from "./arabicNumbers";
 import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
 import { supabase } from "./supabase";
@@ -345,7 +347,8 @@ async function synthToFile(
   });
   if (error) throw error;
   const b64 = (data as { audio?: string; error?: string })?.audio;
-  const d = data as { error?: string; quota?: boolean };
+  const d = data as { error?: string; quota?: boolean; userQuota?: boolean };
+  if (d?.userQuota) throw new Error("USER_QUOTA");
   if (d?.error) throw new Error(d.quota ? `QUOTA: ${d.error}` : d.error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
   const starts = Array.isArray((data as { starts?: number[] })?.starts)
@@ -614,7 +617,14 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
   } catch (e) {
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
     console.warn("VSF_TTS_FALLBACK", reason);
-    // نفاد رصيد الصوت الطبيعي → لا نرجع لصوت آلي مفاجئ؛ نبلّغ بوضوح ونتوقّف
+    // انتهت دقائق المستخدم الشهرية → نكمل بصوت الجهاز (لا تتوقف القراءة) ونعرض الاشتراك
+    if (/USER_QUOTA/.test(reason)) {
+      requestPaywall("voice");
+      opts.onFallback?.(reason);
+      speakWithDevice(clean, opts);
+      return;
+    }
+    // نفاد رصيد حساب الصوت نفسه → لا نرجع لصوت آلي مفاجئ؛ نبلّغ بوضوح ونتوقّف
     if (/QUOTA/i.test(reason)) {
       opts.onError?.(new Error("QUOTA"));
       return;

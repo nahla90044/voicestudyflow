@@ -7,6 +7,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getUserId, isOwner } from "./auth";
+import { getPlan } from "./plan";
 import { supabase } from "./supabase";
 
 /** الحد المجاني قبل إنهاء أي كتاب. */
@@ -50,6 +51,8 @@ export async function hasUnlockedMoreBooks(): Promise<boolean> {
 /** حدّ الكتب الحالي للمستخدم (Infinity للمالك). */
 export async function getBookLimit(): Promise<number> {
   if (await isOwner()) return Infinity;
+  const plan = await getPlan();
+  if (plan === "plus" || plan === "pro") return Infinity;
   return (await hasUnlockedMoreBooks()) ? FREE_BOOKS_UNLOCKED : FREE_BOOKS_BASE;
 }
 

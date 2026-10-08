@@ -4,6 +4,7 @@
 // فأي مستخدم يطلب نفس المحتوى يأخذ الصوت الجاهز بلا تكلفة جديدة (مفتاح بالمحتوى لا بالعنوان).
 // الطلب:  { text, gender?, voiceId?, expressive? }   الرد: { audio: base64Mp3, starts: number[] }
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { consume, getCaller } from "../_shared/plan.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,13 @@ Deno.serve(async (req: Request) => {
       } catch {
         // غير موجود → نولّد
       }
+    }
+
+    // توليد جديد (ليس في الكاش) → يُحسب من حصة المستخدم الشهرية
+    const caller = await getCaller(req);
+    if (!(await consume(caller, "voice", text.length))) {
+      // حصة المستخدم انتهت (لا رصيد الحساب): التطبيق يكمل بصوت الجهاز ويعرض الاشتراك
+      return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
     }
 
     // الإعداد الافتراضي المتوازن الواضح، أو إعداد أكثر دفئًا وتعبيرًا (للعرض التقديمي)

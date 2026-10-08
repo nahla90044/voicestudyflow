@@ -2,7 +2,7 @@
   "expo": {
     "name": "VoiceStudyFlow",
     "slug": "VoiceStudyFlow",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "voicestudyflow",
@@ -85,6 +85,14 @@
     "owner": "nahla900",
     "locales": {
       "ar": "./locales/ar.json"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c1c47712-e163-4649-bc74-79d45519e09f",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }
