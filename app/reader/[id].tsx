@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Haptics from "expo-haptics";
 import * as ScreenOrientation from "expo-screen-orientation";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -59,7 +60,6 @@ import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { FREE_BOOKS_UNLOCKED, markBookCompleted } from "../../lib/perks";
 import { askForReviewOnce } from "../../lib/review";
 import { UnlockModal } from "../../components/brand/unlock-modal";
-import { PlayButton } from "../../components/brand/play-button";
 import { PageScrubber } from "../../components/brand/page-scrubber";
 import { alignSpokenToBoxes, boxIndexAtProgress, sentenceRects } from "../../lib/alignWords";
 import { getSpokenName, isOwner } from "../../lib/auth";
@@ -78,7 +78,50 @@ import {
   setRecordingAudioMode,
 } from "../../lib/voice";
 import { closeReadingCard, onReadingAction, setOpenReaderBook, syncReadingCard } from "../../lib/readingCard";
-import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { Gradients as BaseGradients, Palette as BasePalette, Radius, Spacing } from "../../constants/design";
+import { SCENE_PALETTE } from "../../lib/sceneCore";
+
+// القارئ يلبس دائمًا ألوان «سماء المعرفة» الليلية (كحلي + ذهبي): كروم هادئ داكن
+// يريح العين في جلسات الاستماع الطويلة، بدل تدرّجات النيون البنفسجية/السماوية.
+// نعيد تعريف Palette/Gradients محليًا فيتلوّن كل الكروم مرة واحدة بلا تغيير في البنية.
+const SKY = SCENE_PALETTE.sky;
+const GOLD_SOFT = "rgba(246,213,138,0.14)";
+const Palette = {
+  ...BasePalette,
+  bg: SKY.bg,
+  bgElevated: SKY.card,
+  surface: "rgba(255,255,255,0.06)",
+  surfaceStrong: "rgba(255,255,255,0.10)",
+  border: SKY.cardBorder,
+  text: SKY.ink,
+  textMuted: "#D4D0EC",
+  textDim: SKY.dim,
+  placeholder: SKY.navIdle,
+  primary: SKY.accent,
+  primaryDark: "#E3BE6C",
+  accent: SKY.accent,
+  primarySoft: GOLD_SOFT,
+  accentSoft: GOLD_SOFT,
+  neonCyan: SKY.accent,
+  neonViolet: SKY.accent,
+  neonBlue: SKY.accent,
+  neonPink: SKY.accent,
+  glass: SKY.card,
+  glassBorder: SKY.cardBorder,
+  glassHighlight: "rgba(255,255,255,0.05)",
+} as const;
+// أزرار «مميّزة» = ذهبي مُصمت (تدرّج بلونين متطابقين = لون واحد) — بلا نيون
+const GOLD_SOLID = [SKY.accent, SKY.accent] as const;
+const Gradients = {
+  ...BaseGradients,
+  bg: [SKY.bg, SKY.bg, SKY.bg] as const,
+  hero: [SKY.card, SKY.bg] as const,
+  brand: GOLD_SOLID,
+  neon: GOLD_SOLID,
+  neonBlue: GOLD_SOLID,
+  neonViolet: GOLD_SOLID,
+  brandSoft: [GOLD_SOFT, "rgba(246,213,138,0.06)"] as const,
+} as const;
 import { focusEvery, getFocusLevel } from "../../lib/settings";
 import { handoff, takeOver } from "../../lib/player";
 import { useDictation } from "../../lib/stt";
@@ -191,6 +234,76 @@ function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
 const PAPER = "#F6F1E7";
 const INK = "#2A2622";
 
+/**
+ * زر التشغيل بألوان القارئ (سماء الليل): دائرة ذهبية مُصمتة بأيقونة كحلية وتوهّج ذهبي ناعم.
+ * نفس سلوك PlayButton المشترك (لمسة اهتزاز، نبضة تلميح قبل أول تشغيل، نفس التسميات)
+ * لكن بلا تدرّج النيون — حتى يبقى كروم القارئ موحّدًا.
+ */
+function GoldPlayButton({
+  playing,
+  busy = false,
+  onPress,
+  size = 60,
+  hint = false,
+}: {
+  playing: boolean;
+  busy?: boolean;
+  onPress: () => void;
+  size?: number;
+  hint?: boolean;
+}) {
+  const { t } = useI18n();
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!hint || playing) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1800, useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [hint, playing, pulse]);
+  const r = size / 2;
+  return (
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          width: size,
+          height: size,
+          borderRadius: r,
+          backgroundColor: SKY.accent,
+          opacity: pulse.interpolate({ inputRange: [0, 0.15, 1], outputRange: [0, 0.4, 0] }),
+          transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] }) }],
+        }}
+      />
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          onPress();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={playing ? t("reader.play.pause") : t("reader.play.listen")}
+        hitSlop={8}
+        style={({ pressed }) => [styles.goldPlay, { width: size, height: size, borderRadius: r, transform: [{ scale: pressed ? 0.94 : 1 }] }]}
+      >
+        {busy ? (
+          <ActivityIndicator color={SKY.onAccent} />
+        ) : (
+          <Ionicons
+            name={playing ? "pause" : "play"}
+            size={Math.round(size * 0.42)}
+            color={SKY.onAccent}
+            style={playing ? undefined : { marginLeft: Math.round(size * 0.04) }}
+          />
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 /** زر صغير في لوحة «أدوات القراءة»: أيقونة (أو نص) + تسمية، ويتلوّن عند التفعيل */
 /** زر سريع في شريط القارئ: أيقونة (أو نص) + تسمية قصيرة */
 function QuickChip({
@@ -209,11 +322,11 @@ function QuickChip({
   return (
     <Pressable onPress={onPress} style={[styles.qChip, on && styles.qChipOn]} accessibilityLabel={label}>
       {icon ? (
-        <Ionicons name={icon} size={18} color={on ? "#0B0E26" : Palette.text} />
+        <Ionicons name={icon} size={18} color={on ? SKY.onAccent : Palette.text} />
       ) : (
-        <Text style={[styles.qChipTxt, on && { color: "#0B0E26" }]}>{text}</Text>
+        <Text style={[styles.qChipTxt, on && { color: SKY.onAccent }]}>{text}</Text>
       )}
-      <Text style={[styles.qChipLbl, on && { color: "#0B0E26" }]} numberOfLines={1}>
+      <Text style={[styles.qChipLbl, on && { color: SKY.onAccent }]} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
@@ -2177,14 +2290,20 @@ export default function ReaderScreen() {
   const lensScale = lensZoom;
 
   // مركز العدسة: الكلمة المنطوقة الآن (دقيق بتوقيت الصوت)، ثم أول سطر الجملة، ثم التقدير القديم
-  const lensTarget = useMemo<{ cx: number; cy: number } | null>(() => {
-    if (curWordBox) return { cx: curWordBox.x + curWordBox.w / 2, cy: curWordBox.y + curWordBox.h / 2 };
+  // wordL/lineL (للنص الأجنبي LTR فقط): الحافة اليسرى للكلمة المنطوقة وبداية سطرها،
+  // لتبدأ العدسة من أول السطر وتمسح يمينًا مع الكلمة بدل توسيط الكلمة (الذي كان يقصّ بداية السطر).
+  const lensTarget = useMemo<{ cx: number; cy: number; wordL?: number; lineL?: number } | null>(() => {
+    if (curWordBox) {
+      const cy = curWordBox.y + curWordBox.h / 2;
+      const ln = lines.find((l) => cy >= l.y - l.h * 0.3 && cy <= l.y + l.h * 1.3);
+      return { cx: curWordBox.x + curWordBox.w / 2, cy, wordL: curWordBox.x, lineL: ln ? ln.x : curWordBox.x };
+    }
     // بلا كلمة حالية: نبدأ من أول السطر (يمينه للعربي، يساره للأجنبي) لا من منتصفه
     const half = 1 / lensScale / 2;
     const r = curRects[0] ?? lines[0];
     if (!r) return readPoint ? { cx: readPoint.cx, cy: readPoint.cy } : null;
     const cx = isArabicText ? Math.min(r.x + r.w, fitCol.R) - half : Math.max(r.x, fitCol.L) + half;
-    return { cx, cy: r.y + r.h / 2 };
+    return { cx, cy: r.y + r.h / 2, wordL: r.x, lineL: r.x };
   }, [curWordBox, curRects, lines, readPoint, isArabicText, fitCol, lensScale]);
 
   // العدسة تمسح السطر الحالي **كاملًا** مع تقدّم القراءة، محصورةً دائمًا داخل حدود
@@ -2211,6 +2330,16 @@ export default function ReaderScreen() {
       // عمود النص أضيق من النافذة (نص ضيّق) → وسّطه وثبّته داخل حدود الصورة.
       const a = colL - (win - colW) / 2;
       tX = Math.min(0, Math.max(minX, -a * scaledW));
+    } else if (!isArabicText && lensTarget.wordL !== undefined) {
+      // النص الأجنبي (LTR): تبدأ النافذة من **أول السطر** (لا تتجاوز يسار العمود)، وتنزلق
+      // يمينًا فقط حين تقترب الكلمة المنطوقة من حافتها اليمنى، ولا تتجاوز يمين العمود أبدًا.
+      // (سابقًا كانت تُوسِّط الكلمة — وفي ملفات PDF اللاتينية الصندوق غالبًا عبارة/سطر كامل —
+      // فتقع بداية السطر خارج العدسة: «ins, colorés…» بدل أول السطر.)
+      const lineL = Math.max(colL, lensTarget.lineL ?? colL);
+      let a = Math.max(lineL, lensTarget.wordL - win * 0.25);
+      a = Math.min(a, colR - win);
+      a = Math.max(a, colL);
+      tX = Math.min(0, Math.max(minX, -a * scaledW));
     } else {
       // المغناطيس يضع **الكلمة المقروءة في منتصف العدسة دائمًا** وينزلق معها بحرية:
       // يمين→يسار في العربي و يسار→يمين في الأجنبي تلقائيًا (cx يتبع موضع الكلمة).
@@ -2226,7 +2355,7 @@ export default function ReaderScreen() {
 
     Animated.timing(lensX, { toValue: tX, duration: 150, useNativeDriver: true }).start();
     Animated.timing(lensY, { toValue: tY, duration: 150, useNativeDriver: true }).start();
-  }, [lensOpen, lensW, lensH, lensTarget, fitCol, lensScale, pageImgAspect, lensX, lensY]);
+  }, [lensOpen, lensW, lensH, lensTarget, fitCol, lensScale, pageImgAspect, lensX, lensY, isArabicText]);
 
   // إجراءات بوّابة التحميل
   function gateDownloadNow() {
@@ -2373,7 +2502,7 @@ export default function ReaderScreen() {
       <View style={[styles.viewer, fullText && styles.viewerFull]}>
         {walkMode && !checkIn ? (
           <Pressable onPress={toggleWalk} style={[styles.walkChip, { flexDirection: dir.row }]}>
-            <Ionicons name="walk" size={16} color="#6CF3C5" />
+            <Ionicons name="walk" size={16} color={SKY.accent} />
             <Text style={styles.walkChipTxt} numberOfLines={1}>
               {walkHeard ? t("reader.walk.heard", { text: walkHeard }) : t("reader.walk.listening")}
             </Text>
@@ -2383,13 +2512,13 @@ export default function ReaderScreen() {
         {checkIn ? (
           <View style={styles.checkCard}>
             <View style={[styles.checkHead, { flexDirection: dir.row }]}>
-              <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.checkOrb}>
+              <View style={[styles.checkOrb, { backgroundColor: SKY.accent }]}>
                 {checkIn.phase === "explaining" ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={SKY.onAccent} size="small" />
                 ) : (
-                  <Ionicons name={checkIn.phase === "done" ? "checkmark" : "sparkles"} size={16} color="#fff" />
+                  <Ionicons name={checkIn.phase === "done" ? "checkmark" : "sparkles"} size={16} color={SKY.onAccent} />
                 )}
-              </LinearGradient>
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.checkTitle, { textAlign: dir.textAlign }]}>{checkIn.title}</Text>
                 {checkIn.phase === "ask" ? (
@@ -2400,11 +2529,11 @@ export default function ReaderScreen() {
                 <Pressable
                   onPressIn={() => void replyDict.start()}
                   onPressOut={() => replyDict.stop()}
-                  style={[styles.checkMic, replyDict.listening && { backgroundColor: "#6CF3C5" }]}
+                  style={[styles.checkMic, replyDict.listening && { backgroundColor: SKY.accent }]}
                   accessibilityLabel={t("reader.check.voice")}
                   hitSlop={6}
                 >
-                  <Ionicons name="mic" size={17} color={replyDict.listening ? "#07080D" : "#F3F4F8"} />
+                  <Ionicons name="mic" size={17} color={replyDict.listening ? SKY.onAccent : SKY.ink} />
                 </Pressable>
               )}
               <Pressable onPress={() => setCheckIn(null)} hitSlop={10}>
@@ -2420,7 +2549,7 @@ export default function ReaderScreen() {
                   <Text style={styles.checkBtnTxt}>{t("reader.check.repeat")}</Text>
                 </Pressable>
                 <Pressable onPress={checkInExplain} style={[styles.checkBtn, styles.checkBtnAlt]}>
-                  <Text style={[styles.checkBtnTxt, { color: "#D9D3FF" }]}>{t("reader.check.explain")}</Text>
+                  <Text style={[styles.checkBtnTxt, { color: SKY.accent }]}>{t("reader.check.explain")}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -2451,8 +2580,8 @@ export default function ReaderScreen() {
                 onPress={() => setHighlightMode((m) => !m)}
                 style={[styles.hlToggle, paper && styles.hlTogglePaper, highlightMode && styles.hlToggleOn]}
               >
-                <Ionicons name="brush" size={15} color={highlightMode ? "#0b1220" : paper ? INK : Palette.text} />
-                <Text style={[styles.hlToggleTxt, paper && { color: INK }, highlightMode && { color: "#0b1220" }]}>
+                <Ionicons name="brush" size={15} color={highlightMode ? SKY.onAccent : paper ? INK : Palette.text} />
+                <Text style={[styles.hlToggleTxt, paper && { color: INK }, highlightMode && { color: SKY.onAccent }]}>
                   {highlightMode ? t("reader.highlight.modeOn") : t("reader.highlight.modeOff")}
                 </Text>
               </Pressable>
@@ -2483,7 +2612,7 @@ export default function ReaderScreen() {
                   >
                     <Text
                       selectable
-                      selectionColor="rgba(124,92,255,0.45)"
+                      selectionColor="rgba(246,213,138,0.45)"
                       style={[
                         active ? styles.sentenceActive : styles.sentence,
                         paper && (active ? { color: INK } : { color: "rgba(42,38,34,0.62)" }),
@@ -2621,7 +2750,7 @@ export default function ReaderScreen() {
             {/* زر «تابع القارئ» بعد سحب الصفحة يدويًا أثناء القراءة */}
             {detached && speaking && !lensOpen ? (
               <Pressable onPress={followReader} style={styles.followPill}>
-                <Ionicons name="locate" size={15} color="#07080D" />
+                <Ionicons name="locate" size={15} color={SKY.onAccent} />
                 <Text style={styles.followTxt}>{t("reader.follow")}</Text>
               </Pressable>
             ) : null}
@@ -2632,7 +2761,7 @@ export default function ReaderScreen() {
                 <View pointerEvents="none" style={styles.lensDim} />
                 <View style={styles.lensCard}>
                   <View style={[styles.lensHead, { flexDirection: dir.row }]}>
-                    <Ionicons name="search" size={15} color="#D9D3FF" />
+                    <Ionicons name="search" size={15} color={SKY.accent} />
                     <Text style={styles.lensTitle}>{t("reader.lens.title")}</Text>
                     <View style={{ flex: 1 }} />
                     {[1.5, 2, 2.5].map((z) => (
@@ -2641,7 +2770,7 @@ export default function ReaderScreen() {
                       </Pressable>
                     ))}
                     <Pressable onPress={() => setLensOpen(false)} style={styles.lensClose} hitSlop={8} accessibilityLabel={t("common.close")}>
-                      <Ionicons name="close" size={16} color="#F3F4F8" />
+                      <Ionicons name="close" size={16} color={SKY.ink} />
                     </Pressable>
                   </View>
                   <View
@@ -2727,12 +2856,11 @@ export default function ReaderScreen() {
             <Pressable onPress={() => goPage(-1)} style={styles.floatBtn} hitSlop={8} disabled={page <= 1}>
               <Ionicons name="chevron-forward" size={22} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
-            <PlayButton
+            <GoldPlayButton
               playing={speaking}
               busy={busy}
               onPress={togglePlay}
               size={60}
-              showLabel={false}
               hint={!everPlayed}
             />
             <Pressable onPress={() => goPage(1)} style={styles.floatBtn} hitSlop={8} disabled={!!totalPages && page >= totalPages}>
@@ -2822,13 +2950,13 @@ export default function ReaderScreen() {
             {skipMult > 1 && skipDir < 0 ? <Text style={styles.capBadge}>×{skipMult}</Text> : null}
           </Pressable>
           <Pressable onPress={togglePlay} accessibilityLabel={speaking ? t("dock.pause") : t("dock.play")}>
-            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.capPlay}>
+            <View style={styles.capPlay}>
               {busy && speaking ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={SKY.onAccent} />
               ) : (
-                <Ionicons name={speaking ? "pause" : "play"} size={26} color="#fff" style={speaking ? null : { marginLeft: 3 }} />
+                <Ionicons name={speaking ? "pause" : "play"} size={26} color={SKY.onAccent} style={speaking ? null : { marginLeft: 3 }} />
               )}
-            </LinearGradient>
+            </View>
           </Pressable>
           <Pressable onPress={() => skipSentence(1)} style={styles.capBtn} accessibilityLabel={t("reader.tool.nextSegment")}>
             <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={21} color={Palette.text} />
@@ -2917,7 +3045,7 @@ export default function ReaderScreen() {
                       const loading = musicLoading === m.key;
                       return (
                         <Pressable key={m.key} onPress={() => selectMusic(m.key)} style={[styles.musicChip, on && styles.musicChipOn]}>
-                          {loading ? <ActivityIndicator size="small" color={on ? "#0b1220" : Palette.text} /> : null}
+                          {loading ? <ActivityIndicator size="small" color={on ? SKY.onAccent : Palette.text} /> : null}
                           <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>
                             {loading ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
                           </Text>
@@ -3050,9 +3178,9 @@ export default function ReaderScreen() {
                     style={styles.makeCardsBtn}
                   >
                     {makingCards ? (
-                      <ActivityIndicator size="small" color="#0b1220" />
+                      <ActivityIndicator size="small" color={SKY.onAccent} />
                     ) : (
-                      <Ionicons name="albums" size={16} color="#0b1220" />
+                      <Ionicons name="albums" size={16} color={SKY.onAccent} />
                     )}
                     <Text style={styles.makeCardsTxt}>
                       {makingCards ? t("reader.notes.generating") : t("reader.notes.makeCards")}
@@ -3079,7 +3207,7 @@ export default function ReaderScreen() {
                         autoFocus
                       />
                       <Pressable onPress={saveNoteDraft} style={styles.noteSave}>
-                        <Ionicons name="checkmark" size={18} color="#fff" />
+                        <Ionicons name="checkmark" size={18} color={SKY.onAccent} />
                       </Pressable>
                     </View>
                   ) : h.note ? (
@@ -3181,7 +3309,7 @@ export default function ReaderScreen() {
                   editable={!aiBusy}
                 />
                 <Pressable style={styles.aiSend} onPress={() => runAi("ask")} disabled={aiBusy || !aiQuestion.trim()}>
-                  <Ionicons name="send" size={18} color="#fff" />
+                  <Ionicons name="send" size={18} color={SKY.onAccent} />
                 </Pressable>
               </View>
             ) : null}
@@ -3235,12 +3363,11 @@ export default function ReaderScreen() {
               <Ionicons name="play-forward" size={36} color={page <= 1 ? Palette.textDim : Palette.text} />
             </Pressable>
 
-            <PlayButton
+            <GoldPlayButton
               playing={speaking}
               busy={busy}
               onPress={togglePlay}
               size={120}
-              showLabel={false}
               hint={!everPlayed}
             />
 
@@ -3305,7 +3432,7 @@ export default function ReaderScreen() {
             />
             <Pressable onPress={submitGoto} style={styles.gotoBtn}
             >
-              <Ionicons name="arrow-back" size={18} color="#fff" />
+              <Ionicons name="arrow-back" size={18} color={SKY.onAccent} />
               <Text style={styles.gotoBtnTxt}>{t("reader.goto.cta")}</Text>
             </Pressable>
           </Pressable>
@@ -3331,7 +3458,7 @@ export default function ReaderScreen() {
               <>
                 <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
                 <Pressable onPress={() => void saveToMyWords(dictWord, dictContextRef.current)} style={[styles.dictSave, { flexDirection: dir.row }]}>
-                  <Ionicons name="bookmark" size={15} color="#07080D" />
+                  <Ionicons name="bookmark" size={15} color={SKY.onAccent} />
                   <Text style={styles.dictSaveTxt}>{t("words.saveMore")}</Text>
                 </Pressable>
               </>
@@ -3432,7 +3559,7 @@ export default function ReaderScreen() {
               style={styles.trApplyWrap}
             >
               <LinearGradient
-                colors={listenArabic ? ["#ff5d6c", "#ff8a5c"] : Gradients.success}
+                colors={listenArabic ? ["#ff5d6c", "#ff8a5c"] : GOLD_SOLID}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.trApply}
@@ -3487,7 +3614,7 @@ export default function ReaderScreen() {
               <Ionicons
                 name={presMusicKey ? "musical-notes" : "musical-notes-outline"}
                 size={18}
-                color={presMusicKey ? "#0b1220" : Palette.text}
+                color={presMusicKey ? SKY.onAccent : Palette.text}
               />
             </Pressable>
           </View>
@@ -3507,7 +3634,7 @@ export default function ReaderScreen() {
                 }}
                 style={[styles.musicCard, !presMusicKey && styles.musicCardOn]}
               >
-                <Ionicons name="volume-mute" size={20} color={!presMusicKey ? "#0b1220" : Palette.textMuted} />
+                <Ionicons name="volume-mute" size={20} color={!presMusicKey ? SKY.onAccent : Palette.textMuted} />
                 <Text style={[styles.musicCardTxt, !presMusicKey && styles.musicCardTxtOn]} numberOfLines={1}>
                   {t("reader.music.none")}
                 </Text>
@@ -3522,7 +3649,7 @@ export default function ReaderScreen() {
                     style={[styles.musicCard, on && styles.musicCardOn]}
                   >
                     {loading ? (
-                      <ActivityIndicator size="small" color={on ? "#0b1220" : Palette.text} />
+                      <ActivityIndicator size="small" color={on ? SKY.onAccent : Palette.text} />
                     ) : (
                       <Text style={styles.musicCardEmoji}>{MUSIC_EMOJI[m.key] ?? "🎵"}</Text>
                     )}
@@ -3606,9 +3733,9 @@ export default function ReaderScreen() {
 
           <Pressable onPress={togglePresentNarrate} style={styles.presPlay}>
             {busy && presNarrating ? (
-              <ActivityIndicator color="#0b1220" />
+              <ActivityIndicator color={SKY.onAccent} />
             ) : (
-              <Ionicons name={presNarrating ? "pause" : "play"} size={30} color="#0b1220" />
+              <Ionicons name={presNarrating ? "pause" : "play"} size={30} color={SKY.onAccent} />
             )}
           </Pressable>
           {pageSlides.length > 0 ? (
@@ -3631,7 +3758,7 @@ export default function ReaderScreen() {
               {t("reader.gate.body")}
             </Text>
             <Pressable onPress={gateDownloadNow} style={styles.gatePrimary}>
-              <Ionicons name="cloud-download" size={18} color="#0b1220" />
+              <Ionicons name="cloud-download" size={18} color={SKY.onAccent} />
               <Text style={styles.gatePrimaryTxt}>{t("reader.gate.downloadNow")}</Text>
             </Pressable>
             <Pressable onPress={gateContinueWithout} style={styles.gateSecondary} hitSlop={6}>
@@ -3656,10 +3783,11 @@ export default function ReaderScreen() {
   );
 }
 
-const MM_PRES_COLORS = ["#7c5cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d", "#4f8cff"];
+// ألوان شرائح العرض: هادئة تنسجم مع سماء الليل (ذهبي أولًا)
+const MM_PRES_COLORS = ["#F6D58A", "#A9C7FF", "#9FE0C4", "#F2B48A", "#E6A9D2", "#C9B8FF"];
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Palette.bg },
+  safe: { flex: 1, backgroundColor: SKY.bg },
   topBar: { alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 },
   topBtn: {
     width: 42,
@@ -3673,8 +3801,10 @@ const styles = StyleSheet.create({
   topTitleRow: { alignItems: "center", gap: 5, marginTop: 1 },
   navRow: { alignItems: "center", gap: 8 },
   navArrow: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  sentHL: { position: "absolute", borderRadius: 5, backgroundColor: "rgba(233,179,95,0.32)" },
-  wordNow: { position: "absolute", borderRadius: 4, backgroundColor: "rgba(124,108,255,0.30)", borderBottomWidth: 2.5, borderBottomColor: "#7C6CFF" },
+  // تظليل الجملة: ذهبي دافئ يبقى مقروءًا فوق صفحات الكتاب البيضاء
+  sentHL: { position: "absolute", borderRadius: 5, backgroundColor: "rgba(246,213,138,0.35)" },
+  // الكلمة المنطوقة: ذهبي أقوى + خط سفلي كهرماني واضح على الأبيض
+  wordNow: { position: "absolute", borderRadius: 4, backgroundColor: "rgba(246,213,138,0.55)", borderBottomWidth: 2.5, borderBottomColor: "#D9A43A" },
   followPill: {
     position: "absolute",
     bottom: 14,
@@ -3685,17 +3815,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#E9B35F",
+    backgroundColor: SKY.accent,
   },
-  followTxt: { color: "#07080D", fontSize: 13, fontWeight: "800" },
-  lensDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(5,6,10,0.45)" },
+  followTxt: { color: SKY.onAccent, fontSize: 13, fontWeight: "800" },
+  lensDim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(11,14,38,0.45)" },
   lensCard: {
     height: "48%",
     marginHorizontal: 10,
     borderRadius: 22,
-    backgroundColor: "#10121B",
+    backgroundColor: SKY.card,
     borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.45)",
+    borderColor: SKY.cardBorder,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOpacity: 0.5,
@@ -3704,15 +3834,15 @@ const styles = StyleSheet.create({
     elevation: 14,
   },
   lensHead: { alignItems: "center", gap: 8, paddingHorizontal: 12, height: 44 },
-  lensTitle: { color: "#F3F4F8", fontSize: 13.5, fontWeight: "700" },
+  lensTitle: { color: SKY.ink, fontSize: 13.5, fontWeight: "700" },
   zoomChip: { paddingHorizontal: 9, height: 28, borderRadius: 14, justifyContent: "center", backgroundColor: "rgba(255,255,255,0.06)" },
-  zoomChipOn: { backgroundColor: "#F3F4F8" },
-  zoomTxt: { color: "#C4C9D8", fontSize: 12, fontWeight: "700" },
-  zoomTxtOn: { color: "#07080D" },
+  zoomChipOn: { backgroundColor: SKY.accent },
+  zoomTxt: { color: SKY.dim, fontSize: 12, fontWeight: "700" },
+  zoomTxtOn: { color: SKY.onAccent },
   lensClose: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.10)", alignItems: "center", justifyContent: "center" },
   lensView: { flex: 1, marginHorizontal: 6, marginBottom: 6, borderRadius: 16, overflow: "hidden", backgroundColor: "#FFFFFF" },
-  lensHint: { position: "absolute", bottom: 10, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: "rgba(16,18,27,0.85)" },
-  lensHintTxt: { color: "#F3F4F8", fontSize: 12 },
+  lensHint: { position: "absolute", bottom: 10, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: "rgba(11,14,38,0.85)" },
+  lensHintTxt: { color: SKY.ink, fontSize: 12 },
   topSub: { color: Palette.textDim, fontSize: 12, maxWidth: "100%" },
   topTitle: { color: Palette.text, fontSize: 14, fontWeight: "700", marginTop: 1 },
 
@@ -3725,9 +3855,9 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
     borderRadius: 20,
-    backgroundColor: "#161826",
+    backgroundColor: SKY.card,
     borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.4)",
+    borderColor: SKY.cardBorder,
     shadowColor: "#000",
     shadowOpacity: 0.35,
     shadowRadius: 16,
@@ -3746,14 +3876,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: "rgba(16,18,27,0.94)",
+    backgroundColor: "rgba(21,24,56,0.96)",
     borderWidth: 1,
-    borderColor: "rgba(108,243,197,0.45)",
+    borderColor: "rgba(246,213,138,0.35)",
   },
-  walkChipTxt: { color: "#F3F4F8", fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
+  walkChipTxt: { color: SKY.ink, fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
   checkOrb: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  checkTitle: { color: "#F3F4F8", fontSize: 15, fontWeight: "700" },
-  checkSub: { color: "#8E95AB", fontSize: 12, marginTop: 2 },
+  checkTitle: { color: SKY.ink, fontSize: 15, fontWeight: "700" },
+  checkSub: { color: SKY.dim, fontSize: 12, marginTop: 2 },
   checkRow: { gap: 6 },
   checkBtn: {
     flex: 1,
@@ -3763,18 +3893,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkBtnMain: { backgroundColor: "#F3F4F8" },
-  checkBtnAlt: { flex: 1.3, backgroundColor: "rgba(124,108,255,0.2)" },
-  checkBtnTxt: { color: "#F3F4F8", fontSize: 13, fontWeight: "600" },
-  checkBtnMainTxt: { color: "#07080D", fontSize: 13, fontWeight: "800" },
-  checkBody: { color: "#C4C9D8", fontSize: 14, lineHeight: 24 },
+  checkBtnMain: { backgroundColor: SKY.accent },
+  checkBtnAlt: { flex: 1.3, backgroundColor: GOLD_SOFT },
+  checkBtnTxt: { color: SKY.ink, fontSize: 13, fontWeight: "600" },
+  checkBtnMainTxt: { color: SKY.onAccent, fontSize: 13, fontWeight: "800" },
+  checkBody: { color: Palette.textMuted, fontSize: 14, lineHeight: 24 },
 
   bottom: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 6, gap: 6 },
   gotoModes: { gap: 6, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 4 },
   gotoMode: { flex: 1, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  gotoModeOn: { backgroundColor: "#F6D58A" },
+  gotoModeOn: { backgroundColor: SKY.accent },
   gotoModeTxt: { color: Palette.textMuted, fontSize: 13.5, fontWeight: "700" },
-  gotoModeTxtOn: { color: "#0B0E26", fontWeight: "900" },
+  gotoModeTxtOn: { color: SKY.onAccent, fontWeight: "900" },
   pagerSide: { position: "absolute", top: 0 },
   pagePill: {
     alignItems: "center",
@@ -3782,7 +3912,9 @@ const styles = StyleSheet.create({
     height: 34,
     paddingHorizontal: 12,
     borderRadius: 17,
-    backgroundColor: "rgba(16,18,27,0.85)",
+    backgroundColor: "rgba(21,24,56,0.88)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SKY.cardBorder,
   },
   pagePillTxt: { color: Palette.text, fontSize: 12.5, fontWeight: "800" },
   quickRow: { gap: 8, paddingHorizontal: 2, paddingVertical: 2 },
@@ -3791,20 +3923,30 @@ const styles = StyleSheet.create({
     height: 54,
     paddingHorizontal: 10,
     borderRadius: 16,
-    backgroundColor: "rgba(16,18,27,0.88)",
+    backgroundColor: "rgba(21,24,56,0.92)",
     alignItems: "center",
     justifyContent: "center",
     gap: 3,
   },
   // المفعّل واضح على أي خلفية (ورقية أو داكنة): ذهبي ممتلئ ونص داكن
-  qChipOn: { backgroundColor: "#F6D58A" },
+  qChipOn: { backgroundColor: SKY.accent },
+  goldPlay: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: SKY.accent,
+    shadowColor: SKY.accent,
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+  },
   qChipTxt: { color: Palette.text, fontSize: 15, fontWeight: "900" },
-  qChipLbl: { color: "#B8BDCC", fontSize: 10.5, fontWeight: "700", maxWidth: 86 },
-  capBadge: { position: "absolute", top: 4, right: 2, color: "#F6D58A", fontSize: 9.5, fontWeight: "900" },
+  qChipLbl: { color: SKY.dim, fontSize: 10.5, fontWeight: "700", maxWidth: 86 },
+  capBadge: { position: "absolute", top: 4, right: 2, color: SKY.accent, fontSize: 9.5, fontWeight: "900" },
   capsule: {
     height: 72,
     borderRadius: 30,
-    backgroundColor: "rgba(18,20,31,0.96)",
+    backgroundColor: "rgba(21,24,56,0.97)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
@@ -3823,15 +3965,18 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#3FD0FF",
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    // دائرة ذهبية مُصمتة بأيقونة كحلية وتوهّج ذهبي ناعم
+    backgroundColor: SKY.accent,
+    shadowColor: SKY.accent,
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   capAa: { color: Palette.text, fontSize: 19, fontWeight: "700" },
 
   toolsSheet: {
-    backgroundColor: "#10121B",
+    backgroundColor: SKY.card,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingHorizontal: 16,
@@ -3867,7 +4012,7 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingHorizontal: 4,
   },
-  tileOn: { backgroundColor: "rgba(63,208,255,0.10)", borderColor: "rgba(63,208,255,0.45)" },
+  tileOn: { backgroundColor: GOLD_SOFT, borderColor: "rgba(246,213,138,0.45)" },
   tileTxt: { color: Palette.text, fontSize: 16, fontWeight: "800" },
   tileLabel: { color: Palette.textMuted, fontSize: 11.5, fontWeight: "600", textAlign: "center" },
   tileBadge: {
@@ -3882,7 +4027,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  tileBadgeTxt: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  tileBadgeTxt: { color: SKY.onAccent, fontSize: 10, fontWeight: "800" },
   header: {
     paddingTop: 10,
     paddingHorizontal: 14,
@@ -3921,7 +4066,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Palette.accent,
   },
-  aiBtnTxt: { color: "#fff", fontWeight: "900", fontSize: 13 },
+  aiBtnTxt: { color: SKY.onAccent, fontWeight: "900", fontSize: 13 },
 
   iconBtn: {
     width: 38,
@@ -3943,7 +4088,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  countDotTxt: { color: "#fff", fontSize: 10, fontWeight: "900" },
+  countDotTxt: { color: SKY.onAccent, fontSize: 10, fontWeight: "900" },
 
   notesHint: { color: Palette.textDim, fontSize: 13, lineHeight: 20, textAlign: "right" },
   notesSection: { color: Palette.textMuted, fontSize: 13, fontWeight: "900", textAlign: "right", marginTop: 4 },
@@ -3956,7 +4101,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     backgroundColor: Palette.neonCyan,
   },
-  makeCardsTxt: { color: "#0b1220", fontSize: 14, fontWeight: "900" },
+  makeCardsTxt: { color: SKY.onAccent, fontSize: 14, fontWeight: "900" },
   bmChip: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -4098,7 +4243,7 @@ const styles = StyleSheet.create({
   lensLineHL: {
     position: "absolute",
     borderRadius: 4,
-    backgroundColor: "rgba(124,92,255,0.14)", // تظليل السطر خفيف
+    backgroundColor: "rgba(246,213,138,0.18)", // تظليل السطر خفيف
   },
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "transparent" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
@@ -4115,7 +4260,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.glassBorder,
   },
-  hlToggleOn: { backgroundColor: Palette.warn, borderColor: Palette.warn },
+  hlToggleOn: { backgroundColor: SKY.accent, borderColor: SKY.accent },
   hlTogglePaper: { backgroundColor: "rgba(42,38,34,0.06)", borderColor: "rgba(42,38,34,0.14)" },
   hlToggleTxt: { color: Palette.text, fontSize: 12, fontWeight: "800" },
   textContent: { paddingHorizontal: 22, paddingVertical: 22, gap: 4 },
@@ -4145,7 +4290,7 @@ const styles = StyleSheet.create({
   },
   sentence: { color: Palette.textDim, fontSize: 21, lineHeight: 40, textAlign: "right" },
   sentenceActive: { color: Palette.text, fontSize: 22, lineHeight: 42, textAlign: "right", fontWeight: "700" },
-  wordSpoken: { color: "#fff", backgroundColor: "#7C6CFF", fontWeight: "800" },
+  wordSpoken: { color: SKY.onAccent, backgroundColor: SKY.accent, fontWeight: "800" },
 
   ingestBtn: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
   ingestTxt: { color: Palette.neonCyan, fontSize: 12, fontWeight: "800" },
@@ -4166,8 +4311,8 @@ const styles = StyleSheet.create({
   dictWord: { color: Palette.primary, fontSize: 22, fontWeight: "900", textAlign: "right" },
   dictHint: { color: Palette.textDim, fontSize: 14 },
   dictMeaning: { color: Palette.text, fontSize: 17, lineHeight: 28, textAlign: "right" },
-  dictSave: { alignSelf: "flex-start", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 14, height: 38, borderRadius: 12, backgroundColor: "#F3F4F8" },
-  dictSaveTxt: { color: "#07080D", fontSize: 13.5, fontWeight: "800" },
+  dictSave: { alignSelf: "flex-start", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 14, height: 38, borderRadius: 12, backgroundColor: SKY.accent },
+  dictSaveTxt: { color: SKY.onAccent, fontSize: 13.5, fontWeight: "800" },
 
   gotoMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 220 },
   gotoCard: {
@@ -4197,7 +4342,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     backgroundColor: Palette.primary,
   },
-  gotoBtnTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  gotoBtnTxt: { color: SKY.onAccent, fontSize: 16, fontWeight: "900" },
 
   driveWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: Spacing.xl, paddingTop: 56, paddingBottom: Spacing.xl, alignItems: "center" },
   driveTop: { width: "100%", alignItems: "center", marginBottom: 8 },
@@ -4270,9 +4415,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: Radius.pill,
-    backgroundColor: Palette.primary,
+    backgroundColor: SKY.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(246,213,138,0.35)",
   },
-  toastTxt: { color: "#fff", fontSize: 14, fontWeight: "800", textAlign: "center" },
+  toastTxt: { color: SKY.ink, fontSize: 14, fontWeight: "800", textAlign: "center" },
 
   ribbon: {
     position: "absolute",
@@ -4350,7 +4497,7 @@ const styles = StyleSheet.create({
   },
   langChipOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
   langChipTxt: { color: Palette.textMuted, fontSize: 12.5, fontWeight: "800" },
-  langChipTxtOn: { color: "#fff" },
+  langChipTxtOn: { color: SKY.onAccent },
   voiceRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 2 },
   arToggle: {
     flexDirection: "row-reverse",
@@ -4360,9 +4507,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingVertical: 9,
     borderRadius: Radius.pill,
-    backgroundColor: "rgba(79,140,255,0.12)",
+    backgroundColor: GOLD_SOFT,
     borderWidth: 1,
-    borderColor: "rgba(79,140,255,0.4)",
+    borderColor: "rgba(246,213,138,0.4)",
   },
   arToggleOn: { backgroundColor: Palette.neonBlue, borderColor: Palette.neonBlue },
   arToggleTxt: { color: Palette.neonBlue, fontSize: 12.5, fontWeight: "800" },
@@ -4387,7 +4534,7 @@ const styles = StyleSheet.create({
   },
   modeSegBtnOn: { backgroundColor: Palette.neonCyan },
   modeSegTxt: { color: Palette.text, fontSize: 13.5, fontWeight: "900" },
-  modeSegTxtOn: { color: "#0b1220" },
+  modeSegTxtOn: { color: SKY.onAccent },
   aidsRow: { flexDirection: "row-reverse", gap: 8, marginTop: 8 },
   aidWrap: {
     flex: 1,
@@ -4395,11 +4542,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   aidGrad: { paddingVertical: 12, alignItems: "center", justifyContent: "center" },
-  aidGradTxt: { color: "#fff", fontSize: 12.5, fontWeight: "900" },
+  aidGradTxt: { color: SKY.onAccent, fontSize: 12.5, fontWeight: "900" },
   trVoicesLabel: { color: Palette.textMuted, fontSize: 13, fontWeight: "800", textAlign: "right", marginTop: 12, marginBottom: 8 },
   trApplyWrap: { borderRadius: Radius.lg, overflow: "hidden", marginTop: 16 },
   trApply: { paddingVertical: 15, alignItems: "center", justifyContent: "center" },
-  trApplyTxt: { color: "#0b1220", fontSize: 15, fontWeight: "900" },
+  trApplyTxt: { color: SKY.onAccent, fontSize: 15, fontWeight: "900" },
 
   presWrap: { flex: 1, backgroundColor: Palette.bg, paddingHorizontal: 16, paddingTop: 54, paddingBottom: 24 },
   presTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
@@ -4439,7 +4586,7 @@ const styles = StyleSheet.create({
   musicChipOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
   musicNote: { color: Palette.textMuted, fontSize: 11, fontWeight: "600", marginTop: 6, opacity: 0.85 },
   musicChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
-  musicChipTxtOn: { color: "#0b1220" },
+  musicChipTxtOn: { color: SKY.onAccent },
   // بطاقات موسيقى العرض التقديمي (ارتفاع ثابت — لا تتمدّد لأشرطة طويلة)
   musicScroll: { flexGrow: 0, marginTop: 6 },
   musicScrollContent: { alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
@@ -4458,7 +4605,7 @@ const styles = StyleSheet.create({
   musicCardOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
   musicCardEmoji: { fontSize: 24 },
   musicCardTxt: { color: Palette.text, fontSize: 12, fontWeight: "800", textAlign: "center" },
-  musicCardTxtOn: { color: "#0b1220" },
+  musicCardTxtOn: { color: SKY.onAccent },
   slideBulletsScroll: { alignSelf: "stretch", maxHeight: 320, flexGrow: 0 },
   presStage: { flex: 1, justifyContent: "center" },
   presCenter: { alignItems: "center", gap: 12 },
@@ -4541,7 +4688,7 @@ const styles = StyleSheet.create({
   },
   voiceChipActive: { backgroundColor: Palette.primary, borderColor: Palette.primary },
   voiceChipTxt: { color: Palette.textDim, fontWeight: "800", fontSize: 13 },
-  voiceChipTxtActive: { color: "#fff" },
+  voiceChipTxtActive: { color: SKY.onAccent },
 
   controls: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 18 },
   navBtn: {
@@ -4596,7 +4743,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Palette.bg,
   },
-  skipBadgeTxt: { color: "#fff", fontSize: 11, fontWeight: "900" },
+  skipBadgeTxt: { color: SKY.onAccent, fontSize: 11, fontWeight: "900" },
   gateMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.66)", alignItems: "center", justifyContent: "center", padding: 24 },
   gateCard: {
     width: "100%",
@@ -4631,7 +4778,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: Palette.neonCyan,
   },
-  gatePrimaryTxt: { color: "#0b1220", fontSize: 16, fontWeight: "900" },
+  gatePrimaryTxt: { color: SKY.onAccent, fontSize: 16, fontWeight: "900" },
   gateSecondary: { marginTop: 14, padding: 6 },
   gateSecondaryTxt: { color: Palette.textDim, fontSize: 14, fontWeight: "700" },
   toolTxt: { color: Palette.text, fontSize: 11, fontWeight: "900", paddingHorizontal: 2 },
@@ -4649,7 +4796,7 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: Palette.accent, borderColor: Palette.accent },
   chipTxt: { color: Palette.text, fontWeight: "800", fontSize: 13 },
-  chipTxtActive: { color: "#fff" },
+  chipTxtActive: { color: SKY.onAccent },
 
   pageInfo: { color: Palette.textMuted, textAlign: "center", fontWeight: "800", fontSize: 13 },
   statusTxt: { color: Palette.neonCyan, textAlign: "center", fontWeight: "700", fontSize: 12, marginTop: 2 },
