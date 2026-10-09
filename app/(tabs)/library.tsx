@@ -14,14 +14,12 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GlassCard } from "../../components/brand/glass-card";
-import { GradientButton } from "../../components/brand/gradient-button";
-import { ScreenBackground } from "../../components/brand/screen-background";
-import { ScreenHeader } from "../../components/brand/screen-header";
+import { AppDrawer } from "../../components/brand/app-drawer";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { getWords } from "../../lib/words";
-import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { getLastPage } from "../../lib/readerPrefs";
+import { useScene } from "../../lib/scene";
 import { getUserId } from "../../lib/auth";
 import {
   addFolder,
@@ -43,6 +41,7 @@ type Book = {
   title: string;
   pdf_path: string;
   created_at?: string;
+  page_count?: number | null;
 
   // ✅ للأرشيف (لا تؤثر لو ما استخدمتيها في UI)
   is_archived?: boolean;
@@ -63,6 +62,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
 
   const [rows, setRows] = useState<BookRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +85,29 @@ export default function LibraryScreen() {
       cancelled = true;
     };
   }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // نسبة التقدّم لكل كتاب (آخر صفحة محفوظة محليًا ÷ عدد الصفحات) — للشريط تحت الغلاف
+  const [progress, setProgress] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, number> = {};
+      await Promise.all(
+        rows.map(async (b) => {
+          const total = Number(b.page_count) || 0;
+          if (!total) return;
+          try {
+            const page = await getLastPage(b.id);
+            next[b.id] = page <= 1 ? 0 : Math.min(1, page / total);
+          } catch {}
+        }),
+      );
+      if (!cancelled) setProgress(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rows]);
 
   // ✅ “تحت الإجراء”
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
@@ -158,7 +181,7 @@ export default function LibraryScreen() {
 
     const { data: books, error: booksErr } = await supabase
       .from("books")
-      .select("id,title,pdf_path,created_at,is_archived,archived_at")
+      .select("id,title,pdf_path,created_at,is_archived,archived_at,page_count")
       .eq("is_archived", false) // ✅ نخفي المؤرشف من المكتبة
       .order("created_at", { ascending: false });
 
@@ -405,83 +428,101 @@ export default function LibraryScreen() {
     { key: "noPlan", labelKey: "library.filter.noPlan" },
   ];
 
-  return (
-    <ScreenBackground>
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader
-        icon="library"
+  const chip = { backgroundColor: pal.card, borderColor: pal.cardBorder };
+  const shadowTint = pal.dark ? "#000" : "#3C5028";
+  // «كعب» الكتاب على جهة بداية القراءة: يمين في العربية، يسار في اللغات الأخرى
+  const spineR = dir.isRTL;
+  const bookShape = spineR
+    ? { borderTopRightRadius: 8, borderBottomRightRadius: 8, borderTopLeftRadius: 16, borderBottomLeftRadius: 16 }
+    : { borderTopLeftRadius: 8, borderBottomLeftRadius: 8, borderTopRightRadius: 16, borderBottomRightRadius: 16 };
+
+  const listHeader = (
+    <View>
+      <SceneBanner
         title={t("nav.library")}
         subtitle={t("library.header.subtitle")}
-        actions={[{ icon: "add", label: t("cmd.addBook"), primary: true, onPress: () => router.push("/add-book") }]}
+        left={<AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />}
+        right={
+          <Pressable
+            onPress={() => router.push("/add-book")}
+            accessibilityRole="button"
+            accessibilityLabel={t("cmd.addBook")}
+            hitSlop={6}
+          >
+            <SceneIconButton accent>
+              <Ionicons name="add" size={22} color={pal.onAccent} />
+            </SceneIconButton>
+          </Pressable>
+        }
       />
 
       <View style={styles.header}>
         {/* شريط البحث */}
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={Palette.textDim} />
+        <View style={[styles.searchBar, chip, { shadowColor: shadowTint }]}>
+          <Ionicons name="search" size={18} color={pal.dim} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder={t("library.searchPlaceholder")}
-            placeholderTextColor={Palette.placeholder}
-            style={[styles.searchInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+            placeholderTextColor={pal.dim}
+            selectionColor={pal.accent}
+            style={[styles.searchInput, { color: pal.ink, textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
           />
           {query ? (
             <Pressable onPress={() => setQuery("")} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={Palette.textDim} />
+              <Ionicons name="close-circle" size={18} color={pal.dim} />
             </Pressable>
           ) : null}
         </View>
 
         {/* مكتبة الكلمات: «كلماتي» بجانب الكتب */}
-        <Pressable onPress={() => router.push("/words")} style={[styles.wordsCard, { flexDirection: dir.row }]}>
-          <View style={styles.wordsIcon}>
-            <Ionicons name="bookmarks" size={18} color="#D9D3FF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.wordsTitle, { textAlign: dir.textAlign }]}>{t("words.title")}</Text>
-            <Text style={[styles.wordsSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
-              {wordCount ? t("words.librarySub", { n: wordCount }) : t("words.libraryEmpty")}
-            </Text>
-          </View>
-          <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />
+        <Pressable onPress={() => router.push("/words")}>
+          <SceneCard padded={false} style={[styles.wordsCard, { flexDirection: dir.row }]}>
+            <View style={[styles.wordsIcon, { backgroundColor: pal.soft }]}>
+              <Ionicons name="bookmarks" size={18} color={pal.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.wordsTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("words.title")}</Text>
+              <Text style={[styles.wordsSub, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
+                {wordCount ? t("words.librarySub", { n: wordCount }) : t("words.libraryEmpty")}
+              </Text>
+            </View>
+            <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+          </SceneCard>
         </Pressable>
 
         {/* الفلاتر + الفرز — قابلة للتمرير أفقيًا لتصل لكل الأزرار على الشاشات الأضيق */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-          {FILTERS.map((f) => (
-            <Pressable
-              key={f.key}
-              onPress={() => setFilter(f.key)}
-              style={[styles.fChip, filter === f.key && styles.fChipActive]}
-            >
-              <Text style={[styles.fChipTxt, filter === f.key && styles.fChipTxtActive]}>
-                {t(f.labelKey)}
-              </Text>
-            </Pressable>
-          ))}
+          {FILTERS.map((f) => {
+            const on = filter === f.key;
+            return (
+              <Pressable
+                key={f.key}
+                onPress={() => setFilter(f.key)}
+                style={[styles.fChip, chip, on && { backgroundColor: pal.accent, borderColor: pal.accent }]}
+              >
+                <Text style={[styles.fChipTxt, { color: on ? pal.onAccent : pal.dim }]}>{t(f.labelKey)}</Text>
+              </Pressable>
+            );
+          })}
 
-          <Pressable onPress={cycleSort} style={styles.sortBtn}>
-            <Ionicons name="swap-vertical" size={16} color={Palette.text} />
-            <Text style={styles.sortTxt}>{sortLabel}</Text>
+          <Pressable onPress={cycleSort} style={[styles.sortBtn, chip]}>
+            <Ionicons name="swap-vertical" size={16} color={pal.ink} />
+            <Text style={[styles.sortTxt, { color: pal.ink }]}>{sortLabel}</Text>
           </Pressable>
 
-          <Pressable onPress={() => { load(); loadFolders(); }} style={styles.sortBtn} hitSlop={6}>
-            <Ionicons name="refresh" size={16} color={Palette.text} />
+          <Pressable onPress={() => { load(); loadFolders(); }} style={[styles.sortBtn, chip]} hitSlop={6}>
+            <Ionicons name="refresh" size={16} color={pal.ink} />
           </Pressable>
         </ScrollView>
 
         {/* المجلدات */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.folderRow}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderRow}>
           <Pressable
             onPress={() => setSelectedFolder(null)}
-            style={[styles.folderChip, !selectedFolder && styles.folderChipActive]}
+            style={[styles.folderChip, chip, !selectedFolder && { backgroundColor: pal.soft, borderColor: pal.accent }]}
           >
-            <Text style={[styles.folderChipTxt, !selectedFolder && styles.folderChipTxtActive]}>
+            <Text style={[styles.folderChipTxt, { color: !selectedFolder ? pal.accent : pal.dim }]}>
               📚 {t("library.folder.all")}
             </Text>
           </Pressable>
@@ -495,36 +536,45 @@ export default function LibraryScreen() {
                 onLongPress={() => editFolder(f)}
                 style={[
                   styles.folderChip,
+                  chip,
                   { borderColor: f.color + "66" },
                   active && { backgroundColor: f.color + "26", borderColor: f.color },
                 ]}
               >
                 <View style={[styles.folderDot, { backgroundColor: f.color }]} />
-                <Text style={[styles.folderChipTxt, active && { color: f.color }]}>
+                <Text style={[styles.folderChipTxt, { color: active ? f.color : pal.dim }]}>
                   {f.name} ({folderCount(f.id)})
                 </Text>
               </Pressable>
             );
           })}
 
-          <Pressable onPress={createFolder} style={[styles.folderChip, styles.folderAdd]}>
-            <Ionicons name="add" size={15} color={Palette.neonBlue} />
-            <Text style={[styles.folderChipTxt, { color: Palette.neonBlue }]}>{t("library.folder.chip")}</Text>
+          <Pressable onPress={createFolder} style={[styles.folderChip, styles.folderAdd, { borderColor: pal.accent + "88" }]}>
+            <Ionicons name="add" size={15} color={pal.accent} />
+            <Text style={[styles.folderChipTxt, { color: pal.accent }]}>{t("library.folder.chip")}</Text>
           </Pressable>
         </ScrollView>
       </View>
+    </View>
+  );
 
+  return (
+    <SceneScreen>
       <FlatList
         data={data}
         refreshing={loading}
         onRefresh={load}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        columnWrapperStyle={{ gap: 12 }}
-        contentContainerStyle={{ padding: 12, gap: 12, paddingBottom: 90 }}
+        ListHeaderComponent={listHeader}
+        columnWrapperStyle={{ gap: 12, paddingHorizontal: 16 }}
+        contentContainerStyle={{ gap: 14, paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
         renderItem={({ item }) => {
           const isActive = activeBookId === item.id;
           const bookFolder = folders.find((f) => f.id === assign[item.id]);
+          const frac = progress[item.id] ?? 0;
 
           return (
             <Pressable
@@ -559,121 +609,168 @@ export default function LibraryScreen() {
                 ]);
               }}
             >
-              <GlassCard
-                radius={18}
-                glow={isActive ? Palette.primary : Palette.neonBlue}
-                style={{ flex: 1 }}
+              <SceneCard
+                padded={false}
+                style={[styles.bookCard, isActive && { borderColor: pal.accent, borderWidth: 1.5 }]}
               >
-                <View style={styles.cover}>
-                  {thumbs[item.id] ? (
-                    <>
+                {/* الغلاف كـ«كتاب»: زاوية ضيقة عند الكعب وأعرض في الجهة الأخرى + ظل ناعم */}
+                <View style={[styles.coverShadow, bookShape, { shadowColor: shadowTint, backgroundColor: pal.soft }]}>
+                  <View style={[styles.cover, bookShape, { backgroundColor: pal.soft }]}>
+                    {thumbs[item.id] ? (
                       <Image source={{ uri: thumbs[item.id] }} style={styles.coverImg} resizeMode="cover" />
-                      <LinearGradient
-                        colors={["rgba(8,12,22,0.05)", "rgba(8,12,22,0.92)"]}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    </>
-                  ) : (
-                    <View style={styles.coverPlaceholder}>
-                      <Ionicons name="book" size={34} color="rgba(255,255,255,0.25)" />
-                    </View>
-                  )}
+                    ) : (
+                      <View style={styles.coverPlaceholder}>
+                        <Ionicons name="book" size={34} color={pal.accent} style={{ opacity: 0.55 }} />
+                      </View>
+                    )}
 
-                  {isActive ? (
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>{t("library.activeBadge")}</Text>
-                    </View>
-                  ) : null}
+                    {/* ظلّ الكعب */}
+                    <LinearGradient
+                      colors={["rgba(0,0,0,0.22)", "rgba(0,0,0,0)"]}
+                      start={{ x: spineR ? 1 : 0, y: 0.5 }}
+                      end={{ x: spineR ? 0 : 1, y: 0.5 }}
+                      style={[styles.spine, spineR ? { right: 0 } : { left: 0 }]}
+                      pointerEvents="none"
+                    />
 
-                  {bookFolder ? (
-                    <View style={[styles.folderBadge, { backgroundColor: bookFolder.color + "E6" }]}>
-                      <Ionicons name="folder" size={10} color="#fff" />
-                      <Text style={styles.folderBadgeTxt} numberOfLines={1}>{bookFolder.name}</Text>
-                    </View>
-                  ) : null}
+                    {isActive ? (
+                      <View style={[styles.activeBadge, { backgroundColor: pal.accent }, spineR ? { left: 10 } : { right: 10 }]}>
+                        <Text style={[styles.activeBadgeText, { color: pal.onAccent }]}>{t("library.activeBadge")}</Text>
+                      </View>
+                    ) : null}
 
-                  <Text style={styles.coverTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
+                    {bookFolder ? (
+                      <View
+                        style={[
+                          styles.folderBadge,
+                          { backgroundColor: bookFolder.color + "E6", flexDirection: dir.row },
+                          spineR ? { right: 14 } : { left: 14 },
+                        ]}
+                      >
+                        <Ionicons name="folder" size={10} color="#fff" />
+                        <Text style={styles.folderBadgeTxt} numberOfLines={1}>{bookFolder.name}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
+
+                {/* شريط التقدّم تحت الغلاف */}
+                <View style={[styles.progTrack, { backgroundColor: pal.track }]}>
+                  <View
+                    style={[
+                      styles.progFill,
+                      { width: `${Math.round(frac * 100)}%`, backgroundColor: pal.accent },
+                      dir.isRTL ? { alignSelf: "flex-end" } : null,
+                    ]}
+                  />
+                </View>
+
+                <Text style={[styles.bookTitle, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={2}>
+                  {item.title}
+                </Text>
 
                 <View style={styles.meta}>
                   {item.plan ? (
                     <>
-                      <Text style={styles.metaTxt}>
+                      <Text style={[styles.metaTxt, { color: pal.dim, textAlign: dir.textAlign }]}>
                         {item.plan.start_date} → {item.plan.end_date}
                       </Text>
-                      <Text style={styles.metaTxt}>⏱ {t("library.meta.perDay", { minutes: item.plan.daily_minutes })}</Text>
+                      <Text style={[styles.metaTxt, { color: pal.dim, textAlign: dir.textAlign }]}>
+                        ⏱ {t("library.meta.perDay", { minutes: item.plan.daily_minutes })}
+                      </Text>
                     </>
                   ) : (
-                    <Text style={styles.metaTxt}>{t("library.meta.noPlan")}</Text>
+                    <Text style={[styles.metaTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{t("library.meta.noPlan")}</Text>
                   )}
                 </View>
-              </GlassCard>
+              </SceneCard>
             </Pressable>
           );
         }}
         ListEmptyComponent={
-          <View style={{ padding: 24 }}>
-            <Text style={{ color: "#9fb3c8", textAlign: dir.textAlign }}>
-              {rows.length > 0
-                ? t("library.empty.noResults")
-                : t("library.empty.noBooks")}
-            </Text>
+          <View style={{ paddingHorizontal: 16 }}>
+            <SceneCard>
+              <Text style={{ color: pal.dim, textAlign: dir.textAlign, fontSize: 14, lineHeight: 22 }}>
+                {rows.length > 0 ? t("library.empty.noResults") : t("library.empty.noBooks")}
+              </Text>
+            </SceneCard>
           </View>
         }
       />
 
       {undoVisible ? (
-        <View style={styles.undoBar}>
-          <Text style={[styles.undoTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
+        <View
+          style={[
+            styles.undoBar,
+            { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: shadowTint },
+          ]}
+        >
+          <Text style={[styles.undoTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
             {t("library.undo.pending", { title: undoTitle })}
           </Text>
-          <GradientButton
-            title={t("library.undo.cta")}
-            icon="arrow-undo"
-            colors={Gradients.success}
-            onPress={undoDelete}
-          />
+          <Pressable onPress={undoDelete} style={[styles.solidBtn, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
+            <Ionicons name="arrow-undo" size={16} color={pal.onAccent} />
+            <Text style={[styles.solidBtnTxt, { color: pal.onAccent }]}>{t("library.undo.cta")}</Text>
+          </Pressable>
         </View>
       ) : null}
 
       {renameOpen ? (
         <View style={styles.modalMask}>
-          <GlassCard contentStyle={styles.modal} style={{ width: "100%", maxWidth: 420 }}>
-            <Text style={[styles.modalTitle, { textAlign: dir.textAlign }]}>{t("library.rename.title")}</Text>
+          <SceneCard style={[styles.modal, { width: "100%", maxWidth: 420 }]}>
+            <Text style={[styles.modalTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("library.rename.title")}</Text>
             <TextInput
               value={renameValue}
               onChangeText={setRenameValue}
-              style={[styles.modalInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+              style={[
+                styles.modalInput,
+                {
+                  backgroundColor: pal.soft,
+                  borderColor: pal.cardBorder,
+                  color: pal.ink,
+                  textAlign: dir.textAlign,
+                  writingDirection: dir.writingDirection,
+                },
+              ]}
               placeholder={t("library.rename.placeholder")}
-              placeholderTextColor="#8aa0b8"
+              placeholderTextColor={pal.dim}
+              selectionColor={pal.accent}
             />
             <View style={{ flexDirection: dir.row, gap: 10 }}>
-              <GradientButton title={t("common.save")} icon="checkmark" onPress={saveRename} style={{ flex: 1 }} />
-              <GradientButton
-                title={t("common.cancel")}
-                variant="ghost"
+              <Pressable onPress={saveRename} style={[styles.solidBtn, { flex: 1, backgroundColor: pal.accent, flexDirection: dir.row }]}>
+                <Ionicons name="checkmark" size={18} color={pal.onAccent} />
+                <Text style={[styles.solidBtnTxt, { color: pal.onAccent }]}>{t("common.save")}</Text>
+              </Pressable>
+              <Pressable
                 onPress={() => setRenameOpen(false)}
-                style={{ flex: 1 }}
-              />
+                style={[styles.solidBtn, { flex: 1, backgroundColor: pal.soft, borderWidth: 1, borderColor: pal.cardBorder }]}
+              >
+                <Text style={[styles.solidBtnTxt, { color: pal.ink }]}>{t("common.cancel")}</Text>
+              </Pressable>
             </View>
-          </GlassCard>
+          </SceneCard>
         </View>
       ) : null}
 
       {/* اختيار لون المجلد — إشارة ملوّنة يختارها المستخدم */}
       <Modal visible={!!colorFolder} transparent animationType="fade" onRequestClose={() => setColorFolder(null)}>
         <Pressable style={styles.colorMask} onPress={() => setColorFolder(null)}>
-          <Pressable style={styles.colorCard} onPress={() => {}}>
-            <Text style={[styles.colorTitle, { textAlign: dir.textAlign }]}>
+          <Pressable
+            style={[styles.colorCard, { backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: shadowTint }]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.colorTitle, { color: pal.ink, textAlign: dir.textAlign }]}>
               {t("library.folder.colorTitle", { name: colorFolder?.name ?? "" })}
             </Text>
             <View style={styles.colorGrid}>
               {FOLDER_COLORS.map((c) => {
                 const on = colorFolder?.color === c;
                 return (
-                  <Pressable key={c} onPress={() => pickFolderColor(c)} style={[styles.colorSwatch, { backgroundColor: c }, on && styles.colorSwatchOn]}>
+                  <Pressable
+                    key={c}
+                    onPress={() => pickFolderColor(c)}
+                    style={[styles.colorSwatch, { backgroundColor: c }, on && { borderColor: pal.ink }]}
+                  >
                     {on ? <Ionicons name="checkmark" size={20} color="#fff" /> : null}
                   </Pressable>
                 );
@@ -682,108 +779,56 @@ export default function LibraryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
-    </ScreenBackground>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "transparent" },
-  header: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 6, gap: 10 },
-  h1: { color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "right" },
+  // يتداخل المحتوى قليلًا مع أسفل المشهد ليعطي عمقًا
+  header: { paddingHorizontal: 16, marginTop: -16, paddingBottom: 8, gap: 12 },
 
-  wordsCard: {
-    alignItems: "center",
-    gap: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderRadius: 18,
-    backgroundColor: "rgba(124,108,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.30)",
-  },
-  wordsIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(124,108,255,0.22)", alignItems: "center", justifyContent: "center" },
-  wordsTitle: { color: Palette.text, fontSize: 15, fontWeight: "800" },
-  wordsSub: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
+  wordsCard: { alignItems: "center", gap: 12, padding: 14, borderRadius: 26 },
+  wordsIcon: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  wordsTitle: { fontSize: 15, fontWeight: "900" },
+  wordsSub: { fontSize: 12, marginTop: 2, fontWeight: "600" },
+
   searchBar: {
     flexDirection: "row-reverse",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
+    paddingHorizontal: 16,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-  searchInput: { flex: 1, color: Palette.text, fontSize: 14, padding: 0 },
+  searchInput: { flex: 1, fontSize: 14, padding: 0 },
 
   filterRow: { flexDirection: "row-reverse", alignItems: "center", gap: 8 },
   fChip: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  fChipActive: { backgroundColor: Palette.primary, borderColor: Palette.primary },
-  fChipTxt: { color: Palette.textDim, fontWeight: "800", fontSize: 13 },
-  fChipTxtActive: { color: "#fff" },
+  fChipTxt: { fontWeight: "800", fontSize: 13 },
 
   sortBtn: {
     marginRight: "auto",
     flexDirection: "row-reverse",
     alignItems: "center",
     gap: 5,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-  },
-  sortTxt: { color: Palette.text, fontWeight: "800", fontSize: 13 },
-
-  bookCardWrap: { flex: 1 },
-
-  cover: {
-    height: 170,
-    padding: 14,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    overflow: "hidden",
-  },
-  coverImg: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
-  coverPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  activeBadge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    backgroundColor: "rgba(79,140,255,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(79,140,255,0.35)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  activeBadgeText: { color: "#ffffff", fontWeight: "900", fontSize: 11 },
-
-  coverTitle: { color: "#fff", fontWeight: "900", fontSize: 16, textAlign: "right" },
-  meta: { padding: 12, gap: 4, minHeight: 62, justifyContent: "center" },
-  metaTxt: { color: "#c9d4e2", fontSize: 12, textAlign: "right" },
-  syllabusChip: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    paddingVertical: 6,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "rgba(124,92,255,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(124,92,255,0.5)",
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  syllabusChipTxt: { color: "#cdbdff", fontSize: 12, fontWeight: "800" },
-  folderRow: { flexDirection: "row-reverse", gap: 8, paddingTop: 10, paddingHorizontal: 2 },
+  sortTxt: { fontWeight: "800", fontSize: 13 },
+
+  folderRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: 2, paddingBottom: 4 },
   folderChip: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -791,27 +836,38 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
   },
-  folderChipActive: { backgroundColor: "rgba(79,140,255,0.2)", borderColor: Palette.neonBlue },
-  folderChipTxt: { color: "#c9d4e2", fontSize: 13, fontWeight: "800" },
-  folderChipTxtActive: { color: Palette.neonBlue },
+  folderChipTxt: { fontSize: 13, fontWeight: "800" },
   // إشارة ملوّنة على شكل «كعب كتاب» (شريط عمودي) — مميّزة عن دوائر ألوان أبل
   folderDot: { width: 4, height: 15, borderRadius: 2 },
-  colorMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 24 },
-  colorCard: { width: "100%", maxWidth: 360, backgroundColor: Palette.bgElevated, borderRadius: Radius.xl, borderWidth: 1, borderColor: Palette.glassBorder, padding: Spacing.lg, gap: 16 },
-  colorTitle: { color: Palette.text, fontSize: 16, fontWeight: "900" },
-  colorGrid: { flexDirection: "row", flexWrap: "wrap", gap: 14, justifyContent: "center" },
-  colorSwatch: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "transparent" },
-  colorSwatchOn: { borderColor: "#fff" },
-  folderAdd: { borderColor: "rgba(79,140,255,0.5)", borderStyle: "dashed" },
-  folderBadge: {
+  folderAdd: { backgroundColor: "transparent", borderStyle: "dashed" },
+
+  bookCardWrap: { flex: 1 },
+  bookCard: { flex: 1, padding: 10, borderRadius: 26 },
+
+  coverShadow: {
+    height: 190,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  cover: { flex: 1, overflow: "hidden" },
+  coverImg: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  coverPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+  spine: { position: "absolute", top: 0, bottom: 0, width: 12 },
+  activeBadge: {
     position: "absolute",
     top: 10,
-    right: 10,
-    flexDirection: "row-reverse",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  activeBadgeText: { fontWeight: "900", fontSize: 11 },
+  folderBadge: {
+    position: "absolute",
+    bottom: 10,
     alignItems: "center",
     gap: 4,
     maxWidth: "75%",
@@ -821,23 +877,49 @@ const styles = StyleSheet.create({
   },
   folderBadgeTxt: { color: "#fff", fontSize: 10, fontWeight: "900" },
 
+  progTrack: { height: 5, borderRadius: 3, overflow: "hidden", marginTop: 10, marginHorizontal: 2 },
+  progFill: { height: 5, borderRadius: 3 },
+
+  bookTitle: { fontWeight: "900", fontSize: 15, lineHeight: 22, marginTop: 8, paddingHorizontal: 2 },
+  meta: { paddingHorizontal: 2, paddingTop: 4, paddingBottom: 2, gap: 2 },
+  metaTxt: { fontSize: 12, fontWeight: "600" },
+
+  colorMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center", padding: 24 },
+  colorCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 20,
+    gap: 16,
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  colorTitle: { fontSize: 17, fontWeight: "900" },
+  colorGrid: { flexDirection: "row", flexWrap: "wrap", gap: 14, justifyContent: "center" },
+  colorSwatch: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "transparent" },
+
   undoBar: {
     position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
+    left: 16,
+    right: 16,
+    bottom: 100,
     padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.65)",
-    flexDirection: "row-reverse",
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     gap: 12,
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
-  undoTxt: { color: "#fff", flex: 1, textAlign: "right" },
-  undoBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 12, backgroundColor: "#2ecc71" },
-  undoBtnTxt: { color: "#0b1220", fontWeight: "900" },
+  undoTxt: { flex: 1, fontWeight: "700" },
+
+  solidBtn: { alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16 },
+  solidBtnTxt: { fontWeight: "900", fontSize: 14 },
 
   modalMask: {
     position: "absolute",
@@ -845,21 +927,17 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
   },
-  modal: { padding: 16, gap: 12 },
-  modalTitle: { color: "#fff", fontWeight: "900", fontSize: 18, textAlign: "right" },
+  modal: { gap: 14, borderRadius: 28 },
+  modalTitle: { fontWeight: "900", fontSize: 17 },
   modalInput: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
     padding: 14,
-    color: "#fff",
+    fontSize: 15,
   },
-  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: "center" },
-  modalBtnTxt: { color: "#fff", fontWeight: "900" },
 });

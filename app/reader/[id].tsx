@@ -72,7 +72,7 @@ import {
   warmNext,
   setRecordingAudioMode,
 } from "../../lib/voice";
-import { closeReadingCard, onReadingAction, syncReadingCard } from "../../lib/readingCard";
+import { closeReadingCard, onReadingAction, setOpenReaderBook, syncReadingCard } from "../../lib/readingCard";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel } from "../../lib/settings";
 import { handoff, takeOver } from "../../lib/player";
@@ -745,6 +745,10 @@ export default function ReaderScreen() {
   const cardCtlRef = useRef({ toggle: () => {}, speed: () => {} });
   cardCtlRef.current = { toggle: () => togglePlay(), speed: () => cycleSpeed() };
   useEffect(() => onReadingAction((a) => (a === "toggle" ? cardCtlRef.current.toggle() : cardCtlRef.current.speed())), []);
+  useEffect(() => {
+    setOpenReaderBook(bookId || null);
+    return () => setOpenReaderBook(null);
+  }, [bookId]);
 
   function cycleSleep() {
     const idx = SLEEP_OPTIONS.indexOf(sleepMin as (typeof SLEEP_OPTIONS)[number]);

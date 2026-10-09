@@ -31,6 +31,13 @@ function detail(page: number, total: number): string {
 
 let last = "";
 
+// الكتاب المفتوح الآن في القارئ (لتعود البطاقة إليه بدل فتح قارئ ثانٍ)
+let openReaderBook: string | null = null;
+export const setOpenReaderBook = (id: string | null) => {
+  openReaderBook = id;
+};
+export const getOpenReaderBook = () => openReaderBook;
+
 export function syncReadingCard(s: { bookId: string; title: string; page: number; totalPages: number; rate: number; playing: boolean }) {
   const card = {
     bookId: s.bookId,

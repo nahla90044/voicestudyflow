@@ -102,6 +102,7 @@ struct ReadingLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: ReadingAttributes.self) { context in
       LockScreenView(state: context.state)
+        .widgetURL(URL(string: "voicestudyflow://listening/\(context.attributes.bookId)"))
     } dynamicIsland: { context in
       let s = context.state
       return DynamicIsland {
@@ -141,6 +142,7 @@ struct ReadingLiveActivity: Widget {
         Image(systemName: s.playing ? "waveform" : "book.closed.fill").foregroundStyle(gold)
       }
       .keylineTint(gold)
+      .widgetURL(URL(string: "voicestudyflow://listening/\(context.attributes.bookId)"))
     }
   }
 }

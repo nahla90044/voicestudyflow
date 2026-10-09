@@ -1,18 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GradientButton } from "../../components/brand/gradient-button";
-import { ScreenBackground } from "../../components/brand/screen-background";
-import { ScreenHeader } from "../../components/brand/screen-header";
-import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
+import { Radius, Spacing } from "../../constants/design";
 import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getSavedItems, removeSavedItem, updateSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
+import { useScene } from "../../lib/scene";
 import { removeUnitContent, type UnitContentKind } from "../../lib/unitContent";
+import { speakText, stopSpeaking } from "../../lib/voice";
 
 const ALL = "__all__";
 const NONE = "__none__";
@@ -31,6 +29,7 @@ export default function FlashcardsScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const router = useRouter();
+  const { pal } = useScene();
   const [tab, setTab] = useState<StudyTab>("cards");
   const [showArchived, setShowArchived] = useState(false); // عرض المؤرشفة بدل الحالية
   const [saved, setSaved] = useState<SavedItem[]>([]);
@@ -42,6 +41,8 @@ export default function FlashcardsScreen() {
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const flip = useRef(new Animated.Value(0)).current;
+  const [speaking, setSpeaking] = useState(false); // زر الاستماع للوجه الظاهر من البطاقة
+  const speakingRef = useRef(false);
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -287,293 +288,445 @@ export default function FlashcardsScreen() {
     ],
   };
 
-  return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <ScreenHeader
-          icon="albums"
-          title={t("flashcards.header.title")}
-          subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
-          color={Palette.neonPink}
-          actions={[{ icon: "bookmarks", label: t("words.title"), onPress: () => router.push("/words") }]}
-        />
+  // الاستماع للوجه الظاهر (سؤال أو إجابة) — ضغطة ثانية توقفه
+  function listenCard() {
+    const c = queue[idx];
+    if (!c) return;
+    if (speakingRef.current) {
+      speakingRef.current = false;
+      setSpeaking(false);
+      void stopSpeaking();
+      return;
+    }
+    speakingRef.current = true;
+    setSpeaking(true);
+    const done = () => {
+      speakingRef.current = false;
+      setSpeaking(false);
+    };
+    speakText(flipped ? c.back : c.front, { onDone: done, onError: done }).catch(done);
+  }
 
-        {/* شريط التبويبات: بطاقات / ملخّصات / اختبارات (مركز مراجعة موحّد) */}
-        <View style={[styles.segRow, { flexDirection: dir.row }]}>
+  // تغيّرت البطاقة/وجهها أو خرجنا من المراجعة → أوقف الصوت إن كان يعمل
+  useEffect(() => {
+    if (!speakingRef.current) return;
+    speakingRef.current = false;
+    setSpeaking(false);
+    void stopSpeaking();
+  }, [idx, flipped, mode]);
+
+  // ألوان أزرار التقييم: صعب (أحمر هادئ) · جيد (كهرماني) · سهل (اللون المميّز)
+  const hardTint = pal.dark ? { bg: "rgba(255,107,129,0.16)", fg: "#FF8A9B" } : { bg: "#FDE7E1", fg: "#C2502E" };
+  const goodTint = pal.dark ? { bg: "rgba(246,197,95,0.16)", fg: "#F6C56A" } : { bg: "#FFF1D6", fg: "#A8680F" };
+  const cardShadow = pal.dark ? "#000" : "#3C5028";
+
+  // شرطات التقدّم: نعرضها شرطات حين يكون العدد معقولًا، وإلا شريطًا واحدًا
+  const dashCount = Math.min(queue.length, 24);
+  const useDashes = queue.length > 0 && queue.length <= 24;
+
+  return (
+    <SceneScreen>
+      <SceneBanner
+        title={t("flashcards.header.title")}
+        subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
+        height={mode === "review" ? 150 : 190}
+        right={
+          <Pressable onPress={() => router.push("/words")} hitSlop={6} accessibilityLabel={t("words.title")}>
+            <SceneIconButton>
+              <Ionicons name="bookmarks" size={19} color={pal.ink} />
+            </SceneIconButton>
+          </Pressable>
+        }
+      />
+
+      {/* شريط التبويبات: بطاقات / ملخّصات / اختبارات (مركز مراجعة موحّد) */}
+      <View style={[styles.segRow, { flexDirection: dir.row }]}>
+        <View style={[styles.segWrap, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
           {(["cards", "summary", "quiz"] as StudyTab[]).map((seg) => {
             const on = tab === seg;
             return (
-              <Pressable key={seg} onPress={() => setTab(seg)} style={[styles.segBtn, on && styles.segBtnOn]}>
-                <Text style={[styles.segTxt, on && styles.segTxtOn]} numberOfLines={1}>{t(`flashcards.tab.${seg}`)}</Text>
+              <Pressable key={seg} onPress={() => setTab(seg)} style={[styles.segBtn, on && { backgroundColor: pal.accent }]}>
+                <Text style={[styles.segTxt, { color: on ? pal.onAccent : pal.dim }]} numberOfLines={1}>
+                  {t(`flashcards.tab.${seg}`)}
+                </Text>
               </Pressable>
             );
           })}
         </View>
+      </View>
 
-        {mode !== "review" ? (
-          <Text style={[styles.longPressHint, { textAlign: dir.textAlign }]}>{t("study.longPressHint")}</Text>
-        ) : null}
+      {mode !== "review" ? (
+        <Text style={[styles.longPressHint, { textAlign: dir.textAlign, color: pal.dim }]}>{t("study.longPressHint")}</Text>
+      ) : null}
 
-        {/* مبدّل: الحالية / المؤرشفة — لكل التبويبات (خارج وضع المراجعة) */}
-        {mode !== "review" ? (
-          <View style={[styles.archToggleRow, { flexDirection: dir.row }]}>
-            <Pressable onPress={() => setShowArchived(false)} style={[styles.archToggle, !showArchived && styles.archToggleOn]}>
-              <Text style={[styles.archToggleTxt, !showArchived && styles.archToggleTxtOn]}>{t("study.filter.current")}</Text>
-            </Pressable>
-            <Pressable onPress={() => setShowArchived(true)} style={[styles.archToggle, showArchived && styles.archToggleOn]}>
-              <Text style={[styles.archToggleTxt, showArchived && styles.archToggleTxtOn]}>
-                {t("study.filter.archived")}{archivedCount > 0 ? ` (${archivedCount})` : ""}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
+      {/* مبدّل: الحالية / المؤرشفة — لكل التبويبات (خارج وضع المراجعة) */}
+      {mode !== "review" ? (
+        <View style={[styles.archToggleRow, { flexDirection: dir.row }]}>
+          {[false, true].map((arch) => {
+            const on = showArchived === arch;
+            return (
+              <Pressable
+                key={String(arch)}
+                onPress={() => setShowArchived(arch)}
+                style={[
+                  styles.archToggle,
+                  { backgroundColor: on ? pal.soft : "transparent", borderColor: on ? pal.accent : pal.cardBorder },
+                ]}
+              >
+                <Text style={[styles.archToggleTxt, { color: on ? pal.accent : pal.dim }]}>
+                  {arch
+                    ? `${t("study.filter.archived")}${archivedCount > 0 ? ` (${archivedCount})` : ""}`
+                    : t("study.filter.current")}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
-        {tab !== "cards" ? (
-          savedGroups.length === 0 ? (
-            <View style={styles.center}>
-              <Ionicons name={tab === "quiz" ? "help-circle-outline" : "list-outline"} size={64} color={Palette.textDim} />
-              <Text style={styles.doneTitle}>{showArchived ? t("study.archived.emptyTitle") : t("flashcards.saved.emptyTitle")}</Text>
-              <Text style={styles.dim}>{showArchived ? t("study.archived.emptyBody") : t("flashcards.saved.emptyBody")}</Text>
-            </View>
-          ) : (
-            <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
-              {savedGroups.map((g) => (
-                <View key={g.items[0]?.pdfPath ?? g.title} style={{ gap: 8, marginBottom: 6 }}>
-                  <Text style={[styles.savedBook, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {g.title}</Text>
-                  {g.items.map((it) => (
-                    <Pressable
-                      key={it.key}
-                      onPress={() => openSaved(it)}
-                      onLongPress={() => savedMenu(it)}
-                      delayLongPress={300}
-                      style={styles.bookRow}
-                    >
-                      {it.studied ? <Ionicons name="checkmark-circle" size={18} color={Palette.neonCyan} /> : null}
-                      <View style={styles.bookInfo}>
-                        <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={2}>{it.label}</Text>
-                      </View>
-                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={Palette.textDim} />
-                    </Pressable>
-                  ))}
-                </View>
-              ))}
-            </ScrollView>
-          )
-        ) : mode === "picker" ? (
-          loading ? (
-            <View style={styles.center}>
-              <Text style={styles.dim}>{t("common.loading")}</Text>
-            </View>
-          ) : books.length === 0 ? (
-            <View style={styles.center}>
-              <Ionicons name="albums-outline" size={64} color={Palette.textDim} />
-              <Text style={styles.doneTitle}>{t("flashcards.empty.title")}</Text>
-              <Text style={styles.dim}>{t("flashcards.empty.body")}</Text>
-            </View>
-          ) : (
-            <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
-              {books.length > 1 ? (
-                <Pressable onPress={() => startBook(ALL, t("flashcards.allBooks"))} style={[styles.bookRow, styles.allRow]}>
-                  <View style={styles.bookInfo}>
-                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]}>📚 {t("flashcards.allBooks")}</Text>
-                    <Text style={[styles.bookSub, { textAlign: dir.textAlign }]}>{t("flashcards.cardsCount", { count: all.length })}</Text>
-                  </View>
-                  <View style={[styles.dueBadge, totalDue === 0 && styles.dueBadge0]}>
-                    <Text style={styles.dueBadgeTxt}>{totalDue}</Text>
-                  </View>
-                </Pressable>
-              ) : null}
-
-              {books.map((b) => (
-                <Pressable
-                  key={b.key}
-                  onPress={() => startBook(b.key, b.title)}
-                  onLongPress={() => bookMenu(b)}
-                  delayLongPress={300}
-                  style={styles.bookRow}
-                >
-                  <View style={styles.bookInfo}>
-                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {b.title}</Text>
-                    <Text style={[styles.bookSub, { textAlign: dir.textAlign }]}>{t("flashcards.bookStats", { total: b.total, due: b.due })}</Text>
-                  </View>
-                  <View style={[styles.dueBadge, b.due === 0 && styles.dueBadge0]}>
-                    <Text style={styles.dueBadgeTxt}>{b.due}</Text>
-                  </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-          )
-        ) : reviewDone ? (
-          /* ====== انتهت المراجعة ====== */
+      {tab !== "cards" ? (
+        savedGroups.length === 0 ? (
           <View style={styles.center}>
-            <Ionicons name="checkmark-done-circle" size={72} color={Palette.success} />
-            <Text style={styles.doneTitle}>{t("flashcards.reviewDone", { book: bookName })}</Text>
-            <GradientButton title={t("flashcards.backToBooks")} icon="arrow-back" onPress={() => setMode("picker")} style={{ alignSelf: "stretch", marginTop: Spacing.lg }} />
+            <View style={[styles.emptyIcon, { backgroundColor: pal.soft }]}>
+              <Ionicons name={tab === "quiz" ? "help-circle-outline" : "list-outline"} size={44} color={pal.accent} />
+            </View>
+            <Text style={[styles.doneTitle, { color: pal.ink }]}>
+              {showArchived ? t("study.archived.emptyTitle") : t("flashcards.saved.emptyTitle")}
+            </Text>
+            <Text style={[styles.dim, { color: pal.dim }]}>
+              {showArchived ? t("study.archived.emptyBody") : t("flashcards.saved.emptyBody")}
+            </Text>
           </View>
         ) : (
-          /* ====== المراجعة ====== */
-          <View style={styles.body}>
-            <View style={[styles.reviewTop, { flexDirection: dir.row }]}>
-              <Pressable onPress={() => setMode("picker")} hitSlop={8} style={styles.backChip}>
-                <Ionicons name="chevron-forward" size={16} color={Palette.text} />
-                <Text style={styles.backChipTxt}>{t("flashcards.books")}</Text>
-              </Pressable>
-              <View style={[styles.reviewTopRight, { flexDirection: dir.row }]}>
-                <Pressable onPress={() => goCard(-1)} disabled={idx <= 0} hitSlop={8} style={styles.navChip}>
-                  <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={18} color={idx <= 0 ? Palette.textDim : Palette.text} />
-                </Pressable>
-                <Text style={styles.counter}>{idx + 1} / {queue.length}</Text>
-                <Pressable onPress={() => goCard(1)} disabled={idx >= queue.length - 1} hitSlop={8} style={styles.navChip}>
-                  <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={idx >= queue.length - 1 ? Palette.textDim : Palette.text} />
-                </Pressable>
+          <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
+            {savedGroups.map((g) => (
+              <View key={g.items[0]?.pdfPath ?? g.title} style={{ gap: 8, marginBottom: 6 }}>
+                <Text style={[styles.savedBook, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={1}>
+                  📖 {g.title}
+                </Text>
+                {g.items.map((it) => (
+                  <Pressable key={it.key} onPress={() => openSaved(it)} onLongPress={() => savedMenu(it)} delayLongPress={300}>
+                    <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
+                      {it.studied ? <Ionicons name="checkmark-circle" size={18} color={pal.accent} /> : null}
+                      <View style={styles.bookInfo}>
+                        <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={2}>
+                          {it.label}
+                        </Text>
+                      </View>
+                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={pal.dim} />
+                    </SceneCard>
+                  </Pressable>
+                ))}
               </View>
-            </View>
-
-            <View style={styles.cardArea}>
-              <Pressable onPress={toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
-                <Animated.View style={[styles.face, frontStyle]}>
-                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.faceGrad}>
-                    <Ionicons name="help" size={150} color="rgba(255,255,255,0.08)" style={styles.watermark} />
-                    <Text style={styles.faceLabel}>{t("flashcards.question")}</Text>
-                    <Text style={styles.faceText}>{card?.front}</Text>
-                    <View style={[styles.tapHintRow, { flexDirection: dir.row }]}>
-                      <Ionicons name="sync" size={13} color="rgba(255,255,255,0.7)" />
-                      <Text style={styles.tapHint}>{t("flashcards.tapToFlip")}</Text>
-                    </View>
-                  </LinearGradient>
-                </Animated.View>
-                <Animated.View style={[styles.face, backStyle]}>
-                  <LinearGradient colors={Gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.faceGrad}>
-                    <Ionicons name="bulb" size={150} color="rgba(255,255,255,0.10)" style={styles.watermark} />
-                    <Text style={styles.faceLabelDark}>{t("flashcards.answer")}</Text>
-                    <Text style={styles.faceTextDark}>{card?.back}</Text>
-                  </LinearGradient>
-                </Animated.View>
-              </Pressable>
-            </View>
-
-            {flipped ? (
-              <View style={[styles.ratings, { flexDirection: dir.row }]}>
-                <GradientButton title={t("flashcards.rate.again")} colors={["#ff5d6c", "#ff8a5c"]} onPress={() => rate("again")} style={{ flex: 1 }} />
-                <GradientButton title={t("flashcards.rate.good")} colors={Gradients.brand} onPress={() => rate("good")} style={{ flex: 1 }} />
-                <GradientButton title={t("flashcards.rate.easy")} colors={Gradients.success} onPress={() => rate("easy")} style={{ flex: 1 }} />
-              </View>
-            ) : (
-              <GradientButton title={t("flashcards.revealAnswer")} icon="eye" colors={Gradients.neon} onPress={toggleFlip} />
-            )}
+            ))}
+          </ScrollView>
+        )
+      ) : mode === "picker" ? (
+        loading ? (
+          <View style={styles.center}>
+            <Text style={[styles.dim, { color: pal.dim }]}>{t("common.loading")}</Text>
           </View>
-        )}
+        ) : books.length === 0 ? (
+          <View style={styles.center}>
+            <View style={[styles.emptyIcon, { backgroundColor: pal.soft }]}>
+              <Ionicons name="albums-outline" size={44} color={pal.accent} />
+            </View>
+            <Text style={[styles.doneTitle, { color: pal.ink }]}>{t("flashcards.empty.title")}</Text>
+            <Text style={[styles.dim, { color: pal.dim }]}>{t("flashcards.empty.body")}</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
+            {books.length > 1 ? (
+              <Pressable onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
+                <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
+                  <View style={styles.bookInfo}>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>📚 {t("flashcards.allBooks")}</Text>
+                    <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
+                      {t("flashcards.cardsCount", { count: all.length })}
+                    </Text>
+                  </View>
+                  <View style={[styles.dueBadge, { backgroundColor: totalDue === 0 ? pal.track : pal.accent }]}>
+                    <Text style={[styles.dueBadgeTxt, { color: totalDue === 0 ? pal.dim : pal.onAccent }]}>{totalDue}</Text>
+                  </View>
+                </SceneCard>
+              </Pressable>
+            ) : null}
 
-        {/* زر عائم: توليد مخصّص (اختيار الجزء/النوع/العدد) — يظهر خارج وضع المراجعة */}
-        {mode !== "review" ? (
-          <Pressable onPress={() => router.push("/generate-study")} style={styles.fab}>
-            <Ionicons name="sparkles" size={22} color="#fff" />
-            <Text style={styles.fabTxt}>{t("generate.fab")}</Text>
+            {books.map((b) => (
+              <Pressable key={b.key} onPress={() => startBook(b.key, b.title)} onLongPress={() => bookMenu(b)} delayLongPress={300}>
+                <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
+                  <View style={styles.bookInfo}>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={1}>
+                      📖 {b.title}
+                    </Text>
+                    <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
+                      {t("flashcards.bookStats", { total: b.total, due: b.due })}
+                    </Text>
+                  </View>
+                  <View style={[styles.dueBadge, { backgroundColor: b.due === 0 ? pal.track : pal.accent }]}>
+                    <Text style={[styles.dueBadgeTxt, { color: b.due === 0 ? pal.dim : pal.onAccent }]}>{b.due}</Text>
+                  </View>
+                </SceneCard>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )
+      ) : reviewDone ? (
+        /* ====== انتهت المراجعة ====== */
+        <View style={styles.center}>
+          <View style={[styles.emptyIcon, { backgroundColor: pal.soft }]}>
+            <Ionicons name="checkmark-done-circle" size={52} color={pal.accent} />
+          </View>
+          <Text style={[styles.doneTitle, { color: pal.ink }]}>{t("flashcards.reviewDone", { book: bookName })}</Text>
+          <Pressable
+            onPress={() => setMode("picker")}
+            style={[styles.primaryBtn, { backgroundColor: pal.accent, flexDirection: dir.row, alignSelf: "stretch", marginTop: Spacing.lg }]}
+          >
+            <Ionicons name={dir.isRTL ? "arrow-forward" : "arrow-back"} size={18} color={pal.onAccent} />
+            <Text style={[styles.primaryTxt, { color: pal.onAccent }]}>{t("flashcards.backToBooks")}</Text>
           </Pressable>
-        ) : null}
-      </SafeAreaView>
-    </ScreenBackground>
+        </View>
+      ) : (
+        /* ====== المراجعة ====== */
+        <View style={styles.body}>
+          <View style={[styles.reviewTop, { flexDirection: dir.row }]}>
+            <Pressable
+              onPress={() => setMode("picker")}
+              hitSlop={8}
+              style={[styles.backChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+            >
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={16} color={pal.ink} />
+              <Text style={[styles.backChipTxt, { color: pal.ink }]}>{t("flashcards.books")}</Text>
+            </Pressable>
+            <View style={[styles.reviewTopRight, { flexDirection: dir.row }]}>
+              <Pressable
+                onPress={() => goCard(-1)}
+                disabled={idx <= 0}
+                hitSlop={8}
+                style={[styles.navChip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+              >
+                <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={18} color={idx <= 0 ? pal.track : pal.ink} />
+              </Pressable>
+              <Text style={[styles.counter, { color: pal.dim }]}>
+                {idx + 1} / {queue.length}
+              </Text>
+              <Pressable
+                onPress={() => goCard(1)}
+                disabled={idx >= queue.length - 1}
+                hitSlop={8}
+                style={[styles.navChip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+              >
+                <Ionicons
+                  name={dir.isRTL ? "chevron-back" : "chevron-forward"}
+                  size={18}
+                  color={idx >= queue.length - 1 ? pal.track : pal.ink}
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* شرطات التقدّم: المنجز باللون المميّز والباقي بلون المسار */}
+          {useDashes ? (
+            <View style={[styles.dashRow, { flexDirection: dir.row }]}>
+              {Array.from({ length: dashCount }).map((_, i) => (
+                <View key={i} style={[styles.dash, { backgroundColor: i < idx ? pal.accent : i === idx ? pal.accent + "66" : pal.track }]} />
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.barTrack, { backgroundColor: pal.track, flexDirection: dir.row }]}>
+              <View style={[styles.barFill, { backgroundColor: pal.accent, width: `${queue.length ? (idx / queue.length) * 100 : 0}%` }]} />
+            </View>
+          )}
+
+          <View style={styles.cardArea}>
+            {/* بطاقتان خلف البطاقة الحالية توحيان بالرزمة */}
+            <View style={[styles.deck, styles.deck2, { backgroundColor: pal.track, borderColor: pal.cardBorder }]} />
+            <View style={[styles.deck, styles.deck1, { backgroundColor: pal.soft, borderColor: pal.cardBorder, shadowColor: cardShadow }]} />
+
+            <Pressable onPress={toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
+              <Animated.View
+                style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: cardShadow }]}
+              >
+                <View style={styles.faceInner}>
+                  <View style={[styles.chip, { backgroundColor: pal.soft }]}>
+                    <Text style={[styles.chipTxt, { color: pal.accent }]} numberOfLines={1}>
+                      {card?.bookTitle || bookName || t("flashcards.question")}
+                    </Text>
+                  </View>
+                  <View style={styles.faceMid}>
+                    <Text style={[styles.faceLabel, { color: pal.dim }]}>{t("flashcards.question")}</Text>
+                    <Text style={[styles.faceText, { color: pal.ink }]}>{card?.front}</Text>
+                  </View>
+                  <View style={[styles.tapHintRow, { flexDirection: dir.row }]}>
+                    <Ionicons name="sync" size={13} color={pal.accent} />
+                    <Text style={[styles.tapHint, { color: pal.accent }]}>{t("flashcards.tapToFlip")}</Text>
+                  </View>
+                </View>
+              </Animated.View>
+              <Animated.View
+                style={[styles.face, backStyle, { backgroundColor: pal.card, borderColor: pal.accent + "55", shadowColor: cardShadow }]}
+              >
+                <View style={[styles.faceInner, { backgroundColor: pal.soft }]}>
+                  <View style={[styles.chip, { backgroundColor: pal.card }]}>
+                    <Text style={[styles.chipTxt, { color: pal.accent }]} numberOfLines={1}>
+                      {t("flashcards.answer")}
+                    </Text>
+                  </View>
+                  <View style={styles.faceMid}>
+                    <Ionicons name="bulb-outline" size={22} color={pal.accent} />
+                    <Text style={[styles.faceText, { color: pal.ink }]}>{card?.back}</Text>
+                  </View>
+                  <View style={{ height: 18 }} />
+                </View>
+              </Animated.View>
+            </Pressable>
+
+            {/* زر استماع صغير في الزاوية (للوجه الظاهر) */}
+            <Pressable
+              onPress={listenCard}
+              hitSlop={8}
+              accessibilityLabel={t("ask.listen")}
+              style={[
+                styles.listenBtn,
+                dir.isRTL ? { left: 14 } : { right: 14 },
+                { backgroundColor: speaking ? pal.accent : pal.soft },
+              ]}
+            >
+              <Ionicons name={speaking ? "stop" : "volume-high"} size={17} color={speaking ? pal.onAccent : pal.accent} />
+            </Pressable>
+          </View>
+
+          {flipped ? (
+            <View style={[styles.ratings, { flexDirection: dir.row }]}>
+              <Pressable onPress={() => rate("again")} style={[styles.rateBtn, { backgroundColor: hardTint.bg }]}>
+                <Text style={[styles.rateTxt, { color: hardTint.fg }]}>{t("flashcards.rate.again")}</Text>
+              </Pressable>
+              <Pressable onPress={() => rate("good")} style={[styles.rateBtn, { backgroundColor: goodTint.bg }]}>
+                <Text style={[styles.rateTxt, { color: goodTint.fg }]}>{t("flashcards.rate.good")}</Text>
+              </Pressable>
+              <Pressable onPress={() => rate("easy")} style={[styles.rateBtn, { backgroundColor: pal.accent }]}>
+                <Text style={[styles.rateTxt, { color: pal.onAccent }]}>{t("flashcards.rate.easy")}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={toggleFlip} style={[styles.primaryBtn, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
+              <Ionicons name="eye" size={18} color={pal.onAccent} />
+              <Text style={[styles.primaryTxt, { color: pal.onAccent }]}>{t("flashcards.revealAnswer")}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* زر عائم: توليد مخصّص (اختيار الجزء/النوع/العدد) — يظهر خارج وضع المراجعة */}
+      {mode !== "review" ? (
+        <Pressable
+          onPress={() => router.push("/generate-study")}
+          style={[styles.fab, { flexDirection: dir.row, backgroundColor: pal.accent, shadowColor: pal.dark ? "#000" : pal.accent }]}
+        >
+          <Ionicons name="sparkles" size={20} color={pal.onAccent} />
+          <Text style={[styles.fabTxt, { color: pal.onAccent }]}>{t("generate.fab")}</Text>
+        </Pressable>
+      ) : null}
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 10 },
-  dim: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22 },
-  doneTitle: { color: Palette.text, fontSize: 18, fontWeight: "900", textAlign: "center", marginTop: 8 },
+  dim: { fontSize: 14, textAlign: "center", lineHeight: 22, fontWeight: "600" },
+  doneTitle: { fontSize: 17, fontWeight: "900", textAlign: "center", marginTop: 8 },
+  emptyIcon: { width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center" },
 
-  segRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: Spacing.xl, paddingTop: 4, paddingBottom: 10 },
-  segBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 9,
-    borderRadius: Radius.pill,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-  },
-  segBtnOn: { backgroundColor: Palette.neonPink, borderColor: Palette.neonPink },
-  segTxt: { color: Palette.text, fontSize: 14, fontWeight: "800" },
-  segTxtOn: { color: "#fff" },
-  savedBook: { color: Palette.textMuted, fontSize: 13, fontWeight: "900", marginTop: 6 },
+  segRow: { paddingHorizontal: Spacing.xl, paddingBottom: 6 },
+  segWrap: { flex: 1, padding: 4, gap: 4, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  segBtn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 9, borderRadius: Radius.pill },
+  segTxt: { fontSize: 14, fontWeight: "800" },
+  savedBook: { fontSize: 15, fontWeight: "900", marginTop: 6 },
 
-  pickerWrap: { paddingHorizontal: Spacing.xl, paddingBottom: 100, gap: 10 },
-  bookRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: 12,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-  },
-  allRow: { borderColor: Palette.neonPink + "66", backgroundColor: Palette.neonPink + "14" },
+  pickerWrap: { paddingHorizontal: Spacing.xl, paddingTop: 4, paddingBottom: 100, gap: 10 },
+  bookRow: { alignItems: "center", gap: 12, borderRadius: 22, paddingVertical: 14 },
   bookInfo: { flex: 1 },
-  bookTitle: { color: Palette.text, fontSize: 16, fontWeight: "900", textAlign: "right" },
-  bookSub: { color: Palette.textDim, fontSize: 12, fontWeight: "700", textAlign: "right", marginTop: 3 },
-  dueBadge: { minWidth: 34, height: 34, paddingHorizontal: 8, borderRadius: 17, backgroundColor: Palette.neonPink, alignItems: "center", justifyContent: "center" },
-  dueBadge0: { backgroundColor: Palette.surfaceStrong ?? "rgba(255,255,255,0.12)" },
-  dueBadgeTxt: { color: "#fff", fontWeight: "900", fontSize: 15 },
+  bookTitle: { fontSize: 16, fontWeight: "900" },
+  bookSub: { fontSize: 12, fontWeight: "700", marginTop: 3 },
+  dueBadge: { minWidth: 34, height: 34, paddingHorizontal: 8, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  dueBadgeTxt: { fontWeight: "900", fontSize: 15 },
 
-  body: { flex: 1, paddingHorizontal: Spacing.xl, paddingBottom: 100, gap: Spacing.lg },
-  reviewTop: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
-  backChip: { flexDirection: "row-reverse", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 12, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  backChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
-  counter: { color: Palette.textDim, fontSize: 13, fontWeight: "800" },
-  reviewTopRight: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
-  trashChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  navChip: { padding: 6, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  longPressHint: { color: Palette.textDim, fontSize: 12, fontWeight: "700", paddingHorizontal: Spacing.xl, paddingTop: 8 },
-  archToggleRow: { flexDirection: "row-reverse", gap: 8, paddingHorizontal: Spacing.xl, paddingTop: 10 },
-  archToggle: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  archToggleOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
-  archToggleTxt: { color: Palette.textMuted, fontSize: 13, fontWeight: "800" },
-  archToggleTxtOn: { color: "#fff" },
-  rowArchived: { opacity: 0.5 },
-  archTag: { color: Palette.textDim, fontSize: 11, fontWeight: "800", paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill, backgroundColor: Palette.surface, overflow: "hidden" },
+  body: { flex: 1, paddingHorizontal: Spacing.xl, paddingTop: 4, paddingBottom: 100, gap: 14 },
+  reviewTop: { alignItems: "center", justifyContent: "space-between" },
+  backChip: {
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  backChipTxt: { fontSize: 13, fontWeight: "800" },
+  counter: { fontSize: 13, fontWeight: "800" },
+  reviewTopRight: { alignItems: "center", gap: 10 },
+  navChip: { padding: 6, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  longPressHint: { fontSize: 12, fontWeight: "700", paddingHorizontal: Spacing.xl, paddingTop: 6 },
+  archToggleRow: { gap: 8, paddingHorizontal: Spacing.xl, paddingTop: 10, paddingBottom: 10 },
+  archToggle: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: Radius.pill, borderWidth: 1 },
+  archToggleTxt: { fontSize: 13, fontWeight: "800" },
   fab: {
     position: "absolute",
     bottom: 24,
     alignSelf: "center",
-    flexDirection: "row-reverse",
     alignItems: "center",
     gap: 8,
     paddingVertical: 13,
     paddingHorizontal: 22,
     borderRadius: Radius.pill,
-    backgroundColor: Palette.neonViolet,
-    shadowColor: Palette.neonViolet,
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.3,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  fabTxt: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  trashBtn: { padding: 6, marginStart: 4 },
+  fabTxt: { fontSize: 15, fontWeight: "900" },
 
-  cardArea: { flex: 1 },
+  dashRow: { gap: 4 },
+  dash: { flex: 1, height: 5, borderRadius: 3 },
+  barTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
+  barFill: { height: 5, borderRadius: 3 },
+
+  cardArea: { flex: 1, marginBottom: 14 },
+  deck: { position: "absolute", borderRadius: 28, borderWidth: StyleSheet.hairlineWidth },
+  deck1: {
+    top: 10,
+    bottom: -8,
+    left: 10,
+    right: 10,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  deck2: { top: 20, bottom: -16, left: 22, right: 22 },
   press: { flex: 1 },
   face: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: Radius.xl,
-    overflow: "hidden",
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
     backfaceVisibility: "hidden",
-    shadowColor: Palette.neonViolet,
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
     shadowOffset: { width: 0, height: 12 },
-    elevation: 10,
+    elevation: 5,
   },
-  faceGrad: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xxl, gap: 14 },
-  watermark: { position: "absolute", top: 18, left: 14 },
-  faceLabel: { color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: "900", letterSpacing: 1 },
-  faceText: { color: "#fff", fontSize: 24, fontWeight: "900", textAlign: "center", lineHeight: 38 },
-  faceLabelDark: { color: "rgba(11,18,32,0.7)", fontSize: 13, fontWeight: "900", letterSpacing: 1 },
-  faceTextDark: { color: "#0b1220", fontSize: 24, fontWeight: "900", textAlign: "center", lineHeight: 38 },
-  tapHintRow: { flexDirection: "row-reverse", alignItems: "center", gap: 6, marginTop: 10 },
-  tapHint: { color: "rgba(255,255,255,0.8)", fontSize: 12, fontWeight: "700" },
+  faceInner: { flex: 1, borderRadius: 28, overflow: "hidden", alignItems: "center", padding: Spacing.xl, paddingTop: 18 },
+  faceMid: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 6 },
+  chip: { maxWidth: "70%", paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.pill },
+  chipTxt: { fontSize: 12, fontWeight: "800" },
+  faceLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
+  faceText: { fontSize: 26, fontWeight: "900", textAlign: "center", lineHeight: 40 },
+  tapHintRow: { alignItems: "center", gap: 6 },
+  tapHint: { fontSize: 13, fontWeight: "800" },
+  listenBtn: { position: "absolute", top: 14, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
 
-  ratings: { flexDirection: "row-reverse", gap: 8 },
+  ratings: { gap: 8 },
+  rateBtn: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 15, borderRadius: 18 },
+  rateTxt: { fontSize: 15, fontWeight: "900" },
+  primaryBtn: { alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 15, borderRadius: 18 },
+  primaryTxt: { fontSize: 15, fontWeight: "900" },
 });
