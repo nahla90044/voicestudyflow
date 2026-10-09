@@ -1663,13 +1663,32 @@ export default function ReaderScreen() {
     const pad = 0.006;
     const i = pageWords.findIndex((w) => x >= w.x - pad && x <= w.x + w.w + pad && y >= w.y - pad && y <= w.y + w.h + pad);
     if (i < 0) return;
+    const box = pageWords[i];
     // السياق: كلمات السطر نفسه
-    const cy = pageWords[i].y + pageWords[i].h / 2;
+    const cy = box.y + box.h / 2;
     const ctx = pageWords
-      .filter((w) => Math.abs(w.y + w.h / 2 - cy) < pageWords[i].h * 0.6)
+      .filter((w) => Math.abs(w.y + w.h / 2 - cy) < box.h * 0.6)
       .map((w) => w.t)
       .join(" ");
-    void saveToMyWords(pageWords[i].t, ctx);
+    // بعض ملفات PDF تخزّن عبارة كاملة في صندوق واحد ← نحدّد الكلمة تحت الإصبع
+    // بنسبة موضعه داخل الصندوق (من اليمين للعربي، ومن اليسار لغيره)
+    const tokens = box.t.split(/\s+/).filter((tk) => /[\p{L}]/u.test(tk));
+    let word = box.t;
+    if (tokens.length > 1) {
+      const frac = Math.min(1, Math.max(0, (x - box.x) / Math.max(box.w, 1e-6)));
+      const pos = isArabicText ? 1 - frac : frac;
+      const total = tokens.reduce((a, tk) => a + tk.length + 1, 0);
+      let acc = 0;
+      word = tokens[tokens.length - 1];
+      for (const tk of tokens) {
+        acc += tk.length + 1;
+        if (acc / total >= pos) {
+          word = tk;
+          break;
+        }
+      }
+    }
+    void saveToMyWords(word, ctx);
   }
 
   async function onWordTap(rawWord: string, context: string) {

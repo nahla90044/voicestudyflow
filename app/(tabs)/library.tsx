@@ -20,6 +20,7 @@ import { GlassCard } from "../../components/brand/glass-card";
 import { GradientButton } from "../../components/brand/gradient-button";
 import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
+import { getWords } from "../../lib/words";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import {
@@ -90,6 +91,7 @@ export default function LibraryScreen() {
 
   // بحث + فرز + تصنيف
   const [query, setQuery] = useState("");
+  const [wordCount, setWordCount] = useState(0);
   const [sortBy, setSortBy] = useState<"new" | "old" | "title">("new");
   const [filter, setFilter] = useState<"all" | "withPlan" | "noPlan">("all");
 
@@ -120,6 +122,7 @@ export default function LibraryScreen() {
     useCallback(() => {
       load();
       loadFolders();
+      getWords().then((w) => setWordCount(w.length));
     }, []),
   );
 
@@ -430,6 +433,20 @@ export default function LibraryScreen() {
           ) : null}
         </View>
 
+        {/* مكتبة الكلمات: «كلماتي» بجانب الكتب */}
+        <Pressable onPress={() => router.push("/words")} style={[styles.wordsCard, { flexDirection: dir.row }]}>
+          <View style={styles.wordsIcon}>
+            <Ionicons name="bookmarks" size={18} color="#D9D3FF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.wordsTitle, { textAlign: dir.textAlign }]}>{t("words.title")}</Text>
+            <Text style={[styles.wordsSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
+              {wordCount ? t("words.librarySub", { n: wordCount }) : t("words.libraryEmpty")}
+            </Text>
+          </View>
+          <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />
+        </Pressable>
+
         {/* الفلاتر + الفرز — قابلة للتمرير أفقيًا لتصل لكل الأزرار على الشاشات الأضيق */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {FILTERS.map((f) => (
@@ -675,6 +692,19 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 6, gap: 10 },
   h1: { color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "right" },
 
+  wordsCard: {
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderRadius: 18,
+    backgroundColor: "rgba(124,108,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.30)",
+  },
+  wordsIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "rgba(124,108,255,0.22)", alignItems: "center", justifyContent: "center" },
+  wordsTitle: { color: Palette.text, fontSize: 15, fontWeight: "800" },
+  wordsSub: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
   searchBar: {
     flexDirection: "row-reverse",
     alignItems: "center",

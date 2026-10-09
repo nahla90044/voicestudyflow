@@ -27,3 +27,26 @@ test("word info parsing with lists as arrays or comma strings", () => {
   assert.equal(parseWordInfo("no json"), null);
   assert.equal(parseWordInfo('{"usage":"x"}'), null);
 });
+
+test("verb info: infinitive, derived noun and tenses with examples", () => {
+  const w = parseWordInfo(JSON.stringify({
+    meaning: "ينتقل للسكن",
+    pos: "فعل",
+    verb: {
+      infinitive: "emménager",
+      noun: "l'emménagement",
+      participle: "emménagé",
+      tenses: [
+        { name: "Présent", forms: ["j'emménage", "tu emménages", "il emménage"], example: "J'emménage demain." },
+        { name: "Passé composé", forms: ["j'ai emménagé"] },
+        { name: "", forms: ["x"] },
+      ],
+    },
+  }));
+  assert.ok(w?.verb);
+  assert.equal(w!.verb!.infinitive, "emménager");
+  assert.equal(w!.verb!.noun, "l'emménagement");
+  assert.equal(w!.verb!.tenses.length, 2);
+  assert.equal(w!.verb!.tenses[0].example, "J'emménage demain.");
+  assert.equal(parseWordInfo('{"meaning":"x","verb":{"tenses":[]}}')!.verb, undefined);
+});

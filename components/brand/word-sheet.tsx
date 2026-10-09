@@ -13,6 +13,15 @@ import { PressableScale } from "./motion";
 
 type Props = { word: SavedWord | null; onClose: () => void; onRemoved?: () => void };
 
+function VerbForm({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.vf}>
+      <Text style={styles.vfLabel}>{label}</Text>
+      <Text style={styles.vfValue}>{value}</Text>
+    </View>
+  );
+}
+
 export function WordSheet({ word, onClose, onRemoved }: Props) {
   const { t } = useI18n();
   const dir = useDir();
@@ -78,6 +87,22 @@ export function WordSheet({ word, onClose, onRemoved }: Props) {
                 {info?.pos ? ` · ${info.pos}` : ""}
               </Text>
             </View>
+            <Pressable
+              onPress={async () => {
+                setLoading(true);
+                setFailed(false);
+                const i = await lookupWord(word, true).catch(() => null);
+                setInfo(i);
+                setFailed(!i);
+                setLoading(false);
+              }}
+              disabled={loading}
+              style={styles.round}
+              hitSlop={6}
+              accessibilityLabel={t("glossary.regenerate")}
+            >
+              <Ionicons name="refresh" size={17} color={Palette.text} />
+            </Pressable>
             <Pressable onPress={() => speakText(word.word)} style={styles.round} hitSlop={6} accessibilityLabel={t("glossary.listen")}>
               <Ionicons name="volume-medium" size={18} color="#5ED9FF" />
             </Pressable>
@@ -86,7 +111,7 @@ export function WordSheet({ word, onClose, onRemoved }: Props) {
             </Pressable>
           </View>
 
-          <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ gap: 14, paddingBottom: 6 }}>
+          <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: 14, paddingBottom: 6 }}>
             {!!word.context && (
               <Text style={[styles.context, { textAlign: dir.textAlign }]} numberOfLines={3}>
                 «{word.context}»
@@ -107,6 +132,33 @@ export function WordSheet({ word, onClose, onRemoved }: Props) {
                 {!!info.usage && (
                   <Section title={t("words.usage")}>
                     <Text style={[styles.body, { textAlign: dir.textAlign }]}>{info.usage}</Text>
+                  </Section>
+                )}
+                {info.verb && (
+                  <Section title={t("words.verb")}>
+                    <View style={[styles.verbRow, { flexDirection: dir.row }]}>
+                      <VerbForm label={t("words.infinitive")} value={info.verb.infinitive} />
+                      {!!info.verb.noun && <VerbForm label={t("words.noun")} value={info.verb.noun} />}
+                      {!!info.verb.participle && <VerbForm label={t("words.participle")} value={info.verb.participle} />}
+                    </View>
+                    {info.verb.tenses.map((tn) => (
+                      <View key={tn.name} style={styles.tense}>
+                        <Text style={[styles.tenseName, { textAlign: dir.textAlign }]}>{tn.name}</Text>
+                        <View style={styles.forms}>
+                          {tn.forms.map((f) => (
+                            <Text key={f} style={styles.form}>
+                              {f}
+                            </Text>
+                          ))}
+                        </View>
+                        {!!tn.example && (
+                          <Pressable onPress={() => speakText(tn.example!)} style={[styles.example, { flexDirection: dir.row }]}>
+                            <Ionicons name="play-circle" size={15} color="#B9AFFF" />
+                            <Text style={[styles.exampleTxt, { textAlign: dir.textAlign, fontSize: 13 }]}>{tn.example}</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    ))}
                   </Section>
                 )}
                 {info.synonyms.length > 0 && (
@@ -193,6 +245,14 @@ const styles = StyleSheet.create({
   example: { alignItems: "flex-start", gap: 8, paddingVertical: 4 },
   exampleTxt: { flex: 1, color: "#C4C9D8", fontSize: 14, lineHeight: 23 },
   actions: { gap: 8 },
+  verbRow: { flexWrap: "wrap", gap: 8 },
+  vf: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: "rgba(124,108,255,0.14)", gap: 2 },
+  vfLabel: { color: "#8E95AB", fontSize: 11, fontWeight: "700" },
+  vfValue: { color: "#D9D3FF", fontSize: 15, fontWeight: "800" },
+  tense: { padding: 12, gap: 8, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.08)" },
+  tenseName: { color: "#6CF3C5", fontSize: 13.5, fontWeight: "800" },
+  forms: { flexDirection: "row", flexWrap: "wrap", gap: 6, direction: "ltr" },
+  form: { width: "48%", color: Palette.text, fontSize: 13.5, writingDirection: "auto" },
   btn: {
     flex: 1,
     height: 46,

@@ -5,14 +5,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PressableScale } from "../components/brand/motion";
 import { WordSheet } from "../components/brand/word-sheet";
 import { Gradients, Palette, Radius } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
-import { getWords, wordsToCards, type SavedWord } from "../lib/words";
+import { getWords, lookupWord, wordsToCards, type SavedWord } from "../lib/words";
+import { exportWordsPdf } from "../lib/wordsPdf";
 
 export default function WordsScreen() {
   const router = useRouter();
@@ -23,6 +24,40 @@ export default function WordsScreen() {
   const [book, setBook] = useState<string | null>(null);
   const [open, setOpen] = useState<SavedWord | null>(null);
   const [carded, setCarded] = useState(0);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+
+  // PDF مرتّب: نجهّز معاني الكلمات الناقصة أولًا ثم ننشئ الملف ونفتح الحفظ/المشاركة
+  async function makePdf() {
+    if (pdfBusy || !shown.length) return;
+    const list = [...shown];
+    try {
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].info) continue;
+        setPdfBusy(t("words.pdfPreparing", { done: i + 1, total: list.length }));
+        const info = await lookupWord(list[i]).catch(() => null);
+        if (info) list[i] = { ...list[i], info };
+      }
+      setPdfBusy(t("words.pdfBuilding"));
+      const d = new Date();
+      await exportWordsPdf(list, {
+        title: t("words.pdfTitle"),
+        subtitle: t("words.pdfSub", { n: list.length, date: d.toLocaleDateString() }),
+        meaning: t("words.meaning"),
+        usage: t("words.usage"),
+        synonyms: t("words.synonyms"),
+        antonyms: t("words.antonyms"),
+        examples: t("words.examples"),
+        verb: t("words.verb"),
+        infinitive: t("words.infinitive"),
+        noun: t("words.noun"),
+        general: t("flashcards.generalCards"),
+        rtl: dir.isRTL,
+      });
+    } finally {
+      setPdfBusy(null);
+      reload();
+    }
+  }
 
   const reload = useCallback(() => {
     getWords().then(setWords);
@@ -114,18 +149,29 @@ export default function WordsScreen() {
         />
       )}
 
-      {ready.length > 0 && (
-        <View style={styles.bottom}>
+      {shown.length > 0 && (
+        <View style={[styles.bottom, { flexDirection: dir.row }]}>
+          <PressableScale onPress={makePdf} disabled={!!pdfBusy} style={{ flex: 1 }}>
+            <View style={[styles.cta, styles.ctaGhost]}>
+              {pdfBusy ? <ActivityIndicator color={Palette.text} /> : <Ionicons name="document-text" size={18} color={Palette.text} />}
+              <Text style={[styles.ctaTxt, { color: Palette.text }]} numberOfLines={1}>
+                {pdfBusy ?? t("words.pdf")}
+              </Text>
+            </View>
+          </PressableScale>
           <PressableScale
             onPress={async () => {
               const n = await wordsToCards(ready);
               setCarded(n);
             }}
-            disabled={carded > 0}
+            disabled={carded > 0 || !ready.length}
+            style={{ flex: 1 }}
           >
-            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.cta, carded > 0 && { opacity: 0.55 }]}>
+            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.cta, (carded > 0 || !ready.length) && { opacity: 0.55 }]}>
               <Ionicons name={carded ? "checkmark" : "albums"} size={18} color="#fff" />
-              <Text style={styles.ctaTxt}>{carded ? t("words.carded", { n: carded }) : t("words.allToCards", { n: ready.length })}</Text>
+              <Text style={styles.ctaTxt} numberOfLines={1}>
+                {carded ? t("words.carded", { n: carded }) : t("words.allToCards", { n: ready.length })}
+              </Text>
             </LinearGradient>
           </PressableScale>
         </View>
@@ -181,7 +227,8 @@ const styles = StyleSheet.create({
   word: { color: "#D9D3FF", fontSize: 17, fontWeight: "800" },
   meaning: { color: "#C4C9D8", fontSize: 13.5, lineHeight: 21 },
   src: { color: "#6F7690", fontSize: 11.5 },
-  bottom: { position: "absolute", left: 16, right: 16, bottom: 26 },
+  bottom: { position: "absolute", left: 16, right: 16, bottom: 26, gap: 8 },
+  ctaGhost: { backgroundColor: "#1A1D2B", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   cta: { height: 54, borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  ctaTxt: { color: "#fff", fontSize: 15.5, fontWeight: "800" },
+  ctaTxt: { color: "#fff", fontSize: 14.5, fontWeight: "800", flexShrink: 1 },
 });
