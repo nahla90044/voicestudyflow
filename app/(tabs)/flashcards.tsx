@@ -295,6 +295,7 @@ export default function FlashcardsScreen() {
           title={t("flashcards.header.title")}
           subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
           color={Palette.neonPink}
+          actions={[{ icon: "bookmarks", label: t("words.title"), onPress: () => router.push("/words") }]}
         />
 
         {/* شريط التبويبات: بطاقات / ملخّصات / اختبارات (مركز مراجعة موحّد) */}

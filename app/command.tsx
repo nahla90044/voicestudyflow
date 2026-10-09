@@ -68,6 +68,7 @@ export default function CommandScreen() {
       { key: "add", labelKey: "cmd.addBook", icon: "add-circle", color: Palette.primary, go: go(() => router.push("/add-book")) },
       { key: "plan", labelKey: "cmd.plan", icon: "calendar", color: Palette.neonCyan, go: go(() => router.push("/calendar")) },
       { key: "focus", labelKey: "cmd.focus", icon: "timer", color: Palette.success, go: go(() => router.push("/pomodoro")) },
+      { key: "words", labelKey: "words.title", icon: "bookmarks", color: "#D9D3FF", go: go(() => router.push("/words")) },
       { key: "review", labelKey: "cmd.review", icon: "albums", color: Palette.neonPink, go: go(() => router.push("/flashcards")) },
       { key: "progress", labelKey: "cmd.progress", icon: "stats-chart", color: Palette.warn, go: go(() => router.push("/activity")) },
       { key: "archive", labelKey: "cmd.archive", icon: "archive", color: Palette.textDim, go: go(() => router.push("/explore")) },

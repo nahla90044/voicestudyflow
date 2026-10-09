@@ -80,6 +80,7 @@ export default function RootLayout() {
           <Stack.Screen name="book/[id]" />
           <Stack.Screen name="ask/[id]" />
           <Stack.Screen name="glossary" />
+          <Stack.Screen name="words" />
           {/* «بحث وأوامر» تُفتح كورقة من الأسفل فوق الشاشة الحالية */}
           <Stack.Screen name="command" options={{ presentation: "modal" }} />
           <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />

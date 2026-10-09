@@ -75,6 +75,8 @@ import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel } from "../../lib/settings";
 import { handoff, takeOver } from "../../lib/player";
 import { useDictation } from "../../lib/stt";
+import { addWord, type SavedWord } from "../../lib/words";
+import { WordSheet } from "../../components/brand/word-sheet";
 import { parseWalkCommand, type WalkCommand } from "../../lib/voiceIntents";
 import { useDir, useI18n } from "../../lib/i18n";
 
@@ -295,6 +297,8 @@ export default function ReaderScreen() {
   const [dictWord, setDictWord] = useState("");
   const [dictMeaning, setDictMeaning] = useState("");
   const [dictLoading, setDictLoading] = useState(false);
+  const [wordSheet, setWordSheet] = useState<SavedWord | null>(null); // «كلماتي»: بطاقة الكلمة المحفوظة
+  const dictContextRef = useRef("");
 
   // وضع القيادة (واجهة كبيرة مبسّطة)
   const [drivingMode, setDrivingMode] = useState(false);
@@ -1636,10 +1640,43 @@ export default function ReaderScreen() {
     }, 280);
   }
 
+  /** ضغطة مطوّلة على كلمة: تُحفظ في «كلماتي» ويجهّز الذكاء معناها ومرادفاتها وأضدادها وأمثلتها */
+  async function saveToMyWords(rawWord: string, context: string) {
+    const w = await addWord({
+      word: rawWord,
+      context,
+      bookId,
+      bookTitle: typeof title === "string" ? title : undefined,
+      page: livePageRef.current,
+    });
+    if (!w) return;
+    setDictOpen(false);
+    setWordSheet(w);
+  }
+
+  // ضغطة مطوّلة على صورة الصفحة: أي كلمة تحت الإصبع؟ (من مواضع كلمات الصفحة)
+  function onPageLongPress(locX: number, locY: number) {
+    if (!pdfImgW2 || !pageWords.length) return;
+    const H = pdfImgW2 / (pageImgAspect || 0.7);
+    const x = locX / pdfImgW2;
+    const y = locY / H;
+    const pad = 0.006;
+    const i = pageWords.findIndex((w) => x >= w.x - pad && x <= w.x + w.w + pad && y >= w.y - pad && y <= w.y + w.h + pad);
+    if (i < 0) return;
+    // السياق: كلمات السطر نفسه
+    const cy = pageWords[i].y + pageWords[i].h / 2;
+    const ctx = pageWords
+      .filter((w) => Math.abs(w.y + w.h / 2 - cy) < pageWords[i].h * 0.6)
+      .map((w) => w.t)
+      .join(" ");
+    void saveToMyWords(pageWords[i].t, ctx);
+  }
+
   async function onWordTap(rawWord: string, context: string) {
     const word = rawWord.replace(/[^\p{L}\p{M}]/gu, "").trim();
     if (!word) return;
     setDictWord(word);
+    dictContextRef.current = context;
     setDictMeaning("");
     setDictLoading(true);
     setDictOpen(true);
@@ -2229,6 +2266,7 @@ export default function ReaderScreen() {
                             <Text
                               key={wi}
                               onPress={() => onWordPress(i, tok, s)}
+                              onLongPress={highlightMode ? undefined : () => void saveToMyWords(tok, s)}
                               suppressHighlighting
                               style={spoken ? styles.wordSpoken : undefined}
                             >
@@ -2274,11 +2312,16 @@ export default function ReaderScreen() {
                   onTouchStart={(e) => (touchRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, t: Date.now() })}
                   onTouchEnd={(e) => onPageTouchEnd(e.nativeEvent.pageX, e.nativeEvent.pageY)}
                 >
-                  <Image
-                    source={{ uri: pageImg }}
-                    style={{ width: "100%", aspectRatio: pageImgAspect }}
-                    resizeMode="contain"
-                  />
+                  <Pressable
+                    delayLongPress={380}
+                    onLongPress={(e) => onPageLongPress(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+                  >
+                    <Image
+                      source={{ uri: pageImg }}
+                      style={{ width: "100%", aspectRatio: pageImgAspect }}
+                      resizeMode="contain"
+                    />
+                  </Pressable>
                   {/* هايلايتر الجملة المقروءة (كل أسطرها) + الكلمة المنطوقة الآن */}
                   {pdfImgW2 > 0 &&
                     curRects.map((r, i) => {
@@ -2997,11 +3040,19 @@ export default function ReaderScreen() {
                 <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.dict.loading")}</Text>
               </View>
             ) : (
-              <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
+              <>
+                <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
+                <Pressable onPress={() => void saveToMyWords(dictWord, dictContextRef.current)} style={[styles.dictSave, { flexDirection: dir.row }]}>
+                  <Ionicons name="bookmark" size={15} color="#07080D" />
+                  <Text style={styles.dictSaveTxt}>{t("words.saveMore")}</Text>
+                </Pressable>
+              </>
             )}
           </Pressable>
         </Pressable>
       </Modal>
+
+      <WordSheet word={wordSheet} onClose={() => setWordSheet(null)} />
 
       {/* قائمة اختيار الصوت — منظّمة حسب اللغة */}
       <Modal visible={voiceModal} transparent animationType="slide" onRequestClose={() => setVoiceModal(false)}>
@@ -3796,6 +3847,8 @@ const styles = StyleSheet.create({
   dictWord: { color: Palette.primary, fontSize: 22, fontWeight: "900", textAlign: "right" },
   dictHint: { color: Palette.textDim, fontSize: 14 },
   dictMeaning: { color: Palette.text, fontSize: 17, lineHeight: 28, textAlign: "right" },
+  dictSave: { alignSelf: "flex-start", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 14, height: 38, borderRadius: 12, backgroundColor: "#F3F4F8" },
+  dictSaveTxt: { color: "#07080D", fontSize: 13.5, fontWeight: "800" },
 
   gotoMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 220 },
   gotoCard: {

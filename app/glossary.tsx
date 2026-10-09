@@ -14,11 +14,13 @@ import { PressableScale } from "../components/brand/motion";
 import { Gradients, Palette, Radius } from "../constants/design";
 import { getDownloadState, startDownload, subscribeDownload, type DownloadState } from "../lib/downloadManager";
 import { addCards } from "../lib/flashcards";
-import { getGlossary, type BookKind, type GlossaryItem, type UnitRange } from "../lib/glossary";
+import { getGlossary, setBookKind, type BookKind, type GlossaryItem, type UnitRange } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
 import { setLastPage } from "../lib/readerPrefs";
 import { getSyllabus } from "../lib/syllabus";
 import { speakText, stopSpeaking } from "../lib/voice";
+import { addWord, type SavedWord } from "../lib/words";
+import { WordSheet } from "../components/brand/word-sheet";
 
 type Filter = "all" | GlossaryItem["k"];
 
@@ -60,6 +62,16 @@ export default function GlossaryScreen() {
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [speaking, setSpeaking] = useState<string | null>(null);
   const [dl, setDl] = useState<DownloadState | null>(getDownloadState());
+  const [kindOpen, setKindOpen] = useState(false);
+  const [wordSheet, setWordSheet] = useState<SavedWord | null>(null);
+
+  async function chooseKind(k: BookKind) {
+    setKindOpen(false);
+    if (k === kind) return;
+    await setBookKind(pdfPath, k, titles.length);
+    setKind(k);
+    void load(true);
+  }
 
   useEffect(() => subscribeDownload(setDl), []);
   useEffect(() => () => void stopSpeaking(), []);
@@ -189,11 +201,24 @@ export default function GlossaryScreen() {
               </PressableScale>
             )}
             {kind && (
-              <View style={[styles.metaChip, { backgroundColor: "rgba(108,243,197,0.10)" }]}>
+              <PressableScale onPress={() => setKindOpen((v) => !v)} style={[styles.metaChip, { backgroundColor: "rgba(108,243,197,0.10)" }]}>
                 <Text style={[styles.metaTxt, { color: "#6CF3C5" }]}>{t(`glossary.kind.${kind}`)}</Text>
-              </View>
+                <Ionicons name="chevron-down" size={13} color="#6CF3C5" />
+              </PressableScale>
             )}
           </View>
+          {kindOpen && (
+            <View style={{ gap: 6 }}>
+              <Text style={[styles.dim, { textAlign: dir.textAlign, fontSize: 12.5 }]}>{t("glossary.kindPick")}</Text>
+              <View style={[styles.metaRow, { flexDirection: dir.row }]}>
+                {(["textbook", "language", "novel", "general"] as BookKind[]).map((k) => (
+                  <Pressable key={k} onPress={() => chooseKind(k)} style={[styles.filter, k === kind && styles.filterOn]}>
+                    <Text style={[styles.filterTxt, k === kind && styles.filterTxtOn]}>{t(`glossary.kind.${k}`)}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         {loading ? (
@@ -254,7 +279,13 @@ export default function GlossaryScreen() {
                 <View key={i.t} style={styles.item}>
                   <View style={[styles.itemHead, { flexDirection: dir.row }]}>
                     <View style={[styles.dot, { backgroundColor: c }]} />
-                    <Text style={[styles.term, { textAlign: dir.textAlign }]} selectable>
+                    <Text
+                      style={[styles.term, { textAlign: dir.textAlign }]}
+                      onLongPress={async () => {
+                        const w = await addWord({ word: i.t, context: i.ex || i.m, bookId, bookTitle, page: i.p });
+                        if (w) setWordSheet(w);
+                      }}
+                    >
                       {i.t}
                     </Text>
                     <Text style={[styles.kindTag, { color: c }]}>{t(`glossary.k.${i.k}`)}</Text>
@@ -302,6 +333,7 @@ export default function GlossaryScreen() {
           </PressableScale>
         </View>
       )}
+      <WordSheet word={wordSheet} onClose={() => setWordSheet(null)} />
     </SafeAreaView>
   );
 }

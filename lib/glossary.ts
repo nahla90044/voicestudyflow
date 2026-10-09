@@ -15,7 +15,7 @@ import {
   type UnitRange,
 } from "./glossaryCore.ts";
 import { supabase } from "./supabase";
-import { getUnitContent, setUnitContent } from "./unitContent";
+import { getUnitContent, removeUnitContent, setUnitContent } from "./unitContent";
 
 export type { BookKind, GlossaryItem, UnitRange };
 
@@ -54,9 +54,17 @@ const KIND_Q =
   "language (كتاب لتعليم لغة أجنبية أو مفرداتها)، novel (رواية أو قصص أو أدب)، general (غير ذلك). " +
   "أجب بالكلمة الإنجليزية وحدها دون أي شرح.";
 
+const kindKey = (pdfPath: string) => `bookkind:v1:${hashKey(pdfPath)}`;
+
+/** اختيار المستخدم لنوع الكتاب (يتقدّم على التصنيف الآلي) ويمسح قواميس الوحدات القديمة */
+export async function setBookKind(pdfPath: string, kind: BookKind, unitCount: number): Promise<void> {
+  await AsyncStorage.setItem(kindKey(pdfPath), kind).catch(() => {});
+  for (let i = 0; i < unitCount; i++) await removeUnitContent(pdfPath, i, "glossary").catch(() => {});
+}
+
 /** نوع الكتاب (يُحسب مرة ويُحفظ) */
 export async function getBookKind(pdfPath: string, pages?: PageText[]): Promise<BookKind> {
-  const key = `bookkind:v1:${hashKey(pdfPath)}`;
+  const key = kindKey(pdfPath);
   const cached = await AsyncStorage.getItem(key).catch(() => null);
   if (cached) return cached as BookKind;
   const ps = (pages ?? (await bookPages(pdfPath))).filter((p) => p.text.trim().length > 40);
