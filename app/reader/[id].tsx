@@ -62,6 +62,7 @@ import { getSpokenName, isOwner } from "../../lib/auth";
 import {
   DEFAULT_VOICE_ID,
   prefetchText,
+  holdAudioSession,
   setLivePlaybackRate,
   setNowPlaying,
   speakText,
@@ -347,6 +348,9 @@ export default function ReaderScreen() {
   const [tashkeelMode, setTashkeelMode] = useState(false);
   const tashkeelRef = useRef(false);
   const tashkeelCacheRef = useRef<Map<number, string>>(new Map());
+  // نص الصفحات القادمة مجهّز مسبقًا → الانتقال بين الصفحات بلا انتظار (حتى والجوال مقفل)
+  const pageTextCacheRef = useRef<Map<number, Awaited<ReturnType<typeof extractPdfPageText>>>>(new Map());
+  const pageRetryRef = useRef<Set<number>>(new Set());
   // عرض البريزنتيشن: شرائح مولّدة من الصفحة تتنقّل مع الصوت
   const [presentOpen, setPresentOpen] = useState(false);
   const [pageSlides, setPageSlides] = useState<Slide[]>([]);
@@ -1197,7 +1201,8 @@ export default function ReaderScreen() {
 
   // يقرأ صفحة جملة-بجملة، وعند انتهائها ينتقل تلقائيًا للتالية.
   // announce: يذكر رقم الصفحة مرة واحدة (عند بدء القراءة/الانتقال اليدوي فقط)
-  async function playFromPage(p: number, startIdx = 0, announce = false) {
+  // auto: انتقال تلقائي من نهاية الصفحة السابقة (القراءة مستمرة) — لا نقطعه ببوّابة
+  async function playFromPage(p: number, startIdx = 0, announce = false, auto = false) {
     if (!pdfPath) return;
 
     // بيانات شاشة القفل (اسم الكتاب + الصوت) — تظهر مثل البودكاست عند القراءة والجوال مقفل
@@ -1209,6 +1214,7 @@ export default function ReaderScreen() {
     // بوّابة التحميل: بعد صفحتين مجانيتين، شجّعي تحميل الكتاب كامل قبل المتابعة
     const seen = sessionPagesRef.current;
     if (
+      !auto &&
       !gateDismissedRef.current &&
       !fullyLoadedRef.current &&
       !getDownloadState()?.running &&
@@ -1234,7 +1240,8 @@ export default function ReaderScreen() {
         : `جارٍ تحضير نص الصفحة ${p}…`
     );
     try {
-      const res = await extractPdfPageText(pdfPath, p);
+      const res = pageTextCacheRef.current.get(p) ?? (await extractPdfPageText(pdfPath, p));
+      pageTextCacheRef.current.set(p, res);
       if (res.totalPages) setTotalPages(res.totalPages);
       setPage(res.page);
 
@@ -1266,7 +1273,7 @@ export default function ReaderScreen() {
         // صفحة بدون نص (قد تكون صورة ممسوحة) → جرّب التالية أو أوقف
         if (res.page < res.totalPages) {
           setStatus(`الصفحة ${res.page} بدون نص — أتنقّل للتالية…`);
-          return playFromPage(res.page + 1);
+          return playFromPage(res.page + 1, 0, false, true);
         }
         setStatus("لا يوجد نص قابل للقراءة في هذا الكتاب.");
         stop();
@@ -1292,9 +1299,40 @@ export default function ReaderScreen() {
         playSentence(sents, start, res.page, res.totalPages);
       }
     } catch (e: any) {
+      // أثناء القراءة المتواصلة: محاولة ثانية بعد لحظة (الشبكة قد تتقطّع والجوال مقفل)
+      if (auto && playingRef.current && !pageRetryRef.current.has(p)) {
+        pageRetryRef.current.add(p);
+        setTimeout(() => playingRef.current && playFromPage(p, startIdx, false, true), 1500);
+        return;
+      }
       setBusy(false);
       setStatus(`تعذّر تحميل النص: ${e?.message ?? "تحقّقي من الاتصال"}`);
       stop();
+    }
+  }
+
+  // يجهّز الصفحة التالية كاملة أثناء قراءة الحالية: النص، والتشكيل/الترجمة إن لزم،
+  // وصوت أول جملتين — فتبدأ فور انتهاء الحالية بلا فجوة. ويجلب نص الصفحة التي بعدها.
+  async function prepareNextPage(p: number) {
+    if (!pdfPath || p < 1) return;
+    try {
+      const res = pageTextCacheRef.current.get(p) ?? (await extractPdfPageText(pdfPath, p));
+      pageTextCacheRef.current.set(p, res);
+      if (!res.text.trim()) return;
+      const precise = tashkeelRef.current || !!res.ocr;
+      let txt = res.text;
+      if (listenArabicRef.current) txt = await translatePage(res.page, txt);
+      else if (precise) txt = await tashkeelPage(res.page, txt, !!res.ocr);
+      const sents = listenArabicRef.current || precise ? splitSentences(txt) : getReadingSentences(txt, res.page);
+      const vId = pickVoice();
+      for (const s of sents.slice(0, 2)) await prefetchText(s, { voiceId: vId });
+      if (!pageTextCacheRef.current.has(p + 1)) {
+        extractPdfPageText(pdfPath, p + 1)
+          .then((r) => pageTextCacheRef.current.set(p + 1, r))
+          .catch(() => {});
+      }
+    } catch {
+      // التحضير المسبق اختياري
     }
   }
 
@@ -1319,7 +1357,8 @@ export default function ReaderScreen() {
     if (i >= sents.length) {
       recordActivity({ pages: 1 }); // أنهى صفحة
       if (p < total) {
-        playFromPage(p + 1);
+        holdAudioSession(true); // يُبقي الجلسة حيّة حتى تبدأ الصفحة التالية (الجوال مقفل)
+        playFromPage(p + 1, 0, false, true);
       } else {
         void onBookFinished(); // أنهى الكتاب → يسجّل الإنجاز ويفتح المكافأة
         stop();
@@ -1339,8 +1378,8 @@ export default function ReaderScreen() {
       if (i + 1 < sents.length) warmNext(sents[i + 1], { voiceId: vId });
       if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
       // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل سلس
-      if (i >= sents.length - 2 && p < total) {
-        extractPdfPageText(pdfPath, p + 1).catch(() => {});
+      if (i === Math.max(0, sents.length - 3) && p < total) {
+        void prepareNextPage(p + 1);
       }
       // لموضع العدسة: كم مقطعًا/كلمات قبل هذا المقطع وإجماليها
       let wordsBefore = 0;

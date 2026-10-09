@@ -611,6 +611,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "التشغيل";
     player.play();
+    holdAudioSession(false); // بدأ السرد فعلًا → لا حاجة للمقطع الصامت
     // أزرار شاشة القفل (تشغيل/إيقاف + «قيد التشغيل») لهذا المقطع. التفعيل يخص مركز
     // «قيد التشغيل» فقط ولا يمسّ جلسة الصوت، فلا يُحدث تقطيعًا في الصوت.
     activateLockScreen(player);
@@ -711,6 +712,7 @@ async function speakWithDevice(text: string, opts: SpeakOptions) {
   const voice = await pickDeviceVoiceId(lang, gender);
 
   Speech.stop();
+  holdAudioSession(false);
   Speech.speak(text, {
     language: lang === "ar" ? "ar-SA" : "en-US",
     voice,
@@ -732,9 +734,67 @@ function stopCurrentOnly(): void {
 }
 
 export async function stopSpeaking(): Promise<void> {
+  holdAudioSession(false);
   clearLockScreen(currentPlayer); // إيقاف كامل → أزل أزرار شاشة القفل
   stopCurrentOnly();
   disposeWarm(); // إيقاف كامل (المستخدم) → نتخلّص من المشغّل التالي أيضًا
+}
+
+/* -------- إبقاء جلسة الصوت حيّة بين الصفحات (الجوال مقفل) -------- */
+// iOS يعلّق التطبيق في الخلفية متى توقّف الصوت، ولو لثانية. بين نهاية صفحة وبدء
+// التالية (جلب النص + تجهيز الصوت) فجوة صامتة قد تكفي لتعليقه فتتوقف القراءة.
+// الحل: مقطع صامت يدور طوال الانتقال، فتبقى الجلسة «تشغّل» حتى يبدأ السرد.
+let holdPlayer: AudioPlayer | null = null;
+
+function silenceFile(): File {
+  const f = new File(cacheDir(), "silence-1s.wav");
+  if (!f.exists) {
+    // WAV أحادي 8kHz 16-bit لمدة ثانية كلها أصفار
+    const rate = 8000;
+    const data = rate * 2;
+    const buf = new Uint8Array(44 + data);
+    const v = new DataView(buf.buffer);
+    const str = (o: number, s: string) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    str(0, "RIFF");
+    v.setUint32(4, 36 + data, true);
+    str(8, "WAVE");
+    str(12, "fmt ");
+    v.setUint32(16, 16, true);
+    v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true);
+    v.setUint32(28, rate * 2, true);
+    v.setUint16(32, 2, true);
+    v.setUint16(34, 16, true);
+    str(36, "data");
+    v.setUint32(40, data, true);
+    f.write(buf);
+  }
+  return f;
+}
+
+/** يشغّل/يوقف المقطع الصامت الذي يُبقي القراءة مستمرة أثناء الانتقال بين الصفحات. */
+export function holdAudioSession(on: boolean): void {
+  if (!on) {
+    if (holdPlayer) {
+      try {
+        holdPlayer.pause();
+        holdPlayer.remove();
+      } catch {}
+      holdPlayer = null;
+    }
+    return;
+  }
+  if (holdPlayer) return;
+  try {
+    void ensureAudioMode();
+    const p = createAudioPlayer({ uri: silenceFile().uri });
+    p.loop = true;
+    p.play();
+    holdPlayer = p;
+  } catch {
+    // غير حرج — في المقدّمة لا حاجة له أصلًا
+  }
 }
 
 /**
