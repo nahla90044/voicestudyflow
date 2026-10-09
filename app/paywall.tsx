@@ -13,8 +13,8 @@ import { PressableScale } from "../components/brand/motion";
 import { SceneArt } from "../components/brand/scene-art";
 import { SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { useDir, useI18n } from "../lib/i18n";
-import { getPlan, invalidatePlan } from "../lib/plan";
-import { buy, PRIVACY_URL, restore, storePrice, TERMS_URL, type ProductKey, type StorePrice } from "../lib/purchases";
+import { getPlan, invalidatePlan, PAGE_PACK } from "../lib/plan";
+import { buy, buyPages, pagesPrice, PRIVACY_URL, restore, storePrice, TERMS_URL, type ProductKey, type StorePrice } from "../lib/purchases";
 import { useScene } from "../lib/scene";
 import { sceneGrowth } from "../lib/sceneCore";
 
@@ -39,6 +39,7 @@ export default function PaywallScreen() {
   const [tier, setTier] = useState<Tier>("pro");
   const [prices, setPrices] = useState<Partial<Record<ProductKey, StorePrice | null>>>({});
   const [busy, setBusy] = useState(false);
+  const [packPrice, setPackPrice] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -47,6 +48,7 @@ export default function PaywallScreen() {
       const keys: ProductKey[] = ["pro_month", "pro_year", "plus_month", "plus_year"];
       const got = await Promise.all(keys.map((k) => storePrice(k)));
       setPrices(Object.fromEntries(keys.map((k, i) => [k, got[i]])));
+      setPackPrice(await pagesPrice());
     })();
   }, [router, devPreview]);
 
@@ -64,6 +66,19 @@ export default function PaywallScreen() {
     if (r === "ok") {
       invalidatePlan();
       Alert.alert(t("pay.thanksTitle"), t("pay.thanksBody"));
+      router.back();
+    } else if (r === "failed" || r === "unavailable") {
+      Alert.alert(t("pay.failTitle"), t("pay.failBody"));
+    }
+  }
+
+  async function onBuyPages() {
+    setBusy(true);
+    const r = await buyPages();
+    setBusy(false);
+    if (r === "ok") {
+      invalidatePlan();
+      Alert.alert(t("sub.pagesAddedTitle"), t("sub.pagesAddedBody", { n: PAGE_PACK.pages }));
       router.back();
     } else if (r === "failed" || r === "unavailable") {
       Alert.alert(t("pay.failTitle"), t("pay.failBody"));
@@ -196,6 +211,21 @@ export default function PaywallScreen() {
             <Feat text={t("pay.plus.f1")} />
             <Feat text={t("pay.plus.f2")} />
           </PlanCard>
+
+          {!!packPrice && (
+            <Pressable onPress={onBuyPages} disabled={busy} accessibilityRole="button">
+              <SceneCard style={[styles.pack, { flexDirection: dir.row, borderColor: pal.cardBorder }]}>
+                <View style={[styles.packIcon, { backgroundColor: pal.soft }]}>
+                  <Ionicons name="albums-outline" size={18} color={pal.accent} />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[styles.packTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("pay.pack.title", { n: PAGE_PACK.pages })}</Text>
+                  <Text style={[styles.packSub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("pay.pack.sub")}</Text>
+                </View>
+                <Text style={[styles.packPrice, { color: pal.accent }]}>{packPrice}</Text>
+              </SceneCard>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
 
@@ -254,6 +284,11 @@ const styles = StyleSheet.create({
   radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   radioIn: { width: 10, height: 10, borderRadius: 5 },
   planName: { fontSize: 19, fontWeight: "900" },
+  pack: { alignItems: "center", gap: 12, borderWidth: 2 },
+  packIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  packTitle: { fontSize: 15.5, fontWeight: "800" },
+  packSub: { fontSize: 12.5, fontWeight: "600", lineHeight: 18 },
+  packPrice: { fontSize: 16, fontWeight: "900" },
   badge: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 999 },
   badgeTxt: { fontSize: 11, fontWeight: "800" },
   price: { fontSize: 18, fontWeight: "900" },

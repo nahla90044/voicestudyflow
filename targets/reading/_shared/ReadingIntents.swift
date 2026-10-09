@@ -9,6 +9,9 @@ let readingActionNotification = Notification.Name("VSFReadingAction")
 struct ToggleReadingIntent: AudioPlaybackIntent {
   static var title: LocalizedStringResource = "Play or pause reading"
   static var isDiscoverable: Bool = false
+  // يعمل من شاشة القفل مباشرة بلا فتح القفل (إيقاف/إكمال وتسريع فقط — لا بيانات حساسة)
+  static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+  static var openAppWhenRun: Bool = false
 
   init() {}
 
@@ -22,6 +25,9 @@ struct ToggleReadingIntent: AudioPlaybackIntent {
 struct SpeedReadingIntent: LiveActivityIntent {
   static var title: LocalizedStringResource = "Change reading speed"
   static var isDiscoverable: Bool = false
+  // يعمل من شاشة القفل مباشرة بلا فتح القفل (إيقاف/إكمال وتسريع فقط — لا بيانات حساسة)
+  static var authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+  static var openAppWhenRun: Bool = false
 
   init() {}
 

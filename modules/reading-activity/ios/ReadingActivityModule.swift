@@ -27,24 +27,44 @@ struct ReadingStateRecord: Record {
 
 public class ReadingActivityModule: Module {
   private var observer: NSObjectProtocol?
+  private var listening = false
+  private var pending: String?
 
   public func definition() -> ModuleDefinition {
     Name("ReadingActivity")
     Events("onAction")
 
-    OnStartObserving {
-      // أزرار البطاقة (ToggleReadingIntent / SpeedReadingIntent) ترسل الأمر بهذا الاسم
+    // نراقب أوامر البطاقة منذ إنشاء الوحدة (لا عند أول مستمع فقط)، وما يصل قبل جاهزية
+    // جافاسكربت يُحفظ ويُسلَّم فور بدء الاستماع — فلا يضيع ضغط زر والجوال مقفل.
+    OnCreate {
       self.observer = NotificationCenter.default.addObserver(
         forName: Notification.Name("VSFReadingAction"), object: nil, queue: .main
       ) { [weak self] note in
+        guard let self = self else { return }
         let action = note.userInfo?["action"] as? String ?? ""
-        self?.sendEvent("onAction", ["action": action])
+        if self.listening {
+          self.sendEvent("onAction", ["action": action])
+        } else {
+          self.pending = action
+        }
+      }
+    }
+
+    OnDestroy {
+      if let o = self.observer { NotificationCenter.default.removeObserver(o) }
+      self.observer = nil
+    }
+
+    OnStartObserving {
+      self.listening = true
+      if let a = self.pending {
+        self.pending = nil
+        self.sendEvent("onAction", ["action": a])
       }
     }
 
     OnStopObserving {
-      if let o = self.observer { NotificationCenter.default.removeObserver(o) }
-      self.observer = nil
+      self.listening = false
     }
 
     Function("isSupported") { () -> Bool in
