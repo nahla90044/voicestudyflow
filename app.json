@@ -73,7 +73,8 @@
           ]
         }
       ],
-      "@bacons/apple-targets"
+      "@bacons/apple-targets",
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true,

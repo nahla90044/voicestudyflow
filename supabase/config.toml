@@ -50,3 +50,11 @@ verify_jwt = true
 
 [functions.store-webhook]
 verify_jwt = false
+
+# الاشتراكات مباشرة عبر Apple: التطبيق يرسل المعاملات الموقّعة (يتطلّب دخول المستخدم)
+[functions.apple-verify]
+verify_jwt = true
+
+# إشعارات Apple للخادم: لا رمز دخول — الحماية بتوقيع Apple (التحقّق داخل الدالة)
+[functions.apple-notifications]
+verify_jwt = false

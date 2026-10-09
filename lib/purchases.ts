@@ -1,15 +1,19 @@
 // lib/purchases.ts
-// الشراء عبر متجر Apple بواسطة RevenueCat (نفس نمط حاكي).
-// هوية الشراء = هوية المستخدم في السيرفر، فيعرف ويب-هوك المتجر لمن يفتح الاشتراك.
+// الاشتراك مباشرة عبر Apple (StoreKit 2) بمكتبة expo-iap — نفس نمط «سويعات» و«صفا»، بلا وسيط.
 //
-// الدفع يعمل فقط حين يوجد مفتاح RevenueCat (EXPO_PUBLIC_REVENUECAT_IOS). قبل ذلك:
-// لا شاشة اشتراك ولا قيود تعتمد عليها — حتى لا يرى أحد زرًا لا يعمل (رفض آبل 2.1/3.1).
+// كل شراء/استعادة/فتح للتطبيق: نرسل المعاملة الموقّعة من Apple (JWS) لدالة السيرفر
+// apple-verify فتتحقّق من توقيع Apple وتحدّث اشتراك المستخدم (entitlements). التطبيق
+// نفسه لا يستطيع منح اشتراك. التجديد والإلغاء يصلان للسيرفر أيضًا من Apple مباشرة
+// (apple-notifications). appAccountToken = هوية المستخدم، فيُربط الاشتراك بحسابه.
+//
+// الشراء يظهر فقط حين تكون المنتجات جاهزة في App Store Connect (EXPO_PUBLIC_IAP=1) —
+// حتى لا يرى أحد زرًا لا يعمل (رفض آبل 2.1).
 //
 // المكتبة تُحمَّل عند الحاجة (require داخل الدوال): كودها أصلي، ولو حُمّلت في الأعلى
 // انهار التطبيق في أي نسخة مبنية قبل إضافتها (تحديث هوائي لنسخة قديمة).
 import { Platform } from "react-native";
 
-const KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_IOS ?? "";
+import { supabase } from "./supabase";
 
 export const PRODUCTS = {
   plus_month: "vsf_plus_month",
@@ -18,97 +22,145 @@ export const PRODUCTS = {
   pro_year: "vsf_pro_year",
 } as const;
 export type ProductKey = keyof typeof PRODUCTS;
+const SKUS: string[] = Object.values(PRODUCTS);
 
 // روابط إلزامية في شاشة الاشتراك. الشروط: اتفاقية آبل القياسية.
 export const TERMS_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
 // رابط سياسة الخصوصية المنشورة (نفس المسجّل في App Store Connect)
-export const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL ?? "";
+export const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL ?? "https://voicestudyflow.app/privacy";
 export const MANAGE_URL = "https://apps.apple.com/account/subscriptions";
 
-let ready = false;
+const ENABLED = process.env.EXPO_PUBLIC_IAP === "1";
 
-export function purchasesAvailable(): boolean {
-  return !!KEY_IOS && Platform.OS === "ios";
-}
-
- 
-function sdk(): any | null {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function iap(): any | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("react-native-purchases").default;
+    return require("expo-iap");
   } catch {
     return null;
   }
 }
 
-/** يُستدعى بعد الدخول: يربط المشتريات بهوية المستخدم */
+export function purchasesAvailable(): boolean {
+  return ENABLED && Platform.OS === "ios" && !!iap();
+}
+
+let userId = "";
+let connecting: Promise<boolean> | null = null;
+let pending: ((r: BuyResult) => void) | null = null;
+const products = new Map<string, any>();
+
+/** يرسل معاملات Apple الموقّعة للسيرفر ليتحقّق منها ويحدّث الاشتراك */
+async function sendToServer(tokens: (string | null | undefined)[]): Promise<string | null> {
+  const jws = tokens.filter((x): x is string => !!x);
+  if (!jws.length) return null;
+  try {
+    const { data } = await supabase.functions.invoke("apple-verify", { body: { jws } });
+    return (data as { plan?: string | null })?.plan ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** اتصال واحد بالمتجر + مستمع المشتريات (يُنهي المعاملة بعد تحقّق السيرفر) */
+function connect(): Promise<boolean> {
+  if (connecting) return connecting;
+  connecting = (async () => {
+    const m = iap();
+    if (!m || !purchasesAvailable()) return false;
+    try {
+      await m.initConnection();
+      m.purchaseUpdatedListener(async (purchase: any) => {
+        if (!SKUS.includes(purchase?.productId)) return;
+        await sendToServer([purchase.purchaseToken]);
+        try {
+          await m.finishTransaction({ purchase, isConsumable: false });
+        } catch {
+          // منتهية مسبقًا
+        }
+        const { invalidatePlan } = await import("./plan");
+        invalidatePlan();
+        pending?.("ok");
+        pending = null;
+      });
+      m.purchaseErrorListener((e: any) => {
+        pending?.(String(e?.code) === "user-cancelled" ? "cancelled" : "failed");
+        pending = null;
+      });
+      const list = await m.fetchProducts({ skus: SKUS, type: "subs" });
+      for (const p of list ?? []) products.set(p.id, p);
+      return true;
+    } catch {
+      connecting = null; // نعيد المحاولة لاحقًا
+      return false;
+    }
+  })();
+  return connecting;
+}
+
+/** يُستدعى بعد الدخول: يربط المشتريات بهوية المستخدم ويزامن الاشتراك الفعّال مع السيرفر */
 export async function initPurchases(appUserId: string): Promise<void> {
   if (!purchasesAvailable() || !appUserId) return;
-  const Purchases = sdk();
-  if (!Purchases) return;
+  userId = appUserId;
+  if (!(await connect())) return;
   try {
-    if (!ready) {
-      Purchases.configure({ apiKey: KEY_IOS, appUserID: appUserId });
-      ready = true;
-    } else {
-      await Purchases.logIn(appUserId);
-    }
+    const subs = await iap()!.getActiveSubscriptions(SKUS);
+    await sendToServer((subs ?? []).map((s: any) => s.purchaseToken));
   } catch {
-    // لا نعطّل التطبيق إن فشل الربط
-  }
-}
-
- 
-async function packageFor(productId: string): Promise<any | null> {
-  const Purchases = sdk();
-  if (!Purchases || !ready) return null;
-  try {
-    const offerings = await Purchases.getOfferings();
-     
-    const all = Object.values(offerings.all as Record<string, any>).flatMap((o) => o.availablePackages);
-     
-    return all.find((p: any) => p.product.identifier === productId) ?? null;
-  } catch {
-    return null;
+    // بلا شبكة/متجر → السيرفر يبقى على آخر حالة، وإشعارات Apple تكمل التحديث
   }
 }
 
 export type BuyResult = "ok" | "cancelled" | "unavailable" | "failed";
 
 export async function buy(key: ProductKey): Promise<BuyResult> {
-  if (!purchasesAvailable()) return "unavailable";
-  const Purchases = sdk();
-  const pkg = await packageFor(PRODUCTS[key]);
-  if (!Purchases || !pkg) return "unavailable";
-  try {
-    await Purchases.purchasePackage(pkg);
-    return "ok";
-  } catch (e) {
-    return (e as { userCancelled?: boolean })?.userCancelled ? "cancelled" : "failed";
-  }
+  if (!purchasesAvailable() || !(await connect())) return "unavailable";
+  if (!products.has(PRODUCTS[key])) return "unavailable";
+  return new Promise<BuyResult>((resolve) => {
+    pending = resolve;
+    iap()!
+      .requestPurchase({
+        request: { apple: { sku: PRODUCTS[key], ...(userId ? { appAccountToken: userId } : {}) } },
+        type: "subs",
+      })
+      .catch((e: any) => {
+        if (pending === resolve) {
+          pending = null;
+          resolve(String(e?.code) === "user-cancelled" ? "cancelled" : "failed");
+        }
+      });
+  });
 }
 
 /** استعادة المشتريات: الاشتراك مربوط بحساب Apple فيعود على أي جهاز */
 export async function restore(): Promise<boolean> {
-  const Purchases = sdk();
-  if (!purchasesAvailable() || !Purchases || !ready) return false;
+  if (!purchasesAvailable() || !(await connect())) return false;
+  const m = iap()!;
   try {
-    const info = await Purchases.restorePurchases();
-    return Object.keys(info.entitlements.active).length > 0;
+    await m.restorePurchases();
+  } catch {
+    // نكمل بفحص مباشر
+  }
+  try {
+    const all = await m.getAvailablePurchases();
+    const plan = await sendToServer((all ?? []).filter((p: any) => SKUS.includes(p.productId)).map((p: any) => p.purchaseToken));
+    const { invalidatePlan } = await import("./plan");
+    invalidatePlan();
+    return !!plan;
   } catch {
     return false;
   }
 }
 
-/** الخطة الفعّالة حسب المتجر (فورية بعد الشراء، قبل وصول الويب-هوك للسيرفر) */
+/** الخطة الفعّالة حسب المتجر (فورية بعد الشراء، قبل أي مزامنة مع السيرفر) */
 export async function storeActivePlan(): Promise<"pro" | "plus" | null> {
-  const Purchases = sdk();
-  if (!purchasesAvailable() || !Purchases || !ready) return null;
+  if (!purchasesAvailable() || !(await connect())) return null;
   try {
-    const info = await Purchases.getCustomerInfo();
-    const active = Object.keys(info.entitlements.active);
-    if (active.includes("pro")) return "pro";
-    if (active.includes("plus")) return "plus";
+    const subs: any[] = (await iap()!.getActiveSubscriptions(SKUS)) ?? [];
+    const ids = subs.filter((s) => s.isActive !== false).map((s) => String(s.productId));
+    if (ids.some((id) => id.startsWith("vsf_pro"))) return "pro";
+    if (ids.some((id) => id.startsWith("vsf_plus"))) return "plus";
     return null;
   } catch {
     return null;
@@ -117,20 +169,26 @@ export async function storeActivePlan(): Promise<"pro" | "plus" | null> {
 
 export type StorePrice = { text: string; amount: number; perMonth: string | null; trialDays: number };
 
+const PERIOD_DAYS: Record<string, number> = { day: 1, week: 7, month: 30, year: 365 };
+
 /** السعر كما يعرضه المتجر بعملة المستخدم — لا نكتب الأسعار في التطبيق */
 export async function storePrice(key: ProductKey): Promise<StorePrice | null> {
-  if (!purchasesAvailable()) return null;
-  const pkg = await packageFor(PRODUCTS[key]);
-  const p = pkg?.product;
+  if (!purchasesAvailable() || !(await connect())) return null;
+  const p = products.get(PRODUCTS[key]);
   if (!p) return null;
-  const intro = p.introPrice;
+  const amount = Number(p.price ?? 0);
+  let perMonth: string | null = null;
+  if (key.endsWith("_year") && amount > 0) {
+    try {
+      perMonth = new Intl.NumberFormat(undefined, { style: "currency", currency: p.currency }).format(amount / 12);
+    } catch {
+      perMonth = null;
+    }
+  }
   const trialDays =
-    intro && intro.price === 0
-      ? intro.periodUnit === "WEEK"
-        ? 7 * intro.periodNumberOfUnits
-        : intro.periodUnit === "DAY"
-          ? intro.periodNumberOfUnits
-          : 0
+    p.introductoryPricePaymentModeIOS === "free-trial"
+      ? (PERIOD_DAYS[String(p.introductoryPriceSubscriptionPeriodIOS)] ?? 0) * Math.max(1, Number(p.introductoryPriceNumberOfPeriodsIOS) || 1)
       : 0;
-  return { text: p.priceString, amount: p.price, perMonth: p.pricePerMonthString ?? null, trialDays };
+  return { text: String(p.displayPrice ?? ""), amount, perMonth, trialDays };
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
