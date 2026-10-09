@@ -18,6 +18,36 @@ import { numbersToArabicWords } from "./arabicNumbers";
 import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
 import { supabase } from "./supabase";
 
+/* -------- سجلّ عام لكل مشغّلات السرد: صوت واحد فقط في أي لحظة -------- */
+// يُحفظ على globalThis فيبقى حتى لو أُعيد تحميل هذه الوحدة (التحديث السريع أثناء التطوير)،
+// فلا يبقى صوت «يتيم» يقرأ بلا زر يوقفه. أي سرد جديد يُسكت كل ما قبله.
+type Registry = Set<AudioPlayer>;
+const G = globalThis as unknown as { __vsfNarration?: Registry };
+const registry: Registry = (G.__vsfNarration ??= new Set());
+// وحدة أُعيد تحميلها: أسكت أي مشغّلات من النسخة السابقة
+for (const p of registry) {
+  try {
+    p.pause();
+    p.remove();
+  } catch {}
+}
+registry.clear();
+
+function track(p: AudioPlayer): AudioPlayer {
+  registry.add(p);
+  return p;
+}
+function silenceAllExcept(keep: AudioPlayer | null) {
+  for (const p of [...registry]) {
+    if (p === keep || p === warmPlayer?.player) continue;
+    try {
+      p.pause();
+      p.remove();
+    } catch {}
+    registry.delete(p);
+  }
+}
+
 export type VoiceGender = "male" | "female";
 export type VoiceLang = "ar" | "en";
 
@@ -100,6 +130,7 @@ function disposeWarm() {
     try {
       warmPlayer.player.remove();
     } catch {}
+    registry.delete(warmPlayer.player);
     warmPlayer = null;
   }
 }
@@ -215,6 +246,7 @@ function disposePlayer() {
     try {
       currentPlayer.remove();
     } catch {}
+    registry.delete(currentPlayer);
     currentPlayer = null;
   }
   // لا نحذف الملف: صار مخبّأً (cache) لإعادة استخدامه بدون تكلفة جديدة
@@ -552,7 +584,8 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
     step = "إنشاء المشغّل";
     // المشغّل المُحمّل مسبقًا (warm) إن توفّر → تشغيل فوري بلا فجوة، وإلا ننشئ واحدًا
-    const player = adopted ?? createAudioPlayer({ uri: file.uri }, { updateInterval: 120 });
+    const player = adopted ?? track(createAudioPlayer({ uri: file.uri }, { updateInterval: 120 }));
+    registry.add(player);
     currentPlayer = player;
     // سرعة خاصة بالصوت (مثل هيثم) مضروبة بسرعة المستخدم. زر السرعة يسرّع/يبطّئ
     // **نفس الصوت فقط** — نحافظ دائمًا على طبقة الصوت (pitch) فلا تتغيّر هويّته.
@@ -614,6 +647,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     });
 
     step = "التشغيل";
+    silenceAllExcept(player); // ضمان: لا صوت آخر يقرأ بالتوازي
     player.play();
     holdAudioSession(false); // بدأ السرد فعلًا → لا حاجة للمقطع الصامت
     // أزرار شاشة القفل (تشغيل/إيقاف + «قيد التشغيل») لهذا المقطع. التفعيل يخص مركز
@@ -657,7 +691,7 @@ export async function warmNext(
     const { file } = await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
     if (warmPlayer?.uri === file.uri) return;
     disposeWarm(); // أزل أي مشغّل تالٍ قديم
-    warmPlayer = { uri: file.uri, player: createAudioPlayer({ uri: file.uri }, { updateInterval: 120 }) };
+    warmPlayer = { uri: file.uri, player: track(createAudioPlayer({ uri: file.uri }, { updateInterval: 120 })) };
   } catch {
     // غير حرج — التشغيل العادي يكفي
   }
@@ -739,11 +773,12 @@ function stopCurrentOnly(): void {
 
 /** هل يُسمع سرد الآن فعليًا؟ (لحماية الواجهة من عدم تطابق زر التشغيل مع الصوت) */
 export function isNarrating(): boolean {
-  try {
-    return !!currentPlayer && !!(currentPlayer as unknown as { playing?: boolean }).playing;
-  } catch {
-    return false;
+  for (const p of registry) {
+    try {
+      if ((p as unknown as { playing?: boolean }).playing) return true;
+    } catch {}
   }
+  return false;
 }
 
 export async function stopSpeaking(): Promise<void> {
@@ -751,6 +786,7 @@ export async function stopSpeaking(): Promise<void> {
   clearLockScreen(currentPlayer); // إيقاف كامل → أزل أزرار شاشة القفل
   stopCurrentOnly();
   disposeWarm(); // إيقاف كامل (المستخدم) → نتخلّص من المشغّل التالي أيضًا
+  silenceAllExcept(null); // وأي صوت آخر مهما كان مصدره
 }
 
 /* -------- إبقاء جلسة الصوت حيّة بين الصفحات (الجوال مقفل) -------- */

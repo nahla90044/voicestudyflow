@@ -182,10 +182,10 @@ function Garden({ g }: { g: SceneGrowth }) {
     return Array.from({ length: g.slots }, () => {
       const a = r() * Math.PI * 2;
       const d = Math.pow(r(), 0.6);
-      return { x: 128 + Math.cos(a) * d * 92, y: 262 + Math.sin(a) * d * 64, r: 11 + r() * 8, c: LEAF_COLORS[Math.floor(r() * 4)], d };
+      return { x: 128 + Math.cos(a) * d * 66, y: 268 + Math.sin(a) * d * 46, r: 8 + r() * 6, c: LEAF_COLORS[Math.floor(r() * 4)], d };
     }).sort((p, q) => p.d - q.d);
   }, [g.slots]);
-  const fruitSpots: [number, number][] = [[92, 248], [160, 232], [138, 288], [190, 270], [70, 280], [118, 214], [176, 300], [100, 306]];
+  const fruitSpots: [number, number][] = [[100, 256], [156, 244], [140, 290], [176, 276], [84, 284], [120, 226], [164, 304], [108, 306]];
   return (
     <G>
       <Defs>
@@ -206,7 +206,7 @@ function Garden({ g }: { g: SceneGrowth }) {
       <Path d="M0 360 C80 345 150 365 230 360 C300 356 350 340 390 345 V470 H0Z" fill="#A9D48A" />
       <Path d="M120 360 C122 330 118 306 112 284 L124 281 C127 300 132 310 142 284 L149 288 C138 314 138 336 140 360Z" fill="#8A5A3C" />
       {/* تاج ممتلئ دائمًا (قاعدة متداخلة)، والأوراق الفاتحة فوقه تكثر مع الجاهزية */}
-      {[[128, 266, 74], [80, 276, 46], [176, 276, 46], [104, 222, 48], [152, 222, 48], [128, 200, 40], [62, 252, 30], [194, 252, 30], [128, 312, 44]].map(([cx, cy, r], i) => (
+      {[[128,272,53],[93,279,33],[163,279,33],[111,240,35],[145,240,35],[128,224,29],[80,262,22],[176,262,22],[128,305,32]].map(([cx, cy, r], i) => (
         <Circle key={`b${i}`} cx={cx} cy={cy} r={r} fill={i % 2 ? "#4E9F55" : "#5DB360"} />
       ))}
       {leaves.slice(0, g.lit).map((l, i) => (

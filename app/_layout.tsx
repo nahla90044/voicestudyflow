@@ -14,6 +14,7 @@ import { initPurchases } from "../lib/purchases";
 import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
 import { LanguageProvider } from "../lib/i18n";
+import { closeReadingCard } from "../lib/readingCard";
 import { ThemeProvider } from "../lib/themeContext";
 import { ONBOARDING_KEY } from "./onboarding";
 
@@ -27,6 +28,8 @@ export default function RootLayout() {
   useEffect(() => {
     // التطبيق عموديّ افتراضيًا؛ نسمح بالعرض (landscape) فقط داخل عدسة القارئ.
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    // بطاقة قراءة متبقية من تشغيل سابق أُغلق فيه التطبيق → نزيلها (لا قراءة الآن)
+    closeReadingCard();
   }, []);
 
   useEffect(() => {
