@@ -1,25 +1,35 @@
 // app/paywall.tsx
-// شاشة الاشتراك (تصميم 2.0): شهري/سنوي، برو (الأكثر اختيارًا) وبلس، تجربة مجانية إن
-// كان للمنتج عرض تجريبي في المتجر. الأسعار من المتجر بعملة المستخدم (لا أرقام مكتوبة).
+// شاشة الاشتراك (تصميم «العالم الحيّ»): رأس بمشهد اليوم، شهري/سنوي، برو (الأكثر اختيارًا)
+// وبلس، تجربة مجانية إن كان للمنتج عرض تجريبي في المتجر. الأسعار من المتجر بعملة
+// المستخدم (لا أرقام مكتوبة). الألوان كلها من لوحة المشهد فتُقرأ على الحديقة الفاتحة والمشاهد الداكنة.
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PressableScale } from "../components/brand/motion";
-import { Gradients, Palette } from "../constants/design";
+import { SceneArt } from "../components/brand/scene-art";
+import { SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { useDir, useI18n } from "../lib/i18n";
 import { getPlan, invalidatePlan } from "../lib/plan";
 import { buy, PRIVACY_URL, restore, storePrice, TERMS_URL, type ProductKey, type StorePrice } from "../lib/purchases";
+import { useScene } from "../lib/scene";
+import { sceneGrowth } from "../lib/sceneCore";
 
 type Tier = "pro" | "plus";
+
+const HERO_H = 260;
+// نقطة الارتكاز في كل رسم (بإحداثيات 390×470) — كما في SceneBanner
+const FOCUS = { garden: 270, study: 250, sky: 215 } as const;
 
 export default function PaywallScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { id, pal } = useScene();
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { reason, preview } = useLocalSearchParams<{ reason?: string; preview?: string }>();
   // للمعاينة أثناء التطوير فقط: حساب المالكة يُعاد من الشاشة عادةً
@@ -71,137 +81,196 @@ export default function PaywallScreen() {
 
   const headline = reason === "voice" ? t("pay.reason.voice") : reason === "ai" ? t("pay.reason.ai") : reason === "books" ? t("pay.reason.books") : reason === "voiceAsk" ? t("pay.reason.voiceAsk") : "";
 
+  // رسم المشهد بارتفاعه الكامل مُزاحًا ليظهر قلبه (الشجرة/الرف/القمر) في الرأس
+  const heroH = HERO_H + insets.top;
+  const fullH = (width * 470) / 390;
+  const growth = sceneGrowth(id, { pagesToday: 3, unitsDone: 2, unitCount: 6, readiness: 50 });
+  const artTop = Math.min(0, Math.max(heroH - fullH, heroH * 0.45 - FOCUS[id] * (fullH / 470)));
+
   const Feat = ({ text }: { text: string }) => (
     <View style={[styles.feat, { flexDirection: dir.row }]}>
-      <Ionicons name="checkmark" size={16} color="#6CF3C5" />
-      <Text style={[styles.featTxt, { textAlign: dir.textAlign }]}>{text}</Text>
+      <View style={[styles.featDot, { backgroundColor: pal.soft }]}>
+        <Ionicons name="checkmark" size={14} color={pal.accent} />
+      </View>
+      <Text style={[styles.featTxt, { color: pal.ink, textAlign: dir.textAlign }]}>{text}</Text>
     </View>
   );
 
-  return (
-    <View style={styles.root}>
-      <LinearGradient colors={["rgba(124,108,255,0.40)", "rgba(63,208,255,0.10)", "rgba(7,8,13,0)"]} style={styles.glow} />
-      <ScrollView contentContainerStyle={[styles.body, { paddingTop: insets.top + 10 }]} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: dir.row }}>
-          <PressableScale onPress={() => router.back()} style={styles.ghost}>
-            <Ionicons name="close" size={18} color={Palette.text} accessibilityLabel={t("common.close")} />
-          </PressableScale>
-        </View>
-
-        {!!headline && <Text style={[styles.reason, { textAlign: dir.textAlign }]}>{headline}</Text>}
-        <Text style={[styles.title, { textAlign: dir.textAlign }]}>
-          {t("pay.title1")}
-          {"\n"}
-          <Text style={styles.titleAccent}>{t("pay.title2")}</Text>
-        </Text>
-        <Text style={[styles.sub, { textAlign: dir.textAlign }]}>{t("pay.sub")}</Text>
-
-        <View style={[styles.seg, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => setYearly(false)} style={[styles.segItem, !yearly && styles.segOn]}>
-            <Text style={[styles.segTxt, !yearly && styles.segTxtOn]}>{t("pay.monthly")}</Text>
-          </Pressable>
-          <Pressable onPress={() => setYearly(true)} style={[styles.segItem, yearly && styles.segOn]}>
-            <Text style={[styles.segTxt, yearly && styles.segTxtOn]}>{t("pay.yearly")}</Text>
-          </Pressable>
-        </View>
-
-        <Pressable onPress={() => setTier("pro")} style={[styles.plan, styles.planPro, tier === "pro" && styles.planOn]}>
+  const PlanCard = ({ tr, children }: { tr: Tier; children: React.ReactNode }) => {
+    const on = tier === tr;
+    const p = prices[key(tr)];
+    return (
+      <Pressable onPress={() => setTier(tr)} accessibilityRole="radio" accessibilityState={{ selected: on }}>
+        <SceneCard style={[styles.plan, on ? { borderWidth: 2, borderColor: pal.accent, backgroundColor: pal.soft } : { borderWidth: 2, borderColor: pal.cardBorder }]}>
           <View style={[styles.planHead, { flexDirection: dir.row }]}>
-            <View style={[{ flexDirection: dir.row, alignItems: "center", gap: 8 }]}>
-              <Text style={styles.planName}>{t("pay.pro")}</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeTxt}>{t("pay.popular")}</Text>
-              </View>
+            <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8, flexShrink: 1 }}>
+              <View style={[styles.radio, { borderColor: on ? pal.accent : pal.dim }]}>{on && <View style={[styles.radioIn, { backgroundColor: pal.accent }]} />}</View>
+              <Text style={[styles.planName, { color: pal.ink }]}>{t(tr === "pro" ? "pay.pro" : "pay.plus")}</Text>
+              {tr === "pro" && (
+                <View style={[styles.badge, { backgroundColor: pal.accent }]}>
+                  <Text style={[styles.badgeTxt, { color: pal.onAccent }]}>{t("pay.popular")}</Text>
+                </View>
+              )}
             </View>
-            <Text style={styles.price}>
-              {priceText("pro")}
-              <Text style={styles.per}> / {yearly ? t("pay.year") : t("pay.month")}</Text>
-            </Text>
+            <View style={{ alignItems: dir.isRTL ? "flex-start" : "flex-end" }}>
+              <Text style={[styles.price, { color: pal.ink }]}>
+                {priceText(tr)}
+                <Text style={[styles.per, { color: pal.dim }]}> / {yearly ? t("pay.year") : t("pay.month")}</Text>
+              </Text>
+              {yearly && !!p?.perMonth && (
+                <Text style={[styles.perMonth, { color: pal.dim }]}>
+                  ≈ {p.perMonth} / {t("pay.month")}
+                </Text>
+              )}
+            </View>
           </View>
-          <Feat text={t("pay.pro.f1")} />
-          <Feat text={t("pay.pro.f2")} />
-          <Feat text={t("pay.pro.f3")} />
-        </Pressable>
+          {!!p && p.trialDays > 0 && (
+            <View style={[styles.trialPill, { backgroundColor: pal.soft, borderColor: pal.accent, alignSelf: dir.isRTL ? "flex-end" : "flex-start", flexDirection: dir.row }]}>
+              <Ionicons name="gift-outline" size={13} color={pal.accent} />
+              <Text style={[styles.trialTxt, { color: pal.accent }]}>{t("pay.trial", { n: p.trialDays })}</Text>
+            </View>
+          )}
+          <View style={[styles.divider, { backgroundColor: pal.track }]} />
+          {children}
+        </SceneCard>
+      </Pressable>
+    );
+  };
 
-        <Pressable onPress={() => setTier("plus")} style={[styles.plan, tier === "plus" && styles.planOn]}>
-          <View style={[styles.planHead, { flexDirection: dir.row }]}>
-            <Text style={styles.planName}>{t("pay.plus")}</Text>
-            <Text style={styles.price}>
-              {priceText("plus")}
-              <Text style={styles.per}> / {yearly ? t("pay.year") : t("pay.month")}</Text>
+  return (
+    <SceneScreen>
+      <ScrollView contentContainerStyle={{ paddingBottom: 200 + insets.bottom }} showsVerticalScrollIndicator={false}>
+        {/* الرأس: مقطع من مشهد اليوم يتلاشى في الخلفية، وفوقه زر الإغلاق والعنوان */}
+        <View style={{ height: heroH }}>
+          <View style={[StyleSheet.absoluteFill, { overflow: "hidden", opacity: pal.dark ? 0.9 : 1 }]}>
+            <View style={{ position: "absolute", left: 0, right: 0, top: artTop }}>
+              <SceneArt id={id} growth={growth} width={width} height={fullH} />
+            </View>
+          </View>
+          <LinearGradient colors={[pal.bg + "00", pal.bg + "CC", pal.bg]} locations={[0.3, 0.72, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+          <View style={[styles.heroInner, { paddingTop: insets.top + 6 }]}>
+            <View style={{ flexDirection: dir.row }}>
+              <PressableScale onPress={() => router.back()}>
+                <SceneIconButton>
+                  <Ionicons name="close" size={20} color={pal.ink} accessibilityLabel={t("common.close")} />
+                </SceneIconButton>
+              </PressableScale>
+            </View>
+            <Text style={[styles.title, { color: pal.ink, textAlign: dir.textAlign }]}>
+              {t("pay.title1")}
+              {"\n"}
+              <Text style={{ color: pal.accent }}>{t("pay.title2")}</Text>
             </Text>
           </View>
-          <Feat text={t("pay.plus.f1")} />
-          <Feat text={t("pay.plus.f2")} />
-        </Pressable>
-        <View style={{ height: 170 }} />
+        </View>
+
+        <View style={styles.body}>
+          {!!headline && (
+            <View style={[styles.reasonBox, { backgroundColor: pal.soft, borderColor: pal.cardBorder, flexDirection: dir.row }]}>
+              <Ionicons name="information-circle" size={18} color={pal.accent} />
+              <Text style={[styles.reason, { color: pal.ink, textAlign: dir.textAlign }]}>{headline}</Text>
+            </View>
+          )}
+          <Text style={[styles.sub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("pay.sub")}</Text>
+
+          <View style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+            {([false, true] as const).map((y) => {
+              const on = yearly === y;
+              return (
+                <Pressable key={String(y)} onPress={() => setYearly(y)} style={[styles.segItem, on && { backgroundColor: pal.accent }]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
+                  <Text style={[styles.segTxt, { color: on ? pal.onAccent : pal.dim }]} numberOfLines={1}>
+                    {y ? t("pay.yearly") : t("pay.monthly")}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <PlanCard tr="pro">
+            <Feat text={t("pay.pro.f1")} />
+            <Feat text={t("pay.pro.f2")} />
+            <Feat text={t("pay.pro.f3")} />
+          </PlanCard>
+
+          <PlanCard tr="plus">
+            <Feat text={t("pay.plus.f1")} />
+            <Feat text={t("pay.plus.f2")} />
+          </PlanCard>
+        </View>
       </ScrollView>
 
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={[styles.bottom, { paddingBottom: insets.bottom + 12, backgroundColor: pal.bg, borderTopColor: pal.cardBorder }]}>
         <PressableScale onPress={onBuy} disabled={busy || !selected} style={{ alignSelf: "stretch" }}>
-          <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.cta, (busy || !selected) && { opacity: 0.55 }]}>
+          <View style={[styles.cta, { backgroundColor: pal.accent }, (busy || !selected) && { opacity: 0.55 }]}>
             {busy ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={pal.onAccent} />
             ) : (
-              <Text style={styles.ctaTxt}>
+              <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>
                 {unavailable ? t("pay.unavailable") : trialDays > 0 ? t("pay.trial", { n: trialDays }) : t("pay.subscribe")}
               </Text>
             )}
-          </LinearGradient>
+          </View>
         </PressableScale>
-        <Text style={styles.foot}>
+        <Text style={[styles.foot, { color: pal.dim }]}>
           {t("pay.cancelAnytime")}
           {selected
             ? " · " + (trialDays > 0 ? t("pay.afterTrial", { price: selected.text }) : yearly ? t("pay.renewYear") : t("pay.renewMonth"))
             : ""}
         </Text>
         <View style={[styles.links, { flexDirection: dir.row }]}>
-          <Pressable onPress={onRestore} hitSlop={6}>
-            <Text style={styles.link}>{t("pay.restore")}</Text>
+          <Pressable onPress={onRestore} hitSlop={6} accessibilityRole="button">
+            <Text style={[styles.link, styles.linkStrong, { color: pal.accent }]}>{t("pay.restore")}</Text>
           </Pressable>
-          <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={6}>
-            <Text style={styles.link}>{t("pay.terms")}</Text>
+          <Text style={[styles.sep, { color: pal.dim }]}>·</Text>
+          <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={6} accessibilityRole="link">
+            <Text style={[styles.link, { color: pal.dim }]}>{t("pay.terms")}</Text>
           </Pressable>
           {!!PRIVACY_URL && (
-            <Pressable onPress={() => Linking.openURL(PRIVACY_URL)} hitSlop={6}>
-              <Text style={styles.link}>{t("pay.privacy")}</Text>
-            </Pressable>
+            <>
+              <Text style={[styles.sep, { color: pal.dim }]}>·</Text>
+              <Pressable onPress={() => Linking.openURL(PRIVACY_URL)} hitSlop={6} accessibilityRole="link">
+                <Text style={[styles.link, { color: pal.dim }]}>{t("pay.privacy")}</Text>
+              </Pressable>
+            </>
           )}
         </View>
       </View>
-    </View>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#07080D" },
-  glow: { position: "absolute", top: 0, left: 0, right: 0, height: 420 },
+  heroInner: { flex: 1, paddingHorizontal: 20, paddingBottom: 10, justifyContent: "space-between" },
+  title: { fontSize: 30, fontWeight: "900", lineHeight: 42 },
   body: { paddingHorizontal: 18, gap: 14 },
-  ghost: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  reason: { color: "#FFB38A", fontSize: 13.5, fontWeight: "700" },
-  title: { color: Palette.text, fontSize: 30, fontWeight: "800", lineHeight: 42 },
-  titleAccent: { color: "#7FD8FF" },
-  sub: { color: "#A3A9BE", fontSize: 14, lineHeight: 23, marginTop: -4 },
-  seg: { padding: 4, borderRadius: 16, backgroundColor: "#10121B", gap: 4 },
-  segItem: { flex: 1, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  segOn: { backgroundColor: "#262A3D" },
-  segTxt: { color: "#8E95AB", fontSize: 13.5, fontWeight: "600" },
-  segTxtOn: { color: Palette.text },
-  plan: { padding: 16, borderRadius: 24, backgroundColor: "#10121B", borderWidth: 2, borderColor: "rgba(255,255,255,0.07)", gap: 9 },
-  planPro: { backgroundColor: "rgba(124,108,255,0.14)" },
-  planOn: { borderColor: "#B9AFFF" },
-  planHead: { alignItems: "center", justifyContent: "space-between" },
-  planName: { color: Palette.text, fontSize: 19, fontWeight: "800" },
-  badge: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 999, backgroundColor: "#F3F4F8" },
-  badgeTxt: { color: "#07080D", fontSize: 11, fontWeight: "800" },
-  price: { color: Palette.text, fontSize: 19, fontWeight: "800" },
-  per: { color: "#8E95AB", fontSize: 12, fontWeight: "500" },
-  feat: { alignItems: "center", gap: 8 },
-  featTxt: { flex: 1, color: "#C4C9D8", fontSize: 13.5, lineHeight: 21 },
-  bottom: { position: "absolute", left: 18, right: 18, bottom: 0, alignItems: "center", gap: 10, paddingTop: 12, backgroundColor: "rgba(7,8,13,0.96)" },
+  reasonBox: { alignItems: "center", gap: 8, padding: 12, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
+  reason: { flex: 1, fontSize: 13.5, fontWeight: "700", lineHeight: 21 },
+  sub: { fontSize: 14, lineHeight: 23 },
+  seg: { padding: 4, gap: 4, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
+  segItem: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 9, borderRadius: 999 },
+  segTxt: { fontSize: 14, fontWeight: "800" },
+  plan: { gap: 10, overflow: "hidden" },
+  planHead: { alignItems: "center", justifyContent: "space-between", gap: 10 },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  radioIn: { width: 10, height: 10, borderRadius: 5 },
+  planName: { fontSize: 19, fontWeight: "900" },
+  badge: { paddingVertical: 3, paddingHorizontal: 9, borderRadius: 999 },
+  badgeTxt: { fontSize: 11, fontWeight: "800" },
+  price: { fontSize: 18, fontWeight: "900" },
+  per: { fontSize: 12, fontWeight: "600" },
+  perMonth: { fontSize: 11.5, fontWeight: "600", marginTop: 2 },
+  trialPill: { alignItems: "center", gap: 5, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
+  trialTxt: { fontSize: 12, fontWeight: "800" },
+  divider: { height: StyleSheet.hairlineWidth * 2, marginVertical: 2 },
+  feat: { alignItems: "center", gap: 10 },
+  featDot: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  featTxt: { flex: 1, fontSize: 13.5, lineHeight: 21, fontWeight: "600" },
+  bottom: { position: "absolute", left: 0, right: 0, bottom: 0, alignItems: "center", gap: 10, paddingTop: 12, paddingHorizontal: 18, borderTopWidth: StyleSheet.hairlineWidth },
   cta: { height: 58, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  ctaTxt: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  foot: { color: "#8E95AB", fontSize: 12, textAlign: "center" },
-  links: { gap: 16 },
-  link: { color: "#B9AFFF", fontSize: 12 },
+  ctaTxt: { fontSize: 17, fontWeight: "900" },
+  foot: { fontSize: 12, textAlign: "center", lineHeight: 18 },
+  links: { alignItems: "center", gap: 10 },
+  sep: { fontSize: 12 },
+  link: { fontSize: 12.5, fontWeight: "600" },
+  linkStrong: { fontWeight: "800" },
 });

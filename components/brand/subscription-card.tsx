@@ -5,14 +5,18 @@ import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { Palette, Radius } from "../../constants/design";
+import { Ionicons } from "@expo/vector-icons";
+
 import { useDir, useI18n } from "../../lib/i18n";
 import { getPlan, getUsage, invalidatePlan, LIMITS, requestPaywall, type Plan, type Usage } from "../../lib/plan";
 import { MANAGE_URL, purchasesAvailable, restore } from "../../lib/purchases";
+import { useScene } from "../../lib/scene";
+import { SceneCard } from "./scene-screen";
 
 export function SubscriptionCard() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
 
@@ -35,8 +39,13 @@ export function SubscriptionCard() {
   const store = purchasesAvailable();
 
   return (
-    <View style={styles.card}>
-      <Text style={[styles.plan, { textAlign: dir.textAlign }]}>{t(`sub.plan.${plan}`)}</Text>
+    <SceneCard style={styles.card}>
+      <View style={[styles.head, { flexDirection: dir.row }]}>
+        <View style={[styles.icon, { backgroundColor: pal.soft }]}>
+          <Ionicons name={plan === "free" ? "leaf-outline" : "sparkles"} size={18} color={pal.accent} />
+        </View>
+        <Text style={[styles.plan, { color: pal.ink, textAlign: dir.textAlign }]}>{t(`sub.plan.${plan}`)}</Text>
+      </View>
       {limits && usage && (
         <>
           <Bar label={t("sub.voice", { used: Math.min(usage.voiceMin, limits.voiceMin), limit: limits.voiceMin })} frac={usage.voiceMin / limits.voiceMin} />
@@ -46,13 +55,13 @@ export function SubscriptionCard() {
       {store && plan !== "owner" && (
         <View style={[styles.row, { flexDirection: dir.row }]}>
           {plan !== "pro" && (
-            <Pressable onPress={() => requestPaywall("upgrade", true)} style={[styles.btn, styles.btnMain]}>
-              <Text style={styles.btnMainTxt}>{t("sub.upgrade")}</Text>
+            <Pressable onPress={() => requestPaywall("upgrade", true)} style={[styles.btn, { backgroundColor: pal.accent, borderColor: pal.accent }]}>
+              <Text style={[styles.btnMainTxt, { color: pal.onAccent }]}>{t("sub.upgrade")}</Text>
             </Pressable>
           )}
           {plan !== "free" && (
-            <Pressable onPress={() => Linking.openURL(MANAGE_URL)} style={styles.btn}>
-              <Text style={styles.btnTxt}>{t("sub.manage")}</Text>
+            <Pressable onPress={() => Linking.openURL(MANAGE_URL)} style={[styles.btn, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}>
+              <Text style={[styles.btnTxt, { color: pal.ink }]}>{t("sub.manage")}</Text>
             </Pressable>
           )}
           <Pressable
@@ -62,24 +71,26 @@ export function SubscriptionCard() {
               setPlan(await getPlan(true));
               Alert.alert(ok ? t("pay.restoredTitle") : t("pay.noRestoreTitle"), ok ? t("pay.restoredBody") : t("pay.noRestoreBody"));
             }}
-            style={styles.btn}
+            style={[styles.btn, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
           >
-            <Text style={styles.btnTxt}>{t("pay.restore")}</Text>
+            <Text style={[styles.btnTxt, { color: pal.ink }]}>{t("pay.restore")}</Text>
           </Pressable>
         </View>
       )}
-    </View>
+    </SceneCard>
   );
 }
 
 function Bar({ label, frac }: { label: string; frac: number }) {
   const dir = useDir();
+  const { pal } = useScene();
   const f = Math.max(0.02, Math.min(1, frac || 0));
-  const color = frac >= 1 ? "#FF6B81" : frac >= 0.8 ? "#FFB38A" : "#6CF3C5";
+  // نفاد الحصة يُبرز بلون تحذير واضح على الفاتح والداكن؛ غير ذلك لون المشهد
+  const color = frac >= 1 ? (pal.dark ? "#FF8A8A" : "#C0392B") : pal.accent;
   return (
     <View style={{ gap: 6 }}>
-      <Text style={[styles.label, { textAlign: dir.textAlign }]}>{label}</Text>
-      <View style={styles.track}>
+      <Text style={[styles.label, { color: pal.dim, textAlign: dir.textAlign }]}>{label}</Text>
+      <View style={[styles.track, { backgroundColor: pal.track }]}>
         <View style={[styles.fill, { width: `${f * 100}%`, backgroundColor: color }, dir.isRTL ? { alignSelf: "flex-end" } : null]} />
       </View>
     </View>
@@ -87,21 +98,15 @@ function Bar({ label, frac }: { label: string; frac: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    padding: 16,
-    gap: 12,
-    borderRadius: Radius.xl,
-    backgroundColor: "rgba(124,108,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.30)",
-  },
-  plan: { color: Palette.text, fontSize: 17, fontWeight: "800" },
-  label: { color: Palette.textMuted, fontSize: 12.5 },
-  track: { height: 6, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.08)", overflow: "hidden" },
-  fill: { height: 6, borderRadius: 3 },
+  card: { gap: 12 },
+  head: { alignItems: "center", gap: 10 },
+  icon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  plan: { flex: 1, fontSize: 17, fontWeight: "900" },
+  label: { fontSize: 12.5, fontWeight: "600" },
+  track: { height: 8, borderRadius: 4, overflow: "hidden" },
+  fill: { height: 8, borderRadius: 4 },
   row: { flexWrap: "wrap", gap: 8, marginTop: 2 },
-  btn: { paddingVertical: 9, paddingHorizontal: 14, borderRadius: 12, backgroundColor: "rgba(255,255,255,0.08)" },
-  btnMain: { backgroundColor: "#F3F4F8" },
-  btnTxt: { color: Palette.text, fontSize: 13, fontWeight: "700" },
-  btnMainTxt: { color: "#07080D", fontSize: 13, fontWeight: "800" },
+  btn: { paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
+  btnTxt: { fontSize: 13, fontWeight: "700" },
+  btnMainTxt: { fontSize: 13, fontWeight: "800" },
 });
