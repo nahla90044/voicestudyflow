@@ -9,13 +9,16 @@ import { supabase } from "./supabase";
 
 export type Plan = "owner" | "pro" | "plus" | "free";
 
-// نفس أرقام السيرفر (للعرض: «بقي لك ١٢ دقيقة»)
-export const LIMITS: Record<Exclude<Plan, "owner">, { voiceMin: number; ai: number }> = {
-  free: { voiceMin: 30, ai: 60 },
-  plus: { voiceMin: 300, ai: 1000 },
-  pro: { voiceMin: 900, ai: 4000 },
+// نفس أرقام السيرفر (_shared/plan.ts) — للعرض: «بقي لك ٤٠ صفحة».
+// الصفحة تُحسب مرة واحدة في الشهر (إعادة الاستماع مجانية). المجانية تجربة لمرة واحدة.
+export const LIMITS: Record<Exclude<Plan, "owner">, { pages: number; premium: number; ai: number }> = {
+  free: { pages: 10, premium: 0, ai: 5 },
+  plus: { pages: 100, premium: 5, ai: 50 },
+  pro: { pages: 200, premium: 10, ai: 100 },
 };
-const CHARS_PER_MIN = 1000;
+/** دقائق استماع تقريبية لكل صفحة (للعرض فقط) */
+export const MIN_PER_PAGE = 2;
+export const PAGE_PACK = { productKey: "pages_50" as const, pages: 50 };
 
 let cached: { plan: Plan; at: number } | null = null;
 
@@ -46,17 +49,28 @@ export function invalidatePlan(): void {
   cached = null;
 }
 
-export type Usage = { voiceMin: number; ai: number };
+export type Usage = { pages: number; premium: number; ai: number; credits: number };
 
-/** استهلاك هذا الشهر (UTC) */
+/** استهلاك الفترة الحالية: الشهر (أو التجربة لمرة واحدة للمجانية) + رصيد الصفحات الإضافية */
 export async function getUsage(): Promise<Usage> {
   try {
     const uid = await getUserId();
-    const period = new Date().toISOString().slice(0, 7);
-    const { data } = await supabase.from("usage_monthly").select("voice_chars,ai_requests").eq("user_id", uid).eq("period", period).maybeSingle();
-    return { voiceMin: Math.round((Number(data?.voice_chars) || 0) / CHARS_PER_MIN), ai: Number(data?.ai_requests) || 0 };
+    const plan = await getPlan();
+    const period = plan === "free" ? "lifetime" : new Date().toISOString().slice(0, 7);
+    const [std, prem, u, c] = await Promise.all([
+      supabase.from("page_listens").select("page_key", { count: "exact", head: true }).eq("user_id", uid).eq("period", period).eq("tier", "std"),
+      supabase.from("page_listens").select("page_key", { count: "exact", head: true }).eq("user_id", uid).eq("period", period).eq("tier", "prem"),
+      supabase.from("usage_monthly").select("ai_requests").eq("user_id", uid).eq("period", period).maybeSingle(),
+      supabase.from("page_credits").select("balance").eq("user_id", uid).maybeSingle(),
+    ]);
+    return {
+      pages: std.count ?? 0,
+      premium: prem.count ?? 0,
+      ai: Number(u.data?.ai_requests) || 0,
+      credits: Number(c.data?.balance) || 0,
+    };
   } catch {
-    return { voiceMin: 0, ai: 0 };
+    return { pages: 0, premium: 0, ai: 0, credits: 0 };
   }
 }
 

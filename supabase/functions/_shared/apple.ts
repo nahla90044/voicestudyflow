@@ -28,6 +28,9 @@ export const PRODUCT_PLAN: Record<string, string> = {
   vsf_pro_year: "pro_year",
 };
 
+// الصفحات الإضافية (شراء استهلاكي) → عدد الصفحات المضافة للرصيد
+export const PAGE_PACKS: Record<string, number> = { vsf_pages_50: 50 };
+
 const verifiers = [
   new SignedDataVerifier(ROOTS, false, Environment.PRODUCTION, BUNDLE_ID, APP_APPLE_ID),
   new SignedDataVerifier(ROOTS, false, Environment.SANDBOX, BUNDLE_ID),

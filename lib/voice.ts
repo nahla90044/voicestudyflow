@@ -68,7 +68,11 @@ export type SpeakOptions = {
   rate?: number;
   pitch?: number;
   expressive?: boolean; // صوت أدفأ وأكثر تعبيرًا (للعرض التقديمي/السرد)
+  page?: PageRef; // صفحة الكتاب المقروءة (تُحسب من حصة الصفحات مرة واحدة في الشهر)
 } & SpeakCallbacks;
+
+/** صفحة كتاب يُقرأ صوتها — حصة الاشتراك بالصفحات (إعادة الاستماع مجانية) */
+export type PageRef = { book: string; page: number };
 
 /* ---------------- كتالوج أصوات ElevenLabs العربية ---------------- */
 
@@ -79,29 +83,61 @@ export type VoiceOption = {
   gender: VoiceGender;
   rate?: number; // سرعة تشغيل خاصة بالصوت (< 1 = أبطأ وأعمق)
   lang?: "ar" | "en" | "fr"; // لغة الصوت (افتراضي عربي) — لكتب اللغات
+  premium?: boolean; // صوت فاخر (ElevenLabs) — بعدد صفحات محدود في الاشتراك
 };
 
-// أصوات عربية حقيقية: سعودية واضحة + فصحى + خليجي محايد (مضافة لحساب ElevenLabs).
+// الأصوات الأساسية: Microsoft Azure (واضحة وبلا سقف ضمن صفحات الخطة) — تأتي أولًا.
+// ثم الأصوات الفاخرة: ElevenLabs (أقرب للصوت البشري، بعدد صفحات محدود شهريًا).
 export const VOICE_CATALOG: VoiceOption[] = [
-  { id: "omar", name: "عمر · فصحى", voiceId: "apsZFlSToM2vmFpwz5jX", gender: "male" },
-  { id: "abdullah", name: "عبدالله · فصحى جهوري", voiceId: "XdoLPWNt7ytn6BtU4FBf", gender: "male" },
-  { id: "tariq", name: "طارق · فصحى رنّان", voiceId: "18HMWpalD7cscJTD8lEY", gender: "male" },
-  { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female" },
-  { id: "haytham", name: "هيثم · حكواتي", voiceId: "UR972wNGq3zluze0LoIp", gender: "male", rate: 0.82 },
-  { id: "yahya", name: "يحيى · حكواتي فصحى", voiceId: "QRq5hPRAKf5ZhSlTBH6r", gender: "male" },
-  { id: "fatima", name: "فاطمة · مصرية", voiceId: "vWDp3PLsTWjIhBxxUKh9", gender: "female" },
-  { id: "sufyan", name: "سفيان · عراقي", voiceId: "9FHjCdVXgA4tYxIYHTcZ", gender: "male" },
-  { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male" },
-  { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female" },
-  { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female" },
+  { id: "rashid", name: "راشد · فصحى", voiceId: "azure:ar-AE-Rashid:DragonHDLatestNeural", gender: "male" },
+  { id: "hamed", name: "حامد · سعودي", voiceId: "azure:ar-SA-HamedNeural", gender: "male" },
+  { id: "zariyah", name: "زارية · سعودية", voiceId: "azure:ar-SA-ZariyahNeural", gender: "female" },
+  { id: "salma-az", name: "سلمى · مصرية", voiceId: "azure:ar-EG-SalmaNeural", gender: "female" },
+  { id: "ava", name: "Ava · English", voiceId: "azure:en-US-Ava:DragonHDLatestNeural", gender: "female", lang: "en" },
+  { id: "andrew", name: "Andrew · English", voiceId: "azure:en-US-Andrew:DragonHDLatestNeural", gender: "male", lang: "en" },
+  { id: "vivienne", name: "Vivienne · Français", voiceId: "azure:fr-FR-VivienneMultilingualNeural", gender: "female", lang: "fr" },
+  { id: "remy", name: "Rémy · Français", voiceId: "azure:fr-FR-RemyMultilingualNeural", gender: "male", lang: "fr" },
+  // الأصوات الفاخرة (ElevenLabs)
+  { id: "omar", name: "عمر · فصحى", voiceId: "apsZFlSToM2vmFpwz5jX", gender: "male", premium: true },
+  { id: "abdullah", name: "عبدالله · فصحى جهوري", voiceId: "XdoLPWNt7ytn6BtU4FBf", gender: "male", premium: true },
+  { id: "tariq", name: "طارق · فصحى رنّان", voiceId: "18HMWpalD7cscJTD8lEY", gender: "male", premium: true },
+  { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female", premium: true },
+  { id: "haytham", name: "هيثم · حكواتي", voiceId: "UR972wNGq3zluze0LoIp", gender: "male", premium: true, rate: 0.82 },
+  { id: "yahya", name: "يحيى · حكواتي فصحى", voiceId: "QRq5hPRAKf5ZhSlTBH6r", gender: "male", premium: true },
+  { id: "fatima", name: "فاطمة · مصرية", voiceId: "vWDp3PLsTWjIhBxxUKh9", gender: "female", premium: true },
+  { id: "sufyan", name: "سفيان · عراقي", voiceId: "9FHjCdVXgA4tYxIYHTcZ", gender: "male", premium: true },
+  { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male", premium: true },
+  { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female", premium: true },
+  { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female", premium: true },
   // أصوات إنجليزية وفرنسية لكتب اللغات (أصوات ElevenLabs الجاهزة)
-  { id: "rachel", name: "Rachel · English", voiceId: "21m00Tcm4TlvDq8ikWAM", gender: "female", lang: "en" },
-  { id: "adam", name: "Adam · English", voiceId: "pNInz6obpgDQGcFmaJgB", gender: "male", lang: "en" },
-  { id: "charlotte", name: "Charlotte · Français", voiceId: "XB0fDUnXU5powFXDhCwa", gender: "female", lang: "fr" },
-  { id: "antoni", name: "Antoni · Français", voiceId: "ErXwobaYiN019PkySvjV", gender: "male", lang: "fr" },
+  { id: "rachel", name: "Rachel · English", voiceId: "21m00Tcm4TlvDq8ikWAM", gender: "female", premium: true, lang: "en" },
+  { id: "adam", name: "Adam · English", voiceId: "pNInz6obpgDQGcFmaJgB", gender: "male", premium: true, lang: "en" },
+  { id: "charlotte", name: "Charlotte · Français", voiceId: "XB0fDUnXU5powFXDhCwa", gender: "female", premium: true, lang: "fr" },
+  { id: "antoni", name: "Antoni · Français", voiceId: "ErXwobaYiN019PkySvjV", gender: "male", premium: true, lang: "fr" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
+
+/** هل الصوت فاخر (ElevenLabs)؟ أي معرّف لا يبدأ بـ azure: يُعدّ فاخرًا */
+export const isPremiumVoice = (voiceId?: string) => !!voiceId && !voiceId.startsWith("azure:");
+
+/** الصوت الأساسي المناسب للغة (عند انتهاء صفحات الصوت الفاخر) */
+export function standardVoiceFor(voiceId?: string): string {
+  const lang = voiceLangOf(voiceId);
+  const g = VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.gender;
+  return (
+    VOICE_CATALOG.find((v) => !v.premium && (v.lang ?? "ar") === lang && (!g || v.gender === g))?.voiceId ??
+    VOICE_CATALOG.find((v) => !v.premium && (v.lang ?? "ar") === lang)?.voiceId ??
+    DEFAULT_VOICE_ID
+  );
+}
+
+// انتهت صفحات الصوت الفاخر هذا الشهر → القراءة تكمل بالأساسي، والواجهة تنبّه مرة
+const premiumListeners = new Set<() => void>();
+export function onPremiumExhausted(fn: () => void): () => void {
+  premiumListeners.add(fn);
+  return () => premiumListeners.delete(fn);
+}
 
 /** لغة الصوت المختار من الكتالوج (افتراضي عربي) — تحدّد طريقة تنظيف النص للنطق. */
 export function voiceLangOf(voiceId?: string): "ar" | "en" | "fr" {
@@ -359,7 +395,8 @@ async function synthToFile(
   text: string,
   gender: VoiceGender,
   voiceId?: string,
-  expressive?: boolean
+  expressive?: boolean,
+  page?: PageRef
 ): Promise<{ file: File; starts: number[] }> {
   const vid = voiceId || VOICE_IDS[gender];
   // مفتاح تخزين مختلف للإعداد التعبيري (صوت مختلف) عن العادي
@@ -379,11 +416,12 @@ async function synthToFile(
   // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
   // لا يوجد مفتاح ElevenLabs داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
   const { data, error } = await supabase.functions.invoke("tts", {
-    body: { text, gender, voiceId: vid, expressive: !!expressive },
+    body: { text, gender, voiceId: vid, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
   });
   if (error) throw error;
   const b64 = (data as { audio?: string; error?: string })?.audio;
-  const d = data as { error?: string; quota?: boolean; userQuota?: boolean };
+  const d = data as { error?: string; quota?: boolean; userQuota?: boolean; premiumQuota?: boolean };
+  if (d?.premiumQuota) throw new Error("PREMIUM_QUOTA");
   if (d?.userQuota) throw new Error("USER_QUOTA");
   if (d?.error) throw new Error(d.quota ? `QUOTA: ${d.error}` : d.error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
@@ -575,7 +613,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const gender = opts.gender ?? "female";
 
     step = "توليد الصوت";
-    const { file, starts } = await synthToFile(clean, gender, opts.voiceId, opts.expressive);
+    const { file, starts } = await synthToFile(clean, gender, opts.voiceId, opts.expressive, opts.page);
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
 
     step = "وضع الصوت";
@@ -656,6 +694,11 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
   } catch (e) {
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
     console.warn("VSF_TTS_FALLBACK", reason);
+    // انتهت صفحات الصوت الفاخر هذا الشهر → نكمل نفس الجملة بالصوت الأساسي (بلا انقطاع)
+    if (/PREMIUM_QUOTA/.test(reason) && isPremiumVoice(opts.voiceId)) {
+      premiumListeners.forEach((fn) => fn());
+      return speakText(text, { ...opts, voiceId: standardVoiceFor(opts.voiceId) });
+    }
     // انتهت دقائق المستخدم الشهرية → نكمل بصوت الجهاز (لا تتوقف القراءة) ونعرض الاشتراك
     if (/USER_QUOTA/.test(reason)) {
       requestPaywall("voice");
@@ -680,7 +723,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
  */
 export async function warmNext(
   text: string,
-  opts: { voiceId?: string; gender?: VoiceGender } = {}
+  opts: { voiceId?: string; gender?: VoiceGender; page?: PageRef } = {}
 ): Promise<void> {
   const clean = cleanForSpeech(text, voiceLangOf(opts.voiceId));
   if (!clean) return;
@@ -688,7 +731,7 @@ export async function warmNext(
     const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
     const uri = cacheFileFor(clean, vid).uri;
     if (warmPlayer?.uri === uri) return; // محمّل بالفعل
-    const { file } = await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
+    const { file } = await synthToFile(clean, opts.gender ?? "female", opts.voiceId, false, opts.page);
     if (warmPlayer?.uri === file.uri) return;
     disposeWarm(); // أزل أي مشغّل تالٍ قديم
     warmPlayer = { uri: file.uri, player: track(createAudioPlayer({ uri: file.uri }, { updateInterval: 120 })) };
@@ -703,12 +746,12 @@ export async function warmNext(
  */
 export async function prefetchText(
   text: string,
-  opts: { voiceId?: string; gender?: VoiceGender } = {}
+  opts: { voiceId?: string; gender?: VoiceGender; page?: PageRef } = {}
 ): Promise<void> {
   try {
     const clean = cleanForSpeech(text, voiceLangOf(opts.voiceId));
     if (!clean) return;
-    await synthToFile(clean, opts.gender ?? "female", opts.voiceId);
+    await synthToFile(clean, opts.gender ?? "female", opts.voiceId, false, opts.page);
   } catch {
     // التحضير المسبق اختياري — لا نُزعج القراءة عند فشله
   }

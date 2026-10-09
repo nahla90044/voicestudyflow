@@ -12,7 +12,16 @@ import { focusEvery, getFocusLevel } from "./settings";
 import { recordActivity } from "./stats";
 import { splitSentences } from "./textUtils";
 import { closeReadingCard, nextSpeed, onReadingAction, syncReadingCard } from "./readingCard";
-import { holdAudioSession, setLivePlaybackRate, setNowPlaying, speakText, stopSpeaking } from "./voice";
+import {
+  holdAudioSession,
+  isPremiumVoice,
+  onPremiumExhausted,
+  setLivePlaybackRate,
+  setNowPlaying,
+  speakText,
+  standardVoiceFor,
+  stopSpeaking,
+} from "./voice";
 
 export type PlayerState = {
   bookId: string;
@@ -69,6 +78,11 @@ function patch(p: Partial<PlayerState>) {
   state = { ...state, ...p };
   emit();
 }
+
+// انتهت صفحات الصوت الفاخر: speakText يعيد الجملة بالأساسي؛ نثبّته هنا للجمل التالية
+onPremiumExhausted(() => {
+  if (state && isPremiumVoice(state.voiceId)) patch({ voiceId: standardVoiceFor(state.voiceId) });
+});
 
 export function getPlayer(): PlayerState | null {
   return state ? { ...state } : null;
@@ -193,6 +207,8 @@ async function playFrom(p: number, i: number, my: number) {
     if (!state || my !== token) return;
     speakText(sents[i], {
       voiceId: state.voiceId,
+      // صفحة الكتاب → تُحسب من حصة الصفحات (مرة في الشهر) لا بالأحرف
+      page: { book: state.pdfPath, page: p },
       rate: state.rate,
       onDone: () => {
         if (my === token) void playFrom(p, i + 1, my);

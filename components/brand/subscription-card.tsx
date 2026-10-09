@@ -8,8 +8,8 @@ import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons";
 
 import { useDir, useI18n } from "../../lib/i18n";
-import { getPlan, getUsage, invalidatePlan, LIMITS, requestPaywall, type Plan, type Usage } from "../../lib/plan";
-import { MANAGE_URL, purchasesAvailable, restore } from "../../lib/purchases";
+import { getPlan, getUsage, invalidatePlan, LIMITS, PAGE_PACK, requestPaywall, type Plan, type Usage } from "../../lib/plan";
+import { buyPages, MANAGE_URL, purchasesAvailable, restore } from "../../lib/purchases";
 import { useScene } from "../../lib/scene";
 import { SceneCard } from "./scene-screen";
 
@@ -48,8 +48,14 @@ export function SubscriptionCard() {
       </View>
       {limits && usage && (
         <>
-          <Bar label={t("sub.voice", { used: Math.min(usage.voiceMin, limits.voiceMin), limit: limits.voiceMin })} frac={usage.voiceMin / limits.voiceMin} />
+          <Bar label={t(plan === "free" ? "sub.pagesTrial" : "sub.pages", { used: Math.min(usage.pages, limits.pages), limit: limits.pages })} frac={usage.pages / limits.pages} />
+          {limits.premium > 0 && (
+            <Bar label={t("sub.premium", { used: Math.min(usage.premium, limits.premium), limit: limits.premium })} frac={usage.premium / limits.premium} />
+          )}
           <Bar label={t("sub.ai", { used: Math.min(usage.ai, limits.ai), limit: limits.ai })} frac={usage.ai / limits.ai} />
+          {usage.credits > 0 && (
+            <Text style={[styles.label, { color: pal.accent, textAlign: dir.textAlign }]}>{t("sub.credits", { n: usage.credits })}</Text>
+          )}
         </>
       )}
       {store && plan !== "owner" && (
@@ -57,6 +63,20 @@ export function SubscriptionCard() {
           {plan !== "pro" && (
             <Pressable onPress={() => requestPaywall("upgrade", true)} style={[styles.btn, { backgroundColor: pal.accent, borderColor: pal.accent }]}>
               <Text style={[styles.btnMainTxt, { color: pal.onAccent }]}>{t("sub.upgrade")}</Text>
+            </Pressable>
+          )}
+          {plan !== "free" && (
+            <Pressable
+              onPress={async () => {
+                const r = await buyPages();
+                if (r === "ok") {
+                  setUsage(await getUsage());
+                  Alert.alert(t("sub.pagesAddedTitle"), t("sub.pagesAddedBody", { n: PAGE_PACK.pages }));
+                }
+              }}
+              style={[styles.btn, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
+            >
+              <Text style={[styles.btnTxt, { color: pal.ink }]}>{t("sub.buyPages", { n: PAGE_PACK.pages })}</Text>
             </Pressable>
           )}
           {plan !== "free" && (

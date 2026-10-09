@@ -68,6 +68,9 @@ import {
   prefetchText,
   holdAudioSession,
   isNarrating,
+  isPremiumVoice,
+  onPremiumExhausted,
+  standardVoiceFor,
   setLivePlaybackRate,
   setNowPlaying,
   speakText,
@@ -468,6 +471,29 @@ export default function ReaderScreen() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 2200);
   }
+
+  // انتهت صفحات الصوت الفاخر هذا الشهر: speakText يعيد الجملة بالصوت الأساسي،
+  // وهنا نثبّت الاختيار على الأساسي (لا نعود للفاخر في الجملة التالية) وننبّه مرة.
+  useEffect(() => {
+    return onPremiumExhausted(() => {
+      let switched = false;
+      if (isPremiumVoice(voiceIdRef.current)) {
+        const std = standardVoiceFor(voiceIdRef.current);
+        voiceIdRef.current = std;
+        voiceChosenRef.current = true;
+        setVoiceId(std);
+        switched = true;
+      }
+      if (isPremiumVoice(translateVoiceIdRef.current)) {
+        const std = standardVoiceFor(translateVoiceIdRef.current);
+        translateVoiceIdRef.current = std;
+        setTranslateVoiceId(std);
+        switched = true;
+      }
+      if (switched) showToast(t("reader.toast.premiumOver"));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // تحميل الكتاب كامل (تجهيز كل الصفحات مسبقًا)
   const [ingesting, setIngesting] = useState(false);
@@ -872,7 +898,7 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (sentences.length === 0 || speaking) return;
     const idx = Math.max(0, Math.min(resumeIdxRef.current || 0, sentences.length - 1));
-    prefetchText(sentences[idx], { voiceId: pickVoice() });
+    prefetchText(sentences[idx], { voiceId: pickVoice(), page: pdfPath ? { book: pdfPath, page } : undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sentences]);
 
@@ -1509,7 +1535,8 @@ export default function ReaderScreen() {
       else if (precise) txt = await tashkeelPage(res.page, txt, !!res.ocr);
       const sents = listenArabicRef.current || precise ? splitSentences(txt) : getReadingSentences(txt, res.page);
       const vId = pickVoice();
-      for (const s of sents.slice(0, 2)) await prefetchText(s, { voiceId: vId });
+      const pageRef = { book: pdfPath, page: res.page };
+      for (const s of sents.slice(0, 2)) await prefetchText(s, { voiceId: vId, page: pageRef });
       if (!pageTextCacheRef.current.has(p + 1)) {
         extractPdfPageText(pdfPath, p + 1)
           .then((r) => pageTextCacheRef.current.set(p + 1, r))
@@ -1558,9 +1585,11 @@ export default function ReaderScreen() {
       if (!playingRef.current) return;
       // تجهيز الجمل التالية مسبقًا (صوتها) لقراءة سلسة بلا تقطيع — جملتان قدّام
       const vId = pickVoice();
+      // صفحة الكتاب لهذه الجمل → تُحسب من حصة الصفحات (مرة واحدة في الشهر) لا بالأحرف
+      const pageRef = pdfPath ? { book: pdfPath, page: p } : undefined;
       // المقطع التالي: نحمّل مشغّله مسبقًا (warm) ليبدأ فورًا بلا فجوة بين المقاطع
-      if (i + 1 < sents.length) warmNext(sents[i + 1], { voiceId: vId });
-      if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId });
+      if (i + 1 < sents.length) warmNext(sents[i + 1], { voiceId: vId, page: pageRef });
+      if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId, page: pageRef });
       // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل سلس
       if (i === Math.max(0, sents.length - 3) && p < total) {
         void prepareNextPage(p + 1);
@@ -1572,6 +1601,7 @@ export default function ReaderScreen() {
       const totalWords = sents.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
       speakText(sents[i], {
         voiceId: pickVoice(),
+        page: pageRef,
         rate: rateRef.current,
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
         onProgress: (frac) => {
@@ -3502,17 +3532,37 @@ export default function ReaderScreen() {
             </View>
 
             <ScrollView style={{ maxHeight: 320 }} contentContainerStyle={{ gap: 8, paddingTop: 12 }}>
-              {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === voiceLang).map((v) => {
-                const active = v.voiceId === voiceId;
+              {([false, true] as const).map((premium) => {
+                const group = VOICE_CATALOG.filter(
+                  (v) => (v.lang ?? "ar") === voiceLang && !!v.premium === premium
+                );
+                if (group.length === 0) return null;
                 return (
-                  <Pressable
-                    key={v.id}
-                    onPress={() => chooseVoice(v.voiceId)}
-                    style={[styles.voiceRowItem, active && styles.voiceRowItemOn]}
-                  >
-                    <Text style={[styles.voiceRowTxt, active && { color: Palette.neonCyan }]}>{v.name}</Text>
-                    {active ? <Ionicons name="checkmark-circle" size={20} color={Palette.neonCyan} /> : null}
-                  </Pressable>
+                  <View key={premium ? "premium" : "standard"} style={{ gap: 8 }}>
+                    <Text style={[styles.voiceGroupTxt, { textAlign: dir.textAlign }]}>
+                      {t(premium ? "voice.group.premium" : "voice.group.standard")}
+                    </Text>
+                    {group.map((v) => {
+                      const active = v.voiceId === voiceId;
+                      return (
+                        <Pressable
+                          key={v.id}
+                          onPress={() => chooseVoice(v.voiceId)}
+                          style={[styles.voiceRowItem, active && styles.voiceRowItemOn]}
+                        >
+                          <View style={styles.voiceRowName}>
+                            <Text style={[styles.voiceRowTxt, active && { color: Palette.neonCyan }]}>{v.name}</Text>
+                            {v.premium ? (
+                              <View style={styles.premiumBadge}>
+                                <Text style={styles.premiumBadgeTxt}>{t("voice.badge.premium")}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          {active ? <Ionicons name="checkmark-circle" size={20} color={Palette.neonCyan} /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 );
               })}
             </ScrollView>
@@ -3548,7 +3598,10 @@ export default function ReaderScreen() {
                     }}
                     style={[styles.voiceChip, sel && styles.voiceChipActive]}
                   >
-                    <Text style={[styles.voiceChipTxt, sel && styles.voiceChipTxtActive]}>{v.name}</Text>
+                    <Text style={[styles.voiceChipTxt, sel && styles.voiceChipTxtActive]}>
+                      {v.name}
+                      {v.premium ? <Text style={styles.premiumBadgeTxt}>{`  ${t("voice.badge.premium")}`}</Text> : null}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -4486,6 +4539,17 @@ const styles = StyleSheet.create({
   },
   voiceRowItemOn: { borderColor: Palette.neonCyan },
   voiceRowTxt: { color: Palette.text, fontSize: 15, fontWeight: "800" },
+  voiceRowName: { flexDirection: "row-reverse", alignItems: "center", gap: 8, flexShrink: 1 },
+  voiceGroupTxt: { color: Palette.textMuted, fontSize: 12, fontWeight: "800", marginTop: 4 },
+  premiumBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: "#E8C26A",
+    backgroundColor: "rgba(232,194,106,0.14)",
+  },
+  premiumBadgeTxt: { color: "#E8C26A", fontSize: 11, fontWeight: "800" },
   langRow: { flexDirection: "row-reverse", gap: 8 },
   langChip: {
     paddingVertical: 6,

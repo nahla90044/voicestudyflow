@@ -13,12 +13,21 @@ export type Plan = "owner" | "pro" | "plus" | "free";
 // نفس القائمة في lib/auth.ts (OWNER_EMAILS) — حسابا المالكة.
 const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com"]);
 
-// حدود الشهر. الصوت بالأحرف (≈ ١٠٠٠ حرف لكل دقيقة استماع).
-export const LIMITS: Record<Exclude<Plan, "owner">, { voice: number; ai: number }> = {
-  free: { voice: 30_000, ai: 60 }, // ~٣٠ دقيقة صوت بشري
-  plus: { voice: 300_000, ai: 1_000 }, // ~٥ ساعات
-  pro: { voice: 900_000, ai: 4_000 }, // ~١٥ ساعة
+// حدود الخطط (اتفقنا عليها مع نهلة ٩ أكتوبر — رابحة حتى مع الاستهلاك الكامل):
+//  الصفحات: صفحة الكتاب تُحسب مرة واحدة في الشهر (إعادة الاستماع مجانية).
+//  std = الصوت الأساسي (Azure)، prem = الصوت الفاخر (ElevenLabs).
+//  voice = أحرف خارج صفحات الكتب (القاموس، كلماتي، البطاقات…).
+//  المجانية تجربة لمرة واحدة (فترة lifetime)، والمدفوعة شهرية.
+export const LIMITS: Record<Exclude<Plan, "owner">, { std: number; prem: number; ai: number; voice: number }> = {
+  free: { std: 10, prem: 0, ai: 5, voice: 3_000 },
+  plus: { std: 100, prem: 5, ai: 50, voice: 40_000 },
+  pro: { std: 200, prem: 10, ai: 100, voice: 80_000 },
 };
+
+/** الفترة المحسوبة: lifetime للمجانية، وإلا الشهر الحالي (UTC) */
+export function periodOf(plan: Plan): string {
+  return plan === "free" ? "lifetime" : new Date().toISOString().slice(0, 7);
+}
 
 export type Caller = { id: string; plan: Plan; admin: SupabaseClient } | null;
 
@@ -42,7 +51,7 @@ export async function getCaller(req: Request): Promise<Caller> {
 }
 
 /**
- * يستهلك من حصة الشهر. يُرجع true إن سُمح.
+ * يستهلك من الحصة (طلبات ذكاء أو أحرف صوت خارج الصفحات). يُرجع true إن سُمح.
  * المالكة: دائمًا مسموح بلا تسجيل. بلا فرض (QUOTAS_ENFORCED≠true): يُسجَّل ويُسمح.
  */
 export async function consume(caller: Caller, kind: "voice" | "ai", amount: number): Promise<boolean> {
@@ -50,15 +59,38 @@ export async function consume(caller: Caller, kind: "voice" | "ai", amount: numb
   if (!caller) return !enforced;
   if (caller.plan === "owner") return true;
   const limit = enforced ? LIMITS[caller.plan][kind] : -1;
-  const { data, error } = await caller.admin.rpc("consume_usage", {
+  const { data, error } = await caller.admin.rpc("consume_usage_p", {
     p_user: caller.id,
+    p_period: periodOf(caller.plan),
     p_kind: kind,
     p_amount: Math.max(1, Math.round(amount)),
     p_limit: limit,
   });
   if (error) {
-    console.error("consume_usage", error.message);
+    console.error("consume_usage_p", error.message);
     return true; // عطل في العدّ لا يجب أن يوقف المستخدم
   }
   return data === true;
+}
+
+export type PageResult = "again" | "ok" | "credit" | "over";
+
+/** يستهلك صفحة كتاب (مرة واحدة لكل صفحة في الفترة). */
+export async function consumePage(caller: Caller, pageKey: string, tier: "std" | "prem"): Promise<PageResult> {
+  const enforced = Deno.env.get("QUOTAS_ENFORCED") === "true";
+  if (!caller) return enforced ? "over" : "ok";
+  if (caller.plan === "owner") return "ok";
+  const limit = enforced ? LIMITS[caller.plan][tier] : -1;
+  const { data, error } = await caller.admin.rpc("consume_page", {
+    p_user: caller.id,
+    p_period: periodOf(caller.plan),
+    p_key: pageKey,
+    p_tier: tier,
+    p_limit: limit,
+  });
+  if (error) {
+    console.error("consume_page", error.message);
+    return "ok";
+  }
+  return (data as PageResult) ?? "ok";
 }

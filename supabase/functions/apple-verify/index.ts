@@ -3,7 +3,7 @@
 // منها ونحدّث اشتراك المستخدم. الطلب يتطلّب دخول المستخدم (verify_jwt=true).
 // لا يُمنح اشتراك إلا بمعاملة موقّعة حقيقية من Apple لهذا التطبيق.
 import { getCaller } from "../_shared/plan.ts";
-import { isActive, PRODUCT_PLAN, verifyTransaction } from "../_shared/apple.ts";
+import { isActive, PAGE_PACKS, PRODUCT_PLAN, verifyTransaction } from "../_shared/apple.ts";
 
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
@@ -22,12 +22,28 @@ Deno.serve(async (req) => {
 
   const { admin } = caller;
   let best: { plan: string; expires: number } | null = null;
+  let credited = 0;
   for (const jws of list) {
     let t;
     try {
       t = await verifyTransaction(jws);
     } catch (e) {
       console.error("verify failed", String(e));
+      continue;
+    }
+    // صفحات إضافية (شراء استهلاكي): تُضاف للرصيد مرة واحدة لكل معاملة
+    const packPages = PAGE_PACKS[String(t.productId)];
+    if (packPages) {
+      if (t.appAccountToken && t.appAccountToken.toLowerCase() !== caller.id.toLowerCase()) continue;
+      if (t.transactionId && !t.revocationDate) {
+        const { data: added } = await admin.rpc("credit_pages", {
+          p_user: caller.id,
+          p_tx: t.transactionId,
+          p_product: t.productId,
+          p_pages: packPages,
+        });
+        if (added) credited += packPages;
+      }
       continue;
     }
     const plan = PRODUCT_PLAN[String(t.productId)];
@@ -53,7 +69,7 @@ Deno.serve(async (req) => {
 
   // اشتراك ممنوح يدويًا بلا تاريخ انتهاء لا يُغيَّر
   const { data: current } = await admin.from("entitlements").select("expires_at").eq("user_id", caller.id).maybeSingle();
-  if (current && current.expires_at === null) return json({ plan: "comp" });
+  if (current && current.expires_at === null) return json({ plan: "comp", credited });
 
   if (best) {
     await admin.from("entitlements").upsert({
@@ -62,7 +78,7 @@ Deno.serve(async (req) => {
       expires_at: new Date(best.expires).toISOString(),
       updated_at: new Date().toISOString(),
     });
-    return json({ plan: best.plan, expires_at: new Date(best.expires).toISOString() });
+    return json({ plan: best.plan, expires_at: new Date(best.expires).toISOString(), credited });
   }
-  return json({ plan: null });
+  return json({ plan: null, credited });
 });

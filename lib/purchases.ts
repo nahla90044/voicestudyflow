@@ -23,6 +23,9 @@ export const PRODUCTS = {
 } as const;
 export type ProductKey = keyof typeof PRODUCTS;
 const SKUS: string[] = Object.values(PRODUCTS);
+// صفحات إضافية (شراء استهلاكي يُضاف لرصيد المستخدم على السيرفر)
+export const PAGES_SKU = "vsf_pages_50";
+const ALL_SKUS = [...SKUS, PAGES_SKU];
 
 // روابط إلزامية في شاشة الاشتراك. الشروط: اتفاقية آبل القياسية.
 export const TERMS_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
@@ -72,10 +75,11 @@ function connect(): Promise<boolean> {
     try {
       await m.initConnection();
       m.purchaseUpdatedListener(async (purchase: any) => {
-        if (!SKUS.includes(purchase?.productId)) return;
+        if (!ALL_SKUS.includes(purchase?.productId)) return;
         await sendToServer([purchase.purchaseToken]);
         try {
-          await m.finishTransaction({ purchase, isConsumable: false });
+          // الصفحات الإضافية استهلاكية: تُنهى بعد إضافتها للرصيد على السيرفر
+          await m.finishTransaction({ purchase, isConsumable: purchase.productId === PAGES_SKU });
         } catch {
           // منتهية مسبقًا
         }
@@ -90,6 +94,12 @@ function connect(): Promise<boolean> {
       });
       const list = await m.fetchProducts({ skus: SKUS, type: "subs" });
       for (const p of list ?? []) products.set(p.id, p);
+      try {
+        const packs = await m.fetchProducts({ skus: [PAGES_SKU], type: "in-app" });
+        for (const p of packs ?? []) products.set(p.id, p);
+      } catch {
+        // الصفحات الإضافية غير متاحة بعد → زرها لا يظهر
+      }
       return true;
     } catch {
       connecting = null; // نعيد المحاولة لاحقًا
@@ -131,6 +141,32 @@ export async function buy(key: ProductKey): Promise<BuyResult> {
         }
       });
   });
+}
+
+/** شراء ٥٠ صفحة إضافية (تُضاف لرصيد هذا الحساب بعد تحقّق السيرفر من توقيع Apple) */
+export async function buyPages(): Promise<BuyResult> {
+  if (!purchasesAvailable() || !(await connect())) return "unavailable";
+  if (!products.has(PAGES_SKU)) return "unavailable";
+  return new Promise<BuyResult>((resolve) => {
+    pending = resolve;
+    iap()!
+      .requestPurchase({
+        request: { apple: { sku: PAGES_SKU, ...(userId ? { appAccountToken: userId } : {}) } },
+        type: "in-app",
+      })
+      .catch((e: any) => {
+        if (pending === resolve) {
+          pending = null;
+          resolve(String(e?.code) === "user-cancelled" ? "cancelled" : "failed");
+        }
+      });
+  });
+}
+
+/** سعر الصفحات الإضافية كما يعرضه المتجر */
+export async function pagesPrice(): Promise<string | null> {
+  if (!purchasesAvailable() || !(await connect())) return null;
+  return products.get(PAGES_SKU)?.displayPrice ?? null;
 }
 
 /** استعادة المشتريات: الاشتراك مربوط بحساب Apple فيعود على أي جهاز */
