@@ -25,6 +25,7 @@ import { ScreenBackground } from "../../components/brand/screen-background";
 import { ScreenHeader } from "../../components/brand/screen-header";
 import { Gradients, Palette } from "../../constants/design";
 import { THEMES } from "../../constants/themes";
+import { SCENE_PALETTE, setScenePref, useScene, type ScenePref } from "../../lib/scene";
 import { useTheme } from "../../lib/themeContext";
 import { useDir, useI18n } from "../../lib/i18n";
 import { LinearGradient } from "expo-linear-gradient";
@@ -50,6 +51,7 @@ export default function MoreScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { themeId, setThemeId } = useTheme();
+  const scene = useScene();
   const [minPerPage, setMinPerPageState] = useState("1.5");
   const [loading, setLoading] = useState(true);
   const [kbVisible, setKbVisible] = useState(false);
@@ -200,6 +202,36 @@ export default function MoreScreen() {
         {/* اللغة */}
         <GlassCard contentStyle={styles.cardC} glow={Palette.neonBlue}>
           <LanguageSwitcher />
+        </GlassCard>
+
+        {/* مشهد الواجهة: حسب وقت اليوم أو مشهد ثابت */}
+        <GlassCard contentStyle={styles.cardC} glow={scene.pal.accent}>
+          <Text style={[styles.title, { textAlign: dir.textAlign }]}>{t("scene.pref.title")}</Text>
+          <View style={[styles.themeGrid, { flexDirection: dir.row }]}>
+            {(["auto", "garden", "study", "sky"] as ScenePref[]).map((p) => {
+              const active = scene.pref === p;
+              const sw = p === "auto" ? null : SCENE_PALETTE[p];
+              return (
+                <Pressable
+                  key={p}
+                  onPress={() => void setScenePref(p)}
+                  style={[styles.themeCell, active && { borderColor: scene.pal.accent, borderWidth: 2 }]}
+                >
+                  <View style={[styles.themeSwatch, { flexDirection: dir.row, backgroundColor: sw?.bg ?? "#1A1D2B" }]}>
+                    {sw ? (
+                      <>
+                        <View style={[styles.themeDot, { backgroundColor: sw.accent }]} />
+                        <View style={[styles.themeDot, { backgroundColor: sw.card }]} />
+                      </>
+                    ) : (
+                      (["garden", "study", "sky"] as const).map((k) => <View key={k} style={[styles.themeDot, { backgroundColor: SCENE_PALETTE[k].accent }]} />)
+                    )}
+                  </View>
+                  <Text style={[styles.themeName, active && { color: scene.pal.accent }]}>{t(`scene.pref.${p}`)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </GlassCard>
 
         {/* الثيمات */}

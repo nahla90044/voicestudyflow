@@ -1,0 +1,8 @@
+{
+  "name": "reading-activity",
+  "version": "1.0.0",
+  "description": "Live Activity for VoiceStudyFlow reading (Dynamic Island + lock screen)",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "private": true
+}

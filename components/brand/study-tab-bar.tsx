@@ -4,15 +4,14 @@
 // الشريط داخل تدفّق الصفحة (لا يطفو فوقها) حتى لا يغطّي أسفل أي شاشة قائمة.
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Gradients, Palette } from "../../constants/design";
+import { Palette } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
-import { useTheme } from "../../lib/themeContext";
+import { useScene } from "../../lib/scene";
 import { PressableScale } from "./motion";
 import { NowPlayingDock } from "./now-playing-dock";
 
@@ -30,7 +29,7 @@ const RIGHT: Dest[] = [
 export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
   const { t } = useI18n();
   const dir = useDir();
-  const { theme } = useTheme();
+  const { pal } = useScene(); // الشريط يأخذ ألوان المشهد الحالي (صباح/مساء/ليل)
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
@@ -40,7 +39,7 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
     return (
       <PressableScale
         key={d.route}
-        style={styles.item}
+        style={[styles.item, on && { backgroundColor: pal.soft }]}
         onPress={() => {
           const target = state.routes.find((r) => r.name === d.route);
           if (!target) return;
@@ -48,8 +47,8 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
           if (!on && !ev.defaultPrevented) navigation.navigate(d.route);
         }}
       >
-        <Ionicons name={on ? d.iconOn : d.icon} size={22} color={on ? theme.accent : Palette.placeholder} />
-        <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>
+        <Ionicons name={on ? d.iconOn : d.icon} size={22} color={on ? pal.accent : pal.navIdle} />
+        <Text style={[styles.label, { color: on ? pal.ink : pal.navIdle }, on && styles.labelOn]} numberOfLines={1}>
           {t(d.labelKey)}
         </Text>
       </PressableScale>
@@ -57,16 +56,22 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
   };
 
   return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View style={[styles.wrap, { backgroundColor: pal.bg, paddingBottom: Math.max(insets.bottom, 10) }]}>
       {/* الشريط العائم: الكتاب المسموع فوق التنقّل (يظهر فقط أثناء القراءة في الخلفية) */}
       <NowPlayingDock />
-      <View style={[styles.pill, { flexDirection: dir.row }]}>
+      <View
+        style={[
+          styles.pill,
+          { flexDirection: dir.row, backgroundColor: pal.nav, borderColor: pal.cardBorder },
+          !pal.dark && { shadowColor: "#3C5028", shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+        ]}
+      >
         {LEFT.map(item)}
         {/* ضغطة: بحث وأوامر · ضغطة مطوّلة: المساعد الصوتي مباشرة */}
         <PressableScale onPress={() => router.push("/command")} onLongPress={() => router.push("/voice")} style={styles.orbWrap}>
-          <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.orb}>
-            <Ionicons name="sparkles" size={24} color="#fff" accessibilityLabel={t("nav.orb")} />
-          </LinearGradient>
+          <View style={[styles.orb, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
+            <Ionicons name="sparkles" size={24} color={pal.onAccent} accessibilityLabel={t("nav.orb")} />
+          </View>
         </PressableScale>
         {RIGHT.map(item)}
       </View>
@@ -86,9 +91,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingHorizontal: 4,
   },
-  item: { alignItems: "center", gap: 3, width: 62, paddingVertical: 6 },
+  item: { alignItems: "center", gap: 3, width: 64, paddingVertical: 6, borderRadius: 18 },
   label: { fontSize: 10.5, fontWeight: "600", color: Palette.placeholder },
-  labelOn: { color: Palette.text },
+  labelOn: { fontWeight: "800" },
   orbWrap: { marginTop: -2 },
   orb: {
     width: 54,

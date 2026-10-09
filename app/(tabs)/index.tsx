@@ -1,20 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
-import { BookCover } from "../../components/brand/book-cover";
 import { DownloadIndicator } from "../../components/brand/download-indicator";
 import { FadeIn } from "../../components/brand/fade-in";
-import { GlassCard } from "../../components/brand/glass-card";
 import { CountUp, PressableScale } from "../../components/brand/motion";
-import { ProgressRing } from "../../components/brand/progress-ring";
-import { ScreenBackground } from "../../components/brand/screen-background";
+import { SceneArt } from "../../components/brand/scene-art";
 import { WeekBars } from "../../components/brand/week-bars";
-import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
+import { Palette, Radius, Spacing } from "../../constants/design";
 import { getDisplayName } from "../../lib/auth";
 import { countDue, reviewedToday } from "../../lib/flashcards";
 import { getDailyGoal } from "../../lib/goals";
@@ -24,7 +21,8 @@ import { goalProgress, lastSevenDays, pickNextActions, type NextActionId } from 
 import { getBookReadiness, type BookReadiness } from "../../lib/readiness";
 import { buildDailyPath, type PathStep, type PathStepId } from "../../lib/readinessCore";
 import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
-import { useTheme } from "../../lib/themeContext";
+import { useScene } from "../../lib/scene";
+import { sceneGrowth } from "../../lib/sceneCore";
 
 
 // شكل كل اقتراح ذكي: أيقونة + لون (النص يُبنى في الشاشة لأنه يحتاج بيانات)
@@ -42,7 +40,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
-  const { theme } = useTheme();
+  const scene = useScene();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [due, setDue] = useState(0);
@@ -86,7 +86,6 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const accent: readonly [string, string] = [theme.glow3, theme.accent];
   const streak = stats?.streak ?? 0;
 
   const week = useMemo(
@@ -216,110 +215,134 @@ export default function HomeScreen() {
   const dayLabels = t("home.days").split(",");
   const contFraction = cont && cont.pageCount > 0 ? Math.min(1, cont.page / cont.pageCount) : 0;
 
+  // المشهد الحيّ: يتبدّل مع وقت اليوم ويكبر مع التقدّم الحقيقي
+  const todayISO = week.at(-1)?.iso ?? "";
+  const unitCount = ready?.unitCount ?? 0;
+  const unitsDone = ready
+    ? Math.max(ready.accuracy.filter((a) => a !== null && a >= 0.7).length, Math.floor((ready.readFraction ?? 0) * unitCount))
+    : 0;
+  const growth = sceneGrowth(scene.id, {
+    pagesToday: stats?.days?.[todayISO]?.p ?? 0,
+    unitsDone,
+    unitCount,
+    readiness: ready?.score ?? 0,
+  });
+  const pal = scene.pal;
+  const heroH = Math.round(width * 1.06);
+  const headline = t(`scene.${scene.id}.title`).split("|");
+  const sceneSub =
+    scene.id === "sky"
+      ? t("scene.sky.sub", { n: growth.lit })
+      : scene.id === "study"
+        ? unitCount > 0
+          ? t("scene.study.sub", { n: growth.lit, total: unitCount })
+          : t("scene.study.subEmpty")
+        : t("scene.garden.sub");
+  const greet = name ? t(`scene.${scene.id === "garden" ? "morning" : "evening"}`, { name }) : t(`scene.${scene.id === "garden" ? "morningNoName" : "eveningNoName"}`);
+  const headTop = scene.id === "garden";
+  const cardStyle = { backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: pal.dark ? "#000" : "#3C5028" };
+
   return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* الشريط العلوي: قائمة + تحية */}
-          <View style={[styles.topBar, { flexDirection: dir.row }]}>
-            <AppDrawer />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.hello, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                {name ? t("home.greeting", { name }) : "VoiceStudyFlow"}
-              </Text>
-              <Text style={[styles.cheer, { textAlign: dir.textAlign, color: theme.accent }]} numberOfLines={1}>
-                {dailyCheer}
-              </Text>
+    <View style={[styles.safe, { backgroundColor: pal.bg }]}>
+      <StatusBar style={pal.dark ? "light" : "dark"} />
+      <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
+        {/* المشهد + التحية */}
+        <View style={{ height: heroH }}>
+          <View style={StyleSheet.absoluteFill}>
+            <SceneArt id={scene.id} growth={growth} width={width} height={heroH} />
+          </View>
+          <View style={[styles.heroInner, { paddingTop: insets.top + 6, justifyContent: headTop ? "flex-start" : "space-between" }]}>
+            <View style={[styles.topBar, { flexDirection: dir.row }]}>
+              <AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />
+              <View style={{ flex: 1 }} />
+              <View style={[styles.streakPill, { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.75)", borderColor: pal.dark ? pal.accent + "55" : "transparent" }]}>
+                <Ionicons name="flame" size={14} color={pal.dark ? pal.accent : "#E07A2E"} />
+                <Text style={[styles.streakNum, { color: pal.dark ? pal.accent : "#E07A2E" }]}>{t("scene.streak", { n: streak })}</Text>
+              </View>
             </View>
-            <View style={styles.streakPill}>
-              <Text style={styles.streakFlame}>🔥</Text>
-              <Text style={styles.streakNum}>{streak}</Text>
+            <View style={[styles.headBlock, !headTop && { paddingBottom: Math.round(heroH * 0.17) + 16 }]}>
+              <Text style={[styles.greet, { color: pal.dark ? pal.dim : "#5F6F58", textAlign: dir.textAlign }]} numberOfLines={1}>
+                {greet}
+              </Text>
+              <Text style={[styles.headline, { color: pal.ink, textAlign: dir.textAlign }]}>
+                {headline[0]}
+                {headline[1] ? <Text style={{ color: pal.dark ? pal.accent : pal.accent }}>{headline[1]}</Text> : null}
+              </Text>
+              <Text style={[styles.sceneSub, { color: pal.dark ? pal.dim : "#6E7B66", textAlign: dir.textAlign }]} numberOfLines={2}>
+                {sceneSub}
+              </Text>
             </View>
           </View>
+        </View>
 
+        <View style={[styles.body, { marginTop: -Math.round(heroH * 0.17) }]}>
           <DownloadIndicator />
 
-          {/* بطاقة الجاهزية (تصميم 2.0) — تحلّ محلّ بطاقة الهدف متى توفّرت بيانات */}
-          {showReady && ready && cont && (
+          {/* البطاقة الرئيسية: متابعة الاستماع + أرقام اليوم + الخطوة التالية */}
+          {cont && (
             <FadeIn delay={0}>
-              <PressableScale onPress={() => router.push({ pathname: "/book/[id]", params: { id: cont.id } })}>
-                <GlassCard radius={Radius.xl} glow={Palette.primary} style={styles.block}>
-                  <LinearGradient
-                    colors={["rgba(124,108,255,0.16)", "rgba(16,18,27,0)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0.6, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View style={[styles.todayRow, { flexDirection: dir.row }]}>
-                    <ProgressRing progress={ready.score / 100} colors={[Gradients.neon[0], Gradients.neon[2]]} size={112}>
-                      <Text style={styles.readyNum}>{ready.score}%</Text>
-                      <Text style={styles.ringUnit}>{t("ready.title")}</Text>
-                    </ProgressRing>
-                    <View style={styles.todayInfo}>
-                      <Text style={[styles.sectionLabel, { textAlign: dir.textAlign }]} numberOfLines={2}>
-                        {ready.daysLeft == null || ready.daysLeft < 0
-                          ? t("ready.noExam", { book: cont.title })
-                          : ready.daysLeft === 0
-                            ? t("ready.examToday", { book: cont.title })
-                            : t("ready.exam", { book: cont.title, n: ready.daysLeft })}
-                      </Text>
-                      <Text style={[styles.readyHeadline, { textAlign: dir.textAlign }]}>
-                        {ready.delta && ready.delta > 0
-                          ? t("ready.up", { n: ready.delta })
-                          : ready.delta && ready.delta < 0
-                            ? t("ready.down", { n: -ready.delta })
-                            : t("ready.flat")}
-                      </Text>
-                      {ready.weakUnit !== null && (
-                        <View style={[styles.weakChip, { alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
-                          <Text style={styles.weakChipTxt}>
-                            {t(ready.weakUntested ? "ready.untested" : "ready.weak", { n: ready.weakUnit + 1 })}
-                          </Text>
-                        </View>
-                      )}
+              <View style={[styles.card, cardStyle]}>
+                <PressableScale onPress={() => openBook(cont)} style={[styles.contRow, { flexDirection: dir.row }]}>
+                  <View style={[styles.playBtn, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
+                    <Ionicons name="play" size={20} color={pal.onAccent} style={{ marginLeft: 3 }} />
+                  </View>
+                  <View style={{ flex: 1, gap: 5 }}>
+                    <Text style={[styles.small, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
+                      {t("home.continue.title")} ·{" "}
+                      {cont.pageCount > 0 ? t("home.continue.page", { page: cont.page, total: cont.pageCount }) : t("home.continue.pageOnly", { page: cont.page })}
+                    </Text>
+                    <Text style={[styles.contTitle, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
+                      {cont.title}
+                    </Text>
+                    <View style={[styles.progTrack, { backgroundColor: pal.track }]}>
+                      <View style={[styles.progFill, { width: `${Math.max(4, contFraction * 100)}%`, backgroundColor: pal.accent }, dir.isRTL ? { alignSelf: "flex-end" } : null]} />
                     </View>
                   </View>
-                </GlassCard>
-              </PressableScale>
+                </PressableScale>
+
+                <View style={[styles.hair, { backgroundColor: pal.track }]} />
+
+                <View style={[styles.statsRow, { flexDirection: dir.row }]}>
+                  <PressableScale onPress={() => router.push("/activity")} style={styles.statCell}>
+                    <Text style={[styles.statNum, { color: pal.ink }]}>
+                      <CountUp value={todayMinutes} style={[styles.statNum, { color: pal.ink }]} />
+                      <Text style={[styles.statUnit, { color: pal.dim }]}> / {goal}</Text>
+                    </Text>
+                    <Text style={[styles.statLbl, { color: pal.dim }]}>{t("scene.stat.minutes")}</Text>
+                  </PressableScale>
+                  <View style={[styles.vHair, { backgroundColor: pal.track }]} />
+                  <PressableScale onPress={() => router.push({ pathname: "/book/[id]", params: { id: cont.id } })} style={styles.statCell}>
+                    <Text style={[styles.statNum, { color: pal.ink }]}>{ready ? `${ready.score}%` : "—"}</Text>
+                    <Text style={[styles.statLbl, { color: pal.dim }]}>{t("ready.title")}</Text>
+                  </PressableScale>
+                  <View style={[styles.vHair, { backgroundColor: pal.track }]} />
+                  <PressableScale onPress={() => router.push("/flashcards")} style={styles.statCell}>
+                    <Text style={[styles.statNum, { color: due > 0 ? pal.accent : pal.ink }]}>{due}</Text>
+                    <Text style={[styles.statLbl, { color: pal.dim }]}>{t("home.stat.dueCards")}</Text>
+                  </PressableScale>
+                </View>
+
+                {ready && ready.daysLeft != null && ready.daysLeft >= 0 && (
+                  <Text style={[styles.examLine, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
+                    {ready.daysLeft === 0 ? t("ready.examToday", { book: cont.title }) : t("ready.exam", { book: cont.title, n: ready.daysLeft })}
+                  </Text>
+                )}
+              </View>
             </FadeIn>
           )}
 
-          {/* بطاقة اليوم: حلقة الهدف + أعمدة الأسبوع */}
-          {!showReady && (
-          <FadeIn delay={0}>
-            <PressableScale onPress={() => router.push("/activity")}>
-            <GlassCard radius={Radius.xl} glow={theme.accent} style={styles.block}>
-              <View style={[styles.todayRow, { flexDirection: dir.row }]}>
-                <ProgressRing progress={progress} colors={accent} size={118}>
-                  <CountUp value={todayMinutes} style={styles.ringNum} />
-                  <Text style={styles.ringUnit}>{t("home.today.unit", { goal })}</Text>
-                </ProgressRing>
-                <View style={styles.todayInfo}>
-                  <Text style={[styles.sectionLabel, { textAlign: dir.textAlign }]}>{t("home.today.title")}</Text>
-                  <Text style={[styles.todayStatus, { textAlign: dir.textAlign }]}>
-                    {progress >= 1 ? t("home.today.done") : t("home.today.left", { left: goalLeft })}
-                  </Text>
-                  <Text style={[styles.weekLabel, { textAlign: dir.textAlign }]}>{t("home.week.title")}</Text>
-                  <WeekBars days={week} dayLabels={dayLabels} accent={accent} isRTL={dir.isRTL} height={44} />
-                </View>
-              </View>
-            </GlassCard>
-            </PressableScale>
-          </FadeIn>
-          )}
-
-          {/* مسار اليوم (تصميم 2.0): خطوات اليوم بالترتيب — يحلّ محلّ «تابع القراءة» والاقتراحات */}
+          {/* مسار اليوم */}
           {cont && path.steps.length > 0 && (
             <FadeIn delay={70}>
-              <View style={[styles.pathHead, { flexDirection: dir.row }]}>
-                <Text style={styles.sectionTitle}>{t("path.title")}</Text>
-                <Text style={styles.pathMeta}>
+              <View style={[styles.sectionHead, { flexDirection: dir.row }]}>
+                <Text style={[styles.sectionTitle, { color: pal.ink }]}>{t("path.title")}</Text>
+                <Text style={[styles.small, { color: pal.dim }]}>
                   {path.done === path.steps.length
                     ? t("path.complete")
                     : t("path.progress", { done: path.done, total: path.steps.length, min: path.minutesLeft })}
                 </Text>
               </View>
-              <GlassCard radius={Radius.xl} style={styles.block}>
+              <View style={[styles.card, cardStyle, { padding: 8, gap: 6 }]}>
                 {path.steps.map((st, i) => {
                   const txt = stepText(st);
                   const current = i === firstOpen;
@@ -327,250 +350,146 @@ export default function HomeScreen() {
                     <PressableScale
                       key={st.id}
                       onPress={() => runStep(st.id)}
-                      style={[
-                        styles.stepRow,
-                        { flexDirection: dir.row },
-                        i > 0 && styles.actionDivider,
-                        current && styles.stepCurrent,
-                        st.done && { opacity: 0.55 },
-                      ]}
+                      style={[styles.stepRow, { flexDirection: dir.row }, current && { backgroundColor: pal.soft }, st.done && { opacity: 0.5 }]}
                     >
                       {st.done ? (
-                        <View style={styles.stepDone}>
-                          <Ionicons name="checkmark" size={16} color="#6CF3C5" />
-                        </View>
-                      ) : current ? (
-                        <View style={styles.stepRing}>
-                          <View style={styles.stepDot} />
+                        <View style={[styles.stepIcon, { backgroundColor: pal.soft }]}>
+                          <Ionicons name="checkmark" size={16} color={pal.accent} />
                         </View>
                       ) : (
-                        <View style={styles.stepEmpty} />
+                        <View style={[styles.stepIcon, { borderWidth: 2, borderColor: current ? pal.accent : pal.track }]}>
+                          {current && <View style={[styles.stepDot, { backgroundColor: pal.accent }]} />}
+                        </View>
                       )}
                       <View style={{ flex: 1 }}>
                         <Text
-                          style={[styles.stepTitle, { textAlign: dir.textAlign }, current && { fontWeight: "800" }, st.done && styles.strike]}
+                          style={[styles.stepTitle, { color: pal.ink, textAlign: dir.textAlign }, current && { fontWeight: "800" }, st.done && styles.strike]}
                           numberOfLines={1}
                         >
                           {txt.title}
                         </Text>
                         {!!txt.sub && !st.done && (
-                          <Text style={[styles.actionSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
+                          <Text style={[styles.small, { color: pal.dim, textAlign: dir.textAlign, marginTop: 2 }]} numberOfLines={1}>
                             {txt.sub}
                           </Text>
                         )}
                       </View>
                       {current && (
-                        <View style={styles.startPill}>
-                          <Text style={styles.startTxt}>{t("path.start")}</Text>
+                        <View style={[styles.startPill, { backgroundColor: pal.accent }]}>
+                          <Text style={[styles.startTxt, { color: pal.onAccent }]}>{t("path.start")}</Text>
                         </View>
                       )}
                     </PressableScale>
                   );
                 })}
-              </GlassCard>
-            </FadeIn>
-          )}
-
-          {/* تابع القراءة (حين لا يوجد مسار) */}
-          {cont && path.steps.length === 0 && (
-            <FadeIn delay={70}>
-              <PressableScale onPress={() => openBook(cont)}>
-                <GlassCard radius={Radius.xl} style={styles.block}>
-                  <View style={[styles.contRow, { flexDirection: dir.row }]}>
-                    <BookCover title={cont.title} width={62} height={86} />
-                    <View style={{ flex: 1, gap: 6 }}>
-                      <Text style={[styles.sectionLabel, { textAlign: dir.textAlign }]}>{t("home.continue.title")}</Text>
-                      <Text style={[styles.contTitle, { textAlign: dir.textAlign }]} numberOfLines={2}>
-                        {cont.title}
-                      </Text>
-                      <View style={styles.progTrack}>
-                        <LinearGradient
-                          colors={accent}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={[
-                            styles.progFill,
-                            { width: `${Math.max(4, contFraction * 100)}%` },
-                            dir.isRTL ? { alignSelf: "flex-end" } : null,
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.contSub, { textAlign: dir.textAlign }]}>
-                        {cont.pageCount > 0
-                          ? t("home.continue.page", { page: cont.page, total: cont.pageCount })
-                          : t("home.continue.pageOnly", { page: cont.page })}
-                      </Text>
-                    </View>
-                    <LinearGradient colors={accent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.playBtn}>
-                      <Ionicons name="play" size={22} color="#fff" style={{ marginLeft: 3 }} />
-                    </LinearGradient>
-                  </View>
-                </GlassCard>
-              </PressableScale>
+              </View>
             </FadeIn>
           )}
 
           {/* اقتراحات ذكية — حين لا يوجد كتاب حالي (مثل: إضافة أول كتاب) */}
           {!cont && (
-          <FadeIn delay={140}>
-            <View style={[styles.sectionHead, { flexDirection: dir.row }]}>
-              <Ionicons name="sparkles" size={16} color={theme.accent} />
-              <Text style={styles.sectionTitle}>{t("home.smart.title")}</Text>
-            </View>
-            <GlassCard radius={Radius.xl} style={styles.block}>
-              {actions.map((a, i) => {
-                const look = ACTION_LOOK[a.id];
-                const txt = actionText(a.id);
-                return (
-                  <PressableScale
-                    key={a.id}
-                    onPress={() => runAction(a.id)}
-                    style={[styles.actionRow, { flexDirection: dir.row }, i > 0 && styles.actionDivider]}
-                  >
-                    <View style={[styles.actionIcon, { backgroundColor: look.color + "22", borderColor: look.color + "55" }]}>
-                      <Ionicons name={look.icon} size={20} color={look.color} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.actionTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                        {txt.title}
-                      </Text>
-                      {!!txt.sub && (
-                        <Text style={[styles.actionSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                          {txt.sub}
+            <FadeIn delay={70}>
+              <View style={[styles.sectionHead, { flexDirection: dir.row }]}>
+                <Text style={[styles.sectionTitle, { color: pal.ink }]}>{t("home.smart.title")}</Text>
+              </View>
+              <View style={[styles.card, cardStyle, { padding: 8, gap: 6 }]}>
+                {actions.map((a) => {
+                  const look = ACTION_LOOK[a.id];
+                  const txt = actionText(a.id);
+                  return (
+                    <PressableScale key={a.id} onPress={() => runAction(a.id)} style={[styles.stepRow, { flexDirection: dir.row }]}>
+                      <View style={[styles.actionIcon, { backgroundColor: look.color + "22" }]}>
+                        <Ionicons name={look.icon} size={19} color={look.color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.stepTitle, { color: pal.ink, textAlign: dir.textAlign, fontWeight: "800" }]} numberOfLines={1}>
+                          {txt.title}
                         </Text>
-                      )}
-                    </View>
-                    <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />
-                  </PressableScale>
-                );
-              })}
-            </GlassCard>
-          </FadeIn>
+                        {!!txt.sub && (
+                          <Text style={[styles.small, { color: pal.dim, textAlign: dir.textAlign, marginTop: 2 }]} numberOfLines={1}>
+                            {txt.sub}
+                          </Text>
+                        )}
+                      </View>
+                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+                    </PressableScale>
+                  );
+                })}
+              </View>
+            </FadeIn>
           )}
 
-          {/* أرقامك */}
-          {!showReady && (
-          <FadeIn delay={210}>
-            <View style={[styles.statsRow, { flexDirection: dir.row }]}>
-              <StatTile icon="book" color={Palette.neonBlue} value={books} label={t("home.stat.books")} onPress={() => router.push("/library")} />
-              <StatTile icon="document-text" color={Palette.neonCyan} value={stats?.totalPages ?? 0} label={t("home.stat.pages")} onPress={() => router.push("/activity")} />
-              <StatTile icon="time" color={Palette.neonViolet} value={stats?.totalMinutes ?? 0} label={t("home.stat.minutes")} onPress={() => router.push("/activity")} />
-              <StatTile
-                icon="albums"
-                color={Palette.neonPink}
-                value={due}
-                label={t("home.stat.dueCards")}
-                highlight={due > 0}
-                onPress={() => router.push("/flashcards")}
-              />
-            </View>
+          {/* الأسبوع */}
+          <FadeIn delay={140}>
+            <PressableScale onPress={() => router.push("/activity")} style={[styles.card, cardStyle, { padding: 16, marginTop: 14 }]}>
+              <View style={[styles.sectionHead, { flexDirection: dir.row, marginTop: 0 }]}>
+                <Text style={[styles.sectionTitle, { color: pal.ink, fontSize: 15 }]}>{t("home.week.title")}</Text>
+                <Text style={[styles.small, { color: pal.dim }]}>
+                  {progress >= 1 ? t("home.today.done") : t("home.today.left", { left: goalLeft })}
+                </Text>
+              </View>
+              <WeekBars days={week} dayLabels={dayLabels} accent={[pal.accent, pal.accent]} isRTL={dir.isRTL} height={54} />
+            </PressableScale>
           </FadeIn>
-          )}
-
-        </ScrollView>
-      </SafeAreaView>
-    </ScreenBackground>
-  );
-}
-
-function StatTile({
-  icon,
-  color,
-  value,
-  label,
-  highlight,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  value: number;
-  label: string;
-  highlight?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <PressableScale onPress={onPress} disabled={!onPress} style={styles.statTile}>
-      <GlassCard radius={Radius.lg} glow={highlight ? color : undefined}>
-        <View style={styles.statInner}>
-          <Ionicons name={icon} size={16} color={color} />
-          <CountUp value={value} style={[styles.statValue, highlight && { color }]} />
-          <Text style={styles.statLabel} numberOfLines={1}>
-            {label}
-          </Text>
         </View>
-      </GlassCard>
-    </PressableScale>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  scroll: { padding: Spacing.xl, paddingBottom: 120 },
-  block: { marginBottom: Spacing.lg },
+  heroInner: { flex: 1, paddingHorizontal: 20 },
+  topBar: { alignItems: "center", gap: Spacing.md },
+  streakPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: Radius.pill, borderWidth: 1 },
+  streakNum: { fontSize: 13, fontWeight: "800" },
+  headBlock: { marginTop: 10 },
+  greet: { fontSize: 13.5, fontWeight: "600" },
+  headline: { fontSize: 33, fontWeight: "900", lineHeight: 46 },
+  sceneSub: { fontSize: 13, fontWeight: "600", lineHeight: 20 },
 
-  topBar: { alignItems: "center", gap: Spacing.md, marginBottom: Spacing.lg },
-  hello: { color: Palette.text, fontSize: 22, fontWeight: "900" },
-  cheer: { fontSize: 13, fontWeight: "800", marginTop: 2 },
-  streakPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: Radius.pill,
-    backgroundColor: "rgba(255,122,89,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(255,122,89,0.45)",
+  body: { paddingHorizontal: 16 },
+  card: {
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 6,
   },
-  streakFlame: { fontSize: 15 },
-  streakNum: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  contRow: { alignItems: "center", gap: 12 },
+  playBtn: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  small: { fontSize: 11.5, fontWeight: "600" },
+  contTitle: { fontSize: 17, fontWeight: "900" },
+  progTrack: { height: 5, borderRadius: 3, overflow: "hidden" },
+  progFill: { height: 5, borderRadius: 3 },
+  hair: { height: 1, marginVertical: 14 },
+  vHair: { width: 1, alignSelf: "stretch" },
+  statsRow: { alignItems: "center" },
+  statCell: { flex: 1, alignItems: "center", gap: 2 },
+  statNum: { fontSize: 21, fontWeight: "900" },
+  statUnit: { fontSize: 12, fontWeight: "600" },
+  statLbl: { fontSize: 11, fontWeight: "600" },
+  examLine: { fontSize: 12, fontWeight: "600", marginTop: 12 },
 
-  todayRow: { alignItems: "center", gap: Spacing.lg, padding: Spacing.lg },
-  ringNum: { color: Palette.text, fontSize: 30, fontWeight: "900", lineHeight: 34 },
-  ringUnit: { color: Palette.textDim, fontSize: 11, fontWeight: "700" },
-  todayInfo: { flex: 1, gap: 4 },
-  sectionLabel: { color: Palette.textDim, fontSize: 12, fontWeight: "800", letterSpacing: 0.3 },
-  todayStatus: { color: Palette.text, fontSize: 17, fontWeight: "900" },
-  weekLabel: { color: Palette.textDim, fontSize: 11, fontWeight: "700", marginTop: 10, marginBottom: 4 },
-
-  contRow: { alignItems: "center", gap: Spacing.lg, padding: Spacing.lg },
-  contTitle: { color: Palette.text, fontSize: 16, fontWeight: "900", lineHeight: 22 },
-  contSub: { color: Palette.textDim, fontSize: 12, fontWeight: "700" },
-  progTrack: { height: 6, borderRadius: 3, backgroundColor: Palette.surfaceStrong, overflow: "hidden" },
-  progFill: { height: 6, borderRadius: 3 },
-  playBtn: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center" },
-
-  sectionHead: { alignItems: "center", gap: 6, marginBottom: Spacing.sm, marginTop: Spacing.xs },
-  sectionTitle: { color: Palette.text, fontSize: 16, fontWeight: "900" },
-  actionRow: { alignItems: "center", gap: Spacing.md, paddingVertical: 14, paddingHorizontal: Spacing.lg },
-  actionDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Palette.glassBorder },
-  actionIcon: { width: 42, height: 42, borderRadius: 13, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  actionTitle: { color: Palette.text, fontSize: 15, fontWeight: "800" },
-  actionSub: { color: Palette.textDim, fontSize: 12, marginTop: 2 },
-
-  statsRow: { gap: Spacing.sm, marginBottom: Spacing.lg },
-  statTile: { flex: 1 },
-  statInner: { alignItems: "center", paddingVertical: 12, paddingHorizontal: 4, gap: 3 },
-  statValue: { color: Palette.text, fontSize: 19, fontWeight: "900" },
-  statLabel: { color: Palette.textDim, fontSize: 10.5, fontWeight: "700" },
-
-
-  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
-
-  readyNum: { color: "#D9D3FF", fontSize: 30, fontWeight: "900", lineHeight: 34 },
-  readyHeadline: { color: Palette.text, fontSize: 16.5, fontWeight: "800", lineHeight: 23 },
-  weakChip: { marginTop: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: Radius.pill, backgroundColor: "rgba(255,179,138,0.12)" },
-  weakChipTxt: { color: "#FFB38A", fontSize: 12, fontWeight: "700" },
-  pathHead: { alignItems: "baseline", justifyContent: "space-between", marginBottom: Spacing.sm, marginTop: Spacing.xs },
-  pathMeta: { color: Palette.textDim, fontSize: 11.5, fontWeight: "700" },
-  stepRow: { alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 14 },
-  stepCurrent: { backgroundColor: "rgba(124,108,255,0.08)" },
-  stepDone: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(108,243,197,0.16)", alignItems: "center", justifyContent: "center" },
-  stepRing: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: "#B9AFFF", alignItems: "center", justifyContent: "center" },
-  stepDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#B9AFFF" },
-  stepEmpty: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.18)" },
-  stepTitle: { color: Palette.text, fontSize: 14.5, fontWeight: "600" },
+  sectionHead: { alignItems: "baseline", justifyContent: "space-between", marginTop: 20, marginBottom: 10, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 17, fontWeight: "900" },
+  stepRow: { alignItems: "center", gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderRadius: 18 },
+  stepIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  stepDot: { width: 10, height: 10, borderRadius: 5 },
+  stepTitle: { fontSize: 14.5, fontWeight: "600" },
   strike: { textDecorationLine: "line-through" },
-  startPill: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: Radius.pill, backgroundColor: "#F3F4F8" },
-  startTxt: { color: "#07080D", fontSize: 12.5, fontWeight: "800" },
+  startPill: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: Radius.pill },
+  startTxt: { fontSize: 12.5, fontWeight: "800" },
+  actionIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
 });

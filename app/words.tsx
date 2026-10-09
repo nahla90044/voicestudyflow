@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PressableScale } from "../components/brand/motion";
@@ -25,11 +25,26 @@ export default function WordsScreen() {
   const [open, setOpen] = useState<SavedWord | null>(null);
   const [carded, setCarded] = useState(0);
   const [pdfBusy, setPdfBusy] = useState<string | null>(null);
+  // وضع التحديد: يختار الطالب الكلمات التي تدخل الملف/البطاقات بنفسه
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [nameOpen, setNameOpen] = useState(false);
+  const [fileName, setFileName] = useState("");
+
+  function togglePick(key: string) {
+    setPicked((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  }
 
   // PDF مرتّب: نجهّز معاني الكلمات الناقصة أولًا ثم ننشئ الملف ونفتح الحفظ/المشاركة
   async function makePdf() {
-    if (pdfBusy || !shown.length) return;
-    const list = [...shown];
+    setNameOpen(false);
+    if (pdfBusy || !target.length) return;
+    const list = [...target];
     try {
       for (let i = 0; i < list.length; i++) {
         if (list[i].info) continue;
@@ -40,7 +55,7 @@ export default function WordsScreen() {
       setPdfBusy(t("words.pdfBuilding"));
       const d = new Date();
       await exportWordsPdf(list, {
-        title: t("words.pdfTitle"),
+        title: fileName.trim() || t("words.pdfTitle"),
         subtitle: t("words.pdfSub", { n: list.length, date: d.toLocaleDateString() }),
         meaning: t("words.meaning"),
         usage: t("words.usage"),
@@ -51,6 +66,7 @@ export default function WordsScreen() {
         infinitive: t("words.infinitive"),
         noun: t("words.noun"),
         general: t("flashcards.generalCards"),
+        page: t("glossary.col.page"),
         rtl: dir.isRTL,
       });
     } finally {
@@ -73,7 +89,9 @@ export default function WordsScreen() {
         (!s || w.word.toLowerCase().includes(s) || (w.info?.meaning ?? "").toLowerCase().includes(s))
     );
   }, [words, q, book]);
-  const ready = shown.filter((w) => w.info);
+  // الهدف: الكلمات المحدّدة (إن وُجد تحديد) وإلا كل المعروض
+  const target = selecting && picked.size ? shown.filter((w) => picked.has(w.key)) : shown;
+  const ready = target.filter((w) => w.info);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
@@ -83,8 +101,23 @@ export default function WordsScreen() {
         </PressableScale>
         <View style={{ flex: 1 }}>
           <Text style={[styles.title, { textAlign: dir.textAlign }]}>{t("words.title")}</Text>
-          <Text style={[styles.sub, { textAlign: dir.textAlign }]}>{t("words.count", { n: words.length })}</Text>
+          <Text style={[styles.sub, { textAlign: dir.textAlign }]}>
+            {selecting ? t("words.picked", { n: picked.size }) : t("words.count", { n: words.length })}
+          </Text>
         </View>
+        {words.length > 0 && (
+          <PressableScale
+            onPress={() => {
+              setSelecting((v) => !v);
+              setPicked(new Set());
+              setCarded(0);
+            }}
+            style={[styles.selBtn, selecting && styles.selBtnOn]}
+          >
+            <Ionicons name={selecting ? "checkmark" : "checkbox-outline"} size={16} color={selecting ? "#07080D" : Palette.text} />
+            <Text style={[styles.selTxt, selecting && { color: "#07080D" }]}>{selecting ? t("words.selectDone") : t("words.select")}</Text>
+          </PressableScale>
+        )}
       </View>
 
       {words.length === 0 ? (
@@ -113,6 +146,18 @@ export default function WordsScreen() {
                   style={[styles.searchInput, { textAlign: dir.textAlign }]}
                 />
               </View>
+              {selecting && (
+                <View style={[styles.filters, { flexDirection: dir.row }]}>
+                  <Pressable onPress={() => setPicked(new Set(shown.map((w) => w.key)))} style={styles.filter}>
+                    <Text style={styles.filterTxt}>{t("words.selectAll")}</Text>
+                  </Pressable>
+                  {picked.size > 0 && (
+                    <Pressable onPress={() => setPicked(new Set())} style={styles.filter}>
+                      <Text style={styles.filterTxt}>{t("words.selectNone")}</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
               {books.length > 1 && (
                 <View style={[styles.filters, { flexDirection: dir.row }]}>
                   <Pressable onPress={() => setBook(null)} style={[styles.filter, !book && styles.filterOn]}>
@@ -130,7 +175,15 @@ export default function WordsScreen() {
             </View>
           }
           renderItem={({ item: w }) => (
-            <PressableScale onPress={() => setOpen(w)} style={[styles.row, { flexDirection: dir.row }]}>
+            <PressableScale
+              onPress={() => (selecting ? togglePick(w.key) : setOpen(w))}
+              style={[styles.row, { flexDirection: dir.row }, selecting && picked.has(w.key) && styles.rowOn]}
+            >
+              {selecting && (
+                <View style={[styles.check, picked.has(w.key) && styles.checkOn]}>
+                  {picked.has(w.key) && <Ionicons name="checkmark" size={15} color="#07080D" />}
+                </View>
+              )}
               <View style={{ flex: 1, gap: 3 }}>
                 <Text style={[styles.word, { textAlign: dir.textAlign }]}>{w.word}</Text>
                 <Text style={[styles.meaning, { textAlign: dir.textAlign }]} numberOfLines={2}>
@@ -143,7 +196,7 @@ export default function WordsScreen() {
                   </Text>
                 )}
               </View>
-              <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />
+              {!selecting && <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />}
             </PressableScale>
           )}
         />
@@ -151,11 +204,18 @@ export default function WordsScreen() {
 
       {shown.length > 0 && (
         <View style={[styles.bottom, { flexDirection: dir.row }]}>
-          <PressableScale onPress={makePdf} disabled={!!pdfBusy} style={{ flex: 1 }}>
+          <PressableScale
+            onPress={() => {
+              if (!fileName) setFileName(book ?? t("words.pdfTitle"));
+              setNameOpen(true);
+            }}
+            disabled={!!pdfBusy || !target.length}
+            style={{ flex: 1 }}
+          >
             <View style={[styles.cta, styles.ctaGhost]}>
               {pdfBusy ? <ActivityIndicator color={Palette.text} /> : <Ionicons name="document-text" size={18} color={Palette.text} />}
               <Text style={[styles.ctaTxt, { color: Palette.text }]} numberOfLines={1}>
-                {pdfBusy ?? t("words.pdf")}
+                {pdfBusy ?? (selecting && picked.size ? t("words.pdfN", { n: picked.size }) : t("words.pdf"))}
               </Text>
             </View>
           </PressableScale>
@@ -170,12 +230,44 @@ export default function WordsScreen() {
             <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.cta, (carded > 0 || !ready.length) && { opacity: 0.55 }]}>
               <Ionicons name={carded ? "checkmark" : "albums"} size={18} color="#fff" />
               <Text style={styles.ctaTxt} numberOfLines={1}>
-                {carded ? t("words.carded", { n: carded }) : t("words.allToCards", { n: ready.length })}
+                {carded
+                  ? t("words.carded", { n: carded })
+                  : selecting && picked.size
+                    ? t("words.toCardsN", { n: ready.length })
+                    : t("words.allToCards", { n: ready.length })}
               </Text>
             </LinearGradient>
           </PressableScale>
         </View>
       )}
+
+      {/* اسم ملف الدراسة قبل إنشائه */}
+      <Modal visible={nameOpen} transparent animationType="fade" onRequestClose={() => setNameOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.mask}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setNameOpen(false)} />
+          <View style={styles.nameCard}>
+            <Text style={[styles.nameTitle, { textAlign: dir.textAlign }]}>{t("words.fileName")}</Text>
+            <Text style={[styles.sub, { textAlign: dir.textAlign }]}>{t("words.fileHint", { n: target.length })}</Text>
+            <TextInput
+              value={fileName}
+              onChangeText={setFileName}
+              autoFocus
+              selectTextOnFocus
+              placeholder={t("words.pdfTitle")}
+              placeholderTextColor={Palette.placeholder}
+              style={[styles.nameInput, { textAlign: dir.textAlign }]}
+              onSubmitEditing={makePdf}
+              returnKeyType="done"
+            />
+            <PressableScale onPress={makePdf}>
+              <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
+                <Ionicons name="document-text" size={18} color="#fff" />
+                <Text style={styles.ctaTxt}>{t("words.create")}</Text>
+              </LinearGradient>
+            </PressableScale>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <WordSheet
         word={open}
@@ -231,4 +323,14 @@ const styles = StyleSheet.create({
   ctaGhost: { backgroundColor: "#1A1D2B", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
   cta: { height: 54, borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   ctaTxt: { color: "#fff", fontSize: 14.5, fontWeight: "800", flexShrink: 1 },
+  selBtn: { flexDirection: "row", alignItems: "center", gap: 5, height: 38, paddingHorizontal: 12, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.08)" },
+  selBtnOn: { backgroundColor: "#F3F4F8" },
+  selTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
+  rowOn: { borderColor: "rgba(185,175,255,0.6)", backgroundColor: "rgba(124,108,255,0.10)" },
+  check: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center" },
+  checkOn: { backgroundColor: "#B9AFFF", borderColor: "#B9AFFF" },
+  mask: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
+  nameCard: { backgroundColor: "#10121B", borderRadius: 24, padding: 18, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.12)" },
+  nameTitle: { color: Palette.text, fontSize: 18, fontWeight: "800" },
+  nameInput: { height: 50, borderRadius: 14, paddingHorizontal: 14, color: Palette.text, fontSize: 16, backgroundColor: "rgba(255,255,255,0.06)" },
 });

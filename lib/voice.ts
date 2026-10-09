@@ -11,6 +11,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-aud
 import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
+import { isReadingCardSupported } from "../modules/reading-activity";
 import { requestPaywall } from "./plan";
 
 import { numbersToArabicWords } from "./arabicNumbers";
@@ -125,6 +126,9 @@ type AudioMetadata = { title?: string; artist?: string; albumTitle?: string; art
 
 /** يفعّل أزرار شاشة القفل لهذا المشغّل (يتجاهل بأمان إن لم تتوفّر الميزة). */
 function activateLockScreen(player: AudioPlayer): void {
+  // بطاقة القراءة الحيّة (الجزيرة العائمة) تحلّ محلّ عناصر «قيد التشغيل» العامة حين تتوفّر،
+  // حتى لا يظهر للمستخدم مشغّلان في الجزيرة وشاشة القفل.
+  if (isReadingCardSupported()) return;
   try {
     (player as unknown as LockScreenCapable).setActiveForLockScreen?.(
       true,

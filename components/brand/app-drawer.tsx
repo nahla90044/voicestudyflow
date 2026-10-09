@@ -24,7 +24,7 @@ const ITEMS: Item[] = [
   { icon: "help-circle", labelKey: "drawer.help", route: "/help", color: Palette.neonCyan },
 ];
 
-export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
+export function AppDrawer({ tint = Palette.text, light = false }: { tint?: string; light?: boolean }) {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
@@ -53,7 +53,7 @@ export function AppDrawer({ tint = Palette.text }: { tint?: string }) {
 
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} style={styles.trigger} hitSlop={8}>
+      <Pressable onPress={() => setOpen(true)} style={[styles.trigger, light && styles.triggerLight]} hitSlop={8}>
         <Ionicons name="menu" size={22} color={tint} />
       </Pressable>
 
@@ -121,6 +121,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Palette.glassBorder,
   },
+  // فوق مشهد فاتح (حديقة الصباح): زر أبيض شبه معتم بدل الزجاج الداكن
+  triggerLight: { backgroundColor: "rgba(255,255,255,0.75)", borderColor: "transparent", borderRadius: 20 },
   backdrop: { backgroundColor: "rgba(0,0,0,0.6)" },
   panel: {
     position: "absolute",

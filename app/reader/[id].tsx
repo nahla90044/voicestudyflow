@@ -72,6 +72,7 @@ import {
   warmNext,
   setRecordingAudioMode,
 } from "../../lib/voice";
+import { closeReadingCard, onReadingAction, syncReadingCard } from "../../lib/readingCard";
 import { Gradients, Palette, Radius, Spacing } from "../../constants/design";
 import { focusEvery, getFocusLevel } from "../../lib/settings";
 import { handoff, takeOver } from "../../lib/player";
@@ -486,6 +487,7 @@ export default function ReaderScreen() {
   useEffect(() => {
     // المشغّل العام كان يقرأ هذا الكتاب؟ يتوقف هو، ونكمل نحن من موضعه المحفوظ
     autoResumeRef.current = takeOver(bookId).wasPlaying;
+    if (!autoResumeRef.current) closeReadingCard(); // بطاقة قديمة متوقفة من المشغّل العام
     (async () => {
       const [savedPage, savedRate, savedSent] = await Promise.all([
         getLastPage(bookId),
@@ -528,6 +530,7 @@ export default function ReaderScreen() {
           precise: tashkeelRef.current,
         });
       }
+      if (!keepPlaying) closeReadingCard(); // وإلا يستلمها المشغّل العام ويحدّثها
       stopAmbient(); // أوقف موسيقى الخلفية عند مغادرة الكتاب
       // ملاحظة: لا نوقف تحميل الكتاب عند الخروج — يكمل في الخلفية عبر المدير العام
     };
@@ -723,6 +726,25 @@ export default function ReaderScreen() {
     setLivePlaybackRate(next); // والصوت الجاري يتغيّر فورًا دون إيقاف/تشغيل
     setReadingRate(next);
   }
+
+  // بطاقة الجزيرة العائمة وشاشة القفل: اسم الكتاب + الصفحة + السرعة + حالة التشغيل.
+  // تبقى بعد الإيقاف (متوقفة) ليُكمل الاستماع من شاشة القفل مباشرة.
+  useEffect(() => {
+    if (!bookId || (!everPlayed && !speaking)) return;
+    syncReadingCard({
+      bookId,
+      title: typeof title === "string" ? title : "",
+      page,
+      totalPages,
+      rate,
+      playing: speaking,
+    });
+  }, [bookId, title, page, totalPages, rate, speaking, everPlayed]);
+
+  // أزرار البطاقة: الإيقاف/الإكمال والتسريع (أحدث نسخة من الدوال عبر مرجع)
+  const cardCtlRef = useRef({ toggle: () => {}, speed: () => {} });
+  cardCtlRef.current = { toggle: () => togglePlay(), speed: () => cycleSpeed() };
+  useEffect(() => onReadingAction((a) => (a === "toggle" ? cardCtlRef.current.toggle() : cardCtlRef.current.speed())), []);
 
   function cycleSleep() {
     const idx = SLEEP_OPTIONS.indexOf(sleepMin as (typeof SLEEP_OPTIONS)[number]);

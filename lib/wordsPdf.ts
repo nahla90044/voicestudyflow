@@ -98,6 +98,7 @@ type Labels = {
   infinitive: string;
   noun: string;
   general: string;
+  page?: string;
   rtl: boolean;
 };
 
@@ -132,7 +133,9 @@ function wordTable(w: SavedWord, L: Labels): string {
   const i = w.info;
   const badges =
     (i?.pos ? `<span class="badge" style="background:${TONE.lavender.bg};color:${TONE.lavender.ink}">${esc(i.pos)}</span>` : "") +
-    (w.page ? `<span class="badge" style="background:#F0EFF5;color:#6B6880">${L.rtl ? "ص" : "p."} ${num(w.page, L.rtl)}</span>` : "");
+    (w.bookTitle || w.page
+      ? `<span class="badge" style="background:#F0EFF5;color:#6B6880">${[w.bookTitle ? esc(w.bookTitle) : "", w.page ? `${esc(L.page ?? (L.rtl ? "ص" : "p."))} ${num(w.page, L.rtl)}` : ""].filter(Boolean).join(" · ")}</span>`
+      : "");
   let rows = `<tr class="head"><td colspan="2"><span class="w" dir="auto">${esc(w.word)}</span>${badges}</td></tr>`;
   if (i) {
     rows += row(L.meaning, "lavender", esc(i.meaning));

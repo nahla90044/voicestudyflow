@@ -11,7 +11,8 @@ import { setLastPage, setLastSentence } from "./readerPrefs";
 import { focusEvery, getFocusLevel } from "./settings";
 import { recordActivity } from "./stats";
 import { splitSentences } from "./textUtils";
-import { setNowPlaying, speakText, stopSpeaking } from "./voice";
+import { closeReadingCard, nextSpeed, onReadingAction, syncReadingCard } from "./readingCard";
+import { holdAudioSession, setLivePlaybackRate, setNowPlaying, speakText, stopSpeaking } from "./voice";
 
 export type PlayerState = {
   bookId: string;
@@ -41,6 +42,26 @@ const listeners = new Set<(s: PlayerState | null) => void>();
 function emit() {
   const snap = state ? { ...state } : null;
   listeners.forEach((fn) => fn(snap));
+  // بطاقة الجزيرة العائمة/شاشة القفل تتبع حالة المشغّل العام
+  if (snap) syncReadingCard(snap);
+  else closeReadingCard();
+}
+
+// أزرار البطاقة حين يكون المشغّل العام هو من يقرأ (القارئ مغلق)
+let cardSub: (() => void) | null = null;
+function listenCard() {
+  if (cardSub) return;
+  cardSub = onReadingAction((a) => {
+    if (!state) return;
+    if (a === "toggle") return state.playing ? pause() : resume();
+    const r = nextSpeed(state.rate);
+    setLivePlaybackRate(r);
+    patch({ rate: r });
+  });
+}
+function unlistenCard() {
+  cardSub?.();
+  cardSub = null;
 }
 
 function patch(p: Partial<PlayerState>) {
@@ -73,6 +94,7 @@ export function handoff(h: Handoff) {
   focusCount = 0;
   state = { ...h, playing: true, loading: true, sentence: "" };
   playStart = Date.now();
+  listenCard();
   emit();
   void playFrom(h.page, h.idx, token);
 }
@@ -99,6 +121,7 @@ export function close() {
   stopSpeaking().catch(() => {});
   logMinutes();
   state = null;
+  unlistenCard();
   emit();
 }
 
@@ -117,7 +140,9 @@ export function takeOver(bookId?: string): { wasPlaying: boolean } {
   stopSpeaking().catch(() => {});
   logMinutes();
   state = null;
-  emit();
+  unlistenCard();
+  // القارئ يستلم ويعرض البطاقة بنفسه — لا نغلقها هنا حتى لا تختفي وتظهر
+  listeners.forEach((fn) => fn(null));
   return { wasPlaying };
 }
 
@@ -151,6 +176,7 @@ async function playFrom(p: number, i: number, my: number) {
     // صفحة منتهية أو بلا نص → التالية، أو نهاية الكتاب
     if (sents.length > 0) recordActivity({ pages: 1 }).catch(() => {});
     if (p < state.totalPages) {
+      holdAudioSession(true); // يُبقي الصوت حيًّا بين الصفحات والجوال مقفل
       patch({ page: p + 1, idx: 0 });
       return playFrom(p + 1, 0, my);
     }
