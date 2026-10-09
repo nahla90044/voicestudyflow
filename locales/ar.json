@@ -1,4 +1,6 @@
 {
   "NSMicrophoneUsageDescription": "يُستخدم الميكروفون فقط أثناء الضغط على زر الصوت: لسؤال الكتاب، والإجابة عن الاختبارات، والرد على نداء التركيز بالصوت.",
-  "NSSpeechRecognitionUsageDescription": "تحوّل آبل الكلام إلى نص لفهم الطلبات الصوتية، ولا يُحفظ أي تسجيل."
+  "NSSpeechRecognitionUsageDescription": "تحوّل آبل الكلام إلى نص لفهم الطلبات الصوتية، ولا يُحفظ أي تسجيل.",
+  "NSPhotoLibraryUsageDescription": "تُستخدم مكتبة الصور فقط عند اختيار إضافة صورة صفحة أو صورة من المكتبة للمذاكرة.",
+  "NSPhotoLibraryAddUsageDescription": "تُستخدم فقط عند اختيار حفظ ملف دراسة أو صورة بطاقة في الصور."
 }

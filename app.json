@@ -17,7 +17,9 @@
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false,
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "NSPhotoLibraryUsageDescription": "Used only when you choose to add a page photo or image from your library to study.",
+        "NSPhotoLibraryAddUsageDescription": "Used only when you choose to save a study file or card image to your Photos."
       },
       "appleTeamId": "35WLZWD8D6"
     },
