@@ -5,11 +5,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GlassCard } from "../components/brand/glass-card";
-import { ScreenBackground } from "../components/brand/screen-background";
-import { Palette, Radius, Spacing } from "../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { Radius, Spacing } from "../constants/design";
 import { aiAssist } from "../lib/ai";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
@@ -17,6 +15,7 @@ import { addSavedItem } from "../lib/savedStudy";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
+import { useScene } from "../lib/scene";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../lib/voice";
 
 // يزيل رموز الماركداون إن ظهرت (عنوان #، عريض **، خطوط ---، شفرة `) → نص نظيف
@@ -35,6 +34,7 @@ function stripMarkdown(s: string): string {
 export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const { pdf_path, unit, page, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string; book_title?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
@@ -129,73 +129,74 @@ export default function UnitSummaryScreen() {
   }
 
   return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={[styles.header, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} />
+    <SceneScreen>
+      <SceneBanner
+        title={t("syllabus.summary.label")}
+        subtitle={unitTitle || bookTitle || undefined}
+        height={170}
+        left={
+          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel={t("common.back")}>
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={pal.ink} />
+            </SceneIconButton>
           </Pressable>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            🎧 {t("syllabus.summary.label")}
-          </Text>
-          <View style={styles.iconBtn} />
+        }
+        right={
+          <SceneIconButton>
+            <Ionicons name="headset" size={20} color={pal.accent} />
+          </SceneIconButton>
+        }
+      />
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={pal.accent} />
+          <Text style={[styles.dim, { color: pal.dim }]}>{t("syllabus.action.summary")}…</Text>
         </View>
-
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={Palette.neonCyan} />
-            <Text style={styles.dim}>{t("syllabus.action.summary")}…</Text>
+      ) : err ? (
+        <View style={styles.center}>
+          <View style={[styles.errIcon, { backgroundColor: pal.soft }]}>
+            <Ionicons name="alert-circle-outline" size={34} color={pal.accent} />
           </View>
-        ) : err ? (
-          <View style={styles.center}>
-            <Ionicons name="alert-circle-outline" size={40} color={Palette.warn} />
-            <Text style={styles.dim}>{err}</Text>
-          </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            {!!unitTitle && <Text style={[styles.unitTitle, { textAlign: dir.textAlign }]}>{unitTitle}</Text>}
+          <Text style={[styles.dim, { color: pal.dim }]}>{err}</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <Pressable
+            onPress={togglePlay}
+            style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
+            <Text style={[styles.playTxt, { color: pal.onAccent }]}>{playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
+          </Pressable>
 
-            <Pressable onPress={togglePlay} style={[styles.playBtn, { flexDirection: dir.row }]}>
-              <Ionicons name={playing ? "pause" : "play"} size={20} color="#0b1220" />
-              <Text style={styles.playTxt}>{playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
-            </Pressable>
-
-            <GlassCard glow={Palette.neonCyan} contentStyle={styles.card}>
-              <Text style={[styles.body, { textAlign: dir.textAlign }]}>{text}</Text>
-            </GlassCard>
-            <View style={{ height: 24 }} />
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </ScreenBackground>
+          <SceneCard style={styles.card}>
+            {!!unitTitle && (
+              <Text style={[styles.unitTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{unitTitle}</Text>
+            )}
+            <Text style={[styles.body, { color: pal.ink, textAlign: dir.textAlign }]}>{text}</Text>
+          </SceneCard>
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      )}
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: 8,
-  },
-  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
-  headerTitle: { flex: 1, textAlign: "center", color: Palette.text, fontSize: 18, fontWeight: "900" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 10 },
-  dim: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22 },
-  scroll: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.lg },
-  unitTitle: { color: Palette.text, fontSize: 18, fontWeight: "900", lineHeight: 28 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 12 },
+  errIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
+  dim: { fontSize: 14, fontWeight: "600", textAlign: "center", lineHeight: 22 },
+  scroll: { paddingHorizontal: Spacing.lg, paddingTop: 4, paddingBottom: Spacing.xl, gap: Spacing.lg },
+  unitTitle: { fontSize: 18, fontWeight: "900", lineHeight: 28, marginBottom: 10 },
   playBtn: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: Radius.lg,
-    backgroundColor: Palette.neonCyan,
+    height: 54,
+    borderRadius: Radius.pill,
   },
-  playTxt: { color: "#0b1220", fontSize: 16, fontWeight: "900" },
+  playTxt: { fontSize: 16, fontWeight: "900" },
   card: { padding: Spacing.lg },
-  body: { color: Palette.text, fontSize: 16, lineHeight: 30, textAlign: "right" },
+  body: { fontSize: 16, lineHeight: 30 },
 });

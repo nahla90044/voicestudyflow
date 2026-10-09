@@ -205,6 +205,10 @@ function Garden({ g }: { g: SceneGrowth }) {
       <Path d="M0 330 C90 300 170 320 250 312 C320 305 360 290 390 296 V470 H0Z" fill="#CFE6A9" />
       <Path d="M0 360 C80 345 150 365 230 360 C300 356 350 340 390 345 V470 H0Z" fill="#A9D48A" />
       <Path d="M120 360 C122 330 118 306 112 284 L124 281 C127 300 132 310 142 284 L149 288 C138 314 138 336 140 360Z" fill="#8A5A3C" />
+      {/* تاج ممتلئ دائمًا (قاعدة متداخلة)، والأوراق الفاتحة فوقه تكثر مع الجاهزية */}
+      {[[128, 266, 74], [80, 276, 46], [176, 276, 46], [104, 222, 48], [152, 222, 48], [128, 200, 40], [62, 252, 30], [194, 252, 30], [128, 312, 44]].map(([cx, cy, r], i) => (
+        <Circle key={`b${i}`} cx={cx} cy={cy} r={r} fill={i % 2 ? "#4E9F55" : "#5DB360"} />
+      ))}
       {leaves.slice(0, g.lit).map((l, i) => (
         <Circle key={i} cx={l.x} cy={l.y} r={l.r} fill={l.c} opacity={0.95} />
       ))}
@@ -212,7 +216,7 @@ function Garden({ g }: { g: SceneGrowth }) {
         i < g.fruits ? (
           <Circle key={i} cx={x} cy={y} r={7} fill="#FF9F43" stroke="#FFFFFF" strokeWidth={2} />
         ) : (
-          <Circle key={i} cx={x} cy={y} r={6} fill="none" stroke="#FFFFFF" strokeWidth={1.6} strokeDasharray="2 2" />
+          <Circle key={i} cx={x} cy={y} r={5} fill="#FFFFFF" opacity={0.18} />
         )
       )}
       <Ellipse cx={130} cy={362} rx={70} ry={8} fill="#6FAE5E" opacity={0.5} />

@@ -3,13 +3,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, Vibration, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Pressable, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 
-import { GlassCard } from "../components/brand/glass-card";
-import { ScreenBackground } from "../components/brand/screen-background";
-import { Palette, Radius, Spacing } from "../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { Radius, Spacing } from "../constants/design";
 import { dropEmptyVocative, useDir, useI18n } from "../lib/i18n";
+import { useScene } from "../lib/scene";
 import { getUserName } from "../lib/settings";
 import { recordActivity } from "../lib/stats";
 
@@ -25,6 +25,7 @@ function fmt(s: number) {
 export default function PomodoroScreen() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const [phase, setPhase] = useState<"focus" | "break">("focus");
   const [left, setLeft] = useState(FOCUS);
   const [running, setRunning] = useState(false);
@@ -76,113 +77,123 @@ export default function PomodoroScreen() {
 
   const total = phase === "focus" ? FOCUS : BREAK;
   const pct = Math.round(((total - left) / total) * 100);
-  const accent = phase === "focus" ? Palette.neonCyan : Palette.success;
+  // التركيز باللون المميّز للمشهد، والاستراحة بأخضر هادئ يُقرأ على الفاتح والداكن
+  const accent = phase === "focus" ? pal.accent : pal.dark ? "#7FD9A8" : "#2F8F5B";
+  const onAccent = phase === "focus" ? pal.onAccent : pal.dark ? pal.bg : "#FFFFFF";
   const phaseMsg =
     phase === "focus"
       ? dropEmptyVocative(t("pomodoro.focusMsg", { name }))
       : t("pomodoro.breakMsg");
 
+  const RING = 236;
+  const SW = 14;
+  const r = (RING - SW) / 2;
+  const circ = 2 * Math.PI * r;
+
   return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={[styles.header, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name="chevron-forward" size={22} color={Palette.text} />
+    <SceneScreen>
+      <SceneBanner
+        title={t("pomodoro.title")}
+        height={140}
+        left={
+          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel={t("common.close")}>
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={pal.ink} />
+            </SceneIconButton>
           </Pressable>
-          <Text style={styles.headerTitle}>{t("pomodoro.title")}</Text>
-          <View style={styles.iconBtn} />
-        </View>
+        }
+      />
 
-        <View style={styles.center}>
-          <GlassCard glow={accent} radius={Radius.xl} style={{ width: "100%" }} contentStyle={styles.card}>
-            <View style={[styles.phasePill, { backgroundColor: accent + "22", borderColor: accent }]}>
-              <Text style={[styles.phaseTxt, { color: accent }]}>
-                {phase === "focus" ? t("pomodoro.phaseFocus") : t("pomodoro.phaseBreak")}
-              </Text>
-            </View>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <SceneCard style={styles.card}>
+          <View style={[styles.phasePill, { backgroundColor: pal.soft, borderColor: accent + "66" }]}>
+            <Text style={[styles.phaseTxt, { color: accent }]}>
+              {phase === "focus" ? t("pomodoro.phaseFocus") : t("pomodoro.phaseBreak")}
+            </Text>
+          </View>
 
-            <Text style={[styles.time, { color: accent }]}>{fmt(left)}</Text>
-            <Text style={styles.phaseMsg}>{phaseMsg}</Text>
+          {/* حلقة المؤقّت: المنقضي باللون المميّز فوق مسار المشهد */}
+          <View style={{ width: RING, height: RING, alignItems: "center", justifyContent: "center" }}>
+            <Svg width={RING} height={RING} style={StyleSheet.absoluteFill}>
+              <Circle cx={RING / 2} cy={RING / 2} r={r} stroke={pal.track} strokeWidth={SW} fill="none" />
+              <Circle
+                cx={RING / 2}
+                cy={RING / 2}
+                r={r}
+                stroke={accent}
+                strokeWidth={SW}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={`${circ} ${circ}`}
+                strokeDashoffset={circ * (1 - pct / 100)}
+                transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
+              />
+            </Svg>
+            <Text style={[styles.time, { color: pal.ink }]}>{fmt(left)}</Text>
+            <Text style={[styles.pct, { color: pal.dim }]}>{pct}%</Text>
+          </View>
 
-            <View style={styles.track}>
-              <View style={[styles.fill, { width: `${pct}%`, backgroundColor: accent }]} />
-            </View>
+          <Text style={[styles.phaseMsg, { color: pal.ink }]}>{phaseMsg}</Text>
 
-            <View style={styles.tomatoes}>
-              <Text style={styles.tomatoTxt}>{t("pomodoro.completedToday", { count: tomatoes })}</Text>
-            </View>
+          <View style={[styles.tomatoes, { backgroundColor: pal.soft }]}>
+            <Text style={[styles.tomatoTxt, { color: pal.accent }]}>{t("pomodoro.completedToday", { count: tomatoes })}</Text>
+          </View>
 
-            {/* أزرار */}
-            <Pressable onPress={() => setRunning((r) => !r)} style={[styles.primary, { backgroundColor: accent, flexDirection: dir.row }]}>
-              <Ionicons name={running ? "pause" : "play"} size={22} color="#0b1220" />
-              <Text style={styles.primaryTxt}>{running ? t("pomodoro.pause") : t("pomodoro.start")}</Text>
+          {/* أزرار */}
+          <Pressable onPress={() => setRunning((r) => !r)} style={[styles.primary, { backgroundColor: accent, flexDirection: dir.row }]}>
+            <Ionicons name={running ? "pause" : "play"} size={22} color={onAccent} />
+            <Text style={[styles.primaryTxt, { color: onAccent }]}>{running ? t("pomodoro.pause") : t("pomodoro.start")}</Text>
+          </Pressable>
+
+          <View style={[styles.row, { flexDirection: dir.row }]}>
+            <Pressable onPress={reset} style={[styles.secondary, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder }]}>
+              <Ionicons name="refresh" size={16} color={pal.ink} />
+              <Text style={[styles.secondaryTxt, { color: pal.ink }]}>{t("pomodoro.reset")}</Text>
             </Pressable>
+            <Pressable onPress={skip} style={[styles.secondary, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder }]}>
+              <Ionicons name="play-skip-forward" size={16} color={pal.ink} />
+              <Text style={[styles.secondaryTxt, { color: pal.ink }]}>{t("pomodoro.skip")}</Text>
+            </Pressable>
+          </View>
+        </SceneCard>
 
-            <View style={[styles.row, { flexDirection: dir.row }]}>
-              <Pressable onPress={reset} style={[styles.secondary, { flexDirection: dir.row }]}>
-                <Ionicons name="refresh" size={16} color={Palette.text} />
-                <Text style={styles.secondaryTxt}>{t("pomodoro.reset")}</Text>
-              </Pressable>
-              <Pressable onPress={skip} style={[styles.secondary, { flexDirection: dir.row }]}>
-                <Ionicons name="play-skip-forward" size={16} color={Palette.text} />
-                <Text style={styles.secondaryTxt}>{t("pomodoro.skip")}</Text>
-              </Pressable>
-            </View>
-          </GlassCard>
-
-          <Text style={styles.hint}>{t("pomodoro.hint")}</Text>
-        </View>
-      </SafeAreaView>
-    </ScreenBackground>
+        <Text style={[styles.hint, { color: pal.dim }]}>{t("pomodoro.hint")}</Text>
+      </ScrollView>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { flex: 1, textAlign: "center", color: Palette.text, fontSize: 18, fontWeight: "900" },
-
-  center: { flex: 1, justifyContent: "center", paddingHorizontal: Spacing.xl, gap: Spacing.lg },
+  scroll: { paddingHorizontal: Spacing.lg, paddingTop: 8, paddingBottom: 40, gap: Spacing.lg },
   card: { alignItems: "center", padding: Spacing.xl, gap: 14 },
   phasePill: { paddingVertical: 7, paddingHorizontal: 16, borderRadius: Radius.pill, borderWidth: 1 },
   phaseTxt: { fontSize: 13, fontWeight: "900" },
-  time: { fontSize: 68, fontWeight: "900", letterSpacing: 2 },
-  phaseMsg: { color: Palette.textMuted, fontSize: 16, fontWeight: "800" },
-  track: { width: "100%", height: 10, borderRadius: 5, backgroundColor: Palette.surface, overflow: "hidden", marginTop: 4 },
-  fill: { height: "100%", borderRadius: 5 },
-  tomatoes: { marginTop: 2 },
-  tomatoTxt: { color: Palette.textDim, fontSize: 13, fontWeight: "800" },
+  time: { fontSize: 54, fontWeight: "900", letterSpacing: 2, fontVariant: ["tabular-nums"] },
+  pct: { fontSize: 13, fontWeight: "800", marginTop: 2 },
+  phaseMsg: { fontSize: 16, fontWeight: "900", textAlign: "center" },
+  tomatoes: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: Radius.pill },
+  tomatoTxt: { fontSize: 13, fontWeight: "800" },
 
   primary: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     alignSelf: "stretch",
-    paddingVertical: 15,
-    borderRadius: Radius.lg,
+    height: 56,
+    borderRadius: 20,
     marginTop: 6,
   },
-  primaryTxt: { color: "#0b1220", fontSize: 16, fontWeight: "900" },
-  row: { flexDirection: "row-reverse", gap: 10, alignSelf: "stretch" },
+  primaryTxt: { fontSize: 16, fontWeight: "900" },
+  row: { gap: 10, alignSelf: "stretch" },
   secondary: {
     flex: 1,
-    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
+    paddingVertical: 13,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  secondaryTxt: { color: Palette.text, fontSize: 14, fontWeight: "800" },
-  hint: { color: Palette.textDim, fontSize: 13, textAlign: "center", lineHeight: 21 },
+  secondaryTxt: { fontSize: 14, fontWeight: "800" },
+  hint: { fontSize: 13, textAlign: "center", lineHeight: 21, fontWeight: "600" },
 });

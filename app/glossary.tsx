@@ -4,19 +4,19 @@
 // أو الشخصيات والأماكن والكلمات الصعبة (الرواية) — بدل أن يكتبها بنفسه.
 // كل عنصر: استماع، حفظ كبطاقة، وفتح صفحته في القارئ.
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PressableScale } from "../components/brand/motion";
-import { Gradients, Palette, Radius } from "../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { Radius } from "../constants/design";
 import { getDownloadState, startDownload, subscribeDownload, type DownloadState } from "../lib/downloadManager";
 import { addCards } from "../lib/flashcards";
 import { getGlossary, setBookKind, type BookKind, type GlossaryItem, type UnitRange } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
 import { setLastPage } from "../lib/readerPrefs";
+import { useScene, type ScenePalette } from "../lib/scene";
 import { getSyllabus } from "../lib/syllabus";
 import { speakText, stopSpeaking } from "../lib/voice";
 import { addWord, type SavedWord } from "../lib/words";
@@ -25,19 +25,24 @@ import { WordSheet } from "../components/brand/word-sheet";
 
 type Filter = "all" | GlossaryItem["k"];
 
-const KIND_COLOR: Record<GlossaryItem["k"], string> = {
-  term: "#B9AFFF",
-  def: "#5ED9FF",
-  word: "#6CF3C5",
-  idiom: "#F79ACB",
-  char: "#FFB38A",
-  place: "#FBBF24",
+// لون كل نوع: نسخة فاتحة للمشاهد الداكنة وأخرى أغمق تُقرأ على مشهد الحديقة الفاتح
+const KIND_COLOR: Record<GlossaryItem["k"], { dark: string; light: string }> = {
+  term: { dark: "#B9AFFF", light: "#5A4DB8" },
+  def: { dark: "#5ED9FF", light: "#1D6F8E" },
+  word: { dark: "#6CF3C5", light: "#22683A" },
+  idiom: { dark: "#F79ACB", light: "#A8396F" },
+  char: { dark: "#FFB38A", light: "#A2501E" },
+  place: { dark: "#FBBF24", light: "#8F6206" },
 };
+function kindColor(k: GlossaryItem["k"], pal: ScenePalette) {
+  return pal.dark ? KIND_COLOR[k].dark : KIND_COLOR[k].light;
+}
 
 export default function GlossaryScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const { pdf_path, book_id, book_title, unit, page_count } = useLocalSearchParams<{
     pdf_path?: string;
     book_id?: string;
@@ -174,34 +179,52 @@ export default function GlossaryScreen() {
     setSaved((s) => new Set([...s, ...fresh.map((i) => i.t)]));
   }
 
+  const shadowTint = pal.dark ? "#000" : "#3C5028";
+  const savedTint = pal.dark ? "#7FE8C4" : "#22683A";
+  const chipOff = { backgroundColor: pal.card, borderColor: pal.cardBorder };
+  const chipOn = { backgroundColor: pal.accent, borderColor: pal.accent };
+  const allSaved = saved.size >= items.length;
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SceneScreen>
       {/* الرأس */}
-      <View style={[styles.head, { flexDirection: dir.row }]}>
-        <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={styles.ghost}>
-          <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} accessibilityLabel={t("common.back")} />
-        </PressableScale>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { textAlign: dir.textAlign }]}>{t("glossary.title")}</Text>
-          <Text style={[styles.sub, { textAlign: dir.textAlign }]} numberOfLines={1}>
-            {bookTitle}
-          </Text>
-        </View>
-        {!loading && items.length > 0 && (
-          <PressableScale onPress={printGlossary} disabled={printing} style={styles.ghost}>
-            {printing ? (
-              <ActivityIndicator size="small" color={Palette.text} />
-            ) : (
-              <Ionicons name="print-outline" size={19} color={Palette.text} accessibilityLabel={t("glossary.print")} />
-            )}
-          </PressableScale>
-        )}
-        {!loading && items.length > 0 && (
-          <PressableScale onPress={() => void load(true)} style={styles.ghost}>
-            <Ionicons name="refresh" size={19} color={Palette.text} accessibilityLabel={t("glossary.regenerate")} />
-          </PressableScale>
-        )}
-      </View>
+      <SceneBanner
+        title={t("glossary.title")}
+        subtitle={bookTitle}
+        height={150}
+        left={
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.back")}
+          >
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={pal.ink} />
+            </SceneIconButton>
+          </Pressable>
+        }
+        right={
+          !loading && items.length > 0 ? (
+            <View style={{ flexDirection: dir.row, gap: 8 }}>
+              <PressableScale onPress={printGlossary} disabled={printing}>
+                <SceneIconButton>
+                  {printing ? (
+                    <ActivityIndicator size="small" color={pal.ink} />
+                  ) : (
+                    <Ionicons name="print-outline" size={19} color={pal.ink} accessibilityLabel={t("glossary.print")} />
+                  )}
+                </SceneIconButton>
+              </PressableScale>
+              <PressableScale onPress={() => void load(true)}>
+                <SceneIconButton>
+                  <Ionicons name="refresh" size={19} color={pal.ink} accessibilityLabel={t("glossary.regenerate")} />
+                </SceneIconButton>
+              </PressableScale>
+            </View>
+          ) : undefined
+        }
+      />
 
       {/* الوحدات */}
       {titles.length > 1 && (
@@ -211,114 +234,133 @@ export default function GlossaryScreen() {
           style={{ flexGrow: 0, flexShrink: 0 }}
           contentContainerStyle={[styles.units, { flexDirection: dir.row }]}
         >
-          {titles.map((u, i) => (
-            <Pressable key={i} onPress={() => setIdx(i)} style={[styles.unitChip, i === idx && styles.unitChipOn]}>
-              <Text style={[styles.unitChipTxt, i === idx && styles.unitChipTxtOn]} numberOfLines={1}>
-                {t("glossary.unitN", { n: i + 1 })}
-              </Text>
-            </Pressable>
-          ))}
+          {titles.map((u, i) => {
+            const on = i === idx;
+            return (
+              <Pressable key={i} onPress={() => setIdx(i)} style={[styles.unitChip, on ? chipOn : chipOff]}>
+                <Text style={[styles.unitChipTxt, { color: on ? pal.onAccent : pal.dim }, on && styles.unitChipTxtOn]} numberOfLines={1}>
+                  {t("glossary.unitN", { n: i + 1 })}
+                </Text>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       )}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {/* بطاقة الوحدة: العنوان + صفحاتها + نوع الكتاب */}
-        <View style={styles.unitCard}>
-          <LinearGradient colors={["rgba(124,108,255,0.22)", "rgba(16,18,27,0)"]} style={StyleSheet.absoluteFill} />
-          <Text style={[styles.unitTitle, { textAlign: dir.textAlign }]} numberOfLines={3}>
+        <SceneCard style={[styles.unitCard, { backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
+          <Text style={[styles.unitTitle, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={3}>
             {titles[idx] ?? ""}
           </Text>
           <View style={[styles.metaRow, { flexDirection: dir.row }]}>
             {range && (
-              <PressableScale onPress={() => openPage(range.from)} style={styles.metaChip}>
-                <Ionicons name="document-text-outline" size={13} color="#D9D3FF" />
-                <Text style={styles.metaTxt}>
+              <PressableScale onPress={() => openPage(range.from)} style={[styles.metaChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+                <Ionicons name="document-text-outline" size={13} color={pal.accent} />
+                <Text style={[styles.metaTxt, { color: pal.ink }]}>
                   {t("glossary.pages", { from: range.from, to: range.to })}
                   {range.found ? "" : " " + t("glossary.approx")}
                 </Text>
               </PressableScale>
             )}
             {kind && (
-              <PressableScale onPress={() => setKindOpen((v) => !v)} style={[styles.metaChip, { backgroundColor: "rgba(108,243,197,0.10)" }]}>
-                <Text style={[styles.metaTxt, { color: "#6CF3C5" }]}>{t(`glossary.kind.${kind}`)}</Text>
-                <Ionicons name="chevron-down" size={13} color="#6CF3C5" />
+              <PressableScale
+                onPress={() => setKindOpen((v) => !v)}
+                style={[styles.metaChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.accent + "66" }]}
+              >
+                <Text style={[styles.metaTxt, { color: pal.accent }]}>{t(`glossary.kind.${kind}`)}</Text>
+                <Ionicons name={kindOpen ? "chevron-up" : "chevron-down"} size={13} color={pal.accent} />
               </PressableScale>
             )}
           </View>
           {kindOpen && (
             <View style={{ gap: 6 }}>
-              <Text style={[styles.dim, { textAlign: dir.textAlign, fontSize: 12.5 }]}>{t("glossary.kindPick")}</Text>
+              <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, fontSize: 12.5 }]}>{t("glossary.kindPick")}</Text>
               <View style={[styles.metaRow, { flexDirection: dir.row }]}>
-                {(["textbook", "language", "novel", "general"] as BookKind[]).map((k) => (
-                  <Pressable key={k} onPress={() => chooseKind(k)} style={[styles.filter, k === kind && styles.filterOn]}>
-                    <Text style={[styles.filterTxt, k === kind && styles.filterTxtOn]}>{t(`glossary.kind.${k}`)}</Text>
-                  </Pressable>
-                ))}
+                {(["textbook", "language", "novel", "general"] as BookKind[]).map((k) => {
+                  const on = k === kind;
+                  return (
+                    <Pressable key={k} onPress={() => chooseKind(k)} style={[styles.filter, on ? chipOn : chipOff]}>
+                      <Text style={[styles.filterTxt, { color: on ? pal.onAccent : pal.dim }, on && styles.filterTxtOn]}>
+                        {t(`glossary.kind.${k}`)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
           )}
-        </View>
+        </SceneCard>
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator color={Palette.neonViolet} />
-            <Text style={styles.dim}>{titles.length ? t("glossary.loading") : t("glossary.noSyllabus")}</Text>
-            {titles.length > 0 && <Text style={[styles.dim, { fontSize: 12.5 }]}>{t("quiz2.preparingHint")}</Text>}
+            <ActivityIndicator color={pal.accent} />
+            <Text style={[styles.dim, { color: pal.dim }]}>{titles.length ? t("glossary.loading") : t("glossary.noSyllabus")}</Text>
+            {titles.length > 0 && <Text style={[styles.dim, { color: pal.dim, fontSize: 12.5 }]}>{t("quiz2.preparingHint")}</Text>}
           </View>
         ) : missing ? (
           <View style={styles.center}>
-            <Ionicons name="cloud-download-outline" size={36} color={Palette.neonCyan} />
-            <Text style={styles.dim}>{t("glossary.missing")}</Text>
+            <View style={[styles.stateIcon, { backgroundColor: pal.soft }]}>
+              <Ionicons name="cloud-download-outline" size={32} color={pal.accent} />
+            </View>
+            <Text style={[styles.dim, { color: pal.dim }]}>{t("glossary.missing")}</Text>
             {dl?.running ? (
-              <Text style={styles.dim}>{t("glossary.downloading", { done: dl.done, total: dl.total })}</Text>
+              <Text style={[styles.dim, { color: pal.dim }]}>{t("glossary.downloading", { done: dl.done, total: dl.total })}</Text>
             ) : (
-              <PressableScale onPress={() => startDownload(pdfPath, bookTitle, pageCount)} style={styles.dlBtn}>
-                <Text style={styles.dlTxt}>{t("glossary.download")}</Text>
+              <PressableScale onPress={() => startDownload(pdfPath, bookTitle, pageCount)} style={[styles.dlBtn, { backgroundColor: pal.accent }]}>
+                <Text style={[styles.dlTxt, { color: pal.onAccent }]}>{t("glossary.download")}</Text>
               </PressableScale>
             )}
           </View>
         ) : failed ? (
           <View style={styles.center}>
-            <Ionicons name="alert-circle-outline" size={36} color={Palette.warn} />
-            <Text style={styles.dim}>{t("glossary.failed")}</Text>
-            <PressableScale onPress={() => void load(true)} style={styles.dlBtn}>
-              <Text style={styles.dlTxt}>{t("glossary.retry")}</Text>
+            <View style={[styles.stateIcon, { backgroundColor: pal.soft }]}>
+              <Ionicons name="alert-circle-outline" size={32} color={pal.dark ? "#FFBE9A" : "#A2501E"} />
+            </View>
+            <Text style={[styles.dim, { color: pal.dim }]}>{t("glossary.failed")}</Text>
+            <PressableScale onPress={() => void load(true)} style={[styles.dlBtn, { backgroundColor: pal.accent }]}>
+              <Text style={[styles.dlTxt, { color: pal.onAccent }]}>{t("glossary.retry")}</Text>
             </PressableScale>
           </View>
         ) : (
           <>
             {/* بحث + تصفية */}
-            <View style={[styles.search, { flexDirection: dir.row }]}>
-              <Ionicons name="search" size={17} color={Palette.textDim} />
+            <View style={[styles.search, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: shadowTint }]}>
+              <Ionicons name="search" size={18} color={pal.dim} />
               <TextInput
                 value={q}
                 onChangeText={setQ}
                 placeholder={t("glossary.search")}
-                placeholderTextColor={Palette.placeholder}
-                style={[styles.searchInput, { textAlign: dir.textAlign }]}
+                placeholderTextColor={pal.dim}
+                selectionColor={pal.accent}
+                style={[styles.searchInput, { color: pal.ink, textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
               />
             </View>
             {kinds.length > 1 && (
               <View style={[styles.filters, { flexDirection: dir.row }]}>
-                {(["all", ...kinds] as Filter[]).map((f) => (
-                  <Pressable key={f} onPress={() => setFilter(f)} style={[styles.filter, filter === f && styles.filterOn]}>
-                    <Text style={[styles.filterTxt, filter === f && styles.filterTxtOn]}>
-                      {t(`glossary.k.${f}`)} {f === "all" ? items.length : items.filter((i) => i.k === f).length}
-                    </Text>
-                  </Pressable>
-                ))}
+                {(["all", ...kinds] as Filter[]).map((f) => {
+                  const on = filter === f;
+                  return (
+                    <Pressable key={f} onPress={() => setFilter(f)} style={[styles.filter, { flexDirection: dir.row }, on ? chipOn : chipOff]}>
+                      {f !== "all" && <View style={[styles.dot, { backgroundColor: on ? pal.onAccent : kindColor(f, pal) }]} />}
+                      <Text style={[styles.filterTxt, { color: on ? pal.onAccent : pal.dim }, on && styles.filterTxtOn]}>
+                        {t(`glossary.k.${f}`)} {f === "all" ? items.length : items.filter((i) => i.k === f).length}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
 
             {shown.map((i) => {
-              const c = KIND_COLOR[i.k];
+              const c = kindColor(i.k, pal);
               const isSaved = saved.has(i.t);
               return (
-                <View key={i.t} style={styles.item}>
+                <SceneCard key={i.t} padded={false} style={styles.item}>
                   <View style={[styles.itemHead, { flexDirection: dir.row }]}>
                     <View style={[styles.dot, { backgroundColor: c }]} />
                     <Text
-                      style={[styles.term, { textAlign: dir.textAlign }]}
+                      style={[styles.term, { color: pal.ink, textAlign: dir.textAlign }]}
                       onLongPress={async () => {
                         const w = await addWord({ word: i.t, context: i.ex || i.m, bookId, bookTitle, page: i.p });
                         if (w) setWordSheet(w);
@@ -326,34 +368,36 @@ export default function GlossaryScreen() {
                     >
                       {i.t}
                     </Text>
-                    <Text style={[styles.kindTag, { color: c }]}>{t(`glossary.k.${i.k}`)}</Text>
+                    <View style={[styles.kindPill, { backgroundColor: c + (pal.dark ? "22" : "18") }]}>
+                      <Text style={[styles.kindTag, { color: c }]}>{t(`glossary.k.${i.k}`)}</Text>
+                    </View>
                   </View>
-                  <Text style={[styles.meaning, { textAlign: dir.textAlign }]} selectable>
+                  <Text style={[styles.meaning, { color: pal.ink, textAlign: dir.textAlign }]} selectable>
                     {i.m}
                   </Text>
-                  {!!i.ex && <Text style={[styles.example, { textAlign: dir.textAlign }]}>«{i.ex}»</Text>}
-                  <View style={[styles.actions, { flexDirection: dir.row }]}>
-                    <Pressable onPress={() => listen(i)} hitSlop={6} style={[styles.act, { flexDirection: dir.row }]}>
-                      <Ionicons name={speaking === i.t ? "stop-circle" : "volume-medium"} size={16} color="#5ED9FF" />
-                      <Text style={[styles.actTxt, { color: "#5ED9FF" }]}>{t("glossary.listen")}</Text>
+                  {!!i.ex && <Text style={[styles.example, { color: pal.dim, textAlign: dir.textAlign }]}>«{i.ex}»</Text>}
+                  <View style={[styles.actions, { flexDirection: dir.row, borderTopColor: pal.track }]}>
+                    <Pressable onPress={() => listen(i)} hitSlop={6} style={[styles.act, { flexDirection: dir.row, backgroundColor: speaking === i.t ? pal.accent : pal.soft }]}>
+                      <Ionicons name={speaking === i.t ? "stop-circle" : "volume-medium"} size={16} color={speaking === i.t ? pal.onAccent : pal.accent} />
+                      <Text style={[styles.actTxt, { color: speaking === i.t ? pal.onAccent : pal.ink }]}>{t("glossary.listen")}</Text>
                     </Pressable>
-                    <Pressable onPress={() => saveCards([i])} hitSlop={6} style={[styles.act, { flexDirection: dir.row }]}>
-                      <Ionicons name={isSaved ? "checkmark-circle" : "albums-outline"} size={16} color={isSaved ? "#6CF3C5" : "#F79ACB"} />
-                      <Text style={[styles.actTxt, { color: isSaved ? "#6CF3C5" : "#F79ACB" }]}>
+                    <Pressable onPress={() => saveCards([i])} hitSlop={6} style={[styles.act, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
+                      <Ionicons name={isSaved ? "checkmark-circle" : "albums-outline"} size={16} color={isSaved ? savedTint : pal.accent} />
+                      <Text style={[styles.actTxt, { color: isSaved ? savedTint : pal.ink }]}>
                         {isSaved ? t("glossary.saved") : t("glossary.saveCard")}
                       </Text>
                     </Pressable>
                     {!!i.p && (
-                      <Pressable onPress={() => openPage(i.p as number)} hitSlop={6} style={[styles.act, { flexDirection: dir.row }]}>
-                        <Ionicons name="document-text-outline" size={15} color="#B9AFFF" />
-                        <Text style={[styles.actTxt, { color: "#B9AFFF" }]}>{t("glossary.page", { p: i.p })}</Text>
+                      <Pressable onPress={() => openPage(i.p as number)} hitSlop={6} style={[styles.act, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
+                        <Ionicons name="document-text-outline" size={15} color={pal.accent} />
+                        <Text style={[styles.actTxt, { color: pal.ink }]}>{t("glossary.page", { p: i.p })}</Text>
                       </Pressable>
                     )}
                   </View>
-                </View>
+                </SceneCard>
               );
             })}
-            {!shown.length && <Text style={[styles.dim, { marginTop: 20 }]}>{t("glossary.noMatch")}</Text>}
+            {!shown.length && <Text style={[styles.dim, { color: pal.dim, marginTop: 20 }]}>{t("glossary.noMatch")}</Text>}
             <View style={{ height: 90 }} />
           </>
         )}
@@ -361,84 +405,77 @@ export default function GlossaryScreen() {
 
       {!loading && items.length > 0 && (
         <View style={styles.bottom}>
-          <PressableScale onPress={() => saveCards(items)} disabled={saved.size >= items.length}>
-            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.saveAll, saved.size >= items.length && { opacity: 0.5 }]}>
-              <Ionicons name="albums" size={18} color="#fff" />
-              <Text style={styles.saveAllTxt}>
-                {saved.size >= items.length ? t("glossary.allSaved") : t("glossary.saveAll", { n: items.length - saved.size })}
+          <PressableScale onPress={() => saveCards(items)} disabled={allSaved}>
+            <View style={[styles.saveAll, { backgroundColor: pal.accent, shadowColor: shadowTint }, allSaved && { opacity: 0.5 }]}>
+              <Ionicons name={allSaved ? "checkmark" : "albums"} size={18} color={pal.onAccent} />
+              <Text style={[styles.saveAllTxt, { color: pal.onAccent }]}>
+                {allSaved ? t("glossary.allSaved") : t("glossary.saveAll", { n: items.length - saved.size })}
               </Text>
-            </LinearGradient>
+            </View>
           </PressableScale>
         </View>
       )}
       <WordSheet word={wordSheet} onClose={() => setWordSheet(null)} />
-    </SafeAreaView>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Palette.bg },
-  head: { alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 8 },
-  ghost: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  title: { color: Palette.text, fontSize: 19, fontWeight: "800" },
-  sub: { color: Palette.textDim, fontSize: 12.5, marginTop: 1 },
-  units: { gap: 6, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, alignItems: "center" },
-  unitChip: { paddingHorizontal: 14, height: 34, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.06)", justifyContent: "center" },
-  unitChipOn: { backgroundColor: Palette.text },
-  unitChipTxt: { color: "#C4C9D8", fontSize: 12.5, fontWeight: "600" },
-  unitChipTxtOn: { color: Palette.bg, fontWeight: "800" },
+  units: { gap: 6, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 4, alignItems: "center" },
+  unitChip: { paddingHorizontal: 14, height: 34, borderRadius: Radius.pill, justifyContent: "center", borderWidth: StyleSheet.hairlineWidth },
+  unitChipTxt: { fontSize: 12.5, fontWeight: "700" },
+  unitChipTxtOn: { fontWeight: "900" },
   body: { padding: 16, gap: 10 },
-  unitCard: {
-    padding: 16,
-    gap: 10,
-    borderRadius: 22,
-    overflow: "hidden",
-    backgroundColor: "#10121B",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(124,108,255,0.35)",
-  },
-  unitTitle: { color: Palette.text, fontSize: 17, fontWeight: "800", lineHeight: 25 },
+  unitCard: { gap: 10, borderRadius: 24 },
+  unitTitle: { fontSize: 17, fontWeight: "900", lineHeight: 26 },
   metaRow: { flexWrap: "wrap", gap: 6 },
-  metaChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: Radius.pill, backgroundColor: "rgba(124,108,255,0.16)" },
-  metaTxt: { color: "#D9D3FF", fontSize: 12, fontWeight: "700" },
+  metaChip: { alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  metaTxt: { fontSize: 12, fontWeight: "800" },
   center: { alignItems: "center", gap: 10, paddingVertical: 40 },
-  dim: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22 },
-  dlBtn: { paddingHorizontal: 18, height: 42, borderRadius: 14, backgroundColor: Palette.text, justifyContent: "center" },
-  dlTxt: { color: Palette.bg, fontWeight: "800", fontSize: 14 },
+  stateIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
+  dim: { fontSize: 14, textAlign: "center", lineHeight: 22 },
+  dlBtn: { paddingHorizontal: 20, height: 44, borderRadius: 22, justifyContent: "center" },
+  dlTxt: { fontWeight: "900", fontSize: 14 },
   search: {
     alignItems: "center",
     gap: 8,
-    height: 46,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#10121B",
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-  searchInput: { flex: 1, color: Palette.text, fontSize: 14.5 },
+  searchInput: { flex: 1, fontSize: 14.5, padding: 0 },
   filters: { flexWrap: "wrap", gap: 6 },
-  filter: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.06)" },
-  filterOn: { backgroundColor: "rgba(124,108,255,0.28)" },
-  filterTxt: { color: "#C4C9D8", fontSize: 12.5, fontWeight: "600" },
-  filterTxtOn: { color: Palette.text, fontWeight: "800" },
-  item: {
-    padding: 14,
-    gap: 7,
-    borderRadius: 18,
-    backgroundColor: "#10121B",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
+  filter: { alignItems: "center", gap: 6, paddingHorizontal: 13, paddingVertical: 7, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  filterTxt: { fontSize: 12.5, fontWeight: "700" },
+  filterTxtOn: { fontWeight: "900" },
+  item: { padding: 16, gap: 8, borderRadius: 22 },
   itemHead: { alignItems: "center", gap: 8 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  term: { flex: 1, color: Palette.text, fontSize: 16, fontWeight: "800" },
-  kindTag: { fontSize: 11.5, fontWeight: "700" },
-  meaning: { color: "#C4C9D8", fontSize: 14, lineHeight: 23 },
-  example: { color: "#8E95AB", fontSize: 13, fontStyle: "italic", lineHeight: 21 },
-  actions: { gap: 16, marginTop: 2, flexWrap: "wrap" },
-  act: { alignItems: "center", gap: 5 },
-  actTxt: { fontSize: 12.5, fontWeight: "700" },
+  term: { flex: 1, fontSize: 16.5, fontWeight: "900" },
+  kindPill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: Radius.pill },
+  kindTag: { fontSize: 11.5, fontWeight: "800" },
+  meaning: { fontSize: 14, lineHeight: 23, opacity: 0.9 },
+  example: { fontSize: 13, fontStyle: "italic", lineHeight: 21 },
+  actions: { gap: 8, marginTop: 4, paddingTop: 10, flexWrap: "wrap", borderTopWidth: StyleSheet.hairlineWidth },
+  act: { alignItems: "center", gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: Radius.pill },
+  actTxt: { fontSize: 12.5, fontWeight: "800" },
   bottom: { position: "absolute", left: 16, right: 16, bottom: 26 },
-  saveAll: { height: 54, borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  saveAllTxt: { color: "#fff", fontSize: 15.5, fontWeight: "800" },
+  saveAll: {
+    height: 54,
+    borderRadius: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  saveAllTxt: { fontSize: 15.5, fontWeight: "900" },
 });

@@ -737,6 +737,15 @@ function stopCurrentOnly(): void {
   disposePlayer();
 }
 
+/** هل يُسمع سرد الآن فعليًا؟ (لحماية الواجهة من عدم تطابق زر التشغيل مع الصوت) */
+export function isNarrating(): boolean {
+  try {
+    return !!currentPlayer && !!(currentPlayer as unknown as { playing?: boolean }).playing;
+  } catch {
+    return false;
+  }
+}
+
 export async function stopSpeaking(): Promise<void> {
   holdAudioSession(false);
   clearLockScreen(currentPlayer); // إيقاف كامل → أزل أزرار شاشة القفل

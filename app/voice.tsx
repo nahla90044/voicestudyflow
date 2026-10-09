@@ -4,14 +4,13 @@
 // متابعة القراءة، ملخص وحدة، اختبار، مراجعة الأخطاء، الجاهزية، البطاقات، جلسة تركيز،
 // تذكير بموعد — وما سوى ذلك يُجاب عنه من صفحات الكتاب («كتابك يجيب»).
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PressableScale } from "../components/brand/motion";
-import { Gradients, Palette } from "../constants/design";
+import { SceneCard, SceneScreen } from "../components/brand/scene-screen";
 import { getSpokenName } from "../lib/auth";
 import { askBooks, myBooks } from "../lib/bookQA";
 import { countDue } from "../lib/flashcards";
@@ -20,16 +19,18 @@ import { dropEmptyVocative, useDir, useI18n } from "../lib/i18n";
 import { scheduleOnce } from "../lib/notify";
 import { canUseVoiceAsk, requestPaywall } from "../lib/plan";
 import { setLastPage } from "../lib/readerPrefs";
+import { useScene } from "../lib/scene";
 import { getBookReadiness, type BookReadiness } from "../lib/readiness";
 import { useDictation, type SttLang } from "../lib/stt";
 import { speakText, stopSpeaking, VOICE_CATALOG } from "../lib/voice";
 import { parseIntents, type Intent } from "../lib/voiceIntents";
 
-type Card = { key: string; icon: keyof typeof Ionicons.glyphMap; color: string; title: string; sub: string; tag: string; go?: () => void };
+type Card = { key: string; icon: keyof typeof Ionicons.glyphMap; title: string; sub: string; tag: string; go?: () => void };
 type Phase = "idle" | "listening" | "thinking" | "done";
 
-/** كرة الشفق: ثلاث هالات ملوّنة تتحرّك (أسرع أثناء الاستماع) */
+/** هالة الكرة: حلقات بلون المشهد تتنفّس (أسرع وأوسع أثناء الاستماع) */
 function AuroraOrb({ active }: { active: boolean }) {
+  const { pal } = useScene();
   const a = useRef([0, 1, 2].map(() => new Animated.Value(0))).current;
   useEffect(() => {
     const loops = a.map((v, i) =>
@@ -43,7 +44,7 @@ function AuroraOrb({ active }: { active: boolean }) {
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
   }, [active, a]);
-  const blob = (v: Animated.Value, color: string, size: number, dx: number, dy: number) => (
+  const ring = (v: Animated.Value, size: number, opacity: number) => (
     <Animated.View
       style={[
         styles.blob,
@@ -51,22 +52,19 @@ function AuroraOrb({ active }: { active: boolean }) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: color,
-          transform: [
-            { translateX: v.interpolate({ inputRange: [0, 1], outputRange: [-dx, dx] }) },
-            { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [dy, -dy] }) },
-            { scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, active ? 1.22 : 1.1] }) },
-          ],
+          backgroundColor: pal.accent,
+          shadowColor: pal.accent,
+          opacity: v.interpolate({ inputRange: [0, 1], outputRange: [opacity * 0.6, active ? opacity * 1.4 : opacity] }),
+          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, active ? 1.22 : 1.08] }) }],
         },
       ]}
     />
   );
   return (
     <View style={styles.orbBox} pointerEvents="none">
-      {blob(a[0], "rgba(124,108,255,0.28)", 190, 14, 10)}
-      {blob(a[1], "rgba(63,208,255,0.24)", 160, -16, 8)}
-      {blob(a[2], "rgba(108,243,197,0.22)", 140, 10, -14)}
-      <LinearGradient colors={["rgba(255,255,255,0.9)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0)"]} style={styles.core} />
+      {ring(a[0], 190, pal.dark ? 0.1 : 0.08)}
+      {ring(a[1], 150, pal.dark ? 0.14 : 0.12)}
+      {ring(a[2], 112, pal.dark ? 0.2 : 0.16)}
     </View>
   );
 }
@@ -76,6 +74,7 @@ export default function VoiceAssistant() {
   const { t, lang } = useI18n();
   const dir = useDir();
   const insets = useSafeAreaInsets();
+  const { pal } = useScene();
   const sttLang: SttLang = lang === "en" || lang === "fr" ? lang : "ar";
   const replyVoice = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === sttLang)?.voiceId;
 
@@ -146,14 +145,14 @@ export default function VoiceAssistant() {
     async function runIntent(it: Intent) {
       if (!cont && it.type !== "remind" && it.type !== "focus" && it.type !== "cards") {
         parts.push(t("va.noBook"));
-        out.push({ key: "add", icon: "add-circle", color: Palette.primary, title: t("cmd.addBook"), sub: "", tag: "", go: go(() => router.push("/add-book")) });
+        out.push({ key: "add", icon: "add-circle", title: t("cmd.addBook"), sub: "", tag: "", go: go(() => router.push("/add-book")) });
         return;
       }
       switch (it.type) {
         case "resume": {
           parts.push(t("va.resume", { book: cont!.title, page: cont!.page }));
           const g = go(() => router.push({ pathname: "/reader/[id]", params: { id: cont!.id, title: cont!.title, pdf_path: cont!.pdf_path } }));
-          out.push({ key: "resume", icon: "play", color: "#6CF3C5", title: t("va.card.resume", { page: cont!.page }), sub: cont!.title, tag: t("va.tag.play"), go: g });
+          out.push({ key: "resume", icon: "play", title: t("va.card.resume", { page: cont!.page }), sub: cont!.title, tag: t("va.tag.play"), go: g });
           autoGo = g;
           return;
         }
@@ -162,19 +161,19 @@ export default function VoiceAssistant() {
           const u = unitFor(it.unit);
           if (!u) {
             parts.push(t("va.noSyllabus"));
-            out.push({ key: "hub", icon: "list", color: Palette.neonViolet, title: t("book.units.create"), sub: cont!.title, tag: "", go: go(() => router.push({ pathname: "/book/[id]", params: { id: cont!.id } })) });
+            out.push({ key: "hub", icon: "list", title: t("book.units.create"), sub: cont!.title, tag: "", go: go(() => router.push({ pathname: "/book/[id]", params: { id: cont!.id } })) });
             return;
           }
           const params = { pdf_path: cont!.pdf_path, unit: String(u.idx), title: u.title, book_title: cont!.title };
           if (it.type === "summary") {
             parts.push(t("va.summary", { n: u.idx + 1 }));
             const g = go(() => router.push({ pathname: "/unit-summary", params }));
-            out.push({ key: "sum", icon: "headset", color: "#D9D3FF", title: t("va.card.summary", { n: u.idx + 1 }), sub: u.title, tag: t("va.tag.open"), go: g });
+            out.push({ key: "sum", icon: "headset", title: t("va.card.summary", { n: u.idx + 1 }), sub: u.title, tag: t("va.tag.open"), go: g });
             autoGo = autoGo ?? g;
           } else {
             parts.push(t("va.quiz", { n: u.idx + 1 }));
             const g = go(() => router.push({ pathname: "/unit-quiz", params }));
-            out.push({ key: "quiz", icon: "checkbox", color: "#FFB38A", title: t("va.card.quiz", { n: u.idx + 1 }), sub: u.title, tag: t("va.tag.start"), go: g });
+            out.push({ key: "quiz", icon: "checkbox", title: t("va.card.quiz", { n: u.idx + 1 }), sub: u.title, tag: t("va.tag.start"), go: g });
             autoGo = autoGo ?? g;
           }
           return;
@@ -187,7 +186,7 @@ export default function VoiceAssistant() {
           }
           parts.push(t("va.mistakes", { n }));
           const g = go(() => router.push({ pathname: "/unit-quiz", params: { pdf_path: cont!.pdf_path, mode: "mistakes", book_title: cont!.title } }));
-          out.push({ key: "mis", icon: "refresh-circle", color: "#FFB38A", title: t("book.mistakes", { n }), sub: cont!.title, tag: t("va.tag.start"), go: g });
+          out.push({ key: "mis", icon: "refresh-circle", title: t("book.mistakes", { n }), sub: cont!.title, tag: t("va.tag.start"), go: g });
           autoGo = autoGo ?? g;
           return;
         }
@@ -205,7 +204,6 @@ export default function VoiceAssistant() {
           out.push({
             key: "ready",
             icon: "stats-chart",
-            color: "#5ED9FF",
             title: t("va.card.ready", { score: ready.score }),
             sub: ready.weakUnit !== null ? t(ready.weakUntested ? "ready.untested" : "ready.weak", { n: ready.weakUnit + 1 }) : cont!.title,
             tag: t("va.tag.details"),
@@ -217,14 +215,14 @@ export default function VoiceAssistant() {
           const n = await countDue();
           parts.push(n ? t("va.cards", { n }) : t("va.cardsNone"));
           const g = go(() => router.push("/flashcards"));
-          out.push({ key: "cards", icon: "albums", color: "#F79ACB", title: t("path.cards.title", { n }), sub: "", tag: t("va.tag.start"), go: g });
+          out.push({ key: "cards", icon: "albums", title: t("path.cards.title", { n }), sub: "", tag: t("va.tag.start"), go: g });
           if (n) autoGo = autoGo ?? g;
           return;
         }
         case "focus": {
           parts.push(t("va.focus"));
           const g = go(() => router.push("/pomodoro"));
-          out.push({ key: "focus", icon: "timer", color: "#6CF3C5", title: t("cmd.focus"), sub: "", tag: t("va.tag.start"), go: g });
+          out.push({ key: "focus", icon: "timer", title: t("cmd.focus"), sub: "", tag: t("va.tag.start"), go: g });
           autoGo = autoGo ?? g;
           return;
         }
@@ -237,13 +235,13 @@ export default function VoiceAssistant() {
             return;
           }
           parts.push(t("va.remind", { time }));
-          out.push({ key: "remind", icon: "alarm", color: "#FFB38A", title: t("va.card.remind", { time }), sub: what, tag: t("va.tag.reminder") });
+          out.push({ key: "remind", icon: "alarm", title: t("va.card.remind", { time }), sub: what, tag: t("va.tag.reminder") });
           return;
         }
         case "ask": {
           if (!(await canUseVoiceAsk())) {
             parts.push(t("pay.reason.voiceAsk"));
-            out.push({ key: "pro", icon: "sparkles", color: "#D9D3FF", title: t("sub.upgrade"), sub: t("pay.pro"), tag: "", go: () => requestPaywall("voiceAsk", true) });
+            out.push({ key: "pro", icon: "sparkles", title: t("sub.upgrade"), sub: t("pay.pro"), tag: "", go: () => requestPaywall("voiceAsk", true) });
             return;
           }
           try {
@@ -254,7 +252,6 @@ export default function VoiceAssistant() {
               out.push({
                 key: "p" + c.page,
                 icon: "document-text",
-                color: "#B9AFFF",
                 title: t("va.card.page", { page: c.page }),
                 sub: c.bookTitle,
                 tag: t("va.tag.open"),
@@ -306,44 +303,63 @@ export default function VoiceAssistant() {
   const examples = [t("va.ex1"), t("va.ex2"), t("va.ex3"), t("va.ex4")];
 
   return (
-    <View style={styles.root}>
+    <SceneScreen>
       {/* نافذة ملء الشاشة لا تطبّق الهوامش الآمنة تلقائيًا — نضيفها يدويًا */}
       <View style={{ flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
         <View style={[styles.top, { flexDirection: dir.row }]}>
-          <PressableScale onPress={() => router.back()} style={styles.ghost}>
-            <Ionicons name="close" size={18} color={Palette.text} accessibilityLabel={t("common.close")} />
+          <PressableScale
+            onPress={() => router.back()}
+            style={[styles.ghost, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+          >
+            <Ionicons name="close" size={18} color={pal.ink} accessibilityLabel={t("common.close")} />
           </PressableScale>
-          <Text style={styles.status}>{status}</Text>
+          <View style={[styles.statusPill, { backgroundColor: pal.soft, flexDirection: dir.row }]}>
+            {(phase === "listening" || dict.listening) && <View style={[styles.dot, { backgroundColor: pal.accent }]} />}
+            <Text style={[styles.status, { color: phase === "listening" || dict.listening ? pal.accent : pal.dim }]}>{status}</Text>
+          </View>
         </View>
-        {__DEV__ && !!dict.errorCode && <Text style={[styles.status, { paddingHorizontal: 18 }]}>{dict.errorCode}</Text>}
+        {__DEV__ && !!dict.errorCode && <Text style={[styles.status, { color: pal.dim, paddingHorizontal: 18 }]}>{dict.errorCode}</Text>}
         <View>
         </View>
 
         <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           {!!said && (
-            <View style={{ gap: 6 }}>
-              <Text style={[styles.cap, { textAlign: dir.textAlign }]}>{t("va.request")}</Text>
-              <Text style={[styles.said, { textAlign: dir.textAlign }]}>«{said}»</Text>
-            </View>
+            <SceneCard style={{ gap: 6 }}>
+              <Text style={[styles.cap, { color: pal.dim, textAlign: dir.textAlign }]}>{t("va.request")}</Text>
+              <Text style={[styles.said, { color: pal.ink, textAlign: dir.textAlign }]}>«{said}»</Text>
+            </SceneCard>
           )}
-          {phase === "thinking" && <ActivityIndicator color={Palette.neonViolet} style={{ alignSelf: "flex-start" }} />}
-          {!!reply && <Text style={[styles.reply, { textAlign: dir.textAlign }]}>{reply}</Text>}
+          {phase === "thinking" && <ActivityIndicator color={pal.accent} style={{ alignSelf: "flex-start" }} />}
+          {!!reply && (
+            <SceneCard style={{ backgroundColor: pal.soft, borderColor: pal.accent + "33", shadowOpacity: 0, elevation: 0 }}>
+              <View style={[styles.replyHead, { flexDirection: dir.row }]}>
+                <Ionicons name="sparkles" size={14} color={pal.accent} />
+              </View>
+              <Text style={[styles.reply, { color: pal.ink, textAlign: dir.textAlign }]}>{reply}</Text>
+            </SceneCard>
+          )}
           {cards.map((c) => (
-            <PressableScale key={c.key} onPress={c.go} disabled={!c.go} style={[styles.card, { flexDirection: dir.row }]}>
-              <View style={[styles.cardIcon, { backgroundColor: c.color + "26" }]}>
-                <Ionicons name={c.icon} size={18} color={c.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                  {c.title}
-                </Text>
-                {!!c.sub && (
-                  <Text style={[styles.cardSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                    {c.sub}
+            <PressableScale key={c.key} onPress={c.go} disabled={!c.go}>
+              <SceneCard padded={false} style={[styles.card, { flexDirection: dir.row }]}>
+                <View style={[styles.cardIcon, { backgroundColor: pal.soft }]}>
+                  <Ionicons name={c.icon} size={18} color={pal.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.cardTitle, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
+                    {c.title}
                   </Text>
+                  {!!c.sub && (
+                    <Text style={[styles.cardSub, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
+                      {c.sub}
+                    </Text>
+                  )}
+                </View>
+                {!!c.tag && (
+                  <View style={[styles.tagPill, { backgroundColor: c.go ? pal.accent : pal.soft }]}>
+                    <Text style={[styles.cardTag, { color: c.go ? pal.onAccent : pal.dim }]}>{c.tag}</Text>
+                  </View>
                 )}
-              </View>
-              {!!c.tag && <Text style={styles.cardTag}>{c.tag}</Text>}
+              </SceneCard>
             </PressableScale>
           ))}
         </ScrollView>
@@ -364,63 +380,59 @@ export default function VoiceAssistant() {
           accessibilityLabel={t("va.holdToTalk")}
         >
           <AuroraOrb active={dict.listening} />
-          <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.mic}>
-            <Ionicons name="mic" size={28} color="#fff" />
-          </LinearGradient>
+          <View style={[styles.mic, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
+            <Ionicons name="mic" size={28} color={pal.onAccent} />
+          </View>
         </Pressable>
 
         <View style={styles.examples}>
-          <Text style={styles.cap}>{t("va.examples")}</Text>
+          <Text style={[styles.cap, { color: pal.dim }]}>{t("va.examples")}</Text>
           <View style={styles.chips}>
             {examples.map((e) => (
-              <PressableScale key={e} onPress={() => void handle(e)} style={styles.chip}>
-                <Text style={styles.chipTxt}>{e}</Text>
+              <PressableScale key={e} onPress={() => void handle(e)} style={[styles.chip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+                <Text style={[styles.chipTxt, { color: pal.ink }]}>{e}</Text>
               </PressableScale>
             ))}
           </View>
         </View>
       </View>
-    </View>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#05060A" },
   top: { alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 8 },
-  ghost: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  status: { color: "#8E95AB", fontSize: 12.5 },
-  body: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 12, gap: 12 },
-  cap: { color: "#6F7690", fontSize: 12 },
-  said: { color: Palette.text, fontSize: 22, fontWeight: "600", lineHeight: 36 },
-  reply: { color: "#C4C9D8", fontSize: 15, lineHeight: 27 },
-  card: {
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: "rgba(22,24,38,0.9)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  cardIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  cardTitle: { color: Palette.text, fontSize: 14, fontWeight: "700" },
-  cardSub: { color: "#8E95AB", fontSize: 12, marginTop: 2 },
-  cardTag: { color: "#8E95AB", fontSize: 12 },
+  ghost: { width: 42, height: 42, borderRadius: 21, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
+  statusPill: { alignItems: "center", gap: 7, paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  status: { fontSize: 12.5, fontWeight: "700" },
+  body: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, gap: 12 },
+  cap: { fontSize: 12, fontWeight: "700" },
+  said: { fontSize: 21, fontWeight: "800", lineHeight: 34 },
+  replyHead: { marginBottom: 6 },
+  reply: { fontSize: 15, lineHeight: 27, fontWeight: "500" },
+  card: { alignItems: "center", gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 22 },
+  cardIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  cardTitle: { fontSize: 14, fontWeight: "800" },
+  cardSub: { fontSize: 12, marginTop: 2 },
+  tagPill: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: 999 },
+  cardTag: { fontSize: 12, fontWeight: "700" },
   orbPress: { alignSelf: "center", width: 220, height: 220, alignItems: "center", justifyContent: "center" },
   orbBox: { position: "absolute", width: 220, height: 220, alignItems: "center", justifyContent: "center" },
-  blob: { position: "absolute", shadowColor: "#7C6CFF", shadowOpacity: 0.6, shadowRadius: 30, shadowOffset: { width: 0, height: 0 } },
-  core: { position: "absolute", width: 96, height: 96, borderRadius: 48 },
-  mic: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
+  blob: { position: "absolute", shadowOpacity: 0.5, shadowRadius: 24, shadowOffset: { width: 0, height: 0 } },
+  mic: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
   examples: { alignItems: "center", gap: 10, paddingBottom: 12, paddingTop: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, paddingHorizontal: 16 },
-  chip: {
-    paddingVertical: 9,
-    paddingHorizontal: 13,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  chipTxt: { color: "#C4C9D8", fontSize: 13 },
+  chip: { paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
+  chipTxt: { fontSize: 13, fontWeight: "600" },
 });

@@ -9,21 +9,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BookCover } from "../components/brand/book-cover";
 import { PressableScale } from "../components/brand/motion";
-import { LinearGradient } from "expo-linear-gradient";
+import { SceneCard, SceneScreen } from "../components/brand/scene-screen";
 
-import { Gradients, Palette } from "../constants/design";
 import { getUserId } from "../lib/auth";
 import { getContinueBook, type ContinueBook } from "../lib/home";
 import { useDir, useI18n } from "../lib/i18n";
+import { useScene } from "../lib/scene";
 import { supabase } from "../lib/supabase";
 
 type Book = { id: string; title: string; pdf_path: string };
-type Action = { key: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; color: string; go: () => void };
+type Action = { key: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; go: () => void };
 
 export default function CommandScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const [q, setQ] = useState("");
   const [books, setBooks] = useState<Book[]>([]);
   const [cont, setCont] = useState<ContinueBook | null>(null);
@@ -65,15 +66,15 @@ export default function CommandScreen() {
 
   const actions: Action[] = useMemo(
     () => [
-      { key: "add", labelKey: "cmd.addBook", icon: "add-circle", color: Palette.primary, go: go(() => router.push("/add-book")) },
-      { key: "plan", labelKey: "cmd.plan", icon: "calendar", color: Palette.neonCyan, go: go(() => router.push("/calendar")) },
-      { key: "focus", labelKey: "cmd.focus", icon: "timer", color: Palette.success, go: go(() => router.push("/pomodoro")) },
-      { key: "words", labelKey: "words.title", icon: "bookmarks", color: "#D9D3FF", go: go(() => router.push("/words")) },
-      { key: "review", labelKey: "cmd.review", icon: "albums", color: Palette.neonPink, go: go(() => router.push("/flashcards")) },
-      { key: "progress", labelKey: "cmd.progress", icon: "stats-chart", color: Palette.warn, go: go(() => router.push("/activity")) },
-      { key: "archive", labelKey: "cmd.archive", icon: "archive", color: Palette.textDim, go: go(() => router.push("/explore")) },
-      { key: "settings", labelKey: "cmd.settings", icon: "settings", color: Palette.textDim, go: go(() => router.push("/more")) },
-      { key: "help", labelKey: "cmd.help", icon: "help-circle", color: Palette.textDim, go: go(() => router.push("/help")) },
+      { key: "add", labelKey: "cmd.addBook", icon: "add-circle", go: go(() => router.push("/add-book")) },
+      { key: "plan", labelKey: "cmd.plan", icon: "calendar", go: go(() => router.push("/calendar")) },
+      { key: "focus", labelKey: "cmd.focus", icon: "timer", go: go(() => router.push("/pomodoro")) },
+      { key: "words", labelKey: "words.title", icon: "bookmarks", go: go(() => router.push("/words")) },
+      { key: "review", labelKey: "cmd.review", icon: "albums", go: go(() => router.push("/flashcards")) },
+      { key: "progress", labelKey: "cmd.progress", icon: "stats-chart", go: go(() => router.push("/activity")) },
+      { key: "archive", labelKey: "cmd.archive", icon: "archive", go: go(() => router.push("/explore")) },
+      { key: "settings", labelKey: "cmd.settings", icon: "settings", go: go(() => router.push("/more")) },
+      { key: "help", labelKey: "cmd.help", icon: "help-circle", go: go(() => router.push("/help")) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
@@ -97,111 +98,133 @@ export default function CommandScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={[styles.searchRow, { flexDirection: dir.row }]}>
-        <View style={[styles.search, { flexDirection: dir.row }]}>
-          <Ionicons name="sparkles" size={18} color={Palette.neonViolet} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder={t("cmd.placeholder")}
-            placeholderTextColor={Palette.placeholder}
-            style={[styles.input, { textAlign: dir.textAlign }]}
-            returnKeyType="search"
-          />
+    <SceneScreen>
+      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+        <View style={[styles.searchRow, { flexDirection: dir.row }]}>
+          <View style={[styles.search, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: pal.dark ? "#000" : "#3C5028" }]}>
+            <Ionicons name="sparkles" size={18} color={pal.accent} />
+            <TextInput
+              value={q}
+              onChangeText={setQ}
+              placeholder={t("cmd.placeholder")}
+              placeholderTextColor={pal.dim}
+              selectionColor={pal.accent}
+              style={[styles.input, { color: pal.ink, textAlign: dir.textAlign }]}
+              returnKeyType="search"
+            />
+          </View>
+          <Pressable onPress={() => router.back()} hitSlop={10}>
+            <Text style={[styles.cancel, { color: pal.accent }]}>{t("cmd.cancel")}</Text>
+          </Pressable>
         </View>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Text style={styles.cancel}>{t("cmd.cancel")}</Text>
-        </Pressable>
-      </View>
 
-      {cont && !query && (
-        <PressableScale onPress={() => openBook(cont)} style={[styles.cont, { flexDirection: dir.row }]}>
-          <BookCover title={cont.title} width={40} height={54} />
-          <Text style={[styles.contTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
-            {t("cmd.continue", { title: cont.title })}
-          </Text>
-          <Ionicons name="play-circle" size={30} color={Palette.text} />
-        </PressableScale>
-      )}
+        {cont && !query && (
+          <PressableScale onPress={() => openBook(cont)} style={styles.contWrap}>
+            <SceneCard padded={false} style={[styles.cont, { flexDirection: dir.row }]}>
+              <BookCover title={cont.title} width={40} height={54} />
+              <Text style={[styles.contTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
+                {t("cmd.continue", { title: cont.title })}
+              </Text>
+              <View style={[styles.play, { backgroundColor: pal.accent }]}>
+                <Ionicons name="play" size={16} color={pal.onAccent} />
+              </View>
+            </SceneCard>
+          </PressableScale>
+        )}
 
-      <FlatList
-        style={{ flex: 1 }}
-        data={rows}
-        keyExtractor={(r) => r.key}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 40 }}
-        ListEmptyComponent={<Text style={styles.empty}>{t("cmd.noResults")}</Text>}
-        renderItem={({ item }) => {
-          if (item.kind === "head") return <Text style={[styles.head, { textAlign: dir.textAlign }]}>{item.label}</Text>;
-          if (item.kind === "book")
+        <FlatList
+          style={{ flex: 1 }}
+          data={rows}
+          keyExtractor={(r) => r.key}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+          ListEmptyComponent={<Text style={[styles.empty, { color: pal.dim }]}>{t("cmd.noResults")}</Text>}
+          renderItem={({ item }) => {
+            if (item.kind === "head")
+              return <Text style={[styles.head, { color: pal.dim, textAlign: dir.textAlign }]}>{item.label}</Text>;
+            if (item.kind === "book")
+              return (
+                <PressableScale
+                  onPress={() => openBook(item.book)}
+                  style={[styles.row, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+                >
+                  <BookCover title={item.book.title} width={34} height={46} />
+                  <Text style={[styles.rowTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
+                    {item.book.title}
+                  </Text>
+                  <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={16} color={pal.dim} />
+                </PressableScale>
+              );
+            const a = item.action;
             return (
-              <PressableScale onPress={() => openBook(item.book)} style={[styles.row, { flexDirection: dir.row }]}>
-                <BookCover title={item.book.title} width={34} height={46} />
-                <Text style={[styles.rowTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                  {item.book.title}
-                </Text>
+              <PressableScale
+                onPress={a.go}
+                style={[styles.row, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+              >
+                <View style={[styles.icon, { backgroundColor: pal.soft }]}>
+                  <Ionicons name={a.icon} size={19} color={pal.accent} />
+                </View>
+                <Text style={[styles.rowTxt, { color: pal.ink, textAlign: dir.textAlign }]}>{t(a.labelKey)}</Text>
+                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={16} color={pal.dim} />
               </PressableScale>
             );
-          const a = item.action;
-          return (
-            <PressableScale onPress={a.go} style={[styles.row, { flexDirection: dir.row }]}>
-              <View style={[styles.icon, { backgroundColor: a.color + "22" }]}>
-                <Ionicons name={a.icon} size={19} color={a.color} />
-              </View>
-              <Text style={[styles.rowTxt, { textAlign: dir.textAlign }]}>{t(a.labelKey)}</Text>
-            </PressableScale>
-          );
-        }}
-      />
+          }}
+        />
 
-      {/* المساعد الصوتي: زر يتنفّس أسفل الشاشة */}
-      <View style={styles.voiceWrap}>
-        <PressableScale onPress={go(() => router.push("/voice"))} style={styles.voiceBtnWrap}>
-          <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.voiceBtn}>
-            <Ionicons name="mic" size={30} color="#fff" accessibilityLabel={t("ask.voice")} />
-          </LinearGradient>
-        </PressableScale>
-        <Text style={styles.voiceHint}>{t("cmd.voice")}</Text>
-      </View>
-    </SafeAreaView>
+        {/* المساعد الصوتي: زر بلون المشهد مع هالة خفيفة أسفل الشاشة */}
+        <View style={styles.voiceWrap}>
+          <PressableScale onPress={go(() => router.push("/voice"))} style={[styles.voiceBtnWrap, { shadowColor: pal.accent }]}>
+            <View style={[styles.voiceHalo, { backgroundColor: pal.soft, borderColor: pal.accent + "33" }]}>
+              <View style={[styles.voiceBtn, { backgroundColor: pal.accent }]}>
+                <Ionicons name="mic" size={30} color={pal.onAccent} accessibilityLabel={t("ask.voice")} />
+              </View>
+            </View>
+          </PressableScale>
+          <Text style={[styles.voiceHint, { color: pal.dim }]}>{t("cmd.voice")}</Text>
+        </View>
+      </SafeAreaView>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Palette.bg },
-  searchRow: { alignItems: "center", gap: 12, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
+  safe: { flex: 1 },
+  searchRow: { alignItems: "center", gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
   search: {
     flex: 1,
     alignItems: "center",
     gap: 10,
     height: 52,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    backgroundColor: "#161826",
-    borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.5)",
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-  input: { flex: 1, color: Palette.text, fontSize: 16 },
-  cancel: { color: Palette.neonViolet, fontSize: 14, fontWeight: "600" },
-  cont: {
+  input: { flex: 1, fontSize: 16 },
+  cancel: { fontSize: 14, fontWeight: "700" },
+  contWrap: { marginHorizontal: 16, marginTop: 6, marginBottom: 4 },
+  cont: { alignItems: "center", gap: 12, padding: 12, borderRadius: 22 },
+  contTxt: { flex: 1, fontSize: 15, fontWeight: "800" },
+  play: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  head: { fontSize: 12, fontWeight: "800", marginTop: 18, marginBottom: 8, paddingHorizontal: 6 },
+  row: {
     alignItems: "center",
     gap: 12,
-    marginHorizontal: 14,
-    marginTop: 6,
-    marginBottom: 4,
-    padding: 10,
-    borderRadius: 18,
-    backgroundColor: "rgba(124,108,255,0.10)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  contTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "700" },
-  head: { color: Palette.textDim, fontSize: 12, fontWeight: "700", marginTop: 16, marginBottom: 6, paddingHorizontal: 4 },
-  row: { alignItems: "center", gap: 12, paddingVertical: 9, paddingHorizontal: 4, borderRadius: 14 },
-  rowTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "500" },
-  icon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  empty: { color: Palette.textDim, textAlign: "center", marginTop: 40 },
+  rowTxt: { flex: 1, fontSize: 15, fontWeight: "600" },
+  icon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  empty: { textAlign: "center", marginTop: 40 },
   voiceWrap: { alignItems: "center", gap: 10, paddingTop: 8, paddingBottom: 26 },
-  voiceBtnWrap: { borderRadius: 37, shadowColor: "#3FD0FF", shadowOpacity: 0.4, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
-  voiceBtn: { width: 74, height: 74, borderRadius: 37, alignItems: "center", justifyContent: "center", borderWidth: 6, borderColor: "rgba(124,108,255,0.25)" },
-  voiceHint: { color: "#8E95AB", fontSize: 12.5 },
+  voiceBtnWrap: { borderRadius: 43, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+  voiceHalo: { width: 86, height: 86, borderRadius: 43, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  voiceBtn: { width: 70, height: 70, borderRadius: 35, alignItems: "center", justifyContent: "center" },
+  voiceHint: { fontSize: 12.5, fontWeight: "600" },
 });

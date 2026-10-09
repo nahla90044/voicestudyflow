@@ -2,16 +2,16 @@
 // «كلماتي»: كل الكلمات المحفوظة من الكتب بضغطة مطوّلة — بحث، تصفية حسب الكتاب،
 // فتح بطاقة الكلمة (المعنى والمرادفات والأضداد والجمل)، وتحويل الكل لبطاقات مراجعة.
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { PressableScale } from "../components/brand/motion";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { WordSheet } from "../components/brand/word-sheet";
-import { Gradients, Palette, Radius } from "../constants/design";
+import { Radius } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
+import { useScene } from "../lib/scene";
 import { getWords, lookupWord, wordsToCards, type SavedWord } from "../lib/words";
 import { exportWordsPdf } from "../lib/wordsPdf";
 
@@ -19,6 +19,7 @@ export default function WordsScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const [words, setWords] = useState<SavedWord[]>([]);
   const [q, setQ] = useState("");
   const [book, setBook] = useState<string | null>(null);
@@ -93,112 +94,170 @@ export default function WordsScreen() {
   const target = selecting && picked.size ? shown.filter((w) => picked.has(w.key)) : shown;
   const ready = target.filter((w) => w.info);
 
+  const shadowTint = pal.dark ? "#000" : "#3C5028";
+  const ctaOff = carded > 0 || !ready.length;
+
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <View style={[styles.head, { flexDirection: dir.row }]}>
-        <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={styles.ghost}>
-          <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} accessibilityLabel={t("common.back")} />
-        </PressableScale>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { textAlign: dir.textAlign }]}>{t("words.title")}</Text>
-          <Text style={[styles.sub, { textAlign: dir.textAlign }]}>
-            {selecting ? t("words.picked", { n: picked.size }) : t("words.count", { n: words.length })}
-          </Text>
-        </View>
-        {words.length > 0 && (
-          <PressableScale
-            onPress={() => {
-              setSelecting((v) => !v);
-              setPicked(new Set());
-              setCarded(0);
-            }}
-            style={[styles.selBtn, selecting && styles.selBtnOn]}
+    <SceneScreen>
+      <SceneBanner
+        title={t("words.title")}
+        subtitle={selecting ? t("words.picked", { n: picked.size }) : t("words.count", { n: words.length })}
+        height={160}
+        left={
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.back")}
           >
-            <Ionicons name={selecting ? "checkmark" : "checkbox-outline"} size={16} color={selecting ? "#07080D" : Palette.text} />
-            <Text style={[styles.selTxt, selecting && { color: "#07080D" }]}>{selecting ? t("words.selectDone") : t("words.select")}</Text>
-          </PressableScale>
-        )}
-      </View>
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={pal.ink} />
+            </SceneIconButton>
+          </Pressable>
+        }
+        right={
+          words.length > 0 ? (
+            <PressableScale
+              onPress={() => {
+                setSelecting((v) => !v);
+                setPicked(new Set());
+                setCarded(0);
+              }}
+              style={[
+                styles.selBtn,
+                { flexDirection: dir.row },
+                selecting
+                  ? { backgroundColor: pal.accent }
+                  : { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.8)" },
+              ]}
+            >
+              <Ionicons name={selecting ? "checkmark" : "checkbox-outline"} size={16} color={selecting ? pal.onAccent : pal.ink} />
+              <Text style={[styles.selTxt, { color: selecting ? pal.onAccent : pal.ink }]}>
+                {selecting ? t("words.selectDone") : t("words.select")}
+              </Text>
+            </PressableScale>
+          ) : undefined
+        }
+      />
 
       {words.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="hand-left-outline" size={30} color="#B9AFFF" />
+          <View style={[styles.emptyIcon, { backgroundColor: pal.soft }]}>
+            <Ionicons name="hand-left-outline" size={30} color={pal.accent} />
           </View>
-          <Text style={styles.emptyTitle}>{t("words.emptyTitle")}</Text>
-          <Text style={styles.emptyBody}>{t("words.emptyBody")}</Text>
+          <Text style={[styles.emptyTitle, { color: pal.ink }]}>{t("words.emptyTitle")}</Text>
+          <Text style={[styles.emptyBody, { color: pal.dim }]}>{t("words.emptyBody")}</Text>
         </View>
       ) : (
         <FlatList
           data={shown}
           keyExtractor={(w) => w.key}
-          contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 110 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, gap: 10, paddingBottom: 120 }}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={{ gap: 10, marginBottom: 6 }}>
-              <View style={[styles.search, { flexDirection: dir.row }]}>
-                <Ionicons name="search" size={17} color={Palette.textDim} />
+              <View
+                style={[
+                  styles.search,
+                  { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: shadowTint },
+                ]}
+              >
+                <Ionicons name="search" size={18} color={pal.dim} />
                 <TextInput
                   value={q}
                   onChangeText={setQ}
                   placeholder={t("words.search")}
-                  placeholderTextColor={Palette.placeholder}
-                  style={[styles.searchInput, { textAlign: dir.textAlign }]}
+                  placeholderTextColor={pal.dim}
+                  selectionColor={pal.accent}
+                  style={[styles.searchInput, { color: pal.ink, textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                 />
               </View>
               {selecting && (
                 <View style={[styles.filters, { flexDirection: dir.row }]}>
-                  <Pressable onPress={() => setPicked(new Set(shown.map((w) => w.key)))} style={styles.filter}>
-                    <Text style={styles.filterTxt}>{t("words.selectAll")}</Text>
+                  <Pressable
+                    onPress={() => setPicked(new Set(shown.map((w) => w.key)))}
+                    style={[styles.filter, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
+                  >
+                    <Text style={[styles.filterTxt, { color: pal.ink }]}>{t("words.selectAll")}</Text>
                   </Pressable>
                   {picked.size > 0 && (
-                    <Pressable onPress={() => setPicked(new Set())} style={styles.filter}>
-                      <Text style={styles.filterTxt}>{t("words.selectNone")}</Text>
+                    <Pressable
+                      onPress={() => setPicked(new Set())}
+                      style={[styles.filter, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
+                    >
+                      <Text style={[styles.filterTxt, { color: pal.ink }]}>{t("words.selectNone")}</Text>
                     </Pressable>
                   )}
                 </View>
               )}
               {books.length > 1 && (
                 <View style={[styles.filters, { flexDirection: dir.row }]}>
-                  <Pressable onPress={() => setBook(null)} style={[styles.filter, !book && styles.filterOn]}>
-                    <Text style={[styles.filterTxt, !book && styles.filterTxtOn]}>{t("glossary.k.all")}</Text>
+                  <Pressable
+                    onPress={() => setBook(null)}
+                    style={[styles.filter, !book ? { backgroundColor: pal.accent, borderColor: pal.accent } : { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+                  >
+                    <Text style={[styles.filterTxt, { color: !book ? pal.onAccent : pal.dim }, !book && styles.filterTxtOn]}>
+                      {t("glossary.k.all")}
+                    </Text>
                   </Pressable>
-                  {books.map((b) => (
-                    <Pressable key={b} onPress={() => setBook(b)} style={[styles.filter, book === b && styles.filterOn]}>
-                      <Text style={[styles.filterTxt, book === b && styles.filterTxtOn]} numberOfLines={1}>
-                        {b}
-                      </Text>
-                    </Pressable>
-                  ))}
+                  {books.map((b) => {
+                    const on = book === b;
+                    return (
+                      <Pressable
+                        key={b}
+                        onPress={() => setBook(b)}
+                        style={[styles.filter, on ? { backgroundColor: pal.accent, borderColor: pal.accent } : { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+                      >
+                        <Text style={[styles.filterTxt, { color: on ? pal.onAccent : pal.dim }, on && styles.filterTxtOn]} numberOfLines={1}>
+                          {b}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               )}
             </View>
           }
-          renderItem={({ item: w }) => (
-            <PressableScale
-              onPress={() => (selecting ? togglePick(w.key) : setOpen(w))}
-              style={[styles.row, { flexDirection: dir.row }, selecting && picked.has(w.key) && styles.rowOn]}
-            >
-              {selecting && (
-                <View style={[styles.check, picked.has(w.key) && styles.checkOn]}>
-                  {picked.has(w.key) && <Ionicons name="checkmark" size={15} color="#07080D" />}
-                </View>
-              )}
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={[styles.word, { textAlign: dir.textAlign }]}>{w.word}</Text>
-                <Text style={[styles.meaning, { textAlign: dir.textAlign }]} numberOfLines={2}>
-                  {w.info?.meaning ?? t("words.tapToExplain")}
-                </Text>
-                {!!w.bookTitle && (
-                  <Text style={[styles.src, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                    {w.bookTitle}
-                    {w.page ? ` · ${t("glossary.page", { p: w.page })}` : ""}
-                  </Text>
-                )}
-              </View>
-              {!selecting && <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={Palette.textDim} />}
-            </PressableScale>
-          )}
+          renderItem={({ item: w }) => {
+            const on = selecting && picked.has(w.key);
+            return (
+              <PressableScale onPress={() => (selecting ? togglePick(w.key) : setOpen(w))}>
+                <SceneCard
+                  padded={false}
+                  style={[
+                    styles.row,
+                    { flexDirection: dir.row },
+                    on && { backgroundColor: pal.soft, borderColor: pal.accent, borderWidth: 1 },
+                  ]}
+                >
+                  {selecting && (
+                    <View
+                      style={[
+                        styles.check,
+                        { borderColor: on ? pal.accent : pal.dim + "88" },
+                        on && { backgroundColor: pal.accent },
+                      ]}
+                    >
+                      {on && <Ionicons name="checkmark" size={15} color={pal.onAccent} />}
+                    </View>
+                  )}
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={[styles.word, { color: pal.ink, textAlign: dir.textAlign }]}>{w.word}</Text>
+                    <Text style={[styles.meaning, { color: w.info ? pal.ink : pal.dim, textAlign: dir.textAlign }]} numberOfLines={2}>
+                      {w.info?.meaning ?? t("words.tapToExplain")}
+                    </Text>
+                    {!!w.bookTitle && (
+                      <Text style={[styles.src, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
+                        {w.bookTitle}
+                        {w.page ? ` · ${t("glossary.page", { p: w.page })}` : ""}
+                      </Text>
+                    )}
+                  </View>
+                  {!selecting && <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />}
+                </SceneCard>
+              </PressableScale>
+            );
+          }}
         />
       )}
 
@@ -212,9 +271,15 @@ export default function WordsScreen() {
             disabled={!!pdfBusy || !target.length}
             style={{ flex: 1 }}
           >
-            <View style={[styles.cta, styles.ctaGhost]}>
-              {pdfBusy ? <ActivityIndicator color={Palette.text} /> : <Ionicons name="document-text" size={18} color={Palette.text} />}
-              <Text style={[styles.ctaTxt, { color: Palette.text }]} numberOfLines={1}>
+            <View
+              style={[
+                styles.cta,
+                styles.ctaShadow,
+                { backgroundColor: pal.card, borderWidth: 1, borderColor: pal.cardBorder, shadowColor: shadowTint },
+              ]}
+            >
+              {pdfBusy ? <ActivityIndicator color={pal.accent} /> : <Ionicons name="document-text" size={18} color={pal.accent} />}
+              <Text style={[styles.ctaTxt, { color: pal.ink }]} numberOfLines={1}>
                 {pdfBusy ?? (selecting && picked.size ? t("words.pdfN", { n: picked.size }) : t("words.pdf"))}
               </Text>
             </View>
@@ -224,46 +289,53 @@ export default function WordsScreen() {
               const n = await wordsToCards(ready);
               setCarded(n);
             }}
-            disabled={carded > 0 || !ready.length}
+            disabled={ctaOff}
             style={{ flex: 1 }}
           >
-            <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.cta, (carded > 0 || !ready.length) && { opacity: 0.55 }]}>
-              <Ionicons name={carded ? "checkmark" : "albums"} size={18} color="#fff" />
-              <Text style={styles.ctaTxt} numberOfLines={1}>
+            <View style={[styles.cta, styles.ctaShadow, { backgroundColor: pal.accent, shadowColor: shadowTint }, ctaOff && { opacity: 0.55 }]}>
+              <Ionicons name={carded ? "checkmark" : "albums"} size={18} color={pal.onAccent} />
+              <Text style={[styles.ctaTxt, { color: pal.onAccent }]} numberOfLines={1}>
                 {carded
                   ? t("words.carded", { n: carded })
                   : selecting && picked.size
                     ? t("words.toCardsN", { n: ready.length })
                     : t("words.allToCards", { n: ready.length })}
               </Text>
-            </LinearGradient>
+            </View>
           </PressableScale>
         </View>
       )}
 
       {/* اسم ملف الدراسة قبل إنشائه */}
       <Modal visible={nameOpen} transparent animationType="fade" onRequestClose={() => setNameOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.mask}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={[styles.mask, { backgroundColor: pal.dark ? "rgba(0,0,0,0.6)" : "rgba(31,53,39,0.35)" }]}
+        >
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setNameOpen(false)} />
-          <View style={styles.nameCard}>
-            <Text style={[styles.nameTitle, { textAlign: dir.textAlign }]}>{t("words.fileName")}</Text>
-            <Text style={[styles.sub, { textAlign: dir.textAlign }]}>{t("words.fileHint", { n: target.length })}</Text>
+          <View style={[styles.nameCard, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+            <Text style={[styles.nameTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("words.fileName")}</Text>
+            <Text style={[styles.sub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("words.fileHint", { n: target.length })}</Text>
             <TextInput
               value={fileName}
               onChangeText={setFileName}
               autoFocus
               selectTextOnFocus
               placeholder={t("words.pdfTitle")}
-              placeholderTextColor={Palette.placeholder}
-              style={[styles.nameInput, { textAlign: dir.textAlign }]}
+              placeholderTextColor={pal.dim}
+              selectionColor={pal.accent}
+              style={[
+                styles.nameInput,
+                { color: pal.ink, backgroundColor: pal.soft, borderColor: pal.cardBorder, textAlign: dir.textAlign, writingDirection: dir.writingDirection },
+              ]}
               onSubmitEditing={makePdf}
               returnKeyType="done"
             />
             <PressableScale onPress={makePdf}>
-              <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
-                <Ionicons name="document-text" size={18} color="#fff" />
-                <Text style={styles.ctaTxt}>{t("words.create")}</Text>
-              </LinearGradient>
+              <View style={[styles.cta, { backgroundColor: pal.accent }]}>
+                <Ionicons name="document-text" size={18} color={pal.onAccent} />
+                <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{t("words.create")}</Text>
+              </View>
             </PressableScale>
           </View>
         </KeyboardAvoidingView>
@@ -277,60 +349,46 @@ export default function WordsScreen() {
         }}
         onRemoved={reload}
       />
-    </SafeAreaView>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Palette.bg },
-  head: { alignItems: "center", gap: 10, paddingHorizontal: 16, paddingTop: 8 },
-  ghost: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
-  title: { color: Palette.text, fontSize: 20, fontWeight: "800" },
-  sub: { color: Palette.textDim, fontSize: 12.5, marginTop: 1 },
+  sub: { fontSize: 12.5, marginTop: 1, lineHeight: 19 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(124,108,255,0.14)", alignItems: "center", justifyContent: "center" },
-  emptyTitle: { color: Palette.text, fontSize: 18, fontWeight: "800", textAlign: "center" },
-  emptyBody: { color: Palette.textDim, fontSize: 14.5, lineHeight: 24, textAlign: "center" },
+  emptyIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
+  emptyTitle: { fontSize: 18, fontWeight: "900", textAlign: "center" },
+  emptyBody: { fontSize: 14.5, lineHeight: 24, textAlign: "center" },
   search: {
     alignItems: "center",
     gap: 8,
-    height: 46,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#10121B",
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-  searchInput: { flex: 1, color: Palette.text, fontSize: 14.5 },
+  searchInput: { flex: 1, fontSize: 14.5, padding: 0 },
   filters: { flexWrap: "wrap", gap: 6 },
-  filter: { maxWidth: 200, paddingHorizontal: 12, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.06)" },
-  filterOn: { backgroundColor: "rgba(124,108,255,0.28)" },
-  filterTxt: { color: "#C4C9D8", fontSize: 12.5, fontWeight: "600" },
-  filterTxtOn: { color: Palette.text, fontWeight: "800" },
-  row: {
-    alignItems: "center",
-    gap: 10,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "#10121B",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  word: { color: "#D9D3FF", fontSize: 17, fontWeight: "800" },
-  meaning: { color: "#C4C9D8", fontSize: 13.5, lineHeight: 21 },
-  src: { color: "#6F7690", fontSize: 11.5 },
+  filter: { maxWidth: 200, paddingHorizontal: 13, paddingVertical: 7, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  filterTxt: { fontSize: 12.5, fontWeight: "700" },
+  filterTxtOn: { fontWeight: "900" },
+  row: { alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 22 },
+  word: { fontSize: 17, fontWeight: "900" },
+  meaning: { fontSize: 13.5, lineHeight: 21, opacity: 0.85 },
+  src: { fontSize: 11.5, fontWeight: "600" },
   bottom: { position: "absolute", left: 16, right: 16, bottom: 26, gap: 8 },
-  ctaGhost: { backgroundColor: "#1A1D2B", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
-  cta: { height: 54, borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  ctaTxt: { color: "#fff", fontSize: 14.5, fontWeight: "800", flexShrink: 1 },
-  selBtn: { flexDirection: "row", alignItems: "center", gap: 5, height: 38, paddingHorizontal: 12, borderRadius: Radius.pill, backgroundColor: "rgba(255,255,255,0.08)" },
-  selBtnOn: { backgroundColor: "#F3F4F8" },
-  selTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
-  rowOn: { borderColor: "rgba(185,175,255,0.6)", backgroundColor: "rgba(124,108,255,0.10)" },
-  check: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center" },
-  checkOn: { backgroundColor: "#B9AFFF", borderColor: "#B9AFFF" },
-  mask: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", padding: 24 },
-  nameCard: { backgroundColor: "#10121B", borderRadius: 24, padding: 18, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.12)" },
-  nameTitle: { color: Palette.text, fontSize: 18, fontWeight: "800" },
-  nameInput: { height: 50, borderRadius: 14, paddingHorizontal: 14, color: Palette.text, fontSize: 16, backgroundColor: "rgba(255,255,255,0.06)" },
+  cta: { height: 54, borderRadius: 22, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+  ctaShadow: { shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  ctaTxt: { fontSize: 14.5, fontWeight: "900", flexShrink: 1 },
+  selBtn: { alignItems: "center", gap: 5, height: 40, paddingHorizontal: 14, borderRadius: Radius.pill },
+  selTxt: { fontSize: 13, fontWeight: "800" },
+  check: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  mask: { flex: 1, justifyContent: "center", padding: 24 },
+  nameCard: { borderRadius: 26, padding: 20, gap: 12, borderWidth: StyleSheet.hairlineWidth },
+  nameTitle: { fontSize: 18, fontWeight: "900" },
+  nameInput: { height: 50, borderRadius: 16, paddingHorizontal: 14, fontSize: 16, borderWidth: StyleSheet.hairlineWidth },
 });

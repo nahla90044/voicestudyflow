@@ -9,11 +9,13 @@ import {
   AppState,
   Image,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -35,6 +37,8 @@ import {
 } from "../../lib/annotations";
 import { GlassCard } from "../../components/brand/glass-card";
 import { getPageImage } from "../../lib/pageImage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { inferOffset, printedNumber } from "../../lib/pageLabelCore";
 import { extractPdfPageText, getPageWords, getPageWordsFromText, getPreciseText, type WordBox } from "../../lib/pdfText";
 import { splitForReading, splitSentences } from "../../lib/textUtils";
 import {
@@ -63,6 +67,7 @@ import {
   DEFAULT_VOICE_ID,
   prefetchText,
   holdAudioSession,
+  isNarrating,
   setLivePlaybackRate,
   setNowPlaying,
   speakText,
@@ -187,6 +192,34 @@ const PAPER = "#F6F1E7";
 const INK = "#2A2622";
 
 /** زر صغير في لوحة «أدوات القراءة»: أيقونة (أو نص) + تسمية، ويتلوّن عند التفعيل */
+/** زر سريع في شريط القارئ: أيقونة (أو نص) + تسمية قصيرة */
+function QuickChip({
+  icon,
+  text,
+  label,
+  onPress,
+  on,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  text?: string;
+  label: string;
+  onPress: () => void;
+  on?: boolean;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.qChip, on && styles.qChipOn]} accessibilityLabel={label}>
+      {icon ? (
+        <Ionicons name={icon} size={18} color={on ? "#0B0E26" : Palette.text} />
+      ) : (
+        <Text style={[styles.qChipTxt, on && { color: "#0B0E26" }]}>{text}</Text>
+      )}
+      <Text style={[styles.qChipLbl, on && { color: "#0B0E26" }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function ToolTile({
   icon,
   text,
@@ -309,6 +342,9 @@ export default function ReaderScreen() {
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoValue, setGotoValue] = useState("");
+  // ترقيم الكتاب المطبوع: الفرق بين رقم الصفحة في الملف ورقمها المطبوع (يُستنتج تلقائيًا)
+  const [pageOffset, setPageOffset] = useState<number | null>(null);
+  const [gotoMode, setGotoMode] = useState<"book" | "file">("book");
   // وضع التحديد (للدراسة): لمس السطر يحدّده بلون لجمعه للمقتطفات
   const [highlightMode, setHighlightMode] = useState(false);
   // رسالة تأكيد عابرة (toast)
@@ -437,6 +473,9 @@ export default function ReaderScreen() {
   const pdfFollowRef = useRef(false); // نتتبّع موضع القراءة (للهايلايتر/العدسة) في وضع PDF أو العدسة
   const [pdfImgW2, setPdfImgW2] = useState(0); // عرض صورة الصفحة المعروضة (لتظليل الكلمة)
   const prefetchedRef = useRef(new Set<number>()); // صفحات حُمّلت صورها مسبقًا
+  const imgUriRef = useRef(new Map<number, string>()); // صور الصفحات المحمّلة (للتقليب بالسحب)
+  const [nbr, setNbr] = useState<{ prev: string | null; next: string | null }>({ prev: null, next: null });
+  const pagerX = useRef(new Animated.Value(0)).current; // إزاحة الصفحة أثناء السحب
   const totalPagesRef = useRef(0);
   const pdfZoomRef = useRef(1); // تكبير الصفحة الحالي (السحب للتقليب يعمل بلا تكبير فقط)
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -462,14 +501,20 @@ export default function ReaderScreen() {
       pageImgForRef.current = target;
       setPageImg(uri);
       setPageImgLoading(false);
+      if (uri) imgUriRef.current.set(target, uri);
       // تحميل مسبق للصفحات المجاورة بالخلفية (التالية مرتين والسابقة) → التقليب يصبح فوريًا.
       // وتجهيز نص التالية أيضًا حتى يبدأ صوتها بلا انتظار.
       void (async () => {
-        for (const n of [target + 1, target + 2, target - 1]) {
+        for (const n of [target + 1, target - 1, target + 2]) {
           if (n < 1 || (totalPagesRef.current && n > totalPagesRef.current)) continue;
-          if (prefetchedRef.current.has(n)) continue;
+          if (imgUriRef.current.has(n)) continue;
           prefetchedRef.current.add(n);
-          await getPageImage(pdfPath, n).catch(() => null);
+          const u = await getPageImage(pdfPath, n).catch(() => null);
+          if (u) imgUriRef.current.set(n, u);
+        }
+        // الصفحتان المجاورتان جاهزتان → تظهران تحت الإصبع أثناء السحب
+        if (myReq === imgReqRef.current) {
+          setNbr({ prev: imgUriRef.current.get(target - 1) ?? null, next: imgUriRef.current.get(target + 1) ?? null });
         }
         void extractPdfPageText(pdfPath, target + 1).catch(() => null);
       })();
@@ -1468,6 +1513,25 @@ export default function ReaderScreen() {
   }
 
   // الانتقال لصفحة محددة. إن كانت القراءة شغّالة تكمل منها، وإلا تنتقل للعرض فقط.
+  // رقم الصفحة المطبوع للصفحة p (أو null إن لم يُعرف الترقيم أو كانت قبل بدايته)
+  function printedOf(p: number): number | null {
+    if (pageOffset == null) return null;
+    const n = p - pageOffset;
+    return n > 0 ? n : null;
+  }
+
+  function openGoto() {
+    setGotoMode(pageOffset != null ? "book" : "file");
+    setGotoValue(String(printedOf(page) ?? page));
+    setGotoOpen(true);
+  }
+
+  function submitGoto() {
+    const n = toPageNum(gotoValue);
+    if (n <= 0) return;
+    gotoPage(gotoMode === "book" && pageOffset != null ? n + pageOffset : n);
+  }
+
   function gotoPage(n: number) {
     const target = Math.max(1, totalPages ? Math.min(totalPages, n) : n);
     setGotoOpen(false);
@@ -1499,6 +1563,41 @@ export default function ReaderScreen() {
     if (y < -OVER) goPage(-1);
     else if (viewH > 0 && contentH > 0 && y + viewH > contentH + OVER) goPage(1);
   }
+
+  // تقليب الصفحات بالسحب: الصفحة تتبع الإصبع، والمجاورة تظهر من الطرف، وعند الإفلات
+  // تكتمل الحركة بسلاسة (أو ترجع لمكانها). أثناء القراءة الصفحة ثابتة (مقاومة خفيفة + تنبيه).
+  const { width: screenW } = useWindowDimensions();
+  const pagerCtl = useRef({ arabic: false, playing: false, canPrev: false, canNext: false, commit: (_d: number) => {} });
+  const pager = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6 && pdfZoomRef.current <= 1.05 && !lensOpenRef.current,
+      onPanResponderMove: (_e, g) => {
+        const c = pagerCtl.current;
+        const wantsNext = c.arabic ? g.dx > 0 : g.dx < 0;
+        const allowed = !c.playing && (wantsNext ? c.canNext : c.canPrev);
+        pagerX.setValue(allowed ? g.dx : g.dx * 0.18);
+      },
+      onPanResponderRelease: (_e, g) => {
+        const c = pagerCtl.current;
+        const wantsNext = c.arabic ? g.dx > 0 : g.dx < 0;
+        const allowed = !c.playing && (wantsNext ? c.canNext : c.canPrev);
+        const far = Math.abs(g.dx) > screenW * 0.22 || Math.abs(g.vx) > 0.45;
+        if (c.playing && Math.abs(g.dx) > 40) showToast(t("reader.swipe.locked"));
+        if (!allowed || !far) {
+          Animated.spring(pagerX, { toValue: 0, useNativeDriver: true, bounciness: 4, speed: 18 }).start();
+          return;
+        }
+        Animated.timing(pagerX, { toValue: Math.sign(g.dx) * screenW, duration: 170, useNativeDriver: true }).start(() => {
+          pagerCtl.current.commit(wantsNext ? 1 : -1);
+          requestAnimationFrame(() => pagerX.setValue(0));
+        });
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(pagerX, { toValue: 0, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
   // تسريع التخطّي: كل ضغطة سريعة بنفس الاتجاه تتخطّى مقاطع أكثر (×1، ×2، ×3…)
@@ -1536,6 +1635,13 @@ export default function ReaderScreen() {
   }
 
   function togglePlay() {
+    // حماية: الزر يُظهر «تشغيل» بينما صوت يُقرأ فعلًا (عدم تطابق) → ضغطة واحدة توقفه
+    if (!speaking && (playingRef.current || isNarrating())) {
+      resumeIdxRef.current = Math.max(0, activeSentence);
+      stop();
+      setStatus("");
+      return;
+    }
     if (speaking) {
       // احفظ الموضع الحالي عند الإيقاف ليُستأنف من نفس الجملة (لا من البداية)
       resumeIdxRef.current = Math.max(0, activeSentence);
@@ -1883,6 +1989,21 @@ export default function ReaderScreen() {
     const latin = (sample.match(/[A-Za-z]/g) || []).length;
     return ar >= Math.max(4, latin); // عربي إن كانت الحروف العربية هي الغالبة
   }, [sentences]);
+  // أحدث حالة لمقبض السحب (يُقرأ داخل PanResponder)
+  pagerCtl.current = {
+    arabic: isArabicText,
+    playing: speaking,
+    canPrev: page > 1,
+    canNext: !totalPages || page < totalPages,
+    commit: (d: number) => {
+      const uri = imgUriRef.current.get(page + d);
+      if (uri) {
+        pageImgForRef.current = page + d; // لا وميض: نعرض الصورة الجاهزة فورًا
+        setPageImg(uri);
+      }
+      goPage(d);
+    },
+  };
 
   // أمان: إن كان النص غير عربي وكان التشكيل مفعّلًا، أوقفه (خاصية عربية فقط)
   useEffect(() => {
@@ -2168,6 +2289,38 @@ export default function ReaderScreen() {
   useEffect(() => {
     liveTotalRef.current = totalPages;
   }, [totalPages]);
+  // استنتاج ترقيم الكتاب المطبوع مرة لكل كتاب (من الرقم في هامش ٣ صفحات) ويُحفظ
+  useEffect(() => {
+    if (!prefsLoaded || !pdfPath || !bookId) return;
+    let on = true;
+    const key = `vsf:pageoffset:${bookId}`;
+    (async () => {
+      const saved = await AsyncStorage.getItem(key).catch(() => null);
+      if (saved != null && saved !== "") {
+        const v = Number(saved);
+        if (on && Number.isFinite(v) && v >= 0) setPageOffset(v);
+        return;
+      }
+      const base = Math.max(3, page);
+      const pages = [base, base + 1, base + 2].filter((p) => !totalPages || p <= totalPages);
+      const words = await Promise.all(pages.map((p) => getPageWordsFromText(pdfPath, p).catch(() => [] as WordBox[])));
+      let samples = pages.map((p, i) => ({ pdf: p, printed: printedNumber(words[i]) }));
+      if (samples.every((x) => x.printed == null)) {
+        // كتاب مصوّر بلا طبقة نص: نقرأ صفحة واحدة بالتعرّف الضوئي
+        const vw = await getPageWords(pdfPath, base).catch(() => [] as WordBox[]);
+        samples = [{ pdf: base, printed: printedNumber(vw) }];
+      }
+      const off = inferOffset(samples);
+      if (!on || off == null) return;
+      setPageOffset(off);
+      AsyncStorage.setItem(key, String(off)).catch(() => {});
+    })();
+    return () => {
+      on = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoaded, pdfPath, bookId]);
+
   // استلام من الشريط العائم: بعد تحميل الموضع المحفوظ نكمل التشغيل تلقائيًا
   useEffect(() => {
     if (!prefsLoaded || !autoResumeRef.current) return;
@@ -2196,8 +2349,7 @@ export default function ReaderScreen() {
         <Pressable
           style={{ flex: 1, alignItems: "center" }}
           onPress={() => {
-            setGotoValue(String(page));
-            setGotoOpen(true);
+            openGoto();
           }}
         >
           <Text style={[styles.topSub, paper && { color: INK }]} numberOfLines={1}>
@@ -2366,7 +2518,23 @@ export default function ReaderScreen() {
             )}
           </ScrollView>
         ) : (
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, overflow: "hidden" }} {...pager.panHandlers}>
+          <Animated.View style={{ flex: 1, transform: [{ translateX: pagerX }] }}>
+            {/* الصفحتان المجاورتان خارج الشاشة — تنزلقان للداخل مع السحب */}
+            {pageImg && (isArabicText ? nbr.next : nbr.prev) ? (
+              <Image
+                source={{ uri: (isArabicText ? nbr.next : nbr.prev)! }}
+                style={[styles.pagerSide, { left: -screenW, width: screenW, aspectRatio: pageImgAspect }]}
+                resizeMode="contain"
+              />
+            ) : null}
+            {pageImg && (isArabicText ? nbr.prev : nbr.next) ? (
+              <Image
+                source={{ uri: (isArabicText ? nbr.prev : nbr.next)! }}
+                style={[styles.pagerSide, { left: screenW, width: screenW, aspectRatio: pageImgAspect }]}
+                resizeMode="contain"
+              />
+            ) : null}
             {pageImg ? (
               <ScrollView
                 ref={pdfScrollRef}
@@ -2393,8 +2561,6 @@ export default function ReaderScreen() {
                   // إحداثيات الصفحة من اليسار دائمًا (بدونها تنقلب يمين↔يسار في الواجهة العربية)
                   style={{ direction: "ltr" }}
                   onLayout={(e) => setPdfImgW2(e.nativeEvent.layout.width)}
-                  onTouchStart={(e) => (touchRef.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, t: Date.now() })}
-                  onTouchEnd={(e) => onPageTouchEnd(e.nativeEvent.pageX, e.nativeEvent.pageY)}
                 >
                   <Pressable
                     delayLongPress={380}
@@ -2543,6 +2709,7 @@ export default function ReaderScreen() {
                 color={isBookmarked ? Palette.danger : "rgba(255,255,255,0.6)"}
               />
             </Pressable>
+          </Animated.View>
           </View>
         )}
 
@@ -2589,40 +2756,70 @@ export default function ReaderScreen() {
             <View style={[styles.ingestBarFill, { width: `${Math.round((ingestDone / ingestTotal) * 100)}%` }]} />
           </View>
         ) : null}
-        {/* التنقّل بين الصفحات: السابقة · شريط السحب · التالية (الرقم المباشر من العنوان أعلاه) */}
+        {/* شريط الصفحات: رقم الصفحة (اضغط للانتقال المباشر) + السحب */}
         <View style={[styles.navRow, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => goPage(-1)} disabled={page <= 1} style={[styles.navArrow, paper && styles.topBtnPaper]} hitSlop={6} accessibilityLabel={t("reader.nav.prevPage")}>
-            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={page <= 1 ? Palette.textDim : paper ? INK : Palette.text} />
+          <Pressable
+            onPress={openGoto}
+            style={[styles.pagePill, paper && styles.topBtnPaper, { flexDirection: dir.row }]}
+            hitSlop={6}
+            accessibilityLabel={t("reader.tool.goto")}
+          >
+            <Ionicons name="keypad-outline" size={14} color={paper ? INK : Palette.text} />
+            <Text style={[styles.pagePillTxt, paper && { color: INK }]}>
+              {printedOf(page) != null ? t("reader.page.book", { n: printedOf(page)! }) : t("reader.page.file", { n: page })}
+            </Text>
           </Pressable>
           <View style={{ flex: 1 }}>
             <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
           </View>
-          <Pressable
-            onPress={() => goPage(1)}
-            disabled={!!totalPages && page >= totalPages}
-            style={[styles.navArrow, paper && styles.topBtnPaper]}
-            hitSlop={6}
-            accessibilityLabel={t("reader.nav.nextPage")}
-          >
-            <Ionicons
-              name={dir.isRTL ? "chevron-back" : "chevron-forward"}
-              size={20}
-              color={!!totalPages && page >= totalPages ? Palette.textDim : paper ? INK : Palette.text}
-            />
-          </Pressable>
         </View>
 
-        <View style={[styles.capsule, { flexDirection: dir.row }]}>
-          <Pressable
+        {/* أزرار سريعة ظاهرة: السرعة · النوم · المشي · الموسيقى · العدسة · الترجمة · المساعد · المزيد */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
+          contentContainerStyle={[styles.quickRow, { flexDirection: dir.row }]}
+        >
+          <QuickChip text={`${rate}×`} label={t("reader.tool.speed")} onPress={cycleSpeed} on={rate !== 1} />
+          <QuickChip
+            icon={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
+            label={sleepMin === SLEEP_UNTIL_END ? t("reader.tool.sleepUntilEnd") : sleepMin > 0 ? t("reader.tool.sleepMinutes", { minutes: sleepMin }) : t("reader.tool.sleep")}
+            on={sleepMin !== 0}
+            onPress={cycleSleep}
+          />
+          <QuickChip icon="walk-outline" label={t("reader.walk.title")} on={walkMode} onPress={() => void toggleWalk()} />
+          <QuickChip
+            icon={presMusicKey ? "musical-notes" : "musical-notes-outline"}
+            label={presMusicKey ? t(`music.${presMusicKey}`) : t("reader.music.background")}
+            on={!!presMusicKey}
+            onPress={() => {
+              setShowMusicPicker(true);
+              setToolsOpen(true);
+            }}
+          />
+          {viewMode === "pdf" ? (
+            <QuickChip icon="search-outline" label={t("reader.cap.lens")} on={lensOpen} onPress={() => setLensOpen((v) => !v)} />
+          ) : (
+            <QuickChip text="Aa" label={t("reader.cap.textSize")} on={fontScale > 1} onPress={cycleFontScale} />
+          )}
+          <QuickChip icon="language-outline" label={t("reader.cap.translate")} on={listenArabic} onPress={() => setTranslateModal(true)} />
+          <QuickChip
+            icon="chatbubble-ellipses-outline"
+            label={t("reader.cap.ask")}
             onPress={() => bookId && router.push({ pathname: "/ask/[id]", params: { id: bookId } })}
-            style={styles.capBtn}
-            accessibilityLabel={t("reader.cap.ask")}
-          >
-            <Ionicons name="chatbubble-ellipses-outline" size={22} color={Palette.text} />
+          />
+          <QuickChip icon="grid-outline" label={t("reader.tools.title")} onPress={() => setToolsOpen(true)} />
+        </ScrollView>
+
+        {/* التحكّم بالاستماع: صفحة سابقة · مقطع سابق · تشغيل · مقطع تالٍ · صفحة تالية */}
+        <View style={[styles.capsule, { flexDirection: dir.row }]}>
+          <Pressable onPress={() => goPage(-1)} disabled={page <= 1} style={[styles.capBtn, page <= 1 && { opacity: 0.4 }]} accessibilityLabel={t("reader.nav.prevPage")}>
+            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} />
           </Pressable>
-          <Pressable onPress={() => setTranslateModal(true)} style={styles.capBtn} accessibilityLabel={t("reader.cap.translate")}>
-            <Ionicons name="language-outline" size={23} color={listenArabic ? Palette.neonCyan : Palette.text} />
-            {listenArabic ? <View style={styles.capDot} /> : null}
+          <Pressable onPress={() => skipSentence(-1)} style={styles.capBtn} accessibilityLabel={t("reader.tool.prevSegment")}>
+            <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={21} color={Palette.text} />
+            {skipMult > 1 && skipDir < 0 ? <Text style={styles.capBadge}>×{skipMult}</Text> : null}
           </Pressable>
           <Pressable onPress={togglePlay} accessibilityLabel={speaking ? t("dock.pause") : t("dock.play")}>
             <LinearGradient colors={Gradients.neon} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.capPlay}>
@@ -2633,21 +2830,17 @@ export default function ReaderScreen() {
               )}
             </LinearGradient>
           </Pressable>
-          {viewMode === "pdf" ? (
-            <Pressable
-              onPress={() => setLensOpen((v) => !v)}
-              style={styles.capBtn}
-              accessibilityLabel={t("reader.cap.lens")}
-            >
-              <Ionicons name="search-outline" size={22} color={lensOpen ? Palette.neonCyan : Palette.text} />
-            </Pressable>
-          ) : (
-            <Pressable onPress={cycleFontScale} style={styles.capBtn} accessibilityLabel={t("reader.cap.textSize")}>
-              <Text style={[styles.capAa, fontScale > 1 && { color: Palette.neonCyan }]}>Aa</Text>
-            </Pressable>
-          )}
-          <Pressable onPress={() => setToolsOpen(true)} style={styles.capBtn} accessibilityLabel={t("reader.tools.title")}>
-            <Ionicons name="grid-outline" size={21} color={Palette.text} />
+          <Pressable onPress={() => skipSentence(1)} style={styles.capBtn} accessibilityLabel={t("reader.tool.nextSegment")}>
+            <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={21} color={Palette.text} />
+            {skipMult > 1 && skipDir > 0 ? <Text style={styles.capBadge}>×{skipMult}</Text> : null}
+          </Pressable>
+          <Pressable
+            onPress={() => goPage(1)}
+            disabled={!!totalPages && page >= totalPages}
+            style={[styles.capBtn, !!totalPages && page >= totalPages && { opacity: 0.4 }]}
+            accessibilityLabel={t("reader.nav.nextPage")}
+          >
+            <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={22} color={Palette.text} />
           </Pressable>
         </View>
       </View>
@@ -2691,10 +2884,7 @@ export default function ReaderScreen() {
                   icon="keypad-outline"
                   label={t("reader.tool.goto")}
                   onPress={() =>
-                    fromTools(() => {
-                      setGotoValue(String(page));
-                      setGotoOpen(true);
-                    })
+                    fromTools(() => openGoto())
                   }
                 />
                 <ToolTile
@@ -3079,7 +3269,29 @@ export default function ReaderScreen() {
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
-            <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.goto.hint", { total: totalPages || "؟" })}</Text>
+            {pageOffset != null ? (
+              <>
+                <View style={[styles.gotoModes, { flexDirection: dir.row }]}>
+                  {(["book", "file"] as const).map((m) => (
+                    <Pressable
+                      key={m}
+                      onPress={() => {
+                        setGotoMode(m);
+                        setGotoValue(String(m === "book" ? (printedOf(page) ?? page) : page));
+                      }}
+                      style={[styles.gotoMode, gotoMode === m && styles.gotoModeOn]}
+                    >
+                      <Text style={[styles.gotoModeTxt, gotoMode === m && styles.gotoModeTxtOn]}>{t(`reader.goto.${m}`)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>
+                  {t("reader.goto.now", { book: printedOf(page) ?? "—", file: page, total: totalPages || "؟" })}
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.goto.hint", { total: totalPages || "؟" })}</Text>
+            )}
             <TextInput
               value={gotoValue}
               onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
@@ -3089,17 +3301,9 @@ export default function ReaderScreen() {
               style={styles.gotoInput}
               textAlign="center"
               autoFocus
-              onSubmitEditing={() => {
-                const n = toPageNum(gotoValue);
-                if (n > 0) gotoPage(n);
-              }}
+              onSubmitEditing={submitGoto}
             />
-            <Pressable
-              onPress={() => {
-                const n = toPageNum(gotoValue);
-                if (n > 0) gotoPage(n);
-              }}
-              style={styles.gotoBtn}
+            <Pressable onPress={submitGoto} style={styles.gotoBtn}
             >
               <Ionicons name="arrow-back" size={18} color="#fff" />
               <Text style={styles.gotoBtnTxt}>{t("reader.goto.cta")}</Text>
@@ -3566,6 +3770,37 @@ const styles = StyleSheet.create({
   checkBody: { color: "#C4C9D8", fontSize: 14, lineHeight: 24 },
 
   bottom: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 6, gap: 6 },
+  gotoModes: { gap: 6, backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 14, padding: 4 },
+  gotoMode: { flex: 1, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  gotoModeOn: { backgroundColor: "#F6D58A" },
+  gotoModeTxt: { color: Palette.textMuted, fontSize: 13.5, fontWeight: "700" },
+  gotoModeTxtOn: { color: "#0B0E26", fontWeight: "900" },
+  pagerSide: { position: "absolute", top: 0 },
+  pagePill: {
+    alignItems: "center",
+    gap: 5,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    backgroundColor: "rgba(16,18,27,0.85)",
+  },
+  pagePillTxt: { color: Palette.text, fontSize: 12.5, fontWeight: "800" },
+  quickRow: { gap: 8, paddingHorizontal: 2, paddingVertical: 2 },
+  qChip: {
+    minWidth: 64,
+    height: 54,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: "rgba(16,18,27,0.88)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  // المفعّل واضح على أي خلفية (ورقية أو داكنة): ذهبي ممتلئ ونص داكن
+  qChipOn: { backgroundColor: "#F6D58A" },
+  qChipTxt: { color: Palette.text, fontSize: 15, fontWeight: "900" },
+  qChipLbl: { color: "#B8BDCC", fontSize: 10.5, fontWeight: "700", maxWidth: 86 },
+  capBadge: { position: "absolute", top: 4, right: 2, color: "#F6D58A", fontSize: 9.5, fontWeight: "900" },
   capsule: {
     height: 72,
     borderRadius: 30,
