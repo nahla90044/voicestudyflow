@@ -20,6 +20,7 @@ import { setLastPage } from "../lib/readerPrefs";
 import { getSyllabus } from "../lib/syllabus";
 import { speakText, stopSpeaking } from "../lib/voice";
 import { addWord, type SavedWord } from "../lib/words";
+import { exportGlossaryPdf } from "../lib/wordsPdf";
 import { WordSheet } from "../components/brand/word-sheet";
 
 type Filter = "all" | GlossaryItem["k"];
@@ -64,6 +65,34 @@ export default function GlossaryScreen() {
   const [dl, setDl] = useState<DownloadState | null>(getDownloadState());
   const [kindOpen, setKindOpen] = useState(false);
   const [wordSheet, setWordSheet] = useState<SavedWord | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  // ملف دراسة مطبوع للوحدة: جدول ملوّن (المصطلح · المعنى والمثال · الصفحة)
+  async function printGlossary() {
+    if (printing || !items.length) return;
+    setPrinting(true);
+    try {
+      const unitTitle = [t("glossary.unitN", { n: idx + 1 }), titles[idx]].filter(Boolean).join(" · ");
+      const pages = range ? t("glossary.pages", { from: range.from, to: range.to }) : "";
+      await exportGlossaryPdf(
+        filter === "all" ? items : items.filter((i) => i.k === filter),
+        {
+          title: bookTitle || t("glossary.title"),
+          subtitle: [t("glossary.title"), pages, new Date().toLocaleDateString()].filter(Boolean).join(" · "),
+          unitTitle,
+          term: t("glossary.col.term"),
+          meaning: t("glossary.col.meaning"),
+          example: t("glossary.col.example"),
+          page: t("glossary.col.page"),
+          kindName: (k) => t(`glossary.k.${k}`),
+          rtl: dir.isRTL,
+        },
+        idx
+      );
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   async function chooseKind(k: BookKind) {
     setKindOpen(false);
@@ -158,6 +187,15 @@ export default function GlossaryScreen() {
             {bookTitle}
           </Text>
         </View>
+        {!loading && items.length > 0 && (
+          <PressableScale onPress={printGlossary} disabled={printing} style={styles.ghost}>
+            {printing ? (
+              <ActivityIndicator size="small" color={Palette.text} />
+            ) : (
+              <Ionicons name="print-outline" size={19} color={Palette.text} accessibilityLabel={t("glossary.print")} />
+            )}
+          </PressableScale>
+        )}
         {!loading && items.length > 0 && (
           <PressableScale onPress={() => void load(true)} style={styles.ghost}>
             <Ionicons name="refresh" size={19} color={Palette.text} accessibilityLabel={t("glossary.regenerate")} />
