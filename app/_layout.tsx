@@ -10,8 +10,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AnimatedSplash } from "../components/brand/animated-splash";
 import { UpdateRequired } from "../components/brand/update-required";
 import { checkMinVersion, onUpdateRequired } from "../lib/appVersion";
+import { rescueCachedMusic } from "../lib/sfx";
 import { Palette } from "../constants/design";
-import { getSession } from "../lib/auth";
+import { getSession, isOwner } from "../lib/auth";
 import { initPurchases } from "../lib/purchases";
 import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
@@ -30,6 +31,8 @@ export default function RootLayout() {
   useEffect(() => {
     const off = onUpdateRequired(() => setMustUpdate(true));
     void checkMinVersion();
+    // للمالكة فقط: رفع الموسيقى القديمة المحفوظة في الجوال للسيرفر (إنقاذها)
+    void isOwner().then((own) => (own ? rescueCachedMusic() : undefined)).catch(() => {});
     return () => {
       off();
     };

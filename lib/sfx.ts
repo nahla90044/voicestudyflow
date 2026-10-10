@@ -169,3 +169,36 @@ export async function startAmbient(key: string): Promise<void> {
     ambientPlayer.play();
   } catch {}
 }
+
+/* --- إنقاذ الموسيقى المولّدة سابقًا (للمالكة فقط) --- */
+// المقطوعات القديمة (ElevenLabs) نسختها الوحيدة في تخزين هذا الجوال. نرفع كل ملف
+// للسيرفر مرة واحدة باسم المقطوعة (مثل «saveroom»)، فتُحفظ للأبد وتصل لكل المستخدمين.
+let rescueRunning = false;
+export async function rescueCachedMusic(): Promise<void> {
+  if (rescueRunning) return;
+  rescueRunning = true;
+  try {
+    const names = new Map<string, string>();
+    for (const o of MUSIC_OPTIONS) {
+      names.set(`m-${hash(o.prompt)}.mp3`, `music-${o.key}`);
+      names.set(`${hash(`music-${o.key}`)}.mp3`, `sfx-${o.key}`);
+    }
+    const d = dir();
+    for (const item of d.list()) {
+      if (!(item instanceof File) || !item.name.endsWith(".mp3") || (item.size ?? 0) === 0) continue;
+      const name = names.get(item.name) ?? `other-${item.name.replace(/\.mp3$/, "")}`;
+      const done = new File(d, `${item.name}.rescued`);
+      if (done.exists) continue;
+      try {
+        const audio = await item.base64();
+        const { data, error } = await supabase.functions.invoke("music-rescue", { body: { name, audio } });
+        if (!error && (data as { ok?: boolean })?.ok) done.write("1");
+      } catch {
+        // نعيد المحاولة في التشغيل القادم
+      }
+    }
+  } catch {
+  } finally {
+    rescueRunning = false;
+  }
+}
