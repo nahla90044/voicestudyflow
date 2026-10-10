@@ -48,9 +48,6 @@ Deno.serve(async (req: Request) => {
   const outdated = requireUpdatedApp(req, corsHeaders);
   if (outdated) return outdated;
   try {
-    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-    if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
-
     const body = await req.json().catch(() => ({}));
     const prompt = String(body.prompt ?? "").slice(0, 600);
     // 3s..10min حسب حدود الخدمة (نبقى ضمن نطاق مناسب للخلفية)
@@ -75,6 +72,9 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ليست في الكاش → توليد (المقطوعات المحفوظة تعمل بلا مفتاح ElevenLabs)
+    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
     const res = await fetch("https://api.elevenlabs.io/v1/music?output_format=mp3_44100_128", {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },

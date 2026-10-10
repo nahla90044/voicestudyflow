@@ -2,6 +2,7 @@
 // توليد مؤثرات صوتية / خلفية موسيقية عبر ElevenLabs Sound Generation.
 // المفتاح يبقى سرّيًا بالسيرفر. الطلب: { prompt: string, duration?: number }
 // الرد: { audio: base64 mp3 }
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUpdatedApp } from "../_shared/client.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,14 +30,28 @@ Deno.serve(async (req: Request) => {
   const outdated = requireUpdatedApp(req, corsHeaders);
   if (outdated) return outdated;
   try {
-    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-    if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
-
     const body = await req.json().catch(() => ({}));
     const prompt = String(body.prompt ?? "").slice(0, 400);
     const duration = Math.min(22, Math.max(0.5, Number(body.duration ?? 3)));
     if (!prompt.trim()) return json({ error: "Empty prompt" }, 400);
 
+    // كاش مشترك في «music-shared/sfx/»: كل مؤثّر يُولَّد مرة واحدة ثم يُخدم للجميع من السيرفر
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const store = SUPABASE_URL && SERVICE_ROLE ? createClient(SUPABASE_URL, SERVICE_ROLE) : null;
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`sfx|${duration}|${prompt}`));
+    const path = `sfx/${Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("")}.mp3`;
+    if (store) {
+      try {
+        const { data: mp3 } = await store.storage.from("music-shared").download(path);
+        if (mp3) return json({ audio: bytesToBase64(new Uint8Array(await mp3.arrayBuffer())), shared: true });
+      } catch {
+        // غير موجود → نولّد
+      }
+    }
+
+    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
     const res = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
@@ -47,6 +62,13 @@ Deno.serve(async (req: Request) => {
       return json({ error: `ElevenLabs ${res.status}: ${msg}` }, 500);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
+    if (store) {
+      try {
+        await store.storage.from("music-shared").upload(path, bytes, { contentType: "audio/mpeg", upsert: true });
+      } catch {
+        // غير حرج
+      }
+    }
     return json({ audio: bytesToBase64(bytes) });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
