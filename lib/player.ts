@@ -14,6 +14,7 @@ import { splitSentences } from "./textUtils";
 import { closeReadingCard, nextSpeed, onReadingAction, syncReadingCard } from "./readingCard";
 import {
   holdAudioSession,
+  resumeIfPausedExternally,
   isPremiumVoice,
   onPremiumExhausted,
   setLivePlaybackRate,
@@ -115,6 +116,8 @@ export function handoff(h: Handoff) {
 
 export function pause() {
   if (!state?.playing) return;
+  // أُوقف من شاشة القفل/الجزيرة؟ الضغطة هنا تكمل القراءة بدل الإيقاف
+  if (resumeIfPausedExternally()) return;
   token++;
   stopSpeaking().catch(() => {});
   logMinutes();

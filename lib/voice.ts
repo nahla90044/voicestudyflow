@@ -12,6 +12,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
 import { isReadingCardSupported } from "../modules/reading-activity";
+import { LIVE_CARD_ENABLED } from "./readingCard";
 import { requestPaywall } from "./plan";
 
 import { numbersToArabicWords } from "./arabicNumbers";
@@ -176,6 +177,24 @@ function disposeWarm() {
 // بيانات «قيد التشغيل» التي تظهر على شاشة القفل (يحدّثها القارئ باسم الكتاب والصوت).
 let nowPlayingMeta: { title: string; artist: string } = { title: "VoiceStudyFlow", artist: "" };
 
+/**
+ * أُوقف المقطع من شاشة القفل/الجزيرة (iOS يوقف المشغّل مباشرة)؟ نكمله من مكانه.
+ * يُرجع true إن كان موقوفًا خارجيًا واستُؤنف — فلا يعامل الزر الضغطة كإيقاف.
+ */
+export function resumeIfPausedExternally(): boolean {
+  const p = currentPlayer;
+  if (!p) return false;
+  try {
+    if (!p.playing && p.currentTime > 0 && p.currentTime < (p.duration || Infinity) - 0.05) {
+      p.play();
+      return true;
+    }
+  } catch {
+    // مشغّل محرَّر → نترك الزر يتصرف عاديًا
+  }
+  return false;
+}
+
 /** يحدّث بيانات شاشة القفل (اسم الكتاب/الصوت) قبل بدء القراءة. */
 export function setNowPlaying(meta: { title?: string; artist?: string }): void {
   nowPlayingMeta = {
@@ -196,7 +215,7 @@ type AudioMetadata = { title?: string; artist?: string; albumTitle?: string; art
 function activateLockScreen(player: AudioPlayer): void {
   // بطاقة القراءة الحيّة (الجزيرة العائمة) تحلّ محلّ عناصر «قيد التشغيل» العامة حين تتوفّر،
   // حتى لا يظهر للمستخدم مشغّلان في الجزيرة وشاشة القفل.
-  if (isReadingCardSupported()) return;
+  if (LIVE_CARD_ENABLED && isReadingCardSupported()) return;
   try {
     (player as unknown as LockScreenCapable).setActiveForLockScreen?.(
       true,

@@ -75,6 +75,7 @@ import {
   onPremiumExhausted,
   standardVoiceFor,
   setLivePlaybackRate,
+  resumeIfPausedExternally,
   setNowPlaying,
   speakText,
   stopSpeaking,
@@ -1798,6 +1799,8 @@ export default function ReaderScreen() {
   }
 
   function togglePlay() {
+    // أوقفها المستخدم من شاشة القفل/الجزيرة ثم رجع للتطبيق → الزر يكمل بدل أن يوقف
+    if ((speaking || playingRef.current) && resumeIfPausedExternally()) return;
     // حماية: الزر يُظهر «تشغيل» بينما صوت يُقرأ فعلًا (عدم تطابق) → ضغطة واحدة توقفه
     if (!speaking && (playingRef.current || isNarrating())) {
       resumeIdxRef.current = Math.max(0, activeSentence);

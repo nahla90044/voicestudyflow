@@ -12,6 +12,13 @@ import { getCurrentLang } from "./i18n";
 
 export { isReadingCardSupported, onReadingAction, type ReadingAction };
 
+/**
+ * البطاقة الحيّة الخاصة متوقفة: أزرارها لا تستجيب والجوال مقفل.
+ * بدلها نستخدم مشغّل «قيد التشغيل» الخاص بالنظام (مثل حاكي والبودكاست) — يظهر في
+ * الجزيرة العائمة وشاشة القفل، وiOS نفسه يتحكّم بالإيقاف/الإكمال فيعمل دائمًا.
+ */
+export const LIVE_CARD_ENABLED = false;
+
 /** سرعات زر البطاقة (نفس سرعات القارئ) */
 export const CARD_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 export const nextSpeed = (r: number) => {
@@ -47,6 +54,7 @@ export function syncReadingCard(s: { bookId: string; title: string; page: number
     rate: s.rate,
     playing: s.playing,
   };
+  if (!LIVE_CARD_ENABLED) return;
   const key = JSON.stringify(card);
   if (key === last) return; // لا نرسل تحديثات مكرّرة (لكل نشاط حيّ حدّ تحديثات)
   last = key;
