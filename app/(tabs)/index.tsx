@@ -6,6 +6,7 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-n
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { DownloadIndicator } from "../../components/brand/download-indicator";
 import { FadeIn } from "../../components/brand/fade-in";
 import { CountUp, PressableScale } from "../../components/brand/motion";
@@ -43,6 +44,17 @@ export default function HomeScreen() {
   const scene = useScene();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // جولة الرئيسية (مرة أولى، وتعود بزر «؟»)
+  const coach = useCoachTour(
+    "home_v1",
+    [
+      { id: "streak", title: t("coach.home.streak.title"), body: t("coach.home.streak.body"), shape: "rect" },
+      { id: "cont", title: t("coach.home.cont.title"), body: t("coach.home.cont.body"), shape: "rect" },
+      { id: "path", title: t("coach.home.path.title"), body: t("coach.home.path.body"), shape: "rect" },
+      { id: "menu", title: t("coach.home.menu.title"), body: t("coach.home.menu.body") },
+    ],
+    { delay: 3800 }
+  );
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [due, setDue] = useState(0);
@@ -253,9 +265,12 @@ export default function HomeScreen() {
           </View>
           <View style={[styles.heroInner, { paddingTop: insets.top + 6, justifyContent: headTop ? "flex-start" : "space-between" }]}>
             <View style={[styles.topBar, { flexDirection: dir.row }]}>
-              <AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />
+              <View {...coach.bind("menu")}>
+                <AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />
+              </View>
               <View style={{ flex: 1 }} />
-              <View style={[styles.streakPill, { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.75)", borderColor: pal.dark ? pal.accent + "55" : "transparent" }]}>
+              <CoachHelpButton onPress={coach.replay} />
+              <View {...coach.bind("streak")} style={[styles.streakPill, { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.75)", borderColor: pal.dark ? pal.accent + "55" : "transparent" }]}>
                 <Ionicons name="flame" size={14} color={pal.dark ? pal.accent : "#E07A2E"} />
                 <Text style={[styles.streakNum, { color: pal.dark ? pal.accent : "#E07A2E" }]}>{t("scene.streak", { n: streak })}</Text>
               </View>
@@ -281,7 +296,7 @@ export default function HomeScreen() {
           {/* البطاقة الرئيسية: متابعة الاستماع + أرقام اليوم + الخطوة التالية */}
           {cont && (
             <FadeIn delay={0}>
-              <View style={[styles.card, cardStyle]}>
+              <View {...coach.bind("cont")} style={[styles.card, cardStyle]}>
                 <PressableScale onPress={() => openBook(cont)} style={[styles.contRow, { flexDirection: dir.row }]}>
                   <View style={[styles.playBtn, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
                     <Ionicons name="play" size={20} color={pal.onAccent} style={{ marginLeft: 3 }} />
@@ -342,7 +357,7 @@ export default function HomeScreen() {
                     : t("path.progress", { done: path.done, total: path.steps.length, min: path.minutesLeft })}
                 </Text>
               </View>
-              <View style={[styles.card, cardStyle, { padding: 8, gap: 6 }]}>
+              <View {...coach.bind("path")} style={[styles.card, cardStyle, { padding: 8, gap: 6 }]}>
                 {path.steps.map((st, i) => {
                   const txt = stepText(st);
                   const current = i === firstOpen;
@@ -433,6 +448,7 @@ export default function HomeScreen() {
           </FadeIn>
         </View>
       </ScrollView>
+      {coach.overlay}
     </View>
   );
 }

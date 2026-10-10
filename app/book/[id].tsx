@@ -9,6 +9,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 
 import { BookCover } from "../../components/brand/book-cover";
 import { ExamDateSheet } from "../../components/brand/exam-date-sheet";
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { PressableScale } from "../../components/brand/motion";
 import { NowPlayingDock } from "../../components/brand/now-playing-dock";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
@@ -36,6 +37,17 @@ export default function BookHubScreen() {
     ? { good: "#7BD8A4", mid: "#F2B36B", bad: "#FF8A96" }
     : { good: "#2F7D4A", mid: "#B86B12", bad: "#B83A48" };
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const coach = useCoachTour("book_v1", [
+    { id: "cta", title: t("coach.book.cta.title"), body: t("coach.book.cta.body"), shape: "rect" },
+    { id: "seg", title: t("coach.book.seg.title"), body: t("coach.book.seg.body"), shape: "rect" },
+    { id: "unit", title: t("coach.book.unit.title"), body: t("coach.book.unit.body"), shape: "rect",
+      rows: [
+        { icon: "book", text: t("coach.book.unit.glossary") },
+        { icon: "headset", text: t("coach.book.unit.summary") },
+        { icon: "checkbox", text: t("coach.book.unit.quiz") },
+      ] },
+    { id: "create", title: t("coach.book.create.title"), body: t("coach.book.create.body"), shape: "rect" },
+  ], { delay: 1500 });
   const bookId = typeof id === "string" ? id : "";
 
   const [book, setBook] = useState<Book | null>(null);
@@ -152,7 +164,7 @@ export default function BookHubScreen() {
   return (
     <SceneScreen>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <SceneBanner title="" height={150} left={backBtn} />
+        <SceneBanner title="" height={150} left={backBtn} right={<CoachHelpButton onPress={coach.replay} />} />
 
         <View style={styles.body}>
           {/* بطاقة الكتاب: الغلاف (بألوانه) + العنوان + الشارات + متابعة الاستماع */}
@@ -209,14 +221,14 @@ export default function BookHubScreen() {
               </View>
             )}
 
-            <PressableScale onPress={openReader} style={[styles.cta, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
+            <PressableScale {...coach.bind("cta")} onPress={openReader} style={[styles.cta, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
               <Ionicons name="play" size={18} color={pal.onAccent} />
               <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{started ? t("book.continue", { page }) : t("book.start")}</Text>
             </PressableScale>
           </SceneCard>
 
           {/* تبويبات الصفحة */}
-          <View style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+          <View {...coach.bind("seg")} style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
             {(["units", "tools"] as Tab[]).map((k) => {
               const on = tab === k;
               return (
@@ -253,6 +265,7 @@ export default function BookHubScreen() {
                   return (
                     <View
                       key={i}
+                      {...(i === 0 ? coach.bind("unit") : null)}
                       style={[
                         styles.unit,
                         { flexDirection: dir.row },
@@ -323,7 +336,7 @@ export default function BookHubScreen() {
             ) : (
               <SceneCard style={{ padding: Spacing.lg, gap: 12 }}>
                 <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, lineHeight: 22 }]}>{t("book.units.empty")}</Text>
-                <PressableScale onPress={openSyllabus} style={[styles.create, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
+                <PressableScale {...coach.bind("create")} onPress={openSyllabus} style={[styles.create, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
                   <Ionicons name="sparkles" size={16} color={pal.onAccent} />
                   <Text style={[styles.createTxt, { color: pal.onAccent }]}>{t("book.units.create")}</Text>
                 </PressableScale>
@@ -363,6 +376,7 @@ export default function BookHubScreen() {
       <View style={styles.dockWrap}>
         <NowPlayingDock />
       </View>
+      {coach.overlay}
     </SceneScreen>
   );
 }

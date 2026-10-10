@@ -37,6 +37,7 @@ import {
   speakText,
   stopSpeaking,
 } from "../../lib/voice";
+import { resetCoachTours } from "../../components/brand/coach-mark";
 import { ONBOARDING_KEY } from "../onboarding";
 
 // أوقات التذكير المتاحة (٥ صباحًا حتى ١١ مساءً)
@@ -114,6 +115,7 @@ export default function MoreScreen() {
 
   async function replayTutorial() {
     await AsyncStorage.removeItem(ONBOARDING_KEY);
+    await resetCoachTours(); // وكل جولات الإرشاد داخل الشاشات
     router.replace("/onboarding");
   }
 

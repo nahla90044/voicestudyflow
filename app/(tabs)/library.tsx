@@ -16,6 +16,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { getWords } from "../../lib/words";
 import { getLastPage } from "../../lib/readerPrefs";
@@ -62,6 +63,12 @@ export default function LibraryScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const coach = useCoachTour("library_v1", [
+    { id: "add", title: t("coach.lib.add.title"), body: t("coach.lib.add.body") },
+    { id: "book", title: t("coach.lib.book.title"), body: t("coach.lib.book.body"), shape: "rect" },
+    { id: "search", title: t("coach.lib.search.title"), body: t("coach.lib.search.body"), shape: "rect" },
+    { id: "words", title: t("coach.lib.words.title"), body: t("coach.lib.words.body"), shape: "rect" },
+  ]);
   const { pal } = useScene();
 
   const [rows, setRows] = useState<BookRow[]>([]);
@@ -443,7 +450,10 @@ export default function LibraryScreen() {
         subtitle={t("library.header.subtitle")}
         left={<AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />}
         right={
+          <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
+          <CoachHelpButton onPress={coach.replay} />
           <Pressable
+            {...coach.bind("add")}
             onPress={() => router.push("/add-book")}
             accessibilityRole="button"
             accessibilityLabel={t("cmd.addBook")}
@@ -453,12 +463,13 @@ export default function LibraryScreen() {
               <Ionicons name="add" size={22} color={pal.onAccent} />
             </SceneIconButton>
           </Pressable>
+          </View>
         }
       />
 
       <View style={styles.header}>
         {/* شريط البحث */}
-        <View style={[styles.searchBar, chip, { shadowColor: shadowTint }]}>
+        <View {...coach.bind("search")} style={[styles.searchBar, chip, { shadowColor: shadowTint }]}>
           <Ionicons name="search" size={18} color={pal.dim} />
           <TextInput
             value={query}
@@ -476,7 +487,7 @@ export default function LibraryScreen() {
         </View>
 
         {/* مكتبة الكلمات: «كلماتي» بجانب الكتب */}
-        <Pressable onPress={() => router.push("/words")}>
+        <Pressable {...coach.bind("words")} onPress={() => router.push("/words")}>
           <SceneCard padded={false} style={[styles.wordsCard, { flexDirection: dir.row }]}>
             <View style={[styles.wordsIcon, { backgroundColor: pal.soft }]}>
               <Ionicons name="bookmarks" size={18} color={pal.accent} />
@@ -571,13 +582,14 @@ export default function LibraryScreen() {
         contentContainerStyle={{ gap: 14, paddingBottom: 120 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const isActive = activeBookId === item.id;
           const bookFolder = folders.find((f) => f.id === assign[item.id]);
           const frac = progress[item.id] ?? 0;
 
           return (
             <Pressable
+              {...(index === 0 ? coach.bind("book") : null)}
               style={styles.bookCardWrap}
               onPress={() => onPressBook(item)}
               onLongPress={() => {
@@ -779,6 +791,7 @@ export default function LibraryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      {coach.overlay}
     </SceneScreen>
   );
 }

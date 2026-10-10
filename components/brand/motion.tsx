@@ -13,6 +13,9 @@ type PressProps = {
   children: React.ReactNode;
   /** اهتزاز خفيف عند الضغط (iOS/Android) */
   haptic?: boolean;
+  /** مرجع العنصر (لقياس موضعه، مثل إرشاد الشاشات) */
+  ref?: React.Ref<any>;
+  collapsable?: boolean;
 };
 
 // Pressable نفسه متحرّك: الأبعاد (flex/width) والانكماش على نفس العنصر،
@@ -20,11 +23,13 @@ type PressProps = {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** زر ينكمش قليلًا ويرتدّ بنابض — إحساس ملموس بدل تغيير الشفافية فقط. */
-export function PressableScale({ onPress, onLongPress, disabled, style, children, haptic = true }: PressProps) {
+export function PressableScale({ onPress, onLongPress, disabled, style, children, haptic = true, ref, collapsable }: PressProps) {
   const s = useRef(new Animated.Value(1)).current;
   const to = (v: number) => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 7 }).start();
   return (
     <AnimatedPressable
+      ref={ref}
+      collapsable={collapsable}
       disabled={disabled}
       onPressIn={() => to(0.965)}
       onPressOut={() => to(1)}

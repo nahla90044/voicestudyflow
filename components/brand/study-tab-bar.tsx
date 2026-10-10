@@ -12,8 +12,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Palette } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
+import { useCoachTour } from "./coach-mark";
 import { PressableScale } from "./motion";
 import { NowPlayingDock } from "./now-playing-dock";
+
+const COACH_DELAY = 4300; // بعد شاشة البداية وتهيئة الرئيسية
 
 type Dest = { route: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; iconOn: keyof typeof Ionicons.glyphMap };
 
@@ -33,6 +36,23 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const current = state.routes[state.index]?.name;
+
+  // إرشاد زر النجوم (مرة واحدة، بعد جولة الرئيسية إن وُجدت)
+  const coach = useCoachTour(
+    "orb_v1",
+    [
+      {
+        id: "orb",
+        title: t("coach.orb.title"),
+        body: t("coach.orb.body"),
+        rows: [
+          { icon: "hand-left-outline", text: t("coach.orb.tap") },
+          { icon: "mic-outline", text: t("coach.orb.hold") },
+        ],
+      },
+    ],
+    { delay: COACH_DELAY }
+  );
 
   const item = (d: Dest) => {
     const on = current === d.route;
@@ -69,12 +89,13 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
         {LEFT.map(item)}
         {/* ضغطة: بحث وأوامر · ضغطة مطوّلة: المساعد الصوتي مباشرة */}
         <PressableScale onPress={() => router.push("/command")} onLongPress={() => router.push("/voice")} style={styles.orbWrap}>
-          <View style={[styles.orb, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
+          <View {...coach.bind("orb")} style={[styles.orb, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
             <Ionicons name="sparkles" size={24} color={pal.onAccent} accessibilityLabel={t("nav.orb")} />
           </View>
         </PressableScale>
         {RIGHT.map(item)}
       </View>
+      {coach.overlay}
     </View>
   );
 }

@@ -8,6 +8,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-na
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BookCover } from "../components/brand/book-cover";
+import { CoachHelpButton, useCoachTour } from "../components/brand/coach-mark";
 import { PressableScale } from "../components/brand/motion";
 import { SceneCard, SceneScreen } from "../components/brand/scene-screen";
 
@@ -26,6 +27,13 @@ export default function CommandScreen() {
   const dir = useDir();
   const { pal } = useScene();
   const [q, setQ] = useState("");
+  const coach = useCoachTour("command_v1", [
+    { id: "search", title: t("coach.cmd.search.title"), body: t("coach.cmd.search.body"), shape: "rect" },
+    { id: "cont", title: t("coach.cmd.cont.title"), body: t("coach.cmd.cont.body"), shape: "rect" },
+    { id: "book", title: t("coach.cmd.book.title"), body: t("coach.cmd.book.body"), shape: "rect" },
+    { id: "action", title: t("coach.cmd.action.title"), body: t("coach.cmd.action.body"), shape: "rect" },
+    { id: "mic", title: t("coach.cmd.mic.title"), body: t("coach.cmd.mic.body") },
+  ], { delay: 900, sheet: true });
   const [books, setBooks] = useState<Book[]>([]);
   const [cont, setCont] = useState<ContinueBook | null>(null);
 
@@ -99,9 +107,9 @@ export default function CommandScreen() {
 
   return (
     <SceneScreen>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+      <SafeAreaView {...coach.sheetRoot()} style={styles.safe} edges={["top", "left", "right"]}>
         <View style={[styles.searchRow, { flexDirection: dir.row }]}>
-          <View style={[styles.search, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: pal.dark ? "#000" : "#3C5028" }]}>
+          <View {...coach.bind("search")} style={[styles.search, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: pal.dark ? "#000" : "#3C5028" }]}>
             <Ionicons name="sparkles" size={18} color={pal.accent} />
             <TextInput
               value={q}
@@ -113,13 +121,14 @@ export default function CommandScreen() {
               returnKeyType="search"
             />
           </View>
+          <CoachHelpButton onPress={coach.replay} />
           <Pressable onPress={() => router.back()} hitSlop={10}>
             <Text style={[styles.cancel, { color: pal.accent }]}>{t("cmd.cancel")}</Text>
           </Pressable>
         </View>
 
         {cont && !query && (
-          <PressableScale onPress={() => openBook(cont)} style={styles.contWrap}>
+          <PressableScale {...coach.bind("cont")} onPress={() => openBook(cont)} style={styles.contWrap}>
             <SceneCard padded={false} style={[styles.cont, { flexDirection: dir.row }]}>
               <BookCover title={cont.title} width={40} height={54} />
               <Text style={[styles.contTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
@@ -139,12 +148,13 @@ export default function CommandScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
           ListEmptyComponent={<Text style={[styles.empty, { color: pal.dim }]}>{t("cmd.noResults")}</Text>}
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             if (item.kind === "head")
               return <Text style={[styles.head, { color: pal.dim, textAlign: dir.textAlign }]}>{item.label}</Text>;
             if (item.kind === "book")
               return (
                 <PressableScale
+                  {...(rows[index - 1]?.kind === "head" ? coach.bind("book") : null)}
                   onPress={() => openBook(item.book)}
                   style={[styles.row, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
                 >
@@ -158,6 +168,7 @@ export default function CommandScreen() {
             const a = item.action;
             return (
               <PressableScale
+                {...(rows[index - 1]?.kind === "head" ? coach.bind("action") : null)}
                 onPress={a.go}
                 style={[styles.row, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
               >
@@ -173,7 +184,7 @@ export default function CommandScreen() {
 
         {/* المساعد الصوتي: زر بلون المشهد مع هالة خفيفة أسفل الشاشة */}
         <View style={styles.voiceWrap}>
-          <PressableScale onPress={go(() => router.push("/voice"))} style={[styles.voiceBtnWrap, { shadowColor: pal.accent }]}>
+          <PressableScale {...coach.bind("mic")} onPress={go(() => router.push("/voice"))} style={[styles.voiceBtnWrap, { shadowColor: pal.accent }]}>
             <View style={[styles.voiceHalo, { backgroundColor: pal.soft, borderColor: pal.accent + "33" }]}>
               <View style={[styles.voiceBtn, { backgroundColor: pal.accent }]}>
                 <Ionicons name="mic" size={30} color={pal.onAccent} accessibilityLabel={t("ask.voice")} />
@@ -183,6 +194,7 @@ export default function CommandScreen() {
           <Text style={[styles.voiceHint, { color: pal.dim }]}>{t("cmd.voice")}</Text>
         </View>
       </SafeAreaView>
+      {coach.overlay}
     </SceneScreen>
   );
 }

@@ -62,6 +62,7 @@ import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { FREE_BOOKS_UNLOCKED, markBookCompleted } from "../../lib/perks";
 import { askForReviewOnce } from "../../lib/review";
 import { UnlockModal } from "../../components/brand/unlock-modal";
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { PageScrubber } from "../../components/brand/page-scrubber";
 import { alignSpokenToBoxes, boxIndexAtProgress, sentenceRects } from "../../lib/alignWords";
 import { getSpokenName, isOwner } from "../../lib/auth";
@@ -414,6 +415,19 @@ export default function ReaderScreen() {
   const [fontScale, setFontScale] = useState(1);
   const [toolTab, setToolTab] = useState<"listen" | "study" | "view">("listen");
   const safeInsets = useSafeAreaInsets();
+  // جولة القارئ (مرة أولى، وتعود بزر «؟»)
+  const coach = useCoachTour("reader_v1", [
+    { id: "page", title: t("coach.reader.page.title"), body: t("coach.reader.page.body"), shape: "rect",
+      rows: [
+        { icon: "hand-left-outline", text: t("coach.reader.page.double") },
+        { icon: "swap-horizontal", text: t("coach.reader.page.swipe") },
+        { icon: "bookmark-outline", text: t("coach.reader.page.hold") },
+      ] },
+    { id: "nav", title: t("coach.reader.nav.title"), body: t("coach.reader.nav.body"), shape: "rect" },
+    { id: "capsule", title: t("coach.reader.capsule.title"), body: t("coach.reader.capsule.body"), shape: "rect" },
+    { id: "tabs", title: t("coach.reader.tabs.title"), body: t("coach.reader.tabs.body"), shape: "rect" },
+    { id: "toggle", title: t("coach.reader.toggle.title"), body: t("coach.reader.toggle.body") },
+  ], { delay: 2200 });
   const [toolsHidden, setToolsHiddenState] = useState(false); // إخفاء لوحة الأدوات لمساحة قراءة أكبر
   useEffect(() => {
     void getToolsHidden().then(setToolsHiddenState).catch(() => {});
@@ -2554,6 +2568,7 @@ export default function ReaderScreen() {
             </Text>
           ) : null}
         </View>
+        <CoachHelpButton onPress={coach.replay} />
         <Pressable onPress={togglePaper} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("reader.theme.toggle")}>
           <Ionicons name={paper ? "moon-outline" : "sunny-outline"} size={19} color={paper ? INK : Palette.text} />
         </Pressable>
@@ -2561,7 +2576,7 @@ export default function ReaderScreen() {
       )}
 
       {/* العارض: PDF أو نص بتظليل الجملة المقروءة */}
-      <View style={[styles.viewer, fullText && styles.viewerFull]}>
+      <View {...coach.bind("page")} style={[styles.viewer, fullText && styles.viewerFull]}>
         {walkMode && !checkIn ? (
           <Pressable onPress={toggleWalk} style={[styles.walkChip, { flexDirection: dir.row }]}>
             <Ionicons name="walk" size={16} color={SKY.accent} />
@@ -2948,7 +2963,7 @@ export default function ReaderScreen() {
           </View>
         ) : null}
         {/* شريط الصفحات: رقم الصفحة (اضغط للانتقال المباشر) + السحب */}
-        <View style={[styles.navRow, { flexDirection: dir.row }]}>
+        <View {...coach.bind("nav")} style={[styles.navRow, { flexDirection: dir.row }]}>
           <Pressable
             onPress={openGoto}
             style={[styles.pagePill, paper && styles.topBtnPaper, { flexDirection: dir.row }]}
@@ -2964,6 +2979,7 @@ export default function ReaderScreen() {
             <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} paper={paper} />
           </View>
           <Pressable
+            {...coach.bind("toggle")}
             onPress={toggleToolsHidden}
             style={[styles.toolsToggle, paper && styles.topBtnPaper]}
             hitSlop={8}
@@ -2974,7 +2990,7 @@ export default function ReaderScreen() {
         </View>
 
         {/* التحكّم بالاستماع: مقطع سابق · تشغيل · مقطع تالٍ (الصفحات: الرقم والشريط أعلاه، أو السحب بالإصبع) */}
-        <View style={[styles.capsule, { flexDirection: dir.row }]}>
+        <View {...coach.bind("capsule")} style={[styles.capsule, { flexDirection: dir.row }]}>
           <Pressable onPress={() => skipSentence(-1)} style={styles.capBtn} accessibilityLabel={t("reader.tool.prevSegment")}>
             <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={22} color={Palette.text} />
             {skipMult > 1 && skipDir < 0 ? <Text style={styles.capBadge}>×{skipMult}</Text> : null}
@@ -2997,7 +3013,7 @@ export default function ReaderScreen() {
         {/* أدوات القراءة داخل الصفحة: ثلاث مجموعات ظاهرة، واختيارات الأداة تظهر تحتها مباشرة */}
         {!toolsHidden && (
         <>
-        <View style={[styles.tabsRow, { flexDirection: dir.row }]}>
+        <View {...coach.bind("tabs")} style={[styles.tabsRow, { flexDirection: dir.row }]}>
           {(["listen", "study", "view"] as const).map((g) => (
             <Pressable
               key={g}
@@ -3821,6 +3837,7 @@ export default function ReaderScreen() {
           setTimeout(() => void askForReviewOnce(), 700);
         }}
       />
+      {coach.overlay}
     </SafeAreaView>
   );
 }
