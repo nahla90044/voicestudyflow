@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ScreenOrientation from "expo-screen-orientation";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -307,36 +307,8 @@ function GoldPlayButton({
   );
 }
 
-/** زر صغير في لوحة «أدوات القراءة»: أيقونة (أو نص) + تسمية، ويتلوّن عند التفعيل */
-/** زر سريع في شريط القارئ: أيقونة (أو نص) + تسمية قصيرة */
-function QuickChip({
-  icon,
-  text,
-  label,
-  onPress,
-  on,
-}: {
-  icon?: keyof typeof Ionicons.glyphMap;
-  text?: string;
-  label: string;
-  onPress: () => void;
-  on?: boolean;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.qChip, on && styles.qChipOn]} accessibilityLabel={label}>
-      {icon ? (
-        <Ionicons name={icon} size={18} color={on ? SKY.onAccent : Palette.text} />
-      ) : (
-        <Text style={[styles.qChipTxt, on && { color: SKY.onAccent }]}>{text}</Text>
-      )}
-      <Text style={[styles.qChipLbl, on && { color: SKY.onAccent }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function ToolTile({
+/** أداة في لوحة القارئ الداخلية: أيقونة (أو نص) + تسمية، وتتلوّن عند التفعيل */
+function InTool({
   icon,
   text,
   label,
@@ -354,12 +326,12 @@ function ToolTile({
   badge?: string;
 }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.tile, on && styles.tileOn, disabled && { opacity: 0.45 }]}>
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.inTool, on && styles.inToolOn, disabled && { opacity: 0.45 }]} accessibilityLabel={label}>
       <View>
         {icon ? (
-          <Ionicons name={icon} size={20} color={on ? Palette.neonCyan : Palette.text} />
+          <Ionicons name={icon} size={19} color={on ? SKY.onAccent : Palette.text} />
         ) : (
-          <Text style={[styles.tileTxt, on && { color: Palette.neonCyan }]}>{text}</Text>
+          <Text style={[styles.qChipTxt, on && { color: SKY.onAccent }]}>{text}</Text>
         )}
         {badge ? (
           <View style={styles.tileBadge}>
@@ -367,9 +339,18 @@ function ToolTile({
           </View>
         ) : null}
       </View>
-      <Text style={styles.tileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+      <Text style={[styles.inToolLbl, on && { color: SKY.onAccent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
         {label}
       </Text>
+    </Pressable>
+  );
+}
+
+/** اختيار داخل صف الخيارات (السرعات، مؤقّت النوم، الموسيقى، حجم الخط) */
+function OptChip({ label, on, onPress }: { label: string; on?: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.optChip, on && styles.optChipOn]}>
+      <Text style={[styles.optChipTxt, on && { color: SKY.onAccent }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -429,7 +410,8 @@ export default function ReaderScreen() {
   // تصميم 2.0: مظهر ورقي/ليلي + حجم خط النص + لوحة «أدوات القراءة»
   const [paper, setPaper] = useState(false);
   const [fontScale, setFontScale] = useState(1);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolTab, setToolTab] = useState<"listen" | "study" | "view">("listen");
+  const [toolOpt, setToolOpt] = useState<"speed" | "sleep" | "music" | "font" | null>(null);
   // نداء التركيز التفاعلي: بطاقة تظهر مع النداء الصوتي وتنتظر لمسة (معك / إعادة / شرح أبسط)
   type CheckIn = { phase: "ask" | "done" | "explaining" | "explained"; title: string; body?: string };
   const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
@@ -632,6 +614,8 @@ export default function ReaderScreen() {
     // امسح صورة الصفحة السابقة فورًا إن اختلفت الصفحة (لا يبقى الغلاف القديم)
     if (pageImgForRef.current !== target) setPageImg(null);
     setPageImgLoading(true);
+    // المجاورتان من الذاكرة فورًا (لا تظهر مجاورتا الصفحة السابقة أثناء السحب)
+    setNbr({ prev: imgUriRef.current.get(target - 1) ?? null, next: imgUriRef.current.get(target + 1) ?? null });
     (async () => {
       let uri = await getPageImage(pdfPath, target).catch(() => null);
       // إعادة محاولة (قد لا تكون الصورة وُلِّدت بعد على الخادم)
@@ -904,7 +888,10 @@ export default function ReaderScreen() {
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
-    const next = SPEEDS[(idx + 1) % SPEEDS.length];
+    setSpeed(SPEEDS[(idx + 1) % SPEEDS.length]);
+  }
+
+  function setSpeed(next: number) {
     setRate(next);
     rateRef.current = next; // الجملة التالية تأخذ السرعة الجديدة
     setLivePlaybackRate(next); // والصوت الجاري يتغيّر فورًا دون إيقاف/تشغيل
@@ -934,9 +921,7 @@ export default function ReaderScreen() {
     return () => setOpenReaderBook(null);
   }, [bookId]);
 
-  function cycleSleep() {
-    const idx = SLEEP_OPTIONS.indexOf(sleepMin as (typeof SLEEP_OPTIONS)[number]);
-    const next = SLEEP_OPTIONS[(idx + 1) % SLEEP_OPTIONS.length];
+  function setSleep(next: number) {
     setSleepMin(next);
 
     if (sleepTimerRef.current) {
@@ -1046,18 +1031,6 @@ export default function ReaderScreen() {
       void setReaderPaper(!v);
       return !v;
     });
-  }
-
-  function cycleFontScale() {
-    const next = fontScale === 1 ? 1.15 : fontScale === 1.15 ? 1.3 : 1;
-    setFontScale(next);
-    void setReaderFontScale(next);
-  }
-
-  /** يغلق لوحة الأدوات ثم ينفّذ (نوافذ iOS لا تُفتح فوق نافذة تُغلق) */
-  function fromTools(fn: () => void) {
-    setToolsOpen(false);
-    setTimeout(fn, 350);
   }
 
   // ===== نداء التركيز التفاعلي =====
@@ -1708,39 +1681,58 @@ export default function ReaderScreen() {
   }
 
   // تقليب الصفحات بالسحب: الصفحة تتبع الإصبع، والمجاورة تظهر من الطرف، وعند الإفلات
-  // تكتمل الحركة بسلاسة (أو ترجع لمكانها). أثناء القراءة الصفحة ثابتة (مقاومة خفيفة + تنبيه).
+  // تكتمل الحركة بنابض يحفظ سرعة الإصبع (أو ترجع لمكانها). أثناء القراءة يكمل القارئ من الصفحة الجديدة.
   const { width: screenW } = useWindowDimensions();
   const pagerCtl = useRef({ arabic: false, playing: false, canPrev: false, canNext: false, commit: (_d: number) => {} });
+  const pagerResetRef = useRef(false); // الصفحة الجديدة ستُرسم → نعيد الإزاحة بعد رسمها (بلا وميض)
   const pager = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponderCapture: (_e, g) =>
-        Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.6 && pdfZoomRef.current <= 1.05 && !lensOpenRef.current,
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4 && pdfZoomRef.current <= 1.05 && !lensOpenRef.current,
+      onPanResponderGrant: () => pagerX.stopAnimation(),
       onPanResponderMove: (_e, g) => {
         const c = pagerCtl.current;
         const wantsNext = c.arabic ? g.dx > 0 : g.dx < 0;
-        const allowed = !c.playing && (wantsNext ? c.canNext : c.canPrev);
-        pagerX.setValue(allowed ? g.dx : g.dx * 0.18);
+        const allowed = wantsNext ? c.canNext : c.canPrev;
+        // عند أول/آخر صفحة: مقاومة مطاطية بدل التوقف المفاجئ
+        pagerX.setValue(allowed ? g.dx : g.dx * 0.25);
       },
       onPanResponderRelease: (_e, g) => {
         const c = pagerCtl.current;
         const wantsNext = c.arabic ? g.dx > 0 : g.dx < 0;
-        const allowed = !c.playing && (wantsNext ? c.canNext : c.canPrev);
-        const far = Math.abs(g.dx) > screenW * 0.22 || Math.abs(g.vx) > 0.45;
-        if (c.playing && Math.abs(g.dx) > 40) showToast(t("reader.swipe.locked"));
+        const allowed = wantsNext ? c.canNext : c.canPrev;
+        // تقليب بمسافة كافية أو بحركة سريعة قصيرة (نفض)
+        const far = Math.abs(g.dx) > screenW * 0.2 || (Math.abs(g.vx) > 0.35 && Math.abs(g.dx) > 24);
         if (!allowed || !far) {
-          Animated.spring(pagerX, { toValue: 0, useNativeDriver: true, bounciness: 4, speed: 18 }).start();
+          Animated.spring(pagerX, { toValue: 0, velocity: g.vx, useNativeDriver: true, stiffness: 320, damping: 30, mass: 0.9 }).start();
           return;
         }
-        Animated.timing(pagerX, { toValue: Math.sign(g.dx) * screenW, duration: 170, useNativeDriver: true }).start(() => {
+        Animated.spring(pagerX, {
+          toValue: Math.sign(g.dx) * screenW,
+          velocity: g.vx,
+          useNativeDriver: true,
+          stiffness: 260,
+          damping: 32,
+          mass: 0.9,
+          overshootClamping: true,
+          restDisplacementThreshold: 2,
+          restSpeedThreshold: 6,
+        }).start(() => {
+          pagerResetRef.current = true;
           pagerCtl.current.commit(wantsNext ? 1 : -1);
-          requestAnimationFrame(() => pagerX.setValue(0));
         });
       },
       onPanResponderTerminate: () => {
-        Animated.spring(pagerX, { toValue: 0, useNativeDriver: true }).start();
+        Animated.spring(pagerX, { toValue: 0, useNativeDriver: true, stiffness: 320, damping: 30 }).start();
       },
     })
   ).current;
+  // بعد رسم الصفحة الجديدة نعيدها لمكانها في نفس الإطار → انتقال متصل بلا رجوع للصفحة القديمة
+  useLayoutEffect(() => {
+    if (!pagerResetRef.current) return;
+    pagerResetRef.current = false;
+    pagerX.setValue(0);
+  }, [page, pageImg, pagerX]);
 
   // التقدّم/التأخّر بين المقاطع (الجُمل) داخل الصفحة الحالية
   // تسريع التخطّي: كل ضغطة سريعة بنفس الاتجاه تتخطّى مقاطع أكثر (×1، ×2، ×3…)
@@ -2249,8 +2241,8 @@ export default function ReaderScreen() {
   }
 
   /**
-   * السحب الأفقي يقلّب الصفحات ما دام القارئ متوقفًا. أثناء القراءة الصفحة ثابتة
-   * والقارئ يقرأ فيها. الكتاب العربي: السحب لليمين = الصفحة التالية (مثل الورقي).
+   * السحب الأفقي في عرض النص يقلّب الصفحات (وأثناء القراءة يكمل القارئ من الصفحة الجديدة).
+   * الكتاب العربي: السحب لليمين = الصفحة التالية (مثل الورقي).
    */
   function onPageTouchEnd(x: number, y: number) {
     const st = touchRef.current;
@@ -2260,10 +2252,6 @@ export default function ReaderScreen() {
     const dy = y - st.y;
     if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - st.t > 700) return;
     if (pdfZoomRef.current > 1.05) return;
-    if (playingRef.current) {
-      showToast(t("reader.swipe.locked"));
-      return;
-    }
     const next = isArabicText ? dx > 0 : dx < 0;
     goPage(next ? 1 : -1);
   }
@@ -2505,23 +2493,16 @@ export default function ReaderScreen() {
         <Pressable onPress={goBack} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("common.back")}>
           <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={paper ? INK : Palette.text} />
         </Pressable>
-        <Pressable
-          style={{ flex: 1, alignItems: "center" }}
-          onPress={() => {
-            openGoto();
-          }}
-        >
-          <Text style={[styles.topSub, paper && { color: INK }]} numberOfLines={1}>
+        <View style={{ flex: 1, alignItems: "center" }}>
+          <Text style={[styles.topTitle, paper && { color: INK }]} numberOfLines={1}>
             {typeof title === "string" && title.trim() ? title : t("reader.book")}
           </Text>
-          <View style={[styles.topTitleRow, { flexDirection: dir.row }]}>
-            <Text style={[styles.topTitle, paper && { color: INK }]} numberOfLines={1}>
-              {totalPages ? t("reader.pageOf", { page, total: totalPages }) : t("reader.pageInfo.page", { page })}
-              {ingesting ? t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal }) : ""}
+          {ingesting ? (
+            <Text style={[styles.topSub, paper && { color: INK }]} numberOfLines={1}>
+              {t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal })}
             </Text>
-            <Ionicons name="keypad-outline" size={13} color={paper ? INK : Palette.textDim} />
-          </View>
-        </Pressable>
+          ) : null}
+        </View>
         <Pressable onPress={togglePaper} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("reader.theme.toggle")}>
           <Ionicons name={paper ? "moon-outline" : "sunny-outline"} size={19} color={paper ? INK : Palette.text} />
         </Pressable>
@@ -2928,55 +2909,14 @@ export default function ReaderScreen() {
             </Text>
           </Pressable>
           <View style={{ flex: 1 }}>
-            <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} />
+            <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} paper={paper} />
           </View>
         </View>
 
-        {/* أزرار سريعة ظاهرة: السرعة · النوم · المشي · الموسيقى · العدسة · الترجمة · المساعد · المزيد */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={[styles.quickRow, { flexDirection: dir.row }]}
-        >
-          <QuickChip text={`${rate}×`} label={t("reader.tool.speed")} onPress={cycleSpeed} on={rate !== 1} />
-          <QuickChip
-            icon={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
-            label={sleepMin === SLEEP_UNTIL_END ? t("reader.tool.sleepUntilEnd") : sleepMin > 0 ? t("reader.tool.sleepMinutes", { minutes: sleepMin }) : t("reader.tool.sleep")}
-            on={sleepMin !== 0}
-            onPress={cycleSleep}
-          />
-          <QuickChip icon="walk-outline" label={t("reader.walk.title")} on={walkMode} onPress={() => void toggleWalk()} />
-          <QuickChip
-            icon={presMusicKey ? "musical-notes" : "musical-notes-outline"}
-            label={presMusicKey ? t(`music.${presMusicKey}`) : t("reader.music.background")}
-            on={!!presMusicKey}
-            onPress={() => {
-              setShowMusicPicker(true);
-              setToolsOpen(true);
-            }}
-          />
-          {viewMode === "pdf" ? (
-            <QuickChip icon="search-outline" label={t("reader.cap.lens")} on={lensOpen} onPress={() => setLensOpen((v) => !v)} />
-          ) : (
-            <QuickChip text="Aa" label={t("reader.cap.textSize")} on={fontScale > 1} onPress={cycleFontScale} />
-          )}
-          <QuickChip icon="language-outline" label={t("reader.cap.translate")} on={listenArabic} onPress={() => setTranslateModal(true)} />
-          <QuickChip
-            icon="chatbubble-ellipses-outline"
-            label={t("reader.cap.ask")}
-            onPress={() => bookId && router.push({ pathname: "/ask/[id]", params: { id: bookId } })}
-          />
-          <QuickChip icon="grid-outline" label={t("reader.tools.title")} onPress={() => setToolsOpen(true)} />
-        </ScrollView>
-
-        {/* التحكّم بالاستماع: صفحة سابقة · مقطع سابق · تشغيل · مقطع تالٍ · صفحة تالية */}
+        {/* التحكّم بالاستماع: مقطع سابق · تشغيل · مقطع تالٍ (الصفحات: الرقم والشريط أعلاه، أو السحب بالإصبع) */}
         <View style={[styles.capsule, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => goPage(-1)} disabled={page <= 1} style={[styles.capBtn, page <= 1 && { opacity: 0.4 }]} accessibilityLabel={t("reader.nav.prevPage")}>
-            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} />
-          </Pressable>
           <Pressable onPress={() => skipSentence(-1)} style={styles.capBtn} accessibilityLabel={t("reader.tool.prevSegment")}>
-            <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={21} color={Palette.text} />
+            <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={22} color={Palette.text} />
             {skipMult > 1 && skipDir < 0 ? <Text style={styles.capBadge}>×{skipMult}</Text> : null}
           </Pressable>
           <Pressable onPress={togglePlay} accessibilityLabel={speaking ? t("dock.pause") : t("dock.play")}>
@@ -2989,177 +2929,162 @@ export default function ReaderScreen() {
             </View>
           </Pressable>
           <Pressable onPress={() => skipSentence(1)} style={styles.capBtn} accessibilityLabel={t("reader.tool.nextSegment")}>
-            <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={21} color={Palette.text} />
+            <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={22} color={Palette.text} />
             {skipMult > 1 && skipDir > 0 ? <Text style={styles.capBadge}>×{skipMult}</Text> : null}
           </Pressable>
-          <Pressable
-            onPress={() => goPage(1)}
-            disabled={!!totalPages && page >= totalPages}
-            style={[styles.capBtn, !!totalPages && page >= totalPages && { opacity: 0.4 }]}
-            accessibilityLabel={t("reader.nav.nextPage")}
-          >
-            <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={22} color={Palette.text} />
-          </Pressable>
         </View>
+
+        {/* أدوات القراءة داخل الصفحة: ثلاث مجموعات ظاهرة، واختيارات الأداة تظهر تحتها مباشرة */}
+        <View style={[styles.tabsRow, { flexDirection: dir.row }]}>
+          {(["listen", "study", "view"] as const).map((g) => (
+            <Pressable
+              key={g}
+              onPress={() => {
+                setToolTab(g);
+                setToolOpt(null);
+              }}
+              style={[styles.toolTab, toolTab === g && styles.toolTabOn]}
+            >
+              <Text style={[styles.toolTabTxt, toolTab === g && { color: SKY.onAccent }]}>{t(`reader.tools.${g}`)}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={[styles.inGrid, { flexDirection: dir.row }]}>
+          {toolTab === "listen" ? (
+            <>
+              <InTool text={`${rate}×`} label={t("reader.tool.speed")} on={toolOpt === "speed"} onPress={() => setToolOpt(toolOpt === "speed" ? null : "speed")} />
+              <InTool
+                icon={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
+                label={sleepMin === SLEEP_UNTIL_END ? t("reader.tool.sleepUntilEnd") : sleepMin > 0 ? t("reader.tool.sleepMinutes", { minutes: sleepMin }) : t("reader.tool.sleep")}
+                on={toolOpt === "sleep" || sleepMin !== 0}
+                onPress={() => setToolOpt(toolOpt === "sleep" ? null : "sleep")}
+              />
+              <InTool icon="walk-outline" label={t("reader.walk.title")} on={walkMode} onPress={() => void toggleWalk()} />
+              <InTool
+                icon={presMusicKey ? "musical-notes" : "musical-notes-outline"}
+                label={presMusicKey ? t(`music.${presMusicKey}`) : t("reader.music.background")}
+                on={toolOpt === "music" || !!presMusicKey}
+                onPress={() => setToolOpt(toolOpt === "music" ? null : "music")}
+              />
+              <InTool icon="mic-outline" label={VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name.split(" · ")[0] ?? t("reader.tool.voice")} onPress={() => setVoiceModal(true)} />
+              <InTool icon="language-outline" label={t("reader.cap.translate")} on={listenArabic} onPress={() => setTranslateModal(true)} />
+              {viewMode === "pdf" ? (
+                <InTool icon="search-outline" label={t("reader.cap.lens")} on={lensOpen} onPress={() => setLensOpen((v) => !v)} />
+              ) : (
+                <InTool text="Aa" label={t("reader.cap.textSize")} on={toolOpt === "font"} onPress={() => setToolOpt(toolOpt === "font" ? null : "font")} />
+              )}
+              <InTool icon="car-sport-outline" label={t("reader.tools.driving")} onPress={() => setDrivingMode(true)} />
+            </>
+          ) : toolTab === "study" ? (
+            <>
+              <InTool icon="sparkles-outline" label={t("reader.tools.ai")} onPress={() => setAiOpen(true)} />
+              <InTool
+                icon="chatbubble-ellipses-outline"
+                label={t("reader.cap.ask")}
+                onPress={() => bookId && router.push({ pathname: "/ask/[id]", params: { id: bookId } })}
+              />
+              <InTool
+                icon={isBookmarked ? "bookmark" : "bookmark-outline"}
+                label={isBookmarked ? t("reader.tools.bookmarked") : t("reader.tools.bookmark")}
+                on={isBookmarked}
+                onPress={onToggleBookmark}
+              />
+              <InTool
+                icon="list-outline"
+                label={t("reader.tools.notes")}
+                badge={bookmarks.length + highlights.length > 0 ? String(bookmarks.length + highlights.length) : undefined}
+                onPress={() => setNotesOpen(true)}
+              />
+              {isArabicText ? (
+                <InTool icon="text-outline" label={tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")} on={tashkeelMode} onPress={toggleTashkeel} />
+              ) : null}
+              <InTool
+                icon="easel-outline"
+                label={t("reader.aids.present")}
+                onPress={() => {
+                  presUsedRef.current = true;
+                  warmAllMusic();
+                  setPresentOpen(true);
+                }}
+              />
+              <InTool
+                icon="library-outline"
+                label={t("reader.tools.bookPage")}
+                onPress={() => bookId && router.push({ pathname: "/book/[id]", params: { id: bookId } })}
+              />
+            </>
+          ) : (
+            <>
+              <InTool
+                icon={viewMode === "pdf" ? "reader-outline" : "document-outline"}
+                label={viewMode === "pdf" ? t("reader.tools.viewText") : t("reader.tools.viewPdf")}
+                onPress={toggleViewMode}
+              />
+              <InTool icon={paper ? "moon-outline" : "sunny-outline"} label={paper ? t("reader.tools.night") : t("reader.tools.paper")} onPress={togglePaper} />
+              <InTool icon="expand-outline" label={t("reader.tools.fullscreen")} onPress={() => setFullText(true)} />
+              <InTool
+                icon={fullyLoaded && !ingesting ? "checkmark-circle" : ingesting ? "stop-circle-outline" : "cloud-download-outline"}
+                label={fullyLoaded ? t("reader.tool.loaded") : t("reader.tool.download")}
+                on={fullyLoaded && !ingesting}
+                disabled={fullyLoaded && !ingesting}
+                onPress={startIngest}
+              />
+            </>
+          )}
+        </View>
+        {toolOpt === "speed" ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.optRow, { flexDirection: dir.row }]}>
+            {SPEEDS.map((r) => (
+              <OptChip key={r} label={`${r}×`} on={rate === r} onPress={() => setSpeed(r)} />
+            ))}
+          </ScrollView>
+        ) : toolOpt === "sleep" ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.optRow, { flexDirection: dir.row }]}>
+            {SLEEP_OPTIONS.map((m) => (
+              <OptChip
+                key={m}
+                label={m === 0 ? t("reader.music.none") : m === SLEEP_UNTIL_END ? t("reader.tool.sleepUntilEnd") : t("reader.tool.sleepMinutes", { minutes: m })}
+                on={sleepMin === m}
+                onPress={() => setSleep(m)}
+              />
+            ))}
+          </ScrollView>
+        ) : toolOpt === "font" ? (
+          <View style={[styles.optRow, { flexDirection: dir.row }]}>
+            {([1, 1.15, 1.3] as const).map((f, i) => (
+              <OptChip
+                key={f}
+                label={t(["reader.font.s", "reader.font.m", "reader.font.l"][i])}
+                on={fontScale === f}
+                onPress={() => {
+                  setFontScale(f);
+                  void setReaderFontScale(f);
+                }}
+              />
+            ))}
+          </View>
+        ) : toolOpt === "music" ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.optRow, { flexDirection: dir.row }]}>
+            <OptChip
+              label={t("reader.music.none")}
+              on={!presMusicKey}
+              onPress={() => {
+                setPresMusicKey(null);
+                stopAmbient();
+              }}
+            />
+            {MUSIC_OPTIONS.map((m) => (
+              <OptChip
+                key={m.key}
+                label={musicLoading === m.key ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
+                on={presMusicKey === m.key}
+                onPress={() => selectMusic(m.key)}
+              />
+            ))}
+          </ScrollView>
+        ) : null}
       </View>
       )}
-
-      {/* لوحة «أدوات القراءة»: كل ما كان في لوحة التحكم القديمة، مرتّبًا في مجموعات */}
-      <Modal visible={toolsOpen} transparent animationType="slide" onRequestClose={() => setToolsOpen(false)}>
-        <Pressable style={styles.aiMask} onPress={() => setToolsOpen(false)}>
-          <Pressable style={styles.toolsSheet} onPress={() => {}}>
-            <View style={styles.sheetGrip} />
-            <Text style={[styles.toolsTitle, { textAlign: dir.textAlign }]}>{t("reader.tools.title")}</Text>
-            <ScrollView style={{ maxHeight: 560 }} contentContainerStyle={{ gap: 14, paddingBottom: 12 }}>
-              {/* الاستماع */}
-              <Text style={[styles.toolsSection, { textAlign: dir.textAlign }]}>{t("reader.tools.listen")}</Text>
-              <Pressable onPress={() => fromTools(() => setVoiceModal(true))} style={[styles.toolsWide, { flexDirection: dir.row }]}>
-                <Ionicons name="mic-outline" size={18} color={Palette.neonViolet} />
-                <Text style={[styles.toolsWideTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>
-                  {t("reader.voice.label", { name: VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.name ?? t("reader.voice.choose") })}
-                </Text>
-                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={16} color={Palette.textDim} />
-              </Pressable>
-              <View style={[styles.toolsGrid, { flexDirection: dir.row }]}>
-                <ToolTile icon={dir.isRTL ? "play-skip-forward" : "play-skip-back"} label={t("reader.tool.prevSegment")} onPress={() => skipSentence(-1)} badge={skipMult > 1 && skipDir < 0 ? `×${skipMult}` : undefined} />
-                <ToolTile icon={dir.isRTL ? "play-skip-back" : "play-skip-forward"} label={t("reader.tool.nextSegment")} onPress={() => skipSentence(1)} badge={skipMult > 1 && skipDir > 0 ? `×${skipMult}` : undefined} />
-                <ToolTile text={`${rate}x`} label={t("reader.tool.speed")} onPress={cycleSpeed} />
-                <ToolTile
-                  icon={sleepMin === SLEEP_UNTIL_END ? "book-outline" : "moon-outline"}
-                  label={
-                    sleepMin === SLEEP_UNTIL_END
-                      ? t("reader.tool.sleepUntilEnd")
-                      : sleepMin > 0
-                        ? t("reader.tool.sleepMinutes", { minutes: sleepMin })
-                        : t("reader.tool.sleep")
-                  }
-                  on={sleepMin !== 0}
-                  onPress={cycleSleep}
-                />
-                <ToolTile icon={dir.isRTL ? "chevron-forward" : "chevron-back"} label={t("reader.nav.prevPage")} onPress={() => goPage(-1)} disabled={page <= 1} />
-                <ToolTile icon={dir.isRTL ? "chevron-back" : "chevron-forward"} label={t("reader.nav.nextPage")} onPress={() => goPage(1)} disabled={!!totalPages && page >= totalPages} />
-                <ToolTile
-                  icon="keypad-outline"
-                  label={t("reader.tool.goto")}
-                  onPress={() =>
-                    fromTools(() => openGoto())
-                  }
-                />
-                <ToolTile
-                  icon="walk-outline"
-                  label={t("reader.walk.title")}
-                  on={walkMode}
-                  onPress={() => fromTools(() => void toggleWalk())}
-                />
-                <ToolTile
-                  icon={presMusicKey ? "musical-notes" : "musical-notes-outline"}
-                  label={presMusicKey ? t(`music.${presMusicKey}`) : t("reader.music.background")}
-                  on={!!presMusicKey || showMusicPicker}
-                  onPress={() => setShowMusicPicker((v) => !v)}
-                />
-              </View>
-              {showMusicPicker ? (
-                <>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.musicRow}>
-                    <Pressable
-                      onPress={() => {
-                        setPresMusicKey(null);
-                        stopAmbient();
-                      }}
-                      style={[styles.musicChip, !presMusicKey && styles.musicChipOn]}
-                    >
-                      <Text style={[styles.musicChipTxt, !presMusicKey && styles.musicChipTxtOn]}>{t("reader.music.none")}</Text>
-                    </Pressable>
-                    {MUSIC_OPTIONS.map((m) => {
-                      const on = presMusicKey === m.key;
-                      const loading = musicLoading === m.key;
-                      return (
-                        <Pressable key={m.key} onPress={() => selectMusic(m.key)} style={[styles.musicChip, on && styles.musicChipOn]}>
-                          {loading ? <ActivityIndicator size="small" color={on ? SKY.onAccent : Palette.text} /> : null}
-                          <Text style={[styles.musicChipTxt, on && styles.musicChipTxtOn]}>
-                            {loading ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </ScrollView>
-                  <Text style={[styles.musicNote, { textAlign: dir.textAlign }]}>{t("reader.music.aiNote")}</Text>
-                </>
-              ) : null}
-
-              {/* الفهم والدراسة */}
-              <Text style={[styles.toolsSection, { textAlign: dir.textAlign }]}>{t("reader.tools.study")}</Text>
-              <View style={[styles.toolsGrid, { flexDirection: dir.row }]}>
-                <ToolTile icon="sparkles-outline" label={t("reader.tools.ai")} onPress={() => fromTools(() => setAiOpen(true))} />
-                <ToolTile
-                  icon="language-outline"
-                  label={listenArabic ? t("reader.aids.translateOn") : t("reader.aids.translateOff")}
-                  on={listenArabic}
-                  onPress={() => fromTools(() => setTranslateModal(true))}
-                />
-                {isArabicText ? (
-                  <ToolTile
-                    icon="text-outline"
-                    label={tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")}
-                    on={tashkeelMode}
-                    onPress={toggleTashkeel}
-                  />
-                ) : null}
-                <ToolTile
-                  icon="easel-outline"
-                  label={t("reader.aids.present")}
-                  onPress={() =>
-                    fromTools(() => {
-                      presUsedRef.current = true;
-                      warmAllMusic();
-                      setPresentOpen(true);
-                    })
-                  }
-                />
-                <ToolTile
-                  icon={isBookmarked ? "bookmark" : "bookmark-outline"}
-                  label={isBookmarked ? t("reader.tools.bookmarked") : t("reader.tools.bookmark")}
-                  on={isBookmarked}
-                  onPress={onToggleBookmark}
-                />
-                <ToolTile
-                  icon="list-outline"
-                  label={t("reader.tools.notes")}
-                  badge={bookmarks.length + highlights.length > 0 ? String(bookmarks.length + highlights.length) : undefined}
-                  onPress={() => fromTools(() => setNotesOpen(true))}
-                />
-                <ToolTile
-                  icon="library-outline"
-                  label={t("reader.tools.bookPage")}
-                  onPress={() => fromTools(() => bookId && router.push({ pathname: "/book/[id]", params: { id: bookId } }))}
-                />
-              </View>
-
-              {/* العرض */}
-              <Text style={[styles.toolsSection, { textAlign: dir.textAlign }]}>{t("reader.tools.view")}</Text>
-              <View style={[styles.toolsGrid, { flexDirection: dir.row }]}>
-                <ToolTile
-                  icon={viewMode === "pdf" ? "reader-outline" : "document-outline"}
-                  label={viewMode === "pdf" ? t("reader.tools.viewText") : t("reader.tools.viewPdf")}
-                  onPress={() => {
-                    toggleViewMode();
-                    setToolsOpen(false);
-                  }}
-                />
-                <ToolTile icon="expand-outline" label={t("reader.tools.fullscreen")} onPress={() => fromTools(() => setFullText(true))} />
-                <ToolTile icon="car-sport-outline" label={t("reader.tools.driving")} onPress={() => fromTools(() => setDrivingMode(true))} />
-                <ToolTile
-                  icon={fullyLoaded && !ingesting ? "checkmark-circle" : ingesting ? "stop-circle-outline" : "cloud-download-outline"}
-                  label={fullyLoaded ? t("reader.tool.loaded") : t("reader.tool.download")}
-                  on={fullyLoaded && !ingesting}
-                  disabled={fullyLoaded && !ingesting}
-                  onPress={startIngest}
-                />
-              </View>
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* رسالة تأكيد عابرة */}
       {toast ? (
@@ -3997,20 +3922,41 @@ const styles = StyleSheet.create({
   qChipLbl: { color: SKY.dim, fontSize: 10.5, fontWeight: "700", maxWidth: 86 },
   capBadge: { position: "absolute", top: 4, right: 2, color: SKY.accent, fontSize: 9.5, fontWeight: "900" },
   capsule: {
-    height: 72,
+    height: 64,
     borderRadius: 30,
     backgroundColor: "rgba(21,24,56,0.97)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "space-around",
     paddingHorizontal: 10,
     shadowColor: "#000",
     shadowOpacity: 0.4,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
   },
-  capBtn: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  capBtn: { width: 56, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  tabsRow: { gap: 6 },
+  toolTab: { flex: 1, alignItems: "center", paddingVertical: 7, borderRadius: 999, backgroundColor: "rgba(21,24,56,0.92)" },
+  toolTabOn: { backgroundColor: SKY.accent },
+  toolTabTxt: { color: SKY.dim, fontSize: 12.5, fontWeight: "800" },
+  inGrid: { flexWrap: "wrap", gap: 6 },
+  inTool: {
+    width: "23.5%",
+    alignItems: "center",
+    gap: 3,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(21,24,56,0.92)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  inToolOn: { backgroundColor: SKY.accent, borderColor: SKY.accent },
+  inToolLbl: { color: SKY.dim, fontSize: 10.5, fontWeight: "700", maxWidth: "92%" },
+  optRow: { gap: 6, paddingVertical: 2 },
+  optChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: "rgba(21,24,56,0.92)" },
+  optChipOn: { backgroundColor: SKY.accent },
+  optChipTxt: { color: Palette.text, fontSize: 12.5, fontWeight: "700" },
   capDot: { position: "absolute", top: 8, right: 9, width: 7, height: 7, borderRadius: 4, backgroundColor: Palette.neonCyan },
   capPlay: {
     width: 58,

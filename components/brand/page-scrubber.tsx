@@ -20,12 +20,19 @@ type Props = {
   onSeek: (page: number) => void;
   /** اتجاه الواجهة: في العربية الصفحة الأولى يمين الشريط */
   rtl?: boolean;
+  /** القارئ في الوضع الورقي (خلفية فاتحة) → ألوان داكنة واضحة */
+  paper?: boolean;
 };
+
+// ألوان الشريط بهوية التطبيق (ذهبي على كحلي)، بنسخة واضحة على الورق الفاتح
+const GOLD = "#F6D58A";
+const GOLD_DEEP = "#C9922E";
+const NAVY = "#14213D";
 
 const BAR_H = 6;
 const TOUCH_H = 34; // مساحة لمس مريحة حول الشريط الرفيع
 
-export function PageScrubber({ page, totalPages, onSeek, rtl = true }: Props) {
+export function PageScrubber({ page, totalPages, onSeek, rtl = true, paper = false }: Props) {
   const [width, setWidth] = useState(0);
   const [dragPage, setDragPage] = useState<number | null>(null);
   const widthRef = useRef(0);
@@ -93,11 +100,11 @@ export function PageScrubber({ page, totalPages, onSeek, rtl = true }: Props) {
         }}
         {...pan.panHandlers}
       >
-        <View style={styles.track}>
+        <View style={[styles.track, paper ? styles.trackPaper : null]}>
           <View
             style={[
               styles.fill,
-              { width: pct as any },
+              { width: pct as any, backgroundColor: paper ? GOLD_DEEP : GOLD },
               rtl ? { right: 0 } : { left: 0 },
             ]}
           />
@@ -107,6 +114,7 @@ export function PageScrubber({ page, totalPages, onSeek, rtl = true }: Props) {
             pointerEvents="none"
             style={[
               styles.knob,
+              paper ? styles.knobPaper : null,
               rtl
                 ? { right: Math.max(0, frac * width - 7) }
                 : { left: Math.max(0, frac * width - 7) },
@@ -124,16 +132,16 @@ const styles = StyleSheet.create({
   track: {
     height: BAR_H,
     borderRadius: BAR_H / 2,
-    backgroundColor: Palette.surface,
+    backgroundColor: "rgba(255,255,255,0.16)",
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
+    borderColor: "rgba(255,255,255,0.22)",
     overflow: "hidden",
   },
+  trackPaper: { backgroundColor: "rgba(20,33,61,0.16)", borderColor: "rgba(20,33,61,0.30)" },
   fill: {
     position: "absolute",
     top: 0,
     bottom: 0,
-    backgroundColor: Palette.neonCyan,
   },
   knob: {
     position: "absolute",
@@ -141,11 +149,14 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 7,
     backgroundColor: "#fff",
-    shadowColor: Palette.neonCyan,
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
+    borderWidth: 2,
+    borderColor: GOLD,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
     elevation: 4,
   },
+  knobPaper: { backgroundColor: NAVY, borderColor: GOLD_DEEP },
   bubble: {
     position: "absolute",
     bottom: TOUCH_H - 2,
