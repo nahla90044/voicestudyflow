@@ -38,6 +38,7 @@ import {
   stopSpeaking,
 } from "../../lib/voice";
 import { resetCoachTours } from "../../components/brand/coach-mark";
+import { openStoreReview } from "../../lib/review";
 import { ONBOARDING_KEY } from "../onboarding";
 
 // أوقات التذكير المتاحة (٥ صباحًا حتى ١١ مساءً)
@@ -449,6 +450,13 @@ export default function MoreScreen() {
               {"\n"}
               {t("more.about.music")}
             </Text>
+            <Pressable
+              onPress={() => void openStoreReview()}
+              style={[styles.rateBtn, { backgroundColor: pal.soft, borderColor: pal.cardBorder, flexDirection: dir.row }]}
+            >
+              <Ionicons name="star" size={18} color="#E9A93A" />
+              <Text style={[styles.rateTxt, { color: pal.ink }]}>{t("rate.button")}</Text>
+            </Pressable>
             <Text style={[styles.madeIn, { color: pal.dim }]}>{t("more.madeIn")}</Text>
           </SceneCard>
         </View>
@@ -506,6 +514,8 @@ function SceneButton({
 }
 
 const styles = StyleSheet.create({
+  rateBtn: { alignItems: "center", justifyContent: "center", gap: 8, marginTop: 12, paddingVertical: 12, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
+  rateTxt: { fontSize: 15, fontWeight: "800" },
   body: { paddingHorizontal: 16, gap: 14, marginTop: 4 },
   cardGap: { gap: 10 },
 

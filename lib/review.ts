@@ -12,6 +12,7 @@
 // النافذة أو هل قيّم المستخدم فعلًا. لذلك لا يصحّ بناء أي منطق على "هل قيّم".
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as StoreReview from "expo-store-review";
+import { Linking } from "react-native";
 
 const ASKED_KEY = "vsf:review:asked:v1";
 
@@ -29,5 +30,25 @@ export async function askForReviewOnce(): Promise<void> {
     await StoreReview.requestReview();
   } catch {
     // تجاهل — لا شيء هنا يستحق مقاطعة المستخدم
+  }
+}
+
+// معرّف التطبيق في App Store (نفسه في eas.json)
+const APP_STORE_ID = "6785257689";
+
+/**
+ * زر «تقييم التطبيق» الصريح: يفتح صفحة كتابة التقييم في App Store مباشرة.
+ * (النافذة الأصلية لا تُضمن للأزرار — آبل توصي بالرابط المباشر عند ضغط المستخدم.)
+ */
+export async function openStoreReview(): Promise<void> {
+  const url = `https://apps.apple.com/app/id${APP_STORE_ID}?action=write-review`;
+  try {
+    await Linking.openURL(url);
+  } catch {
+    try {
+      if (await StoreReview.hasAction()) await StoreReview.requestReview();
+    } catch {
+      // لا شيء يستحق مقاطعة المستخدم
+    }
   }
 }

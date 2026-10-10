@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import { signOut } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
+import { openStoreReview } from "../../lib/review";
 import { LanguageSwitcher } from "./language-switcher";
 import { BrandMark } from "./logo";
 
@@ -91,6 +92,21 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
                 </Pressable>
               ))}
             </View>
+
+            {/* تقييم التطبيق في App Store */}
+            <Pressable
+              onPress={() => {
+                setOpen(false);
+                void openStoreReview();
+              }}
+              style={[styles.item, { flexDirection: dir.row, marginTop: 10 }]}
+            >
+              <View style={[styles.itemIcon, { backgroundColor: "#F6C34A22", borderColor: "#F6C34A55" }]}>
+                <Ionicons name="star" size={20} color="#F6C34A" />
+              </View>
+              <Text style={[styles.itemTxt, { textAlign: dir.textAlign }]}>{t("rate.button")}</Text>
+              <Ionicons name="chevron-back" size={18} color={Palette.textDim} />
+            </Pressable>
 
             <View style={{ flex: 1 }} />
 
