@@ -6,6 +6,7 @@
 // القراءة جملة-بجملة وصفحة-بصفحة، ويحفظ الموضع باستمرار. عند الرجوع للقارئ يستلم
 // القارئ من نفس الجملة (takeOver) ويتوقف هذا المشغّل — فلا يُقرأ الكتاب من مكانين.
 import { getSpokenName } from "./auth";
+import { stopAmbient } from "./sfx";
 import { extractPdfPageText, getPreciseText } from "./pdfText";
 import { setLastPage, setLastSentence } from "./readerPrefs";
 import { focusEvery, getFocusLevel } from "./settings";
@@ -136,6 +137,7 @@ export function resume() {
 export function close() {
   token++;
   stopSpeaking().catch(() => {});
+  stopAmbient(); // موسيقى الخلفية التي استمرت مع الشريط العائم
   logMinutes();
   state = null;
   unlistenCard();

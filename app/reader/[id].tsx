@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  AppState,
   Image,
   Modal,
   PanResponder,
@@ -728,21 +727,15 @@ export default function ReaderScreen() {
         });
       }
       if (!keepPlaying) closeReadingCard(); // وإلا يستلمها المشغّل العام ويحدّثها
-      stopAmbient(); // أوقف موسيقى الخلفية عند مغادرة الكتاب
+      // موسيقى الخلفية تكمل مع الشريط العائم إن استمر السرد، وإلا تتوقف بمغادرة الكتاب
+      if (!keepPlaying) stopAmbient();
       // ملاحظة: لا نوقف تحميل الكتاب عند الخروج — يكمل في الخلفية عبر المدير العام
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // خروج التطبيق للخلفية: نُبقي الموسيقى ما دام السرد شغّالًا — قفل الشاشة
-  // أثناء الاستماع يجب ألّا يقطع الجوّ الصوتي. أما إن كان السرد متوقّفًا فلا
-  // معنى لموسيقى تعزف وحدها بعد مغادرة المستخدم، فنوقفها كما كان سابقًا.
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (s) => {
-      if (s !== "active" && !playingRef.current) stopAmbient();
-    });
-    return () => sub.remove();
-  }, []);
+  // قفل الجوال أو الخروج للخلفية لا يوقف موسيقى الخلفية (حتى لو السرد متوقف):
+  // من يختار موسيقى يريدها تكمل والشاشة مقفلة. تتوقف فقط بإيقافها أو بمغادرة الكتاب.
 
   // حفظ آخر صفحة عند تغيّرها (بعد تحميل التفضيلات لتفادي الكتابة فوق المحفوظ)
   useEffect(() => {
