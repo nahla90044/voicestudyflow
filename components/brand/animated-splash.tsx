@@ -13,7 +13,7 @@ import { sceneGrowth } from "../../lib/sceneCore";
 import { BrandMark } from "./logo";
 import { SceneArt } from "./scene-art";
 
-const MIN_MS = 1700; // أقصر مدة عرض حتى يُرى الشروق والحركة كاملين
+const MIN_MS = 3200; // مدة تكفي لقراءة الاسم والشعار والاستمتاع بالمشهد
 const NATIVE_BG = "#07080D"; // لون شاشة النظام قبلها — نبدأ منه فلا يظهر قطع
 
 type Props = {
@@ -78,7 +78,7 @@ export function AnimatedSplash({ ready, onHidden }: Props) {
     if (!ready) return;
     const wait = Math.max(0, MIN_MS - (Date.now() - shownAt));
     const timer = setTimeout(() => {
-      Animated.timing(out, { toValue: 0, duration: 420, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => onHidden());
+      Animated.timing(out, { toValue: 0, duration: 650, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start(() => onHidden());
     }, wait);
     return () => clearTimeout(timer);
   }, [ready, out, onHidden, shownAt]);
