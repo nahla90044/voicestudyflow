@@ -98,6 +98,8 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "piano_dream", name: "بيانو حالم", kind: "music", lengthMs: 30000, prompt: "gentle calm solo piano, slow soft dreamy melody, peaceful warm and flowing, instrumental" },
   { key: "piano_emotive", name: "بيانو عاطفي", kind: "music", lengthMs: 30000, prompt: "reflective emotional solo piano, tender slow melancholic melody, contemplative and touching, instrumental" },
   { key: "piano_bright", name: "بيانو مشرق", kind: "music", lengthMs: 30000, prompt: "bright uplifting soft piano, gentle flowing hopeful melody, light and positive, instrumental" },
+  // 🌙 «خلوة» — مقطوعة بيانو سينمائية هادئة مولّدة من موقع ElevenLabs (محفوظة في السيرفر)
+  { key: "reflections", name: "خلوة", kind: "music", lengthMs: 65000, prompt: "solitary reflections, cinematic ambient minimalist piano, calm and contemplative, instrumental" },
   // 🎻 كمان متنوّع (٣)
   { key: "violin_calm", name: "كمان هادئ", kind: "music", lengthMs: 30000, prompt: "solo violin, warm slow expressive melody, calm and soothing, soft gentle strings, instrumental" },
   { key: "violin_emotive", name: "كمان عاطفي", kind: "music", lengthMs: 30000, prompt: "emotional solo violin, tender melancholic flowing melody, gentle and moving, instrumental" },
