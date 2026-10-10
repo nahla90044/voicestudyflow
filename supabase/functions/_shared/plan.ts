@@ -15,13 +15,13 @@ const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com"]);
 
 // حدود الخطط (اتفقنا عليها مع نهلة ٩ أكتوبر — رابحة حتى مع الاستهلاك الكامل):
 //  الصفحات: صفحة الكتاب تُحسب مرة واحدة في الشهر (إعادة الاستماع مجانية).
-//  std = الصوت الأساسي (Azure)، prem = الصوت الفاخر (ElevenLabs).
+//  std = صفحات الصوت (جيميناي، فئة واحدة). prem قديم (لا صوت فاخر بعد ١٠ أكتوبر).
 //  voice = أحرف خارج صفحات الكتب (القاموس، كلماتي، البطاقات…).
 //  المجانية تجربة لمرة واحدة (فترة lifetime)، والمدفوعة شهرية.
 export const LIMITS: Record<Exclude<Plan, "owner">, { std: number; prem: number; ai: number; voice: number }> = {
   free: { std: 10, prem: 0, ai: 5, voice: 3_000 },
-  plus: { std: 100, prem: 5, ai: 50, voice: 40_000 },
-  pro: { std: 200, prem: 10, ai: 100, voice: 80_000 },
+  plus: { std: 100, prem: 0, ai: 50, voice: 40_000 },
+  pro: { std: 200, prem: 0, ai: 100, voice: 80_000 },
 };
 
 /** الفترة المحسوبة: lifetime للمجانية، وإلا الشهر الحالي (UTC) */

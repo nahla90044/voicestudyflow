@@ -13,8 +13,8 @@ export type Plan = "owner" | "pro" | "plus" | "free";
 // الصفحة تُحسب مرة واحدة في الشهر (إعادة الاستماع مجانية). المجانية تجربة لمرة واحدة.
 export const LIMITS: Record<Exclude<Plan, "owner">, { pages: number; premium: number; ai: number }> = {
   free: { pages: 10, premium: 0, ai: 5 },
-  plus: { pages: 100, premium: 5, ai: 50 },
-  pro: { pages: 200, premium: 10, ai: 100 },
+  plus: { pages: 100, premium: 0, ai: 50 },
+  pro: { pages: 200, premium: 0, ai: 100 },
 };
 /** دقائق استماع تقريبية لكل صفحة (للعرض فقط) */
 export const MIN_PER_PAGE = 2;

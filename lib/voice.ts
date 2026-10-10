@@ -1,7 +1,7 @@
 // lib/voice.ts
-// أصوات بشرية عبر ElevenLabs مع رجوع تلقائي لصوت الجهاز (expo-speech) عند الفشل.
+// أصوات بشرية (Google Gemini عبر السيرفر) مع رجوع تلقائي لصوت الجهاز (expo-speech) عند الفشل.
 //
-// الأمان: لا يوجد أي مفتاح ElevenLabs في العميل إطلاقًا. كل طلبات الصوت تمرّ عبر
+// الأمان: لا يوجد أي مفتاح صوت في العميل إطلاقًا. كل طلبات الصوت تمرّ عبر
 // دالة Supabase «tts» (Edge Function) التي تحفظ المفتاح سرّيًا بالسيرفر
 // (Deno.env). لا تضعي EXPO_PUBLIC_ELEVENLABS_API_KEY في .env — أي متغيّر
 // EXPO_PUBLIC_ يُحزَّم داخل التطبيق ويصبح مكشوفًا. الواجهة (speakText/stopSpeaking)
@@ -76,62 +76,57 @@ export type SpeakOptions = {
 /** صفحة كتاب يُقرأ صوتها — حصة الاشتراك بالصفحات (إعادة الاستماع مجانية) */
 export type PageRef = { book: string; page: number };
 
-/* ---------------- كتالوج أصوات ElevenLabs العربية ---------------- */
+/* ---------------- كتالوج الأصوات (Google Gemini) ---------------- */
 
 export type VoiceOption = {
   id: string;
   name: string; // الاسم المعروض في الواجهة
-  voiceId: string; // معرّف ElevenLabs
+  voiceId: string; // «gemini:<اسم الصوت>» — السيرفر يقرر المزوّد
   gender: VoiceGender;
   rate?: number; // سرعة تشغيل خاصة بالصوت (< 1 = أبطأ وأعمق)
   lang?: "ar" | "en" | "fr"; // لغة الصوت (افتراضي عربي) — لكتب اللغات
-  premium?: boolean; // صوت فاخر (ElevenLabs) — بعدد صفحات محدود في الاشتراك
+  premium?: boolean; // (قديم) لم يعد هناك صوت فاخر — كل الأصوات فئة واحدة
 };
 
-// الأصوات الأساسية: Microsoft Azure (واضحة وبلا سقف ضمن صفحات الخطة) — تأتي أولًا.
-// ثم الأصوات الفاخرة: ElevenLabs (أقرب للصوت البشري، بعدد صفحات محدود شهريًا).
+// كل الأصوات جيميناي (نفس أصوات حاكي): تفهم معنى النص فتنطق الأرقام والتواريخ صح.
+// نفس الصوت يقرأ الإنجليزي والفرنسي، فأصوات اللغات بأسماء لاتينية.
 export const VOICE_CATALOG: VoiceOption[] = [
-  { id: "rashid", name: "راشد · فصحى", voiceId: "azure:ar-AE-Rashid:DragonHDLatestNeural", gender: "male" },
-  { id: "hamed", name: "حامد · سعودي", voiceId: "azure:ar-SA-HamedNeural", gender: "male" },
-  { id: "zariyah", name: "زارية · سعودية", voiceId: "azure:ar-SA-ZariyahNeural", gender: "female" },
-  { id: "salma-az", name: "سلمى · مصرية", voiceId: "azure:ar-EG-SalmaNeural", gender: "female" },
-  { id: "ava", name: "Ava · English", voiceId: "azure:en-US-Ava:DragonHDLatestNeural", gender: "female", lang: "en" },
-  { id: "andrew", name: "Andrew · English", voiceId: "azure:en-US-Andrew:DragonHDLatestNeural", gender: "male", lang: "en" },
-  { id: "vivienne", name: "Vivienne · Français", voiceId: "azure:fr-FR-VivienneMultilingualNeural", gender: "female", lang: "fr" },
-  { id: "remy", name: "Rémy · Français", voiceId: "azure:fr-FR-RemyMultilingualNeural", gender: "male", lang: "fr" },
-  // الأصوات الفاخرة (ElevenLabs)
-  { id: "omar", name: "عمر · فصحى", voiceId: "apsZFlSToM2vmFpwz5jX", gender: "male", premium: true },
-  { id: "abdullah", name: "عبدالله · فصحى جهوري", voiceId: "XdoLPWNt7ytn6BtU4FBf", gender: "male", premium: true },
-  { id: "tariq", name: "طارق · فصحى رنّان", voiceId: "18HMWpalD7cscJTD8lEY", gender: "male", premium: true },
-  { id: "layla", name: "ليلى · فصحى", voiceId: "RaelJk8tltOJ5KMrKjDu", gender: "female", premium: true },
-  { id: "haytham", name: "هيثم · حكواتي", voiceId: "UR972wNGq3zluze0LoIp", gender: "male", premium: true, rate: 0.82 },
-  { id: "yahya", name: "يحيى · حكواتي فصحى", voiceId: "QRq5hPRAKf5ZhSlTBH6r", gender: "male", premium: true },
-  { id: "fatima", name: "فاطمة · مصرية", voiceId: "vWDp3PLsTWjIhBxxUKh9", gender: "female", premium: true },
-  { id: "sufyan", name: "سفيان · عراقي", voiceId: "9FHjCdVXgA4tYxIYHTcZ", gender: "male", premium: true },
-  { id: "sultan", name: "سلطان · خليجي", voiceId: "rUaPbzcZIu8df8iNL9WZ", gender: "male", premium: true },
-  { id: "salma", name: "سلمى · خليجي", voiceId: "KxMRrXEjbJ6kZ93yT3fq", gender: "female", premium: true },
-  { id: "noura", name: "نورة · خليجي", voiceId: "isQLuoVuANx6FjDxyasX", gender: "female", premium: true },
-  // أصوات إنجليزية وفرنسية لكتب اللغات (أصوات ElevenLabs الجاهزة)
-  { id: "rachel", name: "Rachel · English", voiceId: "21m00Tcm4TlvDq8ikWAM", gender: "female", premium: true, lang: "en" },
-  { id: "adam", name: "Adam · English", voiceId: "pNInz6obpgDQGcFmaJgB", gender: "male", premium: true, lang: "en" },
-  { id: "charlotte", name: "Charlotte · Français", voiceId: "XB0fDUnXU5powFXDhCwa", gender: "female", premium: true, lang: "fr" },
-  { id: "antoni", name: "Antoni · Français", voiceId: "ErXwobaYiN019PkySvjV", gender: "male", premium: true, lang: "fr" },
+  { id: "maha", name: "مها · دافئ", voiceId: "gemini:Sulafat", gender: "female" },
+  { id: "hatem", name: "حاتم · عميق", voiceId: "gemini:Charon", gender: "male" },
+  { id: "reem", name: "ريم · واضح", voiceId: "gemini:Kore", gender: "female" },
+  { id: "yousef", name: "يوسف · رصين", voiceId: "gemini:Orus", gender: "male" },
+  { id: "jood", name: "جود · مشرق", voiceId: "gemini:Aoede", gender: "female" },
+  { id: "khaled", name: "خالد · هادئ", voiceId: "gemini:Iapetus", gender: "male" },
+  { id: "lama", name: "لمى · ناعم", voiceId: "gemini:Leda", gender: "female" },
+  { id: "fahad", name: "فهد · جهوري", voiceId: "gemini:Algenib", gender: "male" },
+  { id: "haya", name: "هيا · حيوي", voiceId: "gemini:Despina", gender: "female" },
+  { id: "nasser", name: "ناصر · حكواتي", voiceId: "gemini:Schedar", gender: "male" },
+  { id: "sara", name: "سارة · لطيف", voiceId: "gemini:Achernar", gender: "female" },
+  { id: "bader", name: "بدر · واثق", voiceId: "gemini:Sadaltager", gender: "male" },
+  { id: "dana", name: "دانة · رزين", voiceId: "gemini:Vindemiatrix", gender: "female" },
+  { id: "saad", name: "سعد · ودود", voiceId: "gemini:Achird", gender: "male" },
+  { id: "muneera", name: "منيرة · ناضج", voiceId: "gemini:Gacrux", gender: "female" },
+  { id: "ziyad", name: "زياد · سلس", voiceId: "gemini:Algieba", gender: "male" },
+  // كتب اللغات
+  { id: "kore-en", name: "Kore · English", voiceId: "gemini:Kore", gender: "female", lang: "en" },
+  { id: "charon-en", name: "Charon · English", voiceId: "gemini:Charon", gender: "male", lang: "en" },
+  { id: "sulafat-en", name: "Sulafat · English", voiceId: "gemini:Sulafat", gender: "female", lang: "en" },
+  { id: "orus-en", name: "Orus · English", voiceId: "gemini:Orus", gender: "male", lang: "en" },
+  { id: "aoede-fr", name: "Aoede · Français", voiceId: "gemini:Aoede", gender: "female", lang: "fr" },
+  { id: "iapetus-fr", name: "Iapetus · Français", voiceId: "gemini:Iapetus", gender: "male", lang: "fr" },
+  { id: "leda-fr", name: "Leda · Français", voiceId: "gemini:Leda", gender: "female", lang: "fr" },
+  { id: "algieba-fr", name: "Algieba · Français", voiceId: "gemini:Algieba", gender: "male", lang: "fr" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
 
-/** هل الصوت فاخر (ElevenLabs)؟ أي معرّف لا يبدأ بـ azure: يُعدّ فاخرًا */
-export const isPremiumVoice = (voiceId?: string) => !!voiceId && !voiceId.startsWith("azure:");
+/** (قديم) لا يوجد صوت فاخر بعد الانتقال لجيميناي */
+export const isPremiumVoice = (_voiceId?: string) => false;
 
-/** الصوت الأساسي المناسب للغة (عند انتهاء صفحات الصوت الفاخر) */
+/** الصوت الأساسي المناسب للغة (بقي للتوافق — كل الأصوات أساسية الآن) */
 export function standardVoiceFor(voiceId?: string): string {
   const lang = voiceLangOf(voiceId);
-  const g = VOICE_CATALOG.find((v) => v.voiceId === voiceId)?.gender;
-  return (
-    VOICE_CATALOG.find((v) => !v.premium && (v.lang ?? "ar") === lang && (!g || v.gender === g))?.voiceId ??
-    VOICE_CATALOG.find((v) => !v.premium && (v.lang ?? "ar") === lang)?.voiceId ??
-    DEFAULT_VOICE_ID
-  );
+  return VOICE_CATALOG.find((v) => (v.lang ?? "ar") === lang)?.voiceId ?? DEFAULT_VOICE_ID;
 }
 
 // انتهت صفحات الصوت الفاخر هذا الشهر → القراءة تكمل بالأساسي، والواجهة تنبّه مرة
@@ -151,8 +146,8 @@ export function voiceLangOf(voiceId?: string): "ar" | "en" | "fr" {
 
 // احتياطي عند غياب voiceId (المسار المباشر فقط)
 const VOICE_IDS: Record<VoiceGender, string> = {
-  female: "RaelJk8tltOJ5KMrKjDu", // Layla
-  male: "apsZFlSToM2vmFpwz5jX", // Omar
+  female: "gemini:Sulafat", // مها
+  male: "gemini:Charon", // حاتم
 };
 
 /* ---------------- حالة التشغيل ---------------- */
@@ -310,7 +305,7 @@ function disposePlayer() {
 
 /* ---------------- تخزين الصوت محليًا (cache) ---------------- */
 // نخبّئ كل مقطع صوتي باسم مشتق من (الجنس + الصوت + النص) حتى:
-//  - لا نعيد دفع تكلفة ElevenLabs لنفس الجملة
+//  - لا نعيد دفع تكلفة التوليد لنفس الجملة
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
 const CACHE_DIR_NAME = "tts-cache-v10"; // v10: مع توقيت الحروف للهايلايت كلمة-بكلمة
@@ -434,7 +429,7 @@ async function synthToFile(
   }
 
   // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
-  // لا يوجد مفتاح ElevenLabs داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
+  // لا يوجد مفتاح صوت داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
   const { data, error } = await supabase.functions.invoke("tts", {
     body: { text, gender, voiceId: vid, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
   });
