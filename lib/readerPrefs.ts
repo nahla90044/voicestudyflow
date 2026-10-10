@@ -85,3 +85,14 @@ export async function getReaderFontScale(): Promise<number> {
 export async function setReaderFontScale(n: number): Promise<void> {
   await AsyncStorage.setItem(FONT_KEY, String(n));
 }
+
+const TOOLS_HIDDEN_KEY = "reader:toolsHidden";
+
+/** هل لوحة أدوات القارئ مخفية؟ (يتذكّر اختيار المستخدم) */
+export async function getToolsHidden(): Promise<boolean> {
+  return (await AsyncStorage.getItem(TOOLS_HIDDEN_KEY)) === "1";
+}
+
+export async function setToolsHidden(hidden: boolean): Promise<void> {
+  await AsyncStorage.setItem(TOOLS_HIDDEN_KEY, hidden ? "1" : "0");
+}

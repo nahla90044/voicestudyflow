@@ -47,6 +47,8 @@ import {
   setLastOpenedBook,
   getLastSentence,
   getReadingRate,
+  getToolsHidden,
+  setToolsHidden,
   getReaderFontScale,
   getReaderPaper,
   setReaderFontScale,
@@ -411,6 +413,17 @@ export default function ReaderScreen() {
   const [paper, setPaper] = useState(false);
   const [fontScale, setFontScale] = useState(1);
   const [toolTab, setToolTab] = useState<"listen" | "study" | "view">("listen");
+  const [toolsHidden, setToolsHiddenState] = useState(false); // إخفاء لوحة الأدوات لمساحة قراءة أكبر
+  useEffect(() => {
+    void getToolsHidden().then(setToolsHiddenState).catch(() => {});
+  }, []);
+  function toggleToolsHidden() {
+    setToolsHiddenState((h) => {
+      void setToolsHidden(!h);
+      return !h;
+    });
+    setToolOpt(null);
+  }
   const [toolOpt, setToolOpt] = useState<"speed" | "sleep" | "music" | "font" | null>(null);
   // نداء التركيز التفاعلي: بطاقة تظهر مع النداء الصوتي وتنتظر لمسة (معك / إعادة / شرح أبسط)
   type CheckIn = { phase: "ask" | "done" | "explaining" | "explained"; title: string; body?: string };
@@ -2949,6 +2962,14 @@ export default function ReaderScreen() {
           <View style={{ flex: 1 }}>
             <PageScrubber page={page} totalPages={totalPages} onSeek={gotoPage} rtl={dir.isRTL} paper={paper} />
           </View>
+          <Pressable
+            onPress={toggleToolsHidden}
+            style={[styles.pagePill, paper && styles.topBtnPaper, { paddingHorizontal: 10 }]}
+            hitSlop={6}
+            accessibilityLabel={toolsHidden ? t("reader.tools.show") : t("reader.tools.hide")}
+          >
+            <Ionicons name={toolsHidden ? "options-outline" : "chevron-down"} size={16} color={paper ? INK : Palette.text} />
+          </Pressable>
         </View>
 
         {/* التحكّم بالاستماع: مقطع سابق · تشغيل · مقطع تالٍ (الصفحات: الرقم والشريط أعلاه، أو السحب بالإصبع) */}
@@ -2973,6 +2994,8 @@ export default function ReaderScreen() {
         </View>
 
         {/* أدوات القراءة داخل الصفحة: ثلاث مجموعات ظاهرة، واختيارات الأداة تظهر تحتها مباشرة */}
+        {!toolsHidden && (
+        <>
         <View style={[styles.tabsRow, { flexDirection: dir.row }]}>
           {(["listen", "study", "view"] as const).map((g) => (
             <Pressable
@@ -3121,6 +3144,8 @@ export default function ReaderScreen() {
             ))}
           </ScrollView>
         ) : null}
+        </>
+        )}
       </View>
       )}
 
