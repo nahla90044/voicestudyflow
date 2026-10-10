@@ -6,10 +6,11 @@
 export type SceneId = "garden" | "study" | "sky";
 export type ScenePref = "auto" | SceneId;
 
-/** ٥ص–٣م حديقة · ٣م–٨م سهرة · ٨م–٥ص سماء */
+/** على توقيت السعودية (الغروب ~٦م): ٥ص–٤م حديقة · ٤م–٦:٣٠م غروب «سهرة» · ٦:٣٠م–٥ص سماء الليل.
+ * h ساعة عشرية (١٨٫٥ = ٦:٣٠م) */
 export function sceneForHour(h: number): SceneId {
-  if (h >= 5 && h < 15) return "garden";
-  if (h >= 15 && h < 20) return "study";
+  if (h >= 5 && h < 16) return "garden";
+  if (h >= 16 && h < 18.5) return "study";
   return "sky";
 }
 

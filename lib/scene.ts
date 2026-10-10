@@ -33,16 +33,22 @@ export async function setScenePref(p: ScenePref): Promise<void> {
   await AsyncStorage.setItem(KEY, p).catch(() => {});
 }
 
+/** الساعة الآن بالكسور (٦:٣٠م = ١٨٫٥) — لتبديل المشهد على نصف الساعة */
+const nowHour = () => {
+  const d = new Date();
+  return d.getHours() + d.getMinutes() / 60;
+};
+
 /** المشهد الآن + ألوانه. يُعاد حسابه عند العودة للتطبيق وكل ١٠ دقائق.
  * القيم في حالة React (لا متغيرات الوحدة مباشرة) حتى لا يحفظ React Compiler نتيجة قديمة. */
 export function useScene(): { id: SceneId; pal: ScenePalette; pref: ScenePref } {
   const [cur, setCur] = useState<ScenePref>(pref);
-  const [hour, setHour] = useState(() => new Date().getHours());
+  const [hour, setHour] = useState(nowHour);
   useEffect(() => {
     void load();
     const sync = () => {
       setCur(pref);
-      setHour(new Date().getHours());
+      setHour(nowHour());
     };
     sync();
     listeners.add(sync);
