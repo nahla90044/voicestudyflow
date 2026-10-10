@@ -36,7 +36,9 @@ export default function PaywallScreen() {
   // للمعاينة أثناء التطوير فقط: حساب المالكة يُعاد من الشاشة عادةً
   const devPreview = __DEV__ && preview === "1";
 
-  const [yearly, setYearly] = useState(true);
+  // شهري فقط حتى ٢٠٢٧ (قرار ١٠ أكتوبر): تكلفة الصوت قد تتغيّر، والشهري يسمح بتعديل السعر
+  // بلا التزام سنوي بسعر قديم. المنتجات السنوية باقية في الكود لاستعادة أي اشتراك قديم فقط.
+  const yearly = false;
   const [tier, setTier] = useState<Tier>("pro");
   const [prices, setPrices] = useState<Partial<Record<ProductKey, StorePrice | null>>>({});
   const [busy, setBusy] = useState(false);
@@ -75,7 +77,7 @@ export default function PaywallScreen() {
     (async () => {
       // المالكة لا ترى الاشتراك أبدًا
       if (!devPreview && (await getPlan()) === "owner") return router.back();
-      const keys: ProductKey[] = ["premium_month", "premium_year", "pro_month", "pro_year", "plus_month", "plus_year"];
+      const keys: ProductKey[] = ["premium_month", "pro_month", "plus_month"];
       const got = await Promise.all(keys.map((k) => storePrice(k)));
       // معاينة التطوير (لصور المراجعة فقط): الأسعار المسجّلة في المتجر بدل «…»
       const demo: Record<ProductKey, StorePrice> = {
@@ -242,18 +244,6 @@ export default function PaywallScreen() {
           )}
           <Text style={[styles.sub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("pay.sub")}</Text>
 
-          <View style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
-            {([false, true] as const).map((y) => {
-              const on = yearly === y;
-              return (
-                <Pressable key={String(y)} onPress={() => setYearly(y)} style={[styles.segItem, on && { backgroundColor: pal.accent }]} accessibilityRole="tab" accessibilityState={{ selected: on }}>
-                  <Text style={[styles.segTxt, { color: on ? pal.onAccent : pal.dim }]} numberOfLines={1}>
-                    {y ? t("pay.yearly") : t("pay.monthly")}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
 
           <PlanCard tr="premium">
             <Feat text={t("pay.premium.f1")} />
