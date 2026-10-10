@@ -63,7 +63,6 @@ export default function HelpScreen() {
             onPress={() => Linking.openURL("mailto:Nahlah@Nahlah.io").catch(() => {})}
             style={styles.contact}
           >
-            <Text style={styles.contactName}>{t("help.contact.design")}</Text>
             <Text style={styles.contactMail}>{t("help.contact.mail")}</Text>
             <Text style={styles.madeIn}>{t("help.madeIn")}</Text>
           </Pressable>

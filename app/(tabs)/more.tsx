@@ -441,8 +441,6 @@ export default function MoreScreen() {
           <SceneCard style={styles.cardGap}>
             <Text style={titleStyle}>{t("more.about.title")}</Text>
             <Text style={helpStyle}>
-              {t("more.about.designer", { name: "Nahla Bin Shablan" })}
-              {"\n"}
               {t("more.about.purpose")}
               {"\n"}
               {t("more.about.disclaimer")}

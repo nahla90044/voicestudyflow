@@ -100,7 +100,6 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
               <Text style={[styles.signOutTxt, { textAlign: dir.textAlign }]}>{t("profile.signOut")}</Text>
             </Pressable>
 
-            <Text style={styles.footer}>{t("drawer.credit", { name: "Nahla" })}</Text>
             <Text style={styles.footerMail}>Nahlah@Nahlah.io</Text>
             <Text style={styles.madeIn}>{t("drawer.madeIn")}</Text>
           </View>
