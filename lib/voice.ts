@@ -276,10 +276,10 @@ export async function ensureAudioMode() {
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
-      // "mixWithOthers" لا "doNotMix": التطبيق يشغّل مشغّلَين معًا (السرد +
-      // الموسيقى الخلفية)، و"doNotMix" كان يجعل جلسة الصوت حصرية فتُكتم
-      // الموسيقى — وبوضوح عند قفل الشاشة حيث يبقى السرد وحده.
-      interruptionMode: "mixWithOthers",
+      // "doNotMix" (مثل حاكي): وحده يجعل iOS يعرض مشغّل «قيد التشغيل» في الجزيرة
+      // العائمة وشاشة القفل بأزرار تعمل والجوال مقفل. مع "mixWithOthers" يختفي المشغّل.
+      // (السرد والموسيقى الخلفية مشغّلان داخل نفس التطبيق فيعملان معًا.)
+      interruptionMode: "doNotMix",
     });
   } catch {
     try {
