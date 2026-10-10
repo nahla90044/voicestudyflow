@@ -279,3 +279,48 @@ export async function solveMfaChallenge(code: string): Promise<void> {
   if (!verified) throw new Error("No verified 2FA factor");
   await verifyMfa(verified.id, code);
 }
+
+/**
+ * تسجيل الدخول بحساب Apple (iOS). الرمز يُتحقَّق منه في Supabase (مزوّد apple).
+ * nonce عشوائي: نرسل تجزئته لآبل والنص الأصلي لـ Supabase، فلا يُعاد استخدام الرمز.
+ * التجربة المجانية مشروطة بهذا الدخول (حساب Apple واحد = تجربة واحدة) — يقلّل الحسابات الوهمية.
+ */
+export async function signInWithApple(): Promise<"ok" | "cancelled"> {
+  const AppleAuthentication = await import("expo-apple-authentication");
+  const Crypto = await import("expo-crypto");
+  const rawNonce = Crypto.randomUUID();
+  const hashed = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+  let credential;
+  try {
+    credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashed,
+    });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "ERR_REQUEST_CANCELED") return "cancelled";
+    throw e;
+  }
+  if (!credential.identityToken) throw new Error("No identity token");
+  const { error } = await supabase.auth.signInWithIdToken({ provider: "apple", token: credential.identityToken, nonce: rawNonce });
+  if (error) throw error;
+  // آبل ترسل الاسم في أول دخول فقط — نحفظه اسمًا للعرض
+  const given = credential.fullName?.givenName?.trim();
+  if (given) await updateName(given).catch(() => {});
+  return "ok";
+}
+
+/** هل الحساب الحالي مسجّل بحساب Apple؟ (شرط التجربة المجانية) */
+export async function isAppleAccount(): Promise<boolean> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const providers = (user?.app_metadata?.providers as string[] | undefined) ?? [];
+    return providers.includes("apple") || (user?.identities ?? []).some((i) => i.provider === "apple");
+  } catch {
+    return false;
+  }
+}

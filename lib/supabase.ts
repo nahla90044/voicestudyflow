@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -22,4 +23,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     // React Native لا يستخدم عناوين URL لاسترجاع الجلسة
     detectSessionInUrl: false,
   },
+  // رقم نسخة التطبيق مع كل طلب: السيرفر يرفض النسخ القديمة (قبل 2.0) في الخدمات المكلفة
+  global: { headers: { "x-vsf-version": Constants.expoConfig?.version ?? "0" } },
 });
+
+/** رقم نسخة التطبيق الحالية (من app.json) */
+export const APP_VERSION = Constants.expoConfig?.version ?? "0";

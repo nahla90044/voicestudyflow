@@ -16,6 +16,7 @@ import { requestPaywall } from "./plan";
 
 import { numbersToArabicWords } from "./arabicNumbers";
 import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
+import { markUpdateRequired } from "./appVersion";
 import { supabase } from "./supabase";
 
 /* -------- سجلّ عام لكل مشغّلات السرد: صوت واحد فقط في أي لحظة -------- */
@@ -418,7 +419,11 @@ async function synthToFile(
   const { data, error } = await supabase.functions.invoke("tts", {
     body: { text, gender, voiceId: vid, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
   });
-  if (error) throw error;
+  if (error) {
+    // نسخة لم تعد مدعومة (426) → قفل التطبيق بشاشة التحديث
+    if ((error as { context?: { status?: number } })?.context?.status === 426) markUpdateRequired();
+    throw error;
+  }
   const b64 = (data as { audio?: string; error?: string })?.audio;
   const d = data as { error?: string; quota?: boolean; userQuota?: boolean; premiumQuota?: boolean };
   if (d?.premiumQuota) throw new Error("PREMIUM_QUOTA");

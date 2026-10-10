@@ -6,6 +6,7 @@
 // إن لم يوجد مفتاح Vision: نرجّع معلومات التحويل فقط (للاختبار).
 import * as mupdf from "npm:mupdf@1.3.5";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireUpdatedApp } from "../_shared/client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,6 +62,9 @@ function extractWords(vJson: any): WordBox[] {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // نسخ التطبيق القديمة (قبل 2.0) تُرفض ويُطلب منها التحديث
+  const outdated = requireUpdatedApp(req, corsHeaders);
+  if (outdated) return outdated;
 
   try {
     const body = await req.json().catch(() => ({}));

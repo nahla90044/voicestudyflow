@@ -2,6 +2,7 @@
 // توليد مؤثرات صوتية / خلفية موسيقية عبر ElevenLabs Sound Generation.
 // المفتاح يبقى سرّيًا بالسيرفر. الطلب: { prompt: string, duration?: number }
 // الرد: { audio: base64 mp3 }
+import { requireUpdatedApp } from "../_shared/client.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,6 +25,9 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // نسخ التطبيق القديمة (قبل 2.0) تُرفض ويُطلب منها التحديث
+  const outdated = requireUpdatedApp(req, corsHeaders);
+  if (outdated) return outdated;
   try {
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");

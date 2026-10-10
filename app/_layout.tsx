@@ -8,6 +8,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AnimatedSplash } from "../components/brand/animated-splash";
+import { UpdateRequired } from "../components/brand/update-required";
+import { checkMinVersion, onUpdateRequired } from "../lib/appVersion";
 import { Palette } from "../constants/design";
 import { getSession } from "../lib/auth";
 import { initPurchases } from "../lib/purchases";
@@ -24,6 +26,14 @@ export default function RootLayout() {
   const router = useRouter();
   const [booting, setBooting] = useState(true); // السبلاش ظاهرة
   const [bootReady, setBootReady] = useState(false); // انتهى الإقلاع → تبدأ السبلاش بالتلاشي
+  const [mustUpdate, setMustUpdate] = useState(false); // نسخة لم تعد مدعومة → قفل بشاشة التحديث
+  useEffect(() => {
+    const off = onUpdateRequired(() => setMustUpdate(true));
+    void checkMinVersion();
+    return () => {
+      off();
+    };
+  }, []);
 
   useEffect(() => {
     // التطبيق عموديّ افتراضيًا؛ نسمح بالعرض (landscape) فقط داخل عدسة القارئ.
@@ -89,6 +99,7 @@ export default function RootLayout() {
           <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
         </Stack>
+        {mustUpdate ? <UpdateRequired /> : null}
         {booting ? <AnimatedSplash ready={bootReady} onHidden={() => setBooting(false)} /> : null}
       </SafeAreaProvider>
       </ThemeProvider>

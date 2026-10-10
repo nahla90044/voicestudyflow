@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "../components/brand/motion";
 import { SceneArt } from "../components/brand/scene-art";
 import { SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { isAppleAccount, signInWithApple, signOut } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
 import { getPlan, invalidatePlan, PAGE_PACK } from "../lib/plan";
 import { buy, buyPages, pagesPrice, PRIVACY_URL, restore, storePrice, TERMS_URL, type ProductKey, type StorePrice } from "../lib/purchases";
@@ -39,6 +40,35 @@ export default function PaywallScreen() {
   const [tier, setTier] = useState<Tier>("pro");
   const [prices, setPrices] = useState<Partial<Record<ProductKey, StorePrice | null>>>({});
   const [busy, setBusy] = useState(false);
+  // التجربة المجانية مشروطة بحساب Apple: نعرض الدعوة لمن هو مجاني بلا Apple
+  const [needApple, setNeedApple] = useState(false);
+  useEffect(() => {
+    void (async () => {
+      if ((await getPlan()) === "free" && !(await isAppleAccount())) setNeedApple(true);
+    })();
+  }, []);
+
+  function onAppleTrial() {
+    Alert.alert(t("trial.apple.confirmTitle"), t("trial.apple.confirmBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("trial.apple.cta"),
+        onPress: async () => {
+          try {
+            await signOut();
+            const r = await signInWithApple();
+            if (r === "ok") {
+              invalidatePlan();
+              router.replace("/");
+            } else router.replace("/auth");
+          } catch {
+            Alert.alert(t("pay.failTitle"), t("trial.apple.failed"));
+            router.replace("/auth");
+          }
+        },
+      },
+    ]);
+  }
   const [packPrice, setPackPrice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -188,6 +218,20 @@ export default function PaywallScreen() {
         </View>
 
         <View style={styles.body}>
+          {needApple && (
+            <Pressable onPress={onAppleTrial} accessibilityRole="button">
+              <SceneCard style={[styles.appleCard, { flexDirection: dir.row }]}>
+                <View style={styles.appleIcon}>
+                  <Ionicons name="logo-apple" size={22} color="#FFFFFF" />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[styles.appleTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("trial.apple.title")}</Text>
+                  <Text style={[styles.appleSub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("trial.apple.sub")}</Text>
+                </View>
+                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+              </SceneCard>
+            </Pressable>
+          )}
           {!!headline && (
             <View style={[styles.reasonBox, { backgroundColor: pal.soft, borderColor: pal.cardBorder, flexDirection: dir.row }]}>
               <Ionicons name="information-circle" size={18} color={pal.accent} />
@@ -278,6 +322,10 @@ export default function PaywallScreen() {
 }
 
 const styles = StyleSheet.create({
+  appleCard: { alignItems: "center", gap: 12 },
+  appleIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
+  appleTitle: { fontSize: 15.5, fontWeight: "800" },
+  appleSub: { fontSize: 12.5, fontWeight: "600", lineHeight: 18 },
   heroInner: { flex: 1, paddingHorizontal: 20, paddingBottom: 10, justifyContent: "space-between" },
   title: { fontSize: 30, fontWeight: "900", lineHeight: 42 },
   body: { paddingHorizontal: 18, gap: 14 },

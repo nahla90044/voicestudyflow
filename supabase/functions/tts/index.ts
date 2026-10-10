@@ -9,6 +9,7 @@
 // مرة واحدة في الشهر (حتى لو كان صوتها في الكاش)، وإلا تُحسب الأحرف (القاموس وغيره).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { consume, consumePage, getCaller } from "../_shared/plan.ts";
+import { requireUpdatedApp } from "../_shared/client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,6 +105,9 @@ const MODEL_ID = Deno.env.get("ELEVENLABS_MODEL_ID") || "eleven_multilingual_v2"
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // نسخ التطبيق القديمة (قبل 2.0) تُرفض ويُطلب منها التحديث
+  const outdated = requireUpdatedApp(req, corsHeaders);
+  if (outdated) return outdated;
 
   try {
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");

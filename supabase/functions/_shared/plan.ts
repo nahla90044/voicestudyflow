@@ -29,7 +29,18 @@ export function periodOf(plan: Plan): string {
   return plan === "free" ? "lifetime" : new Date().toISOString().slice(0, 7);
 }
 
-export type Caller = { id: string; plan: Plan; admin: SupabaseClient } | null;
+// apple = دخل بحساب Apple (شرط التجربة المجانية: حساب Apple واحد = تجربة واحدة، فيصعب صنع حسابات وهمية)
+export type Caller = { id: string; plan: Plan; admin: SupabaseClient; apple: boolean } | null;
+
+// حساب مراجعة آبل (بريد وكلمة سر في App Store Connect): يأخذ التجربة المجانية بلا Apple
+const TRIAL_OK_EMAILS = new Set(["review@voicestudyflow.app"]);
+
+/** حدود الحساب: المجاني بلا Apple لا تجربة له (صفر) */
+function limitsFor(caller: NonNullable<Caller>) {
+  const base = LIMITS[caller.plan as Exclude<Plan, "owner">];
+  if (caller.plan === "free" && !caller.apple) return { std: 0, prem: 0, ai: 0, voice: 0 };
+  return base;
+}
 
 /** يتعرّف على المستخدم من رمز الدخول ويحدّد خطته. null إن لم يُعرف. */
 export async function getCaller(req: Request): Promise<Caller> {
@@ -42,12 +53,15 @@ export async function getCaller(req: Request): Promise<Caller> {
   const user = data?.user;
   if (error || !user) return null;
 
-  if (OWNER_EMAILS.has((user.email ?? "").trim().toLowerCase())) return { id: user.id, plan: "owner", admin };
+  const email = (user.email ?? "").trim().toLowerCase();
+  const providers = ((user.app_metadata?.providers as string[] | undefined) ?? []).concat((user.identities ?? []).map((i) => i.provider));
+  const apple = providers.includes("apple") || TRIAL_OK_EMAILS.has(email);
+  if (OWNER_EMAILS.has(email)) return { id: user.id, plan: "owner", admin, apple };
 
   const { data: ent } = await admin.from("entitlements").select("plan_id,expires_at").eq("user_id", user.id).maybeSingle();
   const active = !!ent && (ent.expires_at === null || new Date(ent.expires_at).getTime() > Date.now());
   const plan: Plan = active ? (String(ent!.plan_id).startsWith("pro") ? "pro" : "plus") : "free";
-  return { id: user.id, plan, admin };
+  return { id: user.id, plan, admin, apple };
 }
 
 /**
@@ -58,7 +72,7 @@ export async function consume(caller: Caller, kind: "voice" | "ai", amount: numb
   const enforced = Deno.env.get("QUOTAS_ENFORCED") === "true";
   if (!caller) return !enforced;
   if (caller.plan === "owner") return true;
-  const limit = enforced ? LIMITS[caller.plan][kind] : -1;
+  const limit = enforced ? limitsFor(caller)[kind] : -1;
   const { data, error } = await caller.admin.rpc("consume_usage_p", {
     p_user: caller.id,
     p_period: periodOf(caller.plan),
@@ -80,7 +94,7 @@ export async function consumePage(caller: Caller, pageKey: string, tier: "std" |
   const enforced = Deno.env.get("QUOTAS_ENFORCED") === "true";
   if (!caller) return enforced ? "over" : "ok";
   if (caller.plan === "owner") return "ok";
-  const limit = enforced ? LIMITS[caller.plan][tier] : -1;
+  const limit = enforced ? limitsFor(caller)[tier] : -1;
   const { data, error } = await caller.admin.rpc("consume_page", {
     p_user: caller.id,
     p_period: periodOf(caller.plan),

@@ -5,6 +5,7 @@
 // الرد:   { result: string }
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { consume, getCaller } from "../_shared/plan.ts";
+import { requireUpdatedApp } from "../_shared/client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,6 +88,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+  // نسخ التطبيق القديمة (قبل 2.0) تُرفض ويُطلب منها التحديث
+  const outdated = requireUpdatedApp(req, corsHeaders);
+  if (outdated) return outdated;
 
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");

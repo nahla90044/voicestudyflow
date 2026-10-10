@@ -17,6 +17,7 @@ import {
   mfaChallengeRequired,
   sendLoginCode,
   setNewPassword,
+  signInWithApple,
   signInWithEmail,
   signUpEmail,
   solveMfaChallenge,
@@ -75,6 +76,20 @@ export default function AuthScreen() {
     // أول دخول: نعرض الجولة التعريفية، وإلا ندخل التطبيق مباشرة
     const seen = await AsyncStorage.getItem(ONBOARDING_KEY).catch(() => null);
     router.replace(seen === "1" ? "/" : "/onboarding");
+  }
+
+  // الدخول بحساب Apple: الطريقة الأولى (وشرط التجربة المجانية)
+  async function onApple() {
+    setErr("");
+    setBusy(true);
+    try {
+      const r = await signInWithApple();
+      if (r === "ok") await finishLogin();
+    } catch {
+      setErr(t("trial.apple.failed"));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function onSubmit() {
@@ -345,6 +360,18 @@ export default function AuthScreen() {
               </View>
             ) : (
               <View style={styles.card}>
+                {Platform.OS === "ios" && AppleAuthentication ? (
+                  <>
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                      cornerRadius={14}
+                      style={styles.appleBtn}
+                      onPress={onApple}
+                    />
+                    <Text style={styles.orTxt}>{t("auth.or")}</Text>
+                  </>
+                ) : null}
                 <View style={[styles.tabs, { flexDirection: dir.row }]}>
                   <Pressable onPress={() => setMode("signup")} style={[styles.tab, mode === "signup" && styles.tabOn]}>
                     <Text style={[styles.tabTxt, mode === "signup" && styles.tabTxtOn]}>{t("auth.tab.signup")}</Text>
@@ -428,7 +455,18 @@ export default function AuthScreen() {
   );
 }
 
+// الوحدة الأصلية موجودة من البناء 10؛ في البناءات الأقدم (تحديث هوائي) لا يظهر الزر بدل أن يتعطل التطبيق
+let AppleAuthentication: typeof import("expo-apple-authentication") | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  AppleAuthentication = require("expo-apple-authentication");
+} catch {
+  AppleAuthentication = null;
+}
+
 const styles = StyleSheet.create({
+  appleBtn: { width: "100%", height: 50 },
+  orTxt: { color: Palette.textDim, fontSize: 12.5, fontWeight: "600", textAlign: "center", marginVertical: 14 },
   safe: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center", padding: Spacing.xl },
   logo: { width: 78, height: 78, borderRadius: 24, alignItems: "center", justifyContent: "center", alignSelf: "center" },
