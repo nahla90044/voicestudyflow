@@ -207,6 +207,7 @@ export function useCoachTour(
   // في النافذة المنبثقة تُقاس المواضع من أعلاها لا من أعلى الشاشة → نضيف إزاحتها.
   // النافذة مثبّتة أسفل الشاشة، فإزاحتها = ارتفاع الشاشة − ارتفاعها.
   const sheetH = useRef(0);
+  const sheetRef = useRef<View | null>(null);
 
   const bind = useCallback(
     (id: string) => ({
@@ -231,6 +232,23 @@ export function useCoachTour(
       }
       const v = refs.current[list[i].id];
       if (!v) return show(i + 1);
+      // النافذة المنبثقة: نقيس ارتفاعها لحظة العرض (لا نعتمد على قياس قديم)
+      if (sheet && sheetRef.current) {
+        sheetRef.current.measureInWindow((_x, _y, _w, sh) => {
+          if (sh > 0) sheetH.current = sh;
+          measureStep(v, i);
+        });
+        return;
+      }
+      measureStep(v, i);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key, name, sheet, screenH]
+  );
+
+  const measureStep = useCallback(
+    (v: View, i: number) => {
+      const list = stepsRef.current;
       v.measureInWindow((x, y, w, h) => {
         if (!w || !h) return show(i + 1);
         const dy = sheet && sheetH.current > 0 ? Math.max(0, screenH - sheetH.current) : 0;
@@ -240,12 +258,17 @@ export function useCoachTour(
         setIdx(i);
       });
     },
-    [key, name, sheet, screenH]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sheet, screenH]
   );
 
   /** يوضع على جذر الشاشة المنبثقة لمعرفة ارتفاعها */
   const sheetRoot = useCallback(
     () => ({
+      ref: (r: View | null) => {
+        sheetRef.current = r;
+      },
+      collapsable: false as const,
       onLayout: (e: { nativeEvent: { layout: { height: number } } }) => {
         sheetH.current = e.nativeEvent.layout.height;
       },
