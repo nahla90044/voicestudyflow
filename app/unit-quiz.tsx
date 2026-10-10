@@ -8,6 +8,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 
+import { CoachHelpButton, useCoachTour } from "../components/brand/coach-mark";
 import { PressableScale } from "../components/brand/motion";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
@@ -72,6 +73,25 @@ export default function UnitQuizScreen() {
   const [weak, setWeak] = useState<{ unit: number | null; untested: boolean }>({ unit: null, untested: true });
   const [bookId, setBookId] = useState("");
   const ctxRef = useRef({ unitCount: 0, readFraction: 0 });
+
+  // جولة الإرشاد: عند ظهور أول سؤال، ثم جولة قصيرة بعد أول إجابة (الروابط وزر التالي)
+  const coach = useCoachTour(
+    "unitquiz_v1",
+    [
+      { id: "bars", title: t("coach.quiz.bars.title"), body: t("coach.quiz.bars.body"), shape: "rect" },
+      { id: "ready", title: t("coach.quiz.ready.title"), body: t("coach.quiz.ready.body"), shape: "rect" },
+      { id: "opt", title: t("coach.quiz.opt.title"), body: t("coach.quiz.opt.body"), shape: "rect" },
+    ],
+    { ready: !loading && !err && quiz.length > 0 && picked === null && !done }
+  );
+  const answerCoach = useCoachTour(
+    "unitquiz_answer_v1",
+    [
+      { id: "links", title: t("coach.quiz.links.title"), body: t("coach.quiz.links.body"), shape: "rect" },
+      { id: "next", title: t("coach.quiz.next.title"), body: t("coach.quiz.next.body"), shape: "rect" },
+    ],
+    { delay: 900, ready: picked !== null && !done }
+  );
 
   useEffect(() => {
     let on = true;
@@ -209,20 +229,23 @@ export default function UnitQuizScreen() {
           </Pressable>
         }
         right={
-          ready !== null ? (
-            <View style={[styles.readyChip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
-              <Text style={[styles.readyNum, { color: pal.accent }]}>
-                {ready}%{lastGain > 0 ? " ▲" : ""}
-              </Text>
-              <Text style={[styles.readyCap, { color: pal.dim }]}>{t("quiz2.readiness")}</Text>
-            </View>
-          ) : undefined
+          <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
+            <CoachHelpButton onPress={picked !== null ? answerCoach.replay : coach.replay} />
+            {ready !== null ? (
+              <View {...coach.bind("ready")} style={[styles.readyChip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+                <Text style={[styles.readyNum, { color: pal.accent }]}>
+                  {ready}%{lastGain > 0 ? " ▲" : ""}
+                </Text>
+                <Text style={[styles.readyCap, { color: pal.dim }]}>{t("quiz2.readiness")}</Text>
+              </View>
+            ) : null}
+          </View>
         }
       />
 
       {/* شرطات التقدّم: صح/خطأ بعد الإجابة، والسؤال الحالي باللون المميّز */}
       {total > 0 && !loading && !err && (
-        <View style={[styles.bars, { flexDirection: dir.row }]}>
+        <View {...coach.bind("bars")} style={[styles.bars, { flexDirection: dir.row }]}>
           {quiz.map((_, i) => (
             <View
               key={i}
@@ -300,6 +323,7 @@ export default function UnitQuizScreen() {
               return (
                 <Pressable
                   key={oi}
+                  {...(oi === 0 ? coach.bind("opt") : null)}
                   onPress={() => pick(oi)}
                   style={[
                     styles.opt,
@@ -356,7 +380,7 @@ export default function UnitQuizScreen() {
                 {picked !== q.answer && (
                   <Text style={[styles.fbBody, { color: pal.dim, textAlign: dir.textAlign }]}>{t("quiz2.comesBack")}</Text>
                 )}
-                <View style={[styles.fbLinks, { flexDirection: dir.row }]}>
+                <View {...answerCoach.bind("links")} style={[styles.fbLinks, { flexDirection: dir.row }]}>
                   {q.page ? (
                     <Pressable onPress={() => openPage(q.page as number)} hitSlop={6}>
                       <Text style={[styles.fbLink, { color: pal.accent }]}>{t("quiz2.openPage", { page: q.page })}</Text>
@@ -375,7 +399,7 @@ export default function UnitQuizScreen() {
 
           {picked !== null && (
             <View style={styles.bottom}>
-              <PressableScale onPress={next} style={[styles.nextBtn, { backgroundColor: pal.accent, shadowColor: pal.dark ? "#000" : "#3C5028" }]}>
+              <PressableScale {...answerCoach.bind("next")} onPress={next} style={[styles.nextBtn, { backgroundColor: pal.accent, shadowColor: pal.dark ? "#000" : "#3C5028" }]}>
                 <Text style={[styles.nextTxt, { color: pal.onAccent }]}>
                   {step + 1 >= total ? t("syllabus.quiz.showResult") : t("syllabus.quiz.nextQuestion")}
                 </Text>
@@ -384,6 +408,8 @@ export default function UnitQuizScreen() {
           )}
         </>
       ) : null}
+      {coach.overlay}
+      {answerCoach.overlay}
     </SceneScreen>
   );
 }

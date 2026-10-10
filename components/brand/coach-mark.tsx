@@ -234,6 +234,8 @@ export function useCoachTour(
       v.measureInWindow((x, y, w, h) => {
         if (!w || !h) return show(i + 1);
         const dy = sheet && sheetH.current > 0 ? Math.max(0, screenH - sheetH.current) : 0;
+        // عنصر خارج الشاشة (أسفل قائمة طويلة مثلًا) لا يُضاء → الخطوة التالية
+        if (y + dy >= screenH || y + dy + h <= 0) return show(i + 1);
         setRect({ x, y: y + dy, w, h, shape: list[i].shape });
         setIdx(i);
       });

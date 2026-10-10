@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
@@ -43,6 +44,25 @@ export default function FlashcardsScreen() {
   const flip = useRef(new Animated.Value(0)).current;
   const [speaking, setSpeaking] = useState(false); // زر الاستماع للوجه الظاهر من البطاقة
   const speakingRef = useRef(false);
+
+  // جولة الإرشاد: شاشة الاختيار، ثم جولة ثانية عند أول دخول لوضع المراجعة
+  const coach = useCoachTour("flashcards_v1", [
+    { id: "seg", title: t("coach.fc.seg.title"), body: t("coach.fc.seg.body"), shape: "rect" },
+    { id: "all", title: t("coach.fc.all.title"), body: t("coach.fc.all.body"), shape: "rect" },
+    { id: "deck", title: t("coach.fc.deck.title"), body: t("coach.fc.deck.body"), shape: "rect" },
+    { id: "words", title: t("coach.fc.words.title"), body: t("coach.fc.words.body") },
+    { id: "gen", title: t("coach.fc.gen.title"), body: t("coach.fc.gen.body"), shape: "rect" },
+  ]);
+  const studyCoach = useCoachTour(
+    "flashcards_study_v1",
+    [
+      { id: "card", title: t("coach.fc.card.title"), body: t("coach.fc.card.body"), shape: "rect" },
+      { id: "listen", title: t("coach.fc.listen.title"), body: t("coach.fc.listen.body") },
+      { id: "reveal", title: t("coach.fc.reveal.title"), body: t("coach.fc.reveal.body"), shape: "rect" },
+      { id: "rate", title: t("coach.fc.rate.title"), body: t("coach.fc.rate.body"), shape: "rect" },
+    ],
+    { delay: 900, ready: mode === "review" }
+  );
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -331,17 +351,20 @@ export default function FlashcardsScreen() {
         subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
         height={mode === "review" ? 150 : 190}
         right={
-          <Pressable onPress={() => router.push("/words")} hitSlop={6} accessibilityLabel={t("words.title")}>
-            <SceneIconButton>
-              <Ionicons name="bookmarks" size={19} color={pal.ink} />
-            </SceneIconButton>
-          </Pressable>
+          <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
+            <CoachHelpButton onPress={mode === "review" ? studyCoach.replay : coach.replay} />
+            <Pressable {...coach.bind("words")} onPress={() => router.push("/words")} hitSlop={6} accessibilityLabel={t("words.title")}>
+              <SceneIconButton>
+                <Ionicons name="bookmarks" size={19} color={pal.ink} />
+              </SceneIconButton>
+            </Pressable>
+          </View>
         }
       />
 
       {/* شريط التبويبات: بطاقات / ملخّصات / اختبارات (مركز مراجعة موحّد) */}
       <View style={[styles.segRow, { flexDirection: dir.row }]}>
-        <View style={[styles.segWrap, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+        <View {...coach.bind("seg")} style={[styles.segWrap, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
           {(["cards", "summary", "quiz"] as StudyTab[]).map((seg) => {
             const on = tab === seg;
             return (
@@ -437,7 +460,7 @@ export default function FlashcardsScreen() {
         ) : (
           <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
             {books.length > 1 ? (
-              <Pressable onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
+              <Pressable {...coach.bind("all")} onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
                   <View style={styles.bookInfo}>
                     <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>📚 {t("flashcards.allBooks")}</Text>
@@ -452,8 +475,8 @@ export default function FlashcardsScreen() {
               </Pressable>
             ) : null}
 
-            {books.map((b) => (
-              <Pressable key={b.key} onPress={() => startBook(b.key, b.title)} onLongPress={() => bookMenu(b)} delayLongPress={300}>
+            {books.map((b, index) => (
+              <Pressable key={b.key} {...(index === 0 ? coach.bind("deck") : null)} onPress={() => startBook(b.key, b.title)} onLongPress={() => bookMenu(b)} delayLongPress={300}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
                   <View style={styles.bookInfo}>
                     <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={1}>
@@ -543,7 +566,7 @@ export default function FlashcardsScreen() {
             <View style={[styles.deck, styles.deck2, { backgroundColor: pal.track, borderColor: pal.cardBorder }]} />
             <View style={[styles.deck, styles.deck1, { backgroundColor: pal.soft, borderColor: pal.cardBorder, shadowColor: cardShadow }]} />
 
-            <Pressable onPress={toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
+            <Pressable {...studyCoach.bind("card")} onPress={toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
               <Animated.View
                 style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: cardShadow }]}
               >
@@ -583,6 +606,7 @@ export default function FlashcardsScreen() {
 
             {/* زر استماع صغير في الزاوية (للوجه الظاهر) */}
             <Pressable
+              {...studyCoach.bind("listen")}
               onPress={listenCard}
               hitSlop={8}
               accessibilityLabel={t("ask.listen")}
@@ -597,7 +621,7 @@ export default function FlashcardsScreen() {
           </View>
 
           {flipped ? (
-            <View style={[styles.ratings, { flexDirection: dir.row }]}>
+            <View {...studyCoach.bind("rate")} style={[styles.ratings, { flexDirection: dir.row }]}>
               <Pressable onPress={() => rate("again")} style={[styles.rateBtn, { backgroundColor: hardTint.bg }]}>
                 <Text style={[styles.rateTxt, { color: hardTint.fg }]}>{t("flashcards.rate.again")}</Text>
               </Pressable>
@@ -609,7 +633,7 @@ export default function FlashcardsScreen() {
               </Pressable>
             </View>
           ) : (
-            <Pressable onPress={toggleFlip} style={[styles.primaryBtn, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
+            <Pressable {...studyCoach.bind("reveal")} onPress={toggleFlip} style={[styles.primaryBtn, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
               <Ionicons name="eye" size={18} color={pal.onAccent} />
               <Text style={[styles.primaryTxt, { color: pal.onAccent }]}>{t("flashcards.revealAnswer")}</Text>
             </Pressable>
@@ -620,6 +644,7 @@ export default function FlashcardsScreen() {
       {/* زر عائم: توليد مخصّص (اختيار الجزء/النوع/العدد) — يظهر خارج وضع المراجعة */}
       {mode !== "review" ? (
         <Pressable
+          {...coach.bind("gen")}
           onPress={() => router.push("/generate-study")}
           style={[styles.fab, { flexDirection: dir.row, backgroundColor: pal.accent, shadowColor: pal.dark ? "#000" : pal.accent }]}
         >
@@ -627,6 +652,8 @@ export default function FlashcardsScreen() {
           <Text style={[styles.fabTxt, { color: pal.onAccent }]}>{t("generate.fab")}</Text>
         </Pressable>
       ) : null}
+      {coach.overlay}
+      {studyCoach.overlay}
     </SceneScreen>
   );
 }

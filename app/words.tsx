@@ -6,6 +6,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { CoachHelpButton, useCoachTour } from "../components/brand/coach-mark";
 import { PressableScale } from "../components/brand/motion";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { WordSheet } from "../components/brand/word-sheet";
@@ -31,6 +32,19 @@ export default function WordsScreen() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [nameOpen, setNameOpen] = useState(false);
   const [fileName, setFileName] = useState("");
+
+  // جولة الإرشاد: التحديد، وتصفية الكتب، والكلمة، والملف، والبطاقات (بعد تحميل الكلمات)
+  const coach = useCoachTour(
+    "words_v1",
+    [
+      { id: "select", title: t("coach.words.select.title"), body: t("coach.words.select.body"), shape: "rect" },
+      { id: "books", title: t("coach.words.books.title"), body: t("coach.words.books.body"), shape: "rect" },
+      { id: "word", title: t("coach.words.word.title"), body: t("coach.words.word.body"), shape: "rect" },
+      { id: "pdf", title: t("coach.words.pdf.title"), body: t("coach.words.pdf.body"), shape: "rect" },
+      { id: "cards", title: t("coach.words.cards.title"), body: t("coach.words.cards.body"), shape: "rect" },
+    ],
+    { ready: words.length > 0 }
+  );
 
   function togglePick(key: string) {
     setPicked((prev) => {
@@ -117,25 +131,29 @@ export default function WordsScreen() {
         }
         right={
           words.length > 0 ? (
-            <PressableScale
-              onPress={() => {
-                setSelecting((v) => !v);
-                setPicked(new Set());
-                setCarded(0);
-              }}
-              style={[
-                styles.selBtn,
-                { flexDirection: dir.row },
-                selecting
-                  ? { backgroundColor: pal.accent }
-                  : { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.8)" },
-              ]}
-            >
-              <Ionicons name={selecting ? "checkmark" : "checkbox-outline"} size={16} color={selecting ? pal.onAccent : pal.ink} />
-              <Text style={[styles.selTxt, { color: selecting ? pal.onAccent : pal.ink }]}>
-                {selecting ? t("words.selectDone") : t("words.select")}
-              </Text>
-            </PressableScale>
+            <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
+              <CoachHelpButton onPress={coach.replay} />
+              <PressableScale
+                {...coach.bind("select")}
+                onPress={() => {
+                  setSelecting((v) => !v);
+                  setPicked(new Set());
+                  setCarded(0);
+                }}
+                style={[
+                  styles.selBtn,
+                  { flexDirection: dir.row },
+                  selecting
+                    ? { backgroundColor: pal.accent }
+                    : { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.8)" },
+                ]}
+              >
+                <Ionicons name={selecting ? "checkmark" : "checkbox-outline"} size={16} color={selecting ? pal.onAccent : pal.ink} />
+                <Text style={[styles.selTxt, { color: selecting ? pal.onAccent : pal.ink }]}>
+                  {selecting ? t("words.selectDone") : t("words.select")}
+                </Text>
+              </PressableScale>
+            </View>
           ) : undefined
         }
       />
@@ -191,7 +209,7 @@ export default function WordsScreen() {
                 </View>
               )}
               {books.length > 1 && (
-                <View style={[styles.filters, { flexDirection: dir.row }]}>
+                <View {...coach.bind("books")} style={[styles.filters, { flexDirection: dir.row }]}>
                   <Pressable
                     onPress={() => setBook(null)}
                     style={[styles.filter, !book ? { backgroundColor: pal.accent, borderColor: pal.accent } : { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
@@ -218,10 +236,10 @@ export default function WordsScreen() {
               )}
             </View>
           }
-          renderItem={({ item: w }) => {
+          renderItem={({ item: w, index }) => {
             const on = selecting && picked.has(w.key);
             return (
-              <PressableScale onPress={() => (selecting ? togglePick(w.key) : setOpen(w))}>
+              <PressableScale {...(index === 0 ? coach.bind("word") : null)} onPress={() => (selecting ? togglePick(w.key) : setOpen(w))}>
                 <SceneCard
                   padded={false}
                   style={[
@@ -264,6 +282,7 @@ export default function WordsScreen() {
       {shown.length > 0 && (
         <View style={[styles.bottom, { flexDirection: dir.row }]}>
           <PressableScale
+            {...coach.bind("pdf")}
             onPress={() => {
               if (!fileName) setFileName(book ?? t("words.pdfTitle"));
               setNameOpen(true);
@@ -285,6 +304,7 @@ export default function WordsScreen() {
             </View>
           </PressableScale>
           <PressableScale
+            {...coach.bind("cards")}
             onPress={async () => {
               const n = await wordsToCards(ready);
               setCarded(n);
@@ -349,6 +369,7 @@ export default function WordsScreen() {
         }}
         onRemoved={reload}
       />
+      {coach.overlay}
     </SceneScreen>
   );
 }

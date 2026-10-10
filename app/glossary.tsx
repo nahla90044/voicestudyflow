@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { CoachHelpButton, useCoachTour } from "../components/brand/coach-mark";
 import { PressableScale } from "../components/brand/motion";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius } from "../constants/design";
@@ -71,6 +72,31 @@ export default function GlossaryScreen() {
   const [kindOpen, setKindOpen] = useState(false);
   const [wordSheet, setWordSheet] = useState<SavedWord | null>(null);
   const [printing, setPrinting] = useState(false);
+
+  // جولة الإرشاد: تبدأ بعد تجهيز عناصر الوحدة
+  const coach = useCoachTour(
+    "glossary_v1",
+    [
+      { id: "units", title: t("coach.gl.units.title"), body: t("coach.gl.units.body"), shape: "rect" },
+      { id: "range", title: t("coach.gl.range.title"), body: t("coach.gl.range.body"), shape: "rect" },
+      { id: "filter", title: t("coach.gl.filter.title"), body: t("coach.gl.filter.body"), shape: "rect" },
+      {
+        id: "item",
+        title: t("coach.gl.item.title"),
+        body: t("coach.gl.item.body"),
+        shape: "rect",
+        rows: [
+          { icon: "volume-medium", text: t("coach.gl.item.listen") },
+          { icon: "albums-outline", text: t("coach.gl.item.card") },
+          { icon: "document-text-outline", text: t("coach.gl.item.page") },
+          { icon: "hand-left-outline", text: t("coach.gl.item.hold") },
+        ],
+      },
+      { id: "print", title: t("coach.gl.print.title"), body: t("coach.gl.print.body") },
+      { id: "all", title: t("coach.gl.all.title"), body: t("coach.gl.all.body"), shape: "rect" },
+    ],
+    { ready: !loading && items.length > 0 }
+  );
 
   // ملف دراسة مطبوع للوحدة: جدول ملوّن (المصطلح · المعنى والمثال · الصفحة)
   async function printGlossary() {
@@ -206,8 +232,9 @@ export default function GlossaryScreen() {
         }
         right={
           !loading && items.length > 0 ? (
-            <View style={{ flexDirection: dir.row, gap: 8 }}>
-              <PressableScale onPress={printGlossary} disabled={printing}>
+            <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
+              <CoachHelpButton onPress={coach.replay} />
+              <PressableScale {...coach.bind("print")} onPress={printGlossary} disabled={printing}>
                 <SceneIconButton>
                   {printing ? (
                     <ActivityIndicator size="small" color={pal.ink} />
@@ -228,23 +255,25 @@ export default function GlossaryScreen() {
 
       {/* الوحدات */}
       {titles.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0, flexShrink: 0 }}
-          contentContainerStyle={[styles.units, { flexDirection: dir.row }]}
-        >
-          {titles.map((u, i) => {
-            const on = i === idx;
-            return (
-              <Pressable key={i} onPress={() => setIdx(i)} style={[styles.unitChip, on ? chipOn : chipOff]}>
-                <Text style={[styles.unitChipTxt, { color: on ? pal.onAccent : pal.dim }, on && styles.unitChipTxtOn]} numberOfLines={1}>
-                  {t("glossary.unitN", { n: i + 1 })}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <View {...coach.bind("units")} style={{ flexGrow: 0, flexShrink: 0 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 0 }}
+            contentContainerStyle={[styles.units, { flexDirection: dir.row }]}
+          >
+            {titles.map((u, i) => {
+              const on = i === idx;
+              return (
+                <Pressable key={i} onPress={() => setIdx(i)} style={[styles.unitChip, on ? chipOn : chipOff]}>
+                  <Text style={[styles.unitChipTxt, { color: on ? pal.onAccent : pal.dim }, on && styles.unitChipTxtOn]} numberOfLines={1}>
+                    {t("glossary.unitN", { n: i + 1 })}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
       )}
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -255,7 +284,7 @@ export default function GlossaryScreen() {
           </Text>
           <View style={[styles.metaRow, { flexDirection: dir.row }]}>
             {range && (
-              <PressableScale onPress={() => openPage(range.from)} style={[styles.metaChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+              <PressableScale {...coach.bind("range")} onPress={() => openPage(range.from)} style={[styles.metaChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
                 <Ionicons name="document-text-outline" size={13} color={pal.accent} />
                 <Text style={[styles.metaTxt, { color: pal.ink }]}>
                   {t("glossary.pages", { from: range.from, to: range.to })}
@@ -337,7 +366,7 @@ export default function GlossaryScreen() {
               />
             </View>
             {kinds.length > 1 && (
-              <View style={[styles.filters, { flexDirection: dir.row }]}>
+              <View {...coach.bind("filter")} style={[styles.filters, { flexDirection: dir.row }]}>
                 {(["all", ...kinds] as Filter[]).map((f) => {
                   const on = filter === f;
                   return (
@@ -352,7 +381,7 @@ export default function GlossaryScreen() {
               </View>
             )}
 
-            {shown.map((i) => {
+            {shown.map((i, index) => {
               const c = kindColor(i.k, pal);
               const isSaved = saved.has(i.t);
               return (
@@ -376,7 +405,7 @@ export default function GlossaryScreen() {
                     {i.m}
                   </Text>
                   {!!i.ex && <Text style={[styles.example, { color: pal.dim, textAlign: dir.textAlign }]}>«{i.ex}»</Text>}
-                  <View style={[styles.actions, { flexDirection: dir.row, borderTopColor: pal.track }]}>
+                  <View {...(index === 0 ? coach.bind("item") : null)} style={[styles.actions, { flexDirection: dir.row, borderTopColor: pal.track }]}>
                     <Pressable onPress={() => listen(i)} hitSlop={6} style={[styles.act, { flexDirection: dir.row, backgroundColor: speaking === i.t ? pal.accent : pal.soft }]}>
                       <Ionicons name={speaking === i.t ? "stop-circle" : "volume-medium"} size={16} color={speaking === i.t ? pal.onAccent : pal.accent} />
                       <Text style={[styles.actTxt, { color: speaking === i.t ? pal.onAccent : pal.ink }]}>{t("glossary.listen")}</Text>
@@ -405,7 +434,7 @@ export default function GlossaryScreen() {
 
       {!loading && items.length > 0 && (
         <View style={styles.bottom}>
-          <PressableScale onPress={() => saveCards(items)} disabled={allSaved}>
+          <PressableScale {...coach.bind("all")} onPress={() => saveCards(items)} disabled={allSaved}>
             <View style={[styles.saveAll, { backgroundColor: pal.accent, shadowColor: shadowTint }, allSaved && { opacity: 0.5 }]}>
               <Ionicons name={allSaved ? "checkmark" : "albums"} size={18} color={pal.onAccent} />
               <Text style={[styles.saveAllTxt, { color: pal.onAccent }]}>
@@ -416,6 +445,7 @@ export default function GlossaryScreen() {
         </View>
       )}
       <WordSheet word={wordSheet} onClose={() => setWordSheet(null)} />
+      {coach.overlay}
     </SceneScreen>
   );
 }

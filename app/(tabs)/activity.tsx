@@ -11,6 +11,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { Circle, Line } from "react-native-svg";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { FadeIn } from "../../components/brand/fade-in";
 import { PressableScale } from "../../components/brand/motion";
 import { ProgressRing } from "../../components/brand/progress-ring";
@@ -53,6 +54,15 @@ export default function ActivityScreen() {
   const [period, setPeriod] = useState<Period>("week");
   const [ready, setReady] = useState<BookReadiness[]>([]);
   const [skyBookId, setSkyBookId] = useState<string | null>(null);
+
+  // جولة الإرشاد: السماء، واختيار الكتاب، والفترة، وجاهزية كل كتاب، وهدف اليوم
+  const coach = useCoachTour("activity_v1", [
+    { id: "sky", title: t("coach.act.sky.title"), body: t("coach.act.sky.body"), shape: "rect" },
+    { id: "books", title: t("coach.act.books.title"), body: t("coach.act.books.body"), shape: "rect" },
+    { id: "period", title: t("coach.act.period.title"), body: t("coach.act.period.body"), shape: "rect" },
+    { id: "row", title: t("coach.act.row.title"), body: t("coach.act.row.body"), shape: "rect" },
+    { id: "goal", title: t("coach.act.goal.title"), body: t("coach.act.goal.body"), shape: "rect" },
+  ], { delay: 2200, ready: stats !== null });
 
   useFocusEffect(
     useCallback(() => {
@@ -107,39 +117,44 @@ export default function ActivityScreen() {
           subtitle={t("activity.header.subtitle")}
           height={170}
           left={<AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />}
+          right={<CoachHelpButton onPress={coach.replay} />}
         />
 
         <View style={styles.body}>
           {/* «سماؤك»: كوكبات الوحدات */}
           <FadeIn delay={0}>
-            <SkyPanel book={skyBook} pagesFallback={series.pages} />
+            <View {...coach.bind("sky")}>
+              <SkyPanel book={skyBook} pagesFallback={series.pages} />
+            </View>
           </FadeIn>
 
           {/* اختيار كتاب السماء */}
           {ready.length > 1 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={[styles.chips, { flexDirection: dir.row }]}
-            >
-              {ready.map((r) => {
-                const on = r.bookId === skyBook?.bookId;
-                return (
-                  <Pressable
-                    key={r.bookId}
-                    onPress={() => setSkyBookId(r.bookId)}
-                    style={[
-                      styles.chip,
-                      { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder },
-                    ]}
-                  >
-                    <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]} numberOfLines={1}>
-                      {r.title}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <View {...coach.bind("books")}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[styles.chips, { flexDirection: dir.row }]}
+              >
+                {ready.map((r) => {
+                  const on = r.bookId === skyBook?.bookId;
+                  return (
+                    <Pressable
+                      key={r.bookId}
+                      onPress={() => setSkyBookId(r.bookId)}
+                      style={[
+                        styles.chip,
+                        { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder },
+                      ]}
+                    >
+                      <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]} numberOfLines={1}>
+                        {r.title}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
           )}
 
           {/* المؤشرات */}
@@ -169,7 +184,7 @@ export default function ActivityScreen() {
           </FadeIn>
 
           {/* الفترة */}
-          <View style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.track }]}>
+          <View {...coach.bind("period")} style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.track }]}>
             {(["week", "month"] as Period[]).map((p) => (
               <Pressable
                 key={p}
@@ -228,11 +243,12 @@ export default function ActivityScreen() {
             <FadeIn delay={170}>
               <SceneCard style={[styles.tile, { gap: 14 }]}>
                 <Text style={[styles.tileTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("progress.readiness")}</Text>
-                {ready.map((r) => {
+                {ready.map((r, index) => {
                   const fill = r.score >= 40 ? pal.accent : pal.dark ? pal.dim : "#C9862E";
                   return (
                     <PressableScale
                       key={r.bookId}
+                      {...(index === 0 ? coach.bind("row") : null)}
                       onPress={() => router.push({ pathname: "/book/[id]", params: { id: r.bookId } })}
                       style={styles.rRow}
                     >
@@ -278,7 +294,7 @@ export default function ActivityScreen() {
                   {goalFrac >= 1 ? t("activity.goal.done") : t("progress.goalSub", { done: todayMin, goal })}
                 </Text>
               </View>
-              <PressableScale onPress={cycleGoal} style={[styles.goalChip, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}>
+              <PressableScale {...coach.bind("goal")} onPress={cycleGoal} style={[styles.goalChip, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}>
                 <Text style={[styles.goalChipTxt, { color: pal.accent }]}>{t("activity.goal.chip", { goal })}</Text>
               </PressableScale>
             </SceneCard>
@@ -293,6 +309,7 @@ export default function ActivityScreen() {
           </FadeIn>
         </View>
       </ScrollView>
+      {coach.overlay}
     </SceneScreen>
   );
 }
