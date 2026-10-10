@@ -19,7 +19,7 @@ import { buy, buyPages, pagesPrice, PRIVACY_URL, restore, storePrice, TERMS_URL,
 import { useScene } from "../lib/scene";
 import { sceneGrowth } from "../lib/sceneCore";
 
-type Tier = "pro" | "plus";
+type Tier = "premium" | "pro" | "plus";
 
 const HERO_H = 260;
 // نقطة الارتكاز في كل رسم (بإحداثيات 390×470) — كما في SceneBanner
@@ -75,18 +75,20 @@ export default function PaywallScreen() {
     (async () => {
       // المالكة لا ترى الاشتراك أبدًا
       if (!devPreview && (await getPlan()) === "owner") return router.back();
-      const keys: ProductKey[] = ["pro_month", "pro_year", "plus_month", "plus_year"];
+      const keys: ProductKey[] = ["premium_month", "premium_year", "pro_month", "pro_year", "plus_month", "plus_year"];
       const got = await Promise.all(keys.map((k) => storePrice(k)));
       // معاينة التطوير (لصور المراجعة فقط): الأسعار المسجّلة في المتجر بدل «…»
       const demo: Record<ProductKey, StorePrice> = {
-        pro_month: { text: "59.99 SAR", amount: 59.99, perMonth: null, trialDays: 7 },
-        pro_year: { text: "599.00 SAR", amount: 599, perMonth: "49.92 SAR", trialDays: 7 },
-        plus_month: { text: "29.99 SAR", amount: 29.99, perMonth: null, trialDays: 7 },
-        plus_year: { text: "299.00 SAR", amount: 299, perMonth: "24.92 SAR", trialDays: 7 },
+        premium_month: { text: "59.99 SAR", amount: 59.99, perMonth: null, trialDays: 7 },
+        premium_year: { text: "599.00 SAR", amount: 599, perMonth: "49.92 SAR", trialDays: 7 },
+        pro_month: { text: "39.99 SAR", amount: 39.99, perMonth: null, trialDays: 7 },
+        pro_year: { text: "399.00 SAR", amount: 399, perMonth: "33.25 SAR", trialDays: 7 },
+        plus_month: { text: "19.99 SAR", amount: 19.99, perMonth: null, trialDays: 7 },
+        plus_year: { text: "199.00 SAR", amount: 199, perMonth: "16.58 SAR", trialDays: 7 },
       };
       setPrices(Object.fromEntries(keys.map((k, i) => [k, got[i] ?? (devPreview ? demo[k] : null)])));
       // معاينة التطوير (لصورة المراجعة): سعر الباقة المسجّل في المتجر
-      setPackPrice((await pagesPrice()) ?? (devPreview ? "9.99 SAR" : null));
+      setPackPrice((await pagesPrice()) ?? (devPreview ? "6.99 SAR" : null));
     })();
   }, [router, devPreview]);
 
@@ -158,7 +160,7 @@ export default function PaywallScreen() {
           <View style={[styles.planHead, { flexDirection: dir.row }]}>
             <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8, flexShrink: 1 }}>
               <View style={[styles.radio, { borderColor: on ? pal.accent : pal.dim }]}>{on && <View style={[styles.radioIn, { backgroundColor: pal.accent }]} />}</View>
-              <Text style={[styles.planName, { color: pal.ink }]}>{t(tr === "pro" ? "pay.pro" : "pay.plus")}</Text>
+              <Text style={[styles.planName, { color: pal.ink }]}>{t(`pay.${tr}`)}</Text>
               {tr === "pro" && (
                 <View style={[styles.badge, { backgroundColor: pal.accent }]}>
                   <Text style={[styles.badgeTxt, { color: pal.onAccent }]}>{t("pay.popular")}</Text>
@@ -252,6 +254,12 @@ export default function PaywallScreen() {
               );
             })}
           </View>
+
+          <PlanCard tr="premium">
+            <Feat text={t("pay.premium.f1")} />
+            <Feat text={t("pay.premium.f2")} />
+            <Feat text={t("pay.pro.f3")} />
+          </PlanCard>
 
           <PlanCard tr="pro">
             <Feat text={t("pay.pro.f1")} />

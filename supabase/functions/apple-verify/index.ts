@@ -59,8 +59,9 @@ Deno.serve(async (req) => {
       updated_at: new Date().toISOString(),
     });
     if (isActive(t)) {
-      const rank = plan.startsWith("pro") ? 2 : 1;
-      const bestRank = best ? (best.plan.startsWith("pro") ? 2 : 1) : 0;
+      const rankOf = (p: string) => (p.startsWith("premium") ? 3 : p.startsWith("pro") ? 2 : 1);
+      const rank = rankOf(plan);
+      const bestRank = best ? rankOf(best.plan) : 0;
       if (rank > bestRank || (rank === bestRank && t.expiresDate! > (best?.expires ?? 0))) {
         best = { plan, expires: t.expiresDate! };
       }

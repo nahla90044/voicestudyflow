@@ -13,6 +13,8 @@ const PRODUCTS: Record<string, string> = {
   vsf_plus_year: "plus_year",
   vsf_pro_month: "pro_month",
   vsf_pro_year: "pro_year",
+  vsf_premium_month: "premium_month",
+  vsf_premium_year: "premium_year",
 };
 
 const GRANT = ["INITIAL_PURCHASE", "RENEWAL", "PRODUCT_CHANGE", "UNCANCELLATION", "SUBSCRIPTION_EXTENDED", "TRANSFER"];

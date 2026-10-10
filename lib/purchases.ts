@@ -20,6 +20,8 @@ export const PRODUCTS = {
   plus_year: "vsf_plus_year",
   pro_month: "vsf_pro_month",
   pro_year: "vsf_pro_year",
+  premium_month: "vsf_premium_month",
+  premium_year: "vsf_premium_year",
 } as const;
 export type ProductKey = keyof typeof PRODUCTS;
 const SKUS: string[] = Object.values(PRODUCTS);
@@ -190,11 +192,12 @@ export async function restore(): Promise<boolean> {
 }
 
 /** الخطة الفعّالة حسب المتجر (فورية بعد الشراء، قبل أي مزامنة مع السيرفر) */
-export async function storeActivePlan(): Promise<"pro" | "plus" | null> {
+export async function storeActivePlan(): Promise<"premium" | "pro" | "plus" | null> {
   if (!purchasesAvailable() || !(await connect())) return null;
   try {
     const subs: any[] = (await iap()!.getActiveSubscriptions(SKUS)) ?? [];
     const ids = subs.filter((s) => s.isActive !== false).map((s) => String(s.productId));
+    if (ids.some((id) => id.startsWith("vsf_premium"))) return "premium";
     if (ids.some((id) => id.startsWith("vsf_pro"))) return "pro";
     if (ids.some((id) => id.startsWith("vsf_plus"))) return "plus";
     return null;

@@ -26,6 +26,8 @@ export const PRODUCT_PLAN: Record<string, string> = {
   vsf_plus_year: "plus_year",
   vsf_pro_month: "pro_month",
   vsf_pro_year: "pro_year",
+  vsf_premium_month: "premium_month",
+  vsf_premium_year: "premium_year",
 };
 
 // الصفحات الإضافية (شراء استهلاكي) → عدد الصفحات المضافة للرصيد

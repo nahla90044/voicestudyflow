@@ -8,7 +8,7 @@
 // فقط، حتى لا تتوقف ميزات مستخدمي النسخة الحالية في المتجر قبل نزول نسخة فيها الاشتراك.
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export type Plan = "owner" | "pro" | "plus" | "free";
+export type Plan = "owner" | "premium" | "pro" | "plus" | "free";
 
 // نفس القائمة في lib/auth.ts (OWNER_EMAILS) — حسابا المالكة.
 const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com"]);
@@ -22,6 +22,7 @@ export const LIMITS: Record<Exclude<Plan, "owner">, { std: number; prem: number;
   free: { std: 10, prem: 0, ai: 5, voice: 3_000 },
   plus: { std: 100, prem: 0, ai: 50, voice: 40_000 },
   pro: { std: 200, prem: 0, ai: 100, voice: 80_000 },
+  premium: { std: 300, prem: 0, ai: 150, voice: 120_000 },
 };
 
 /** الفترة المحسوبة: lifetime للمجانية، وإلا الشهر الحالي (UTC) */
@@ -60,7 +61,8 @@ export async function getCaller(req: Request): Promise<Caller> {
 
   const { data: ent } = await admin.from("entitlements").select("plan_id,expires_at").eq("user_id", user.id).maybeSingle();
   const active = !!ent && (ent.expires_at === null || new Date(ent.expires_at).getTime() > Date.now());
-  const plan: Plan = active ? (String(ent!.plan_id).startsWith("pro") ? "pro" : "plus") : "free";
+  const pid = String(ent?.plan_id ?? "");
+  const plan: Plan = !active ? "free" : pid.startsWith("premium") ? "premium" : pid.startsWith("pro") ? "pro" : "plus";
   return { id: user.id, plan, admin, apple };
 }
 

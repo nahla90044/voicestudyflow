@@ -7,7 +7,7 @@ import { getUserId, isOwner } from "./auth";
 import { purchasesAvailable, storeActivePlan } from "./purchases";
 import { supabase } from "./supabase";
 
-export type Plan = "owner" | "pro" | "plus" | "free";
+export type Plan = "owner" | "premium" | "pro" | "plus" | "free";
 
 // نفس أرقام السيرفر (_shared/plan.ts) — للعرض: «بقي لك ٤٠ صفحة».
 // الصفحة تُحسب مرة واحدة في الشهر (إعادة الاستماع مجانية). المجانية تجربة لمرة واحدة.
@@ -15,10 +15,16 @@ export const LIMITS: Record<Exclude<Plan, "owner">, { pages: number; premium: nu
   free: { pages: 10, premium: 0, ai: 5 },
   plus: { pages: 100, premium: 0, ai: 50 },
   pro: { pages: 200, premium: 0, ai: 100 },
+  premium: { pages: 300, premium: 0, ai: 150 },
 };
 /** دقائق استماع تقريبية لكل صفحة (للعرض فقط) */
 export const MIN_PER_PAGE = 2;
 export const PAGE_PACK = { productKey: "pages_50" as const, pages: 50 };
+
+/** معرّف الاشتراك (premium_month…) → الخطة */
+export function planOf(planId: string): Exclude<Plan, "owner" | "free"> {
+  return planId.startsWith("premium") ? "premium" : planId.startsWith("pro") ? "pro" : "plus";
+}
 
 let cached: { plan: Plan; at: number } | null = null;
 
@@ -35,7 +41,7 @@ export async function getPlan(force = false): Promise<Plan> {
         const uid = await getUserId();
         const { data } = await supabase.from("entitlements").select("plan_id,expires_at").eq("user_id", uid).maybeSingle();
         const active = !!data && (data.expires_at === null || new Date(data.expires_at).getTime() > Date.now());
-        if (active) plan = String(data!.plan_id).startsWith("pro") ? "pro" : "plus";
+        if (active) plan = planOf(String(data!.plan_id));
       } catch {
         // بلا شبكة → مجاني للعرض؛ السيرفر يقرّر عند الطلب
       }
@@ -94,5 +100,5 @@ export function requestPaywall(reason: PaywallReason, userInitiated = false): bo
 export async function canUseVoiceAsk(): Promise<boolean> {
   if (!purchasesAvailable()) return true;
   const p = await getPlan();
-  return p === "pro" || p === "owner";
+  return p === "pro" || p === "premium" || p === "owner";
 }

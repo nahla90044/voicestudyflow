@@ -52,7 +52,7 @@ export async function hasUnlockedMoreBooks(): Promise<boolean> {
 export async function getBookLimit(): Promise<number> {
   if (await isOwner()) return Infinity;
   const plan = await getPlan();
-  if (plan === "plus" || plan === "pro") return Infinity;
+  if (plan === "plus" || plan === "pro" || plan === "premium") return Infinity;
   return (await hasUnlockedMoreBooks()) ? FREE_BOOKS_UNLOCKED : FREE_BOOKS_BASE;
 }
 

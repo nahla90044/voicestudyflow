@@ -60,7 +60,7 @@ export function SubscriptionCard() {
       )}
       {store && plan !== "owner" && (
         <View style={[styles.row, { flexDirection: dir.row }]}>
-          {plan !== "pro" && (
+          {plan !== "premium" && (
             <Pressable onPress={() => requestPaywall("upgrade", true)} style={[styles.btn, { backgroundColor: pal.accent, borderColor: pal.accent }]}>
               <Text style={[styles.btnMainTxt, { color: pal.onAccent }]}>{t("sub.upgrade")}</Text>
             </Pressable>
