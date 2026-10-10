@@ -37,6 +37,7 @@ export function CoachMark({ target, title, body, rows = [], doneLabel, onDone, o
   const dir = useDir();
   const { width, height } = useWindowDimensions();
   const fade = useRef(new Animated.Value(0)).current;
+  const [cardH, setCardH] = useState(0); // ارتفاع البطاقة الفعلي (لإبقائها داخل الشاشة)
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -62,6 +63,17 @@ export function CoachMark({ target, title, body, rows = [], doneLabel, onDone, o
   // البطاقة فوق العنصر (أو تحته إن كان في أعلى الشاشة)
   const above = cy > height * 0.45;
   const cardW = Math.min(340, width - 32);
+  // البطاقة داخل الشاشة دائمًا: إن لم يتّسع المكان فوق/تحت العنصر الكبير تستقرّ على حافة الشاشة
+  const MARGIN = 28;
+  const cardPos = (() => {
+    if (above) {
+      const top = hy - 18 - cardH;
+      return top < MARGIN + 30 ? { top: MARGIN + 30 } : { bottom: height - hy + 18 };
+    }
+    const top = hy + hh + 18;
+    return cardH && top + cardH > height - MARGIN ? { bottom: MARGIN } : { top };
+  })();
+  const arrowHidden = (above && "top" in cardPos) || (!above && "bottom" in cardPos);
   const cardLeft = Math.min(Math.max(16, cx - cardW / 2), width - cardW - 16);
 
   return (
@@ -107,12 +119,14 @@ export function CoachMark({ target, title, body, rows = [], doneLabel, onDone, o
           style={[
             styles.card,
             { width: cardW, left: cardLeft, backgroundColor: pal.card, borderColor: pal.cardBorder },
-            above ? { bottom: height - hy + 18 } : { top: hy + hh + 18 },
+            cardPos,
           ]}
+          onLayout={(e) => setCardH(e.nativeEvent.layout.height)}
         >
           <View
             style={[
               styles.arrow,
+              arrowHidden && { opacity: 0 },
               { left: Math.min(Math.max(18, cx - cardLeft - 9), cardW - 36), backgroundColor: pal.card },
               above ? { bottom: -7 } : { top: -7 },
             ]}
