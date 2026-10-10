@@ -47,8 +47,16 @@ export default function PaywallScreen() {
       if (!devPreview && (await getPlan()) === "owner") return router.back();
       const keys: ProductKey[] = ["pro_month", "pro_year", "plus_month", "plus_year"];
       const got = await Promise.all(keys.map((k) => storePrice(k)));
-      setPrices(Object.fromEntries(keys.map((k, i) => [k, got[i]])));
-      setPackPrice(await pagesPrice());
+      // معاينة التطوير (لصور المراجعة فقط): الأسعار المسجّلة في المتجر بدل «…»
+      const demo: Record<ProductKey, StorePrice> = {
+        pro_month: { text: "59.99 SAR", amount: 59.99, perMonth: null, trialDays: 7 },
+        pro_year: { text: "599.00 SAR", amount: 599, perMonth: "49.92 SAR", trialDays: 7 },
+        plus_month: { text: "29.99 SAR", amount: 29.99, perMonth: null, trialDays: 7 },
+        plus_year: { text: "299.00 SAR", amount: 299, perMonth: "24.92 SAR", trialDays: 7 },
+      };
+      setPrices(Object.fromEntries(keys.map((k, i) => [k, got[i] ?? (devPreview ? demo[k] : null)])));
+      // معاينة التطوير (لصورة المراجعة): سعر الباقة المسجّل في المتجر
+      setPackPrice((await pagesPrice()) ?? (devPreview ? "9.99 SAR" : null));
     })();
   }, [router, devPreview]);
 
