@@ -1960,6 +1960,43 @@ export default function ReaderScreen() {
     setWordSheet(w);
   }
 
+  // ضغطتان على صورة الصفحة → القراءة من الجملة تحت الإصبع (مثل عرض النص)
+  const pageTapRef = useRef<{ t: number; x: number; y: number } | null>(null);
+  function onPageTap(locX: number, locY: number) {
+    const now = Date.now();
+    const prev = pageTapRef.current;
+    if (prev && now - prev.t < 320 && Math.abs(prev.x - locX) < 30 && Math.abs(prev.y - locY) < 30) {
+      pageTapRef.current = null;
+      const i = sentenceAtPoint(locX, locY);
+      if (i >= 0) readFromSentence(i);
+      return;
+    }
+    pageTapRef.current = { t: now, x: locX, y: locY };
+  }
+  /** أي جملة تحت النقطة؟ من مستطيلات الجمل، وإلا أقرب جملة عموديًا */
+  function sentenceAtPoint(locX: number, locY: number): number {
+    if (!pdfImgW2 || !sentences.length) return -1;
+    const H = pdfImgW2 / (pageImgAspect || 0.7);
+    const x = locX / pdfImgW2;
+    const y = locY / H;
+    let best = -1;
+    let bestD = Infinity;
+    hl.rects.forEach((rs, si) => {
+      for (const r of rs ?? []) {
+        const inX = x >= r.x - 0.01 && x <= r.x + r.w + 0.01;
+        const dy = y < r.y ? r.y - y : y > r.y + r.h ? y - (r.y + r.h) : 0;
+        const d = (inX ? 0 : 0.05) + dy;
+        if (d < bestD) {
+          bestD = d;
+          best = si;
+        }
+      }
+    });
+    if (best >= 0 && bestD < 0.06) return best;
+    // بلا مواضع موثوقة: نقدّر بنسبة الارتفاع
+    return Math.min(sentences.length - 1, Math.max(0, Math.floor(y * sentences.length)));
+  }
+
   // ضغطة مطوّلة على صورة الصفحة: أي كلمة تحت الإصبع؟ (من مواضع كلمات الصفحة)
   function onPageLongPress(locX: number, locY: number) {
     if (!pdfImgW2 || !pageWords.length) return;
@@ -2704,6 +2741,7 @@ export default function ReaderScreen() {
                 >
                   <Pressable
                     delayLongPress={380}
+                    onPress={(e) => onPageTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}
                     onLongPress={(e) => onPageLongPress(e.nativeEvent.locationX, e.nativeEvent.locationY)}
                   >
                     <Image
