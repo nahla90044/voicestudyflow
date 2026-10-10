@@ -3,7 +3,7 @@
 // منها ونحدّث اشتراك المستخدم. الطلب يتطلّب دخول المستخدم (verify_jwt=true).
 // لا يُمنح اشتراك إلا بمعاملة موقّعة حقيقية من Apple لهذا التطبيق.
 import { getCaller } from "../_shared/plan.ts";
-import { isActive, PAGE_PACKS, PRODUCT_PLAN, verifyTransaction } from "../_shared/apple.ts";
+import { isActive, isTrial, PAGE_PACKS, PRODUCT_PLAN, verifyTransaction } from "../_shared/apple.ts";
 
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   if (!list.length) return json({ error: "bad request" }, 400);
 
   const { admin } = caller;
-  let best: { plan: string; expires: number } | null = null;
+  let best: { plan: string; expires: number; trial: boolean } | null = null;
   let credited = 0;
   for (const jws of list) {
     let t;
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
       const rank = rankOf(plan);
       const bestRank = best ? rankOf(best.plan) : 0;
       if (rank > bestRank || (rank === bestRank && t.expiresDate! > (best?.expires ?? 0))) {
-        best = { plan, expires: t.expiresDate! };
+        best = { plan, expires: t.expiresDate!, trial: isTrial(t) };
       }
     }
   }
@@ -76,6 +76,7 @@ Deno.serve(async (req) => {
     await admin.from("entitlements").upsert({
       user_id: caller.id,
       plan_id: best.plan,
+      trial: best.trial,
       expires_at: new Date(best.expires).toISOString(),
       updated_at: new Date().toISOString(),
     });

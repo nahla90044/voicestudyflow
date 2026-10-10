@@ -384,7 +384,7 @@ export default function ReaderScreen() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [voiceId, setVoiceId] = useState(initialVoiceId);
-  const [voiceLang, setVoiceLang] = useState<"ar" | "en" | "fr">(initialVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
+  const [, setVoiceLang] = useState<"ar" | "en" | "fr">(initialVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
   const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
   const [rate, setRate] = useState(1);
   const rateRef = useRef(1); // أحدث سرعة (لتقرأها الجملة التالية بلا إغلاق قديم)
@@ -1097,7 +1097,7 @@ export default function ReaderScreen() {
         "ask",
         passage,
         "اشرح هذه الفقرة بأبسط عبارة ممكنة في جملتين أو ثلاث، مع مثال من الحياة اليومية. خاطب القارئ بصيغة محايدة.",
-        voiceLangOf(pickVoice())
+        textLang(passage) ?? voiceLangOf(pickVoice())
       );
       const body = out.trim() || t("reader.ai.noResult");
       setCheckIn({ phase: "explained", title: t("reader.check.explainedTitle"), body });
@@ -3516,26 +3516,10 @@ export default function ReaderScreen() {
               {t("reader.voice.hint")}
             </Text>
 
-            {/* تبويبات اللغة */}
-            <View style={styles.langRow}>
-              {([
-                { k: "ar", label: t("reader.voice.tabArabic") },
-                { k: "en", label: "English" },
-                { k: "fr", label: "Français" },
-              ] as const).map((l) => {
-                const on = voiceLang === l.k;
-                return (
-                  <Pressable key={l.k} onPress={() => setVoiceLang(l.k)} style={[styles.langChip, on && styles.langChipOn]}>
-                    <Text style={[styles.langChipTxt, on && styles.langChipTxtOn]}>{l.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
             <ScrollView style={{ maxHeight: 320 }} contentContainerStyle={{ gap: 8, paddingTop: 12 }}>
               {([false, true] as const).map((premium) => {
                 const group = VOICE_CATALOG.filter(
-                  (v) => (v.lang ?? "ar") === voiceLang && !!v.premium === premium
+                  (v) => !!v.premium === premium
                 );
                 if (group.length === 0) return null;
                 return (
@@ -3588,7 +3572,7 @@ export default function ReaderScreen() {
 
             <Text style={[styles.trVoicesLabel, { textAlign: dir.textAlign }]}>{t("reader.translate.chooseVoice")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.voiceRow}>
-              {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === uiVoiceLang).map((v) => {
+              {VOICE_CATALOG.map((v) => {
                 const sel = v.voiceId === translateVoiceId;
                 return (
                   <Pressable

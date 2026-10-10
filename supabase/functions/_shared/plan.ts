@@ -31,7 +31,8 @@ export function periodOf(plan: Plan): string {
 }
 
 // apple = دخل بحساب Apple (شرط التجربة المجانية: حساب Apple واحد = تجربة واحدة، فيصعب صنع حسابات وهمية)
-export type Caller = { id: string; plan: Plan; admin: SupabaseClient; apple: boolean } | null;
+// trial = في أسبوع التجربة المجانية لاشتراك مدفوع → حدود التجربة فقط حتى يبدأ الدفع
+export type Caller = { id: string; plan: Plan; admin: SupabaseClient; apple: boolean; trial?: boolean } | null;
 
 // حساب مراجعة آبل (بريد وكلمة سر في App Store Connect): يأخذ التجربة المجانية بلا Apple
 const TRIAL_OK_EMAILS = new Set(["review@voicestudyflow.app"]);
@@ -40,6 +41,8 @@ const TRIAL_OK_EMAILS = new Set(["review@voicestudyflow.app"]);
 function limitsFor(caller: NonNullable<Caller>) {
   const base = LIMITS[caller.plan as Exclude<Plan, "owner">];
   if (caller.plan === "free" && !caller.apple) return { std: 0, prem: 0, ai: 0, voice: 0 };
+  // أسبوع التجربة المجانية (قرار نهلة ١٠ أكتوبر): ١٠ صفحات و٥ طلبات، ثم الباقة كاملة بعد الدفع
+  if (caller.trial && caller.plan !== "free") return { std: 10, prem: 0, ai: 5, voice: 3_000 };
   return base;
 }
 
@@ -59,11 +62,11 @@ export async function getCaller(req: Request): Promise<Caller> {
   const apple = providers.includes("apple") || TRIAL_OK_EMAILS.has(email);
   if (OWNER_EMAILS.has(email)) return { id: user.id, plan: "owner", admin, apple };
 
-  const { data: ent } = await admin.from("entitlements").select("plan_id,expires_at").eq("user_id", user.id).maybeSingle();
+  const { data: ent } = await admin.from("entitlements").select("plan_id,expires_at,trial").eq("user_id", user.id).maybeSingle();
   const active = !!ent && (ent.expires_at === null || new Date(ent.expires_at).getTime() > Date.now());
   const pid = String(ent?.plan_id ?? "");
   const plan: Plan = !active ? "free" : pid.startsWith("premium") ? "premium" : pid.startsWith("pro") ? "pro" : "plus";
-  return { id: user.id, plan, admin, apple };
+  return { id: user.id, plan, admin, apple, trial: active && !!ent?.trial };
 }
 
 /**

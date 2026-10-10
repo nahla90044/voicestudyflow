@@ -65,6 +65,12 @@ export async function verifyNotification(signedPayload: string): Promise<Respons
 }
 
 /** هل هذه المعاملة تمنح اشتراكًا الآن؟ (لم تنتهِ ولم تُسترجع) */
+/** أسبوع التجربة المجانية (عرض تمهيدي مجاني): حدوده صغيرة حتى يبدأ الدفع */
+export function isTrial(t: JWSTransactionDecodedPayload): boolean {
+  const x = t as unknown as { offerType?: number; offerDiscountType?: string; price?: number };
+  return x.offerType === 1 && (x.offerDiscountType === "FREE_TRIAL" || x.price === 0);
+}
+
 export function isActive(t: JWSTransactionDecodedPayload): boolean {
   return !!t.expiresDate && t.expiresDate > Date.now() && !t.revocationDate;
 }

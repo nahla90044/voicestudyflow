@@ -5,7 +5,7 @@
 //   https://jhfufoltmjhauqvgqezv.functions.supabase.co/apple-notifications  (Production وSandbox، النسخة 2)
 // منشور بلا تحقّق JWT (Apple لا ترسل رمز دخول) — الحماية بتوقيع Apple نفسه.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isActive, PRODUCT_PLAN, verifyNotification, verifyTransaction } from "../_shared/apple.ts";
+import { isActive, isTrial, PRODUCT_PLAN, verifyNotification, verifyTransaction } from "../_shared/apple.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
     await admin.from("entitlements").upsert({
       user_id: userId,
       plan_id: plan,
+      trial: isTrial(t),
       expires_at: new Date(t.expiresDate!).toISOString(),
       updated_at: new Date().toISOString(),
     });

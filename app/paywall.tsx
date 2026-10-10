@@ -297,6 +297,7 @@ export default function PaywallScreen() {
             ? " · " + (trialDays > 0 ? t("pay.afterTrial", { price: selected.text }) : yearly ? t("pay.renewYear") : t("pay.renewMonth"))
             : ""}
         </Text>
+        {trialDays > 0 && <Text style={[styles.foot, { color: pal.dim }]}>{t("pay.trialLimits")}</Text>}
         <View style={[styles.links, { flexDirection: dir.row }]}>
           <Pressable onPress={onRestore} hitSlop={6} accessibilityRole="button">
             <Text style={[styles.link, styles.linkStrong, { color: pal.accent }]}>{t("pay.restore")}</Text>

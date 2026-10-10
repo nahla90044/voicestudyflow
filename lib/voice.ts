@@ -89,7 +89,7 @@ export type VoiceOption = {
 };
 
 // كل الأصوات جيميناي (نفس أصوات حاكي): تفهم معنى النص فتنطق الأرقام والتواريخ صح.
-// نفس الصوت يقرأ الإنجليزي والفرنسي، فأصوات اللغات بأسماء لاتينية.
+// كل صوت يقرأ الكتاب بلغته أيًّا كانت (عربي/إنجليزي/فرنسي) — السيرفر يوجّهه حسب لغة النص.
 export const VOICE_CATALOG: VoiceOption[] = [
   { id: "maha", name: "مها · دافئ", voiceId: "gemini:Sulafat", gender: "female" },
   { id: "hatem", name: "حاتم · عميق", voiceId: "gemini:Charon", gender: "male" },
@@ -107,15 +107,6 @@ export const VOICE_CATALOG: VoiceOption[] = [
   { id: "saad", name: "سعد · ودود", voiceId: "gemini:Achird", gender: "male" },
   { id: "muneera", name: "منيرة · ناضج", voiceId: "gemini:Gacrux", gender: "female" },
   { id: "ziyad", name: "زياد · سلس", voiceId: "gemini:Algieba", gender: "male" },
-  // كتب اللغات
-  { id: "kore-en", name: "Kore · English", voiceId: "gemini:Kore", gender: "female", lang: "en" },
-  { id: "charon-en", name: "Charon · English", voiceId: "gemini:Charon", gender: "male", lang: "en" },
-  { id: "sulafat-en", name: "Sulafat · English", voiceId: "gemini:Sulafat", gender: "female", lang: "en" },
-  { id: "orus-en", name: "Orus · English", voiceId: "gemini:Orus", gender: "male", lang: "en" },
-  { id: "aoede-fr", name: "Aoede · Français", voiceId: "gemini:Aoede", gender: "female", lang: "fr" },
-  { id: "iapetus-fr", name: "Iapetus · Français", voiceId: "gemini:Iapetus", gender: "male", lang: "fr" },
-  { id: "leda-fr", name: "Leda · Français", voiceId: "gemini:Leda", gender: "female", lang: "fr" },
-  { id: "algieba-fr", name: "Algieba · Français", voiceId: "gemini:Algieba", gender: "male", lang: "fr" },
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
