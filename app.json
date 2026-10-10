@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.nahlah.voicestudyflow",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -50,9 +50,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#07080D",
+          "backgroundColor": "#0E1A33",
           "dark": {
-            "backgroundColor": "#07080D"
+            "backgroundColor": "#0E1A33"
           }
         }
       ],

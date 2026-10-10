@@ -5,7 +5,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Svg, { Circle, Defs, Mask, Rect } from "react-native-svg";
 
 import { useDir, useI18n } from "../../lib/i18n";
@@ -193,7 +193,14 @@ export async function resetCoachTours() {
 export function useCoachTour(
   name: string,
   steps: CoachStep[],
-  opts: { delay?: number; ready?: boolean; /** الشاشة نافذة منبثقة (modal sheet) نازلة عن أعلى الشاشة */ sheet?: boolean } = {}
+  opts: {
+    delay?: number;
+    ready?: boolean;
+    /** الشاشة نافذة منبثقة (modal sheet) نازلة عن أعلى الشاشة */
+    sheet?: boolean;
+    /** شاشة تمرير: الجولة تمرّر للعنصر إن كان خارج الشاشة. y = موضع التمرير الحالي */
+    scroll?: { ref: React.RefObject<ScrollView | null>; y: React.MutableRefObject<number> };
+  } = {}
 ) {
   const { t, lang } = useI18n();
   const key = COACH_PREFIX + name;
@@ -247,13 +254,22 @@ export function useCoachTour(
   );
 
   const measureStep = useCallback(
-    (v: View, i: number) => {
+    (v: View, i: number, scrolled = false) => {
       const list = stepsRef.current;
       v.measureInWindow((x, y, w, h) => {
         if (!w || !h) return show(i + 1);
         const dy = sheet && sheetH.current > 0 ? Math.max(0, screenH - sheetH.current) : 0;
-        // عنصر خارج الشاشة (أسفل قائمة طويلة مثلًا) لا يُضاء → الخطوة التالية
-        if (y + dy >= screenH || y + dy + h <= 0) return show(i + 1);
+        const top = y + dy;
+        // العنصر خارج الجزء المرئي (أو تحت شريط التنقّل): نمرّر إليه أولًا إن أمكن
+        const hidden = top + h > screenH - 110 || top < 60;
+        if (hidden && opts.scroll?.ref.current && !scrolled) {
+          const target = Math.max(0, opts.scroll.y.current + top - screenH * 0.3);
+          opts.scroll.ref.current.scrollTo({ y: target, animated: true });
+          setTimeout(() => measureStep(v, i, true), 450);
+          return;
+        }
+        // عنصر خارج الشاشة ولا تمرير → الخطوة التالية
+        if (top >= screenH || top + h <= 0) return show(i + 1);
         setRect({ x, y: y + dy, w, h, shape: list[i].shape });
         setIdx(i);
       });

@@ -6,8 +6,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import Svg, { Circle, Line } from "react-native-svg";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
@@ -16,6 +16,7 @@ import { FadeIn } from "../../components/brand/fade-in";
 import { PressableScale } from "../../components/brand/motion";
 import { ProgressRing } from "../../components/brand/progress-ring";
 import { SceneBanner, SceneCard, SceneScreen } from "../../components/brand/scene-screen";
+import { ValleyArt, type ValleyTree } from "../../components/brand/valley-art";
 import { Radius } from "../../constants/design";
 import { myBooks } from "../../lib/bookQA";
 import { getDailyGoal, setDailyGoal } from "../../lib/goals";
@@ -48,21 +49,26 @@ export default function ActivityScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
-  const { pal } = useScene();
+  const { id: sceneId, pal } = useScene();
+  const { width: winW } = useWindowDimensions();
   const [stats, setStats] = useState<Stats | null>(null);
   const [goal, setGoal] = useState(20);
   const [period, setPeriod] = useState<Period>("week");
   const [ready, setReady] = useState<BookReadiness[]>([]);
   const [skyBookId, setSkyBookId] = useState<string | null>(null);
+  const [valley, setValley] = useState<ValleyTree[]>([]);
 
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollY = useRef(0);
   // جولة الإرشاد: السماء، واختيار الكتاب، والفترة، وجاهزية كل كتاب، وهدف اليوم
   const coach = useCoachTour("activity_v1", [
     { id: "sky", title: t("coach.act.sky.title"), body: t("coach.act.sky.body"), shape: "rect" },
     { id: "books", title: t("coach.act.books.title"), body: t("coach.act.books.body"), shape: "rect" },
+    { id: "valley", title: t("coach.act.valley.title"), body: t("coach.act.valley.body"), shape: "rect" },
     { id: "period", title: t("coach.act.period.title"), body: t("coach.act.period.body"), shape: "rect" },
     { id: "row", title: t("coach.act.row.title"), body: t("coach.act.row.body"), shape: "rect" },
     { id: "goal", title: t("coach.act.goal.title"), body: t("coach.act.goal.body"), shape: "rect" },
-  ], { delay: 2200, ready: stats !== null });
+  ], { delay: 2200, ready: stats !== null, scroll: { ref: scrollRef, y: scrollY } });
 
   useFocusEffect(
     useCallback(() => {
@@ -73,11 +79,17 @@ export default function ActivityScreen() {
       (async () => {
         const books = await myBooks().catch(() => []);
         const out: BookReadiness[] = [];
+        const trees: ValleyTree[] = [];
         for (const b of books) {
           const r = await getBookReadiness(b.pdf_path);
-          if (r && (r.unitCount > 0 || r.answered > 0 || r.examISO)) out.push(r);
+          if (!r) continue;
+          trees.push({ id: r.bookId, read: r.readFraction, readiness: r.score }); // الوادي: كل الكتب
+          if (r.unitCount > 0 || r.answered > 0 || r.examISO) out.push(r);
         }
-        if (on) setReady(out.sort((a, b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999)));
+        if (on) {
+          setReady(out.sort((a, b) => (a.daysLeft ?? 999) - (b.daysLeft ?? 999)));
+          setValley(trees);
+        }
       })();
       return () => {
         on = false;
@@ -111,7 +123,13 @@ export default function ActivityScreen() {
 
   return (
     <SceneScreen>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        onScroll={(e) => (scrollY.current = e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={32}
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
         <SceneBanner
           title={t("nav.progress")}
           subtitle={t("activity.header.subtitle")}
@@ -182,6 +200,25 @@ export default function ActivityScreen() {
               <Kpi value={String(series.pages)} label={t("progress.pages")} icon="document-text" />
             </View>
           </FadeIn>
+
+          {/* وادي الكتب: شجرة لكل كتاب تكبر مع القراءة وتثمر حين يكتمل */}
+          {valley.length > 0 && (
+            <View {...coach.bind("valley")}>
+            <SceneCard padded={false} style={styles.valleyCard}>
+              <View style={styles.valleyHead}>
+                <Text style={[styles.valleyTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("valley.title")}</Text>
+                <Text style={[styles.valleySub, { color: pal.dim, textAlign: dir.textAlign }]}>
+                  {t("valley.sub", { n: valley.filter((b) => b.read >= 0.97).length, total: valley.length })}
+                </Text>
+              </View>
+              <ValleyArt
+                id={sceneId}
+                width={winW - 32}
+                trees={valley}
+              />
+            </SceneCard>
+            </View>
+          )}
 
           {/* الفترة */}
           <View {...coach.bind("period")} style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.track }]}>
@@ -545,6 +582,10 @@ function SceneHeatmap({ days, pal, weeks = 13 }: { days: Record<string, { m: num
 }
 
 const styles = StyleSheet.create({
+  valleyCard: { overflow: "hidden" },
+  valleyHead: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, gap: 2 },
+  valleyTitle: { fontSize: 17, fontWeight: "900" },
+  valleySub: { fontSize: 12.5, fontWeight: "600" },
   scroll: { paddingBottom: 120 },
   body: { paddingHorizontal: 20, gap: 12, marginTop: -6 },
   seg: { padding: 4, borderRadius: 16, gap: 4 },
