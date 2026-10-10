@@ -19,7 +19,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
@@ -413,6 +413,7 @@ export default function ReaderScreen() {
   const [paper, setPaper] = useState(false);
   const [fontScale, setFontScale] = useState(1);
   const [toolTab, setToolTab] = useState<"listen" | "study" | "view">("listen");
+  const safeInsets = useSafeAreaInsets();
   const [toolsHidden, setToolsHiddenState] = useState(false); // إخفاء لوحة الأدوات لمساحة قراءة أكبر
   useEffect(() => {
     void getToolsHidden().then(setToolsHiddenState).catch(() => {});
@@ -2937,7 +2938,7 @@ export default function ReaderScreen() {
 
       {/* أسفل القارئ (تصميم 2.0): شريط الصفحات + كبسولة الأدوات الخمس */}
       {!fullText && (
-      <View style={styles.bottom}>
+      <View style={[styles.bottom, { paddingBottom: Math.max(safeInsets.bottom, 12) + (toolsHidden ? 10 : 2) }]}>
         {voiceWarn ? (
           <Text style={styles.warnTxt}>{t("reader.voice.humanFailed", { reason: voiceWarn })}</Text>
         ) : null}
@@ -2964,11 +2965,11 @@ export default function ReaderScreen() {
           </View>
           <Pressable
             onPress={toggleToolsHidden}
-            style={[styles.pagePill, paper && styles.topBtnPaper, { paddingHorizontal: 10 }]}
-            hitSlop={6}
+            style={[styles.toolsToggle, paper && styles.topBtnPaper]}
+            hitSlop={8}
             accessibilityLabel={toolsHidden ? t("reader.tools.show") : t("reader.tools.hide")}
           >
-            <Ionicons name={toolsHidden ? "options-outline" : "chevron-down"} size={16} color={paper ? INK : Palette.text} />
+            <Ionicons name={toolsHidden ? "options-outline" : "chevron-down"} size={18} color={paper ? INK : Palette.text} />
           </Pressable>
         </View>
 
@@ -3841,6 +3842,16 @@ const styles = StyleSheet.create({
   topBtnPaper: { backgroundColor: "rgba(42,38,34,0.07)" },
   topTitleRow: { alignItems: "center", gap: 5, marginTop: 1 },
   navRow: { alignItems: "center", gap: 8 },
+  toolsToggle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(21,24,56,0.88)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: SKY.cardBorder,
+  },
   navArrow: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
   // تظليل الجملة: ذهبي دافئ يبقى مقروءًا فوق صفحات الكتاب البيضاء
   sentHL: { position: "absolute", borderRadius: 5, backgroundColor: "rgba(246,213,138,0.35)" },
