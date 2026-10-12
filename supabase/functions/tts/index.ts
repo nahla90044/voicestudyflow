@@ -42,6 +42,10 @@ async function contentKey(voiceId: string, expressive: boolean, text: string): P
 
 const SHARED_BUCKET = "tts-shared";
 
+// بعد رفض جوجل بسبب الحد (429) نتوقف عن مراسلتها دقيقة: كل طلب جديد يرجع فورًا
+// فيكمل التطبيق بصوت الجهاز بدل انتظار رفض جديد في كل جملة.
+let coolUntil = 0;
+
 async function sha(s: string): Promise<string> {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -107,13 +111,17 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (Date.now() < coolUntil) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
     let out: { mp3: Uint8Array; seconds: number };
     try {
       out = await geminiMp3(voiceName, text, expressive);
     } catch (e) {
-      // نُرجع 200 مع التفصيل ليصل للعميل (فيكمل بصوت الجهاز)، لا 500 مبهم
+      // نُرجع 200 مع التفصيل ليصل للعميل فيكمل بصوت الجهاز (لا يتوقف)، لا 500 مبهم
       const msg = (e as Error).message;
-      return json({ error: msg, quota: /\b(429|403)\b|quota|billing/i.test(msg) }, 200);
+      console.error("tts gemini failed:", msg.slice(0, 300), "chars:", text.length);
+      if (/\b429\b|RESOURCE_EXHAUSTED/i.test(msg)) coolUntil = Date.now() + 60_000;
+      // نفاد الرصيد المدفوع فقط يُعدّ «quota»؛ الحد المؤقت والبطء يرجعان لصوت الجهاز
+      return json({ error: msg, quota: /billing|prepay|credit/i.test(msg) && !/\b429\b/.test(msg) }, 200);
     }
 
     // توقيت تقريبي لكل حرف (توزيع خطّي على مدة المقطع) — لتزامن الهايلايت

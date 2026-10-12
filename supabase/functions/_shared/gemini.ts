@@ -7,6 +7,7 @@ import { createMp3Encoder } from "npm:wasm-media-encoders@0.7.0";
 export const GEMINI_MODEL = Deno.env.get("GEMINI_TTS_MODEL") ?? "gemini-3.8-flash-lite-tts";
 export const GEMINI_KBPS = 48;
 const RATE = 24000;
+const TIMEOUT_MS = 25_000;
 
 // أصوات جيميناي المسموحة (نفس أصوات حاكي) — أي اسم غيرها يُرفض ويُستبدل بالافتراضي
 export const GEMINI_VOICES = new Set([
@@ -116,8 +117,13 @@ export async function geminiMp3(voiceName: string, text: string, expressive = fa
   const key = Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new Error("Missing GEMINI_API_KEY");
   const instruction = PROMPTS[langOf(text)][expressive ? 1 : 0];
+  // حد أقصى للانتظار: طلب عالق لا يُعلّق القراءة دقائق — نلغيه ويكمل التطبيق بصوت الجهاز
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+  try {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, {
     method: "POST",
+    signal: abort.signal,
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       contents: [{ parts: [{ text: `${instruction}\n${text}` }] }],
@@ -151,4 +157,10 @@ export async function geminiMp3(voiceName: string, text: string, expressive = fa
   }
   if (!got) throw new Error("gemini 502: empty audio");
   return enc.finish();
+  } catch (e) {
+    if (abort.signal.aborted) throw new Error("gemini 504: timeout");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
