@@ -112,23 +112,45 @@ function b64(s: string): Uint8Array {
   return u;
 }
 
+// Vertex (بوابة جوجل للشركات): نفس النموذج والأصوات، بحدود أعلى بكثير وبلا سقف يومي ١٠٠ طلب.
+// المفتاح مربوط بحساب الخدمة vsf-tts (دور Agent Platform User). عند تعذّره نرجع لبوابة AI Studio.
+const VERTEX_PROJECT = Deno.env.get("GOOGLE_CLOUD_PROJECT") ?? "gen-lang-client-0211542939";
+
 /** صوت النص كاملًا (MP3) ومدته بالثواني. البث من جوجل أسرع بكثير من انتظار الرد كاملًا. */
 export async function geminiMp3(voiceName: string, text: string, expressive = false): Promise<{ mp3: Uint8Array; seconds: number }> {
-  const key = Deno.env.get("GEMINI_API_KEY");
-  if (!key) throw new Error("Missing GEMINI_API_KEY");
   const instruction = PROMPTS[langOf(text)][expressive ? 1 : 0];
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: `${instruction}\n${text}` }] }],
+    generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
+  });
+  const vertexKey = Deno.env.get("GOOGLE_TTS_API_KEY");
+  const studioKey = Deno.env.get("GEMINI_API_KEY");
+  if (!vertexKey && !studioKey) throw new Error("Missing GEMINI_API_KEY");
+  if (vertexKey) {
+    try {
+      return await streamTts(
+        `https://aiplatform.googleapis.com/v1/projects/${VERTEX_PROJECT}/locations/global/publishers/google/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`,
+        vertexKey,
+        body,
+      );
+    } catch (e) {
+      if (!studioKey) throw e;
+      console.error("vertex tts failed, falling back:", (e as Error).message.slice(0, 200));
+    }
+  }
+  return streamTts(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, studioKey!, body);
+}
+
+async function streamTts(url: string, key: string, body: string): Promise<{ mp3: Uint8Array; seconds: number }> {
   // حد أقصى للانتظار: طلب عالق لا يُعلّق القراءة دقائق — نلغيه ويكمل التطبيق بصوت الجهاز
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
   try {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, {
+  const res = await fetch(url, {
     method: "POST",
     signal: abort.signal,
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: `${instruction}\n${text}` }] }],
-      generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
-    }),
+    body,
   });
   if (!res.ok || !res.body) throw new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const enc = await encoder();
