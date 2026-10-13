@@ -35,9 +35,10 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-// بصمة المحتوى (نص + صوت + تعبيري) — مفتاح الكاش المشترك
+// بصمة المحتوى (نص + صوت + تعبيري) — مفتاح الكاش المشترك.
+// v2: أُزيل التوجيه قبل النص (كان يُقرأ أحيانًا وسط الكلام) — المقاطع القديمة تُولَّد من جديد.
 async function contentKey(voiceId: string, expressive: boolean, text: string): Promise<string> {
-  return sha(`${voiceId}|${expressive ? 1 : 0}|${text}`);
+  return sha(`v2|${voiceId}|${expressive ? 1 : 0}|${text}`);
 }
 
 const SHARED_BUCKET = "tts-shared";

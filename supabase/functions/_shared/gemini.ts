@@ -57,16 +57,9 @@ export function langOf(t: string): "ar" | "en" | "fr" {
   return /[àâçéèêëîïôûùüÿœ]/i.test(t) ? "fr" : "en";
 }
 
-// التوجيه جملة إنجليزية قصيرة قبل النص — التوجيه الطويل بالعربي كان يُقرأ بصوت عالي مع النص.
-// expressive = إلقاء أدفأ (سرد العرض التقديمي)، وإلا قراءة دراسية واضحة.
-const PROMPTS: Record<"ar" | "en" | "fr", [string, string]> = {
-  ar: [
-    "Read aloud in a clear, natural Modern Standard Arabic narrator voice:",
-    "Read in a warm, calm Arabic storyteller voice:",
-  ],
-  en: ["Read aloud in a clear, natural English narrator voice:", "Read in a warm, engaging English storyteller voice:"],
-  fr: ["Read aloud in a clear, natural French narrator voice:", "Read in a warm, engaging French storyteller voice:"],
-};
+// بلا أي توجيه قبل النص: التوجيه (حتى الجملة الإنجليزية القصيرة) كان يُقرأ أحيانًا بصوت عالي
+// وسط الكلام («Read aloud in a clear…»). النموذج يقرأ بلغة النص وبإلقاء طبيعي من نفسه
+// (نفس ما ثبت في حاكي للكتب غير العربية)، و expressive لم يعد يغيّر الطلب.
 
 // يحوّل مقاطع الصوت الخام (16-بت) إلى MP3 أول بأول.
 async function encoder() {
@@ -117,10 +110,9 @@ function b64(s: string): Uint8Array {
 const VERTEX_PROJECT = Deno.env.get("GOOGLE_CLOUD_PROJECT") ?? "gen-lang-client-0211542939";
 
 /** صوت النص كاملًا (MP3) ومدته بالثواني. البث من جوجل أسرع بكثير من انتظار الرد كاملًا. */
-export async function geminiMp3(voiceName: string, text: string, expressive = false): Promise<{ mp3: Uint8Array; seconds: number }> {
-  const instruction = PROMPTS[langOf(text)][expressive ? 1 : 0];
+export async function geminiMp3(voiceName: string, text: string, _expressive = false): Promise<{ mp3: Uint8Array; seconds: number }> {
   const body = JSON.stringify({
-    contents: [{ role: "user", parts: [{ text: `${instruction}\n${text}` }] }],
+    contents: [{ role: "user", parts: [{ text }] }],
     generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
   });
   const vertexKey = Deno.env.get("GOOGLE_TTS_API_KEY");
