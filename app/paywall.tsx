@@ -95,6 +95,17 @@ export default function PaywallScreen() {
   }, [router, devPreview]);
 
   const key = (tr: Tier): ProductKey => `${tr}_${yearly ? "year" : "month"}` as ProductKey;
+  // نعرض فقط الباقات التي يبيعها المتجر فعلًا (لها سعر) — باقة لم تُعتمد بعد لا تظهر بزر لا يعمل.
+  // قبل وصول الأسعار نعرض الكل (بـ «…») حتى لا تقفز الشاشة.
+  const loadedPrices = Object.keys(prices).length > 0;
+  const shown = (tr: Tier) => !loadedPrices || !!prices[key(tr)];
+  useEffect(() => {
+    if (loadedPrices && !prices[key(tier)]) {
+      const first = (["pro", "premium", "plus"] as Tier[]).find((tr) => !!prices[key(tr)]);
+      if (first) setTier(first);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prices]);
   const selected = prices[key(tier)];
   const priceText = (tr: Tier) => prices[key(tr)]?.text ?? "…";
   const trialDays = selected?.trialDays ?? 0;
@@ -245,22 +256,28 @@ export default function PaywallScreen() {
           <Text style={[styles.sub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("pay.sub")}</Text>
 
 
+          {shown("premium") && (
           <PlanCard tr="premium">
             <Feat text={t("pay.premium.f1")} />
             <Feat text={t("pay.premium.f2")} />
             <Feat text={t("pay.pro.f3")} />
           </PlanCard>
+          )}
 
+          {shown("pro") && (
           <PlanCard tr="pro">
             <Feat text={t("pay.pro.f1")} />
             <Feat text={t("pay.pro.f2")} />
             <Feat text={t("pay.pro.f3")} />
           </PlanCard>
+          )}
 
+          {shown("plus") && (
           <PlanCard tr="plus">
             <Feat text={t("pay.plus.f1")} />
             <Feat text={t("pay.plus.f2")} />
           </PlanCard>
+          )}
 
           {!!packPrice && (
             <Pressable onPress={onBuyPages} disabled={busy} accessibilityRole="button">
