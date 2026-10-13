@@ -79,6 +79,10 @@ import {
   speakText,
   stopSpeaking,
   VOICE_CATALOG,
+  READ_STYLES,
+  getReadStyle,
+  setReadStyle,
+  type ReadStyle,
   voiceLangOf,
   warmNext,
   setRecordingAudioMode,
@@ -384,6 +388,7 @@ export default function ReaderScreen() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [voiceId, setVoiceId] = useState(initialVoiceId);
+  const [readStyle, setReadStyleState] = useState<ReadStyle>(getReadStyle());
   const [, setVoiceLang] = useState<"ar" | "en" | "fr">(initialVoiceLang); // فلتر لغة الأصوات (افتراضه لغة الواجهة)
   const [voiceModal, setVoiceModal] = useState(false); // قائمة اختيار الصوت
   const [rate, setRate] = useState(1);
@@ -1294,7 +1299,18 @@ export default function ReaderScreen() {
     voiceChosenRef.current = true; // اختيار صريح → لا نبدّله تلقائيًا بعد الآن
     setVoiceId(newVoiceId);
     setVoiceModal(false);
+    restartReading();
+  }
 
+  /** طريقة القراءة (عادية/هادئة/…): تُحفظ للمرات القادمة ونعيد القراءة بها فورًا من نفس الجملة */
+  function chooseReadStyle(style: ReadStyle) {
+    setReadStyle(style);
+    setReadStyleState(style);
+    setVoiceModal(false);
+    restartReading();
+  }
+
+  function restartReading() {
     const resumeAt = playingRef.current ? Math.max(0, activeSentence) : resumeIdxRef.current;
     stop();
     setVoiceWarn("");
@@ -3551,6 +3567,20 @@ export default function ReaderScreen() {
                 );
               })}
             </ScrollView>
+
+            {/* طريقة القراءة: تُطبَّق على كل الأصوات */}
+            <Text style={[styles.voiceGroupTxt, { textAlign: dir.textAlign, marginTop: 14 }]}>{t("reader.style.title")}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.voiceRow, { paddingTop: 8 }]}>
+              {READ_STYLES.map((st) => {
+                const sel = st === readStyle;
+                return (
+                  <Pressable key={st} onPress={() => chooseReadStyle(st)} style={[styles.voiceChip, sel && styles.voiceChipActive]}>
+                    <Text style={[styles.voiceChipTxt, sel && styles.voiceChipTxtActive]}>{t(`reader.style.${st}`)}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Text style={[styles.notesHint, { textAlign: dir.textAlign, marginTop: 8 }]}>{t(`reader.style.${readStyle}.hint`)}</Text>
           </View>
         </View>
       </Modal>

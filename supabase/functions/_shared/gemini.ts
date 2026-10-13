@@ -57,9 +57,17 @@ export function langOf(t: string): "ar" | "en" | "fr" {
   return /[àâçéèêëîïôûùüÿœ]/i.test(t) ? "fr" : "en";
 }
 
-// بلا أي توجيه قبل النص: التوجيه (حتى الجملة الإنجليزية القصيرة) كان يُقرأ أحيانًا بصوت عالي
-// وسط الكلام («Read aloud in a clear…»). النموذج يقرأ بلغة النص وبإلقاء طبيعي من نفسه
-// (نفس ما ثبت في حاكي للكتب غير العربية)، و expressive لم يعد يغيّر الطلب.
+// بلا أي توجيه داخل النص: التوجيه (حتى الجملة الإنجليزية القصيرة) كان يُقرأ أحيانًا بصوت عالي
+// وسط الكلام («Read aloud in a clear…»). طريقة القراءة تُرسل الآن في حقل منفصل عن النص
+// (speech_metadata.style) فلا تُقرأ أبدًا — اختُبر بتفريغ الصوت.
+export type ReadStyle = "normal" | "calm" | "story" | "clear" | "oratory";
+export const READ_STYLES: ReadStyle[] = ["normal", "calm", "story", "clear", "oratory"];
+const STYLE_TEXT: Record<Exclude<ReadStyle, "normal">, string> = {
+  calm: "very calm, slow and soft, like a bedtime story",
+  story: "warm and engaging, like a storyteller narrating a book",
+  clear: "slow, with very clear articulation, for studying",
+  oratory: "strong, confident and eloquent, like an orator",
+};
 
 // يحوّل مقاطع الصوت الخام (16-بت) إلى MP3 أول بأول.
 async function encoder() {
@@ -109,15 +117,34 @@ function b64(s: string): Uint8Array {
 // المفتاح مربوط بحساب الخدمة vsf-tts (دور Agent Platform User). عند تعذّره نرجع لبوابة AI Studio.
 const VERTEX_PROJECT = Deno.env.get("GOOGLE_CLOUD_PROJECT") ?? "gen-lang-client-0211542939";
 
-/** صوت النص كاملًا (MP3) ومدته بالثواني. البث من جوجل أسرع بكثير من انتظار الرد كاملًا. */
-export async function geminiMp3(voiceName: string, text: string, _expressive = false): Promise<{ mp3: Uint8Array; seconds: number }> {
+/** صوت النص كاملًا (MP3) ومدته بالثواني. البث من جوجل أسرع بكثير من انتظار الرد كاملًا.
+ *  طريقة القراءة (غير «عادية») تمر عبر بوابة AI Studio فقط (حقل speech_metadata غير متاح في Vertex
+ *  بمفتاح API)؛ إن تعذّرت (مثل سقف ١٠٠ طلب يوميًا) نكمل بالقراءة العادية على Vertex — الصوت لا يتوقف. */
+export async function geminiMp3(voiceName: string, text: string, style: ReadStyle = "normal"): Promise<{ mp3: Uint8Array; seconds: number }> {
+  const vertexKey = Deno.env.get("GOOGLE_TTS_API_KEY");
+  const studioKey = Deno.env.get("GEMINI_API_KEY");
+  if (!vertexKey && !studioKey) throw new Error("Missing GEMINI_API_KEY");
+  if (style !== "normal" && studioKey) {
+    try {
+      return await streamTts(
+        "https://generativelanguage.googleapis.com/v1beta/interactions?alt=sse",
+        studioKey,
+        JSON.stringify({
+          model: GEMINI_MODEL,
+          input: [{ type: "user_input", content: [{ type: "text", text, annotations: [{ type: "speech_metadata", style: STYLE_TEXT[style] }] }] }],
+          response_format: { type: "audio" },
+          generation_config: { speech_config: [{ voice: voiceName }] },
+          stream: true,
+        }),
+      );
+    } catch (e) {
+      console.error(`styled tts (${style}) failed, reading normally:`, (e as Error).message.slice(0, 200));
+    }
+  }
   const body = JSON.stringify({
     contents: [{ role: "user", parts: [{ text }] }],
     generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
   });
-  const vertexKey = Deno.env.get("GOOGLE_TTS_API_KEY");
-  const studioKey = Deno.env.get("GEMINI_API_KEY");
-  if (!vertexKey && !studioKey) throw new Error("Missing GEMINI_API_KEY");
   if (vertexKey) {
     try {
       return await streamTts(
@@ -160,12 +187,14 @@ async function streamTts(url: string, key: string, body: string): Promise<{ mp3:
       const line = ev.split("\n").find((l) => l.startsWith("data:"));
       if (!line) continue;
       const d = JSON.parse(line.slice(5));
-      for (const p of d.candidates?.[0]?.content?.parts ?? []) {
-        if (p.inlineData?.data) {
-          const pcm = b64(p.inlineData.data);
-          got += pcm.length;
-          enc.push(pcm);
-        }
+      // generateContent: candidates[].content.parts[].inlineData — interactions: step.delta بنوع audio
+      const chunks: string[] = (d.candidates?.[0]?.content?.parts ?? []).map((p: { inlineData?: { data?: string } }) => p.inlineData?.data);
+      if (d.delta?.type === "audio") chunks.push(d.delta.data);
+      for (const c of chunks) {
+        if (!c) continue;
+        const pcm = b64(c);
+        got += pcm.length;
+        enc.push(pcm);
       }
     }
   }

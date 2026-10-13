@@ -8,6 +8,7 @@
 // تبقى كما هي.
 
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Directory, File, Paths } from "expo-file-system";
 import * as Speech from "expo-speech";
 
@@ -110,6 +111,35 @@ export const VOICE_CATALOG: VoiceOption[] = [
 ];
 
 export const DEFAULT_VOICE_ID = VOICE_CATALOG[0].voiceId;
+
+/* ---------------- طريقة القراءة ---------------- */
+// يختارها المستخدم من نافذة الصوت. تُرسل للسيرفر في حقل منفصل عن النص (لا تُقرأ بصوت عالي).
+// «عادية» = بلا توجيه. السرد التعبيري (العرض التقديمي) بلا اختيار = قصصية.
+export type ReadStyle = "normal" | "calm" | "story" | "clear" | "oratory";
+export const READ_STYLES: ReadStyle[] = ["normal", "calm", "story", "clear", "oratory"];
+const KEY_READ_STYLE = "voice:read_style";
+let readStyle: ReadStyle = "normal";
+AsyncStorage.getItem(KEY_READ_STYLE)
+  .then((v) => {
+    if (v && (READ_STYLES as string[]).includes(v)) readStyle = v as ReadStyle;
+  })
+  .catch(() => {});
+
+export function getReadStyle(): ReadStyle {
+  return readStyle;
+}
+export function setReadStyle(style: ReadStyle): void {
+  readStyle = style;
+  AsyncStorage.setItem(KEY_READ_STYLE, style).catch(() => {});
+}
+function styleFor(expressive?: boolean): ReadStyle {
+  return readStyle === "normal" && expressive ? "story" : readStyle;
+}
+// مفتاح التخزين المحلي: كل طريقة قراءة صوتها مختلف
+function styleCacheKey(vid: string, expressive?: boolean): string {
+  const st = styleFor(expressive);
+  return st === "normal" ? vid : `${vid}|${st}`;
+}
 
 /** (قديم) لا يوجد صوت فاخر بعد الانتقال لجيميناي */
 export const isPremiumVoice = (_voiceId?: string) => false;
@@ -405,8 +435,9 @@ async function synthToFile(
   page?: PageRef
 ): Promise<{ file: File; starts: number[] }> {
   const vid = voiceId || VOICE_IDS[gender];
-  // مفتاح تخزين مختلف للإعداد التعبيري (صوت مختلف) عن العادي
-  const cacheKey = vid + (expressive ? "|x" : "");
+  // مفتاح تخزين مختلف لكل طريقة قراءة (صوت مختلف)
+  const style = styleFor(expressive);
+  const cacheKey = styleCacheKey(vid, expressive);
 
   // 1) موجود في التخزين؟ شغّله مباشرة بدون تكلفة/إنترنت (مع توقيت الحروف إن وُجد)
   const file = cacheFileFor(text, cacheKey);
@@ -422,7 +453,7 @@ async function synthToFile(
   // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
   // لا يوجد مفتاح صوت داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
   const { data, error } = await supabase.functions.invoke("tts", {
-    body: { text, gender, voiceId: vid, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
+    body: { text, gender, voiceId: vid, style, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
   });
   if (error) {
     // نسخة لم تعد مدعومة (426) → قفل التطبيق بشاشة التحديث
@@ -605,7 +636,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
 
   // إن كان مشغّل هذا المقطع مُحمّلًا مسبقًا (warm) → نتبنّاه قبل الإيقاف لتشغيل فوري
   const vidForWarm = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
-  const expectedUri = cacheFileFor(clean, vidForWarm + (opts.expressive ? "|x" : "")).uri;
+  const expectedUri = cacheFileFor(clean, styleCacheKey(vidForWarm, opts.expressive)).uri;
   let adopted: AudioPlayer | null = null;
   if (warmPlayer && warmPlayer.uri === expectedUri) {
     adopted = warmPlayer.player;
@@ -739,7 +770,7 @@ export async function warmNext(
   if (!clean) return;
   try {
     const vid = opts.voiceId || VOICE_IDS[opts.gender ?? "female"];
-    const uri = cacheFileFor(clean, vid).uri;
+    const uri = cacheFileFor(clean, styleCacheKey(vid)).uri;
     if (warmPlayer?.uri === uri) return; // محمّل بالفعل
     const { file } = await synthToFile(clean, opts.gender ?? "female", opts.voiceId, false, opts.page);
     if (warmPlayer?.uri === file.uri) return;

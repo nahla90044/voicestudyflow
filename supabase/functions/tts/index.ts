@@ -2,7 +2,7 @@
 // تحويل نص إلى صوت عبر Google Gemini TTS — المفتاح يبقى سرّيًا بالسيرفر.
 // كاش مشترك: يُولّد كل (نص+صوت) **مرة واحدة** ويُخزّن في bucket «tts-shared»،
 // فأي مستخدم يطلب نفس المحتوى يأخذ الصوت الجاهز بلا تكلفة جديدة (مفتاح بالمحتوى لا بالعنوان).
-// الطلب:  { text, gender?, voiceId?, expressive?, book?, page? }   الرد: { audio: base64Mp3, starts: number[] }
+// الطلب:  { text, gender?, voiceId?, style?, expressive?, book?, page? }   الرد: { audio: base64Mp3, starts: number[] }
 //
 // مزوّد واحد: جيميناي (voiceId «gemini:<اسم>»، والمعرّفات القديمة تتحوّل لأقرب صوت).
 // حصة الاشتراك بالصفحات: إن وصل book+page تُحسب صفحة الكتاب مرة واحدة في الشهر
@@ -10,7 +10,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { consume, consumePage, getCaller } from "../_shared/plan.ts";
 import { requireUpdatedApp } from "../_shared/client.ts";
-import { geminiMp3, geminiVoiceFor } from "../_shared/gemini.ts";
+import { geminiMp3, geminiVoiceFor, READ_STYLES, type ReadStyle } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -37,8 +37,9 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 // بصمة المحتوى (نص + صوت + تعبيري) — مفتاح الكاش المشترك.
 // v2: أُزيل التوجيه قبل النص (كان يُقرأ أحيانًا وسط الكلام) — المقاطع القديمة تُولَّد من جديد.
-async function contentKey(voiceId: string, expressive: boolean, text: string): Promise<string> {
-  return sha(`v2|${voiceId}|${expressive ? 1 : 0}|${text}`);
+// القراءة العادية تبقى على نفس المفتاح القديم (كاشها صالح)، وكل طريقة قراءة لها مفتاحها.
+async function contentKey(voiceId: string, style: ReadStyle, text: string): Promise<string> {
+  return sha(style === "normal" ? `v2|${voiceId}|0|${text}` : `v2|${voiceId}|${style}|${text}`);
 }
 
 const SHARED_BUCKET = "tts-shared";
@@ -66,7 +67,8 @@ Deno.serve(async (req: Request) => {
     // كل الأصوات جيميناي (المعرّفات القديمة تتحوّل لأقرب صوت) — فئة واحدة للصفحات
     const voiceName = geminiVoiceFor(body.voiceId, body.gender);
     const voiceId = `gemini:${voiceName}`;
-    const expressive = !!body.expressive;
+    // طريقة القراءة يختارها المستخدم؛ النسخ الأقدم ترسل expressive (سرد العرض التقديمي) = قصصية
+    const style: ReadStyle = READ_STYLES.includes(body.style) ? body.style : body.expressive ? "story" : "normal";
 
     // حصة الصفحات: صفحة الكتاب تُحسب مرة واحدة في الفترة (قبل الكاش — قيمة للمستخدم)
     const book = typeof body.book === "string" ? body.book : "";
@@ -84,7 +86,7 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const store = SUPABASE_URL && SERVICE_ROLE ? createClient(SUPABASE_URL, SERVICE_ROLE) : null;
-    const key = await contentKey(voiceId, expressive, text);
+    const key = await contentKey(voiceId, style, text);
 
     if (store) {
       try {
@@ -115,7 +117,7 @@ Deno.serve(async (req: Request) => {
     if (Date.now() < coolUntil) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
     let out: { mp3: Uint8Array; seconds: number };
     try {
-      out = await geminiMp3(voiceName, text, expressive);
+      out = await geminiMp3(voiceName, text, style);
     } catch (e) {
       // نُرجع 200 مع التفصيل ليصل للعميل فيكمل بصوت الجهاز (لا يتوقف)، لا 500 مبهم
       const msg = (e as Error).message;
