@@ -120,6 +120,11 @@ export default function PaywallScreen() {
       invalidatePlan();
       Alert.alert(t("pay.thanksTitle"), t("pay.thanksBody"));
       router.back();
+    } else if (r === "pending") {
+      Alert.alert(t("pay.pendingTitle"), t("pay.pendingBody"));
+      router.back();
+    } else if (r === "conflict") {
+      Alert.alert(t("pay.conflictTitle"), t("pay.conflictBody"));
     } else if (r === "failed" || r === "unavailable") {
       Alert.alert(t("pay.failTitle"), t("pay.failBody"));
     }
@@ -133,6 +138,9 @@ export default function PaywallScreen() {
       invalidatePlan();
       Alert.alert(t("sub.pagesAddedTitle"), t("sub.pagesAddedBody", { n: PAGE_PACK.pages }));
       router.back();
+    } else if (r === "pending") {
+      Alert.alert(t("pay.pendingTitle"), t("pay.pendingBody"));
+      router.back();
     } else if (r === "failed" || r === "unavailable") {
       Alert.alert(t("pay.failTitle"), t("pay.failBody"));
     }
@@ -140,11 +148,17 @@ export default function PaywallScreen() {
 
   async function onRestore() {
     setBusy(true);
-    const ok = await restore();
+    const r = await restore();
     setBusy(false);
     invalidatePlan();
-    Alert.alert(ok ? t("pay.restoredTitle") : t("pay.noRestoreTitle"), ok ? t("pay.restoredBody") : t("pay.noRestoreBody"));
-    if (ok) router.back();
+    if (r === "ok") {
+      Alert.alert(t("pay.restoredTitle"), t("pay.restoredBody"));
+      router.back();
+    } else if (r === "conflict") {
+      Alert.alert(t("pay.conflictTitle"), t("pay.conflictBody"));
+    } else {
+      Alert.alert(t("pay.noRestoreTitle"), t("pay.noRestoreBody"));
+    }
   }
 
   const headline = reason === "voice" ? t("pay.reason.voice") : reason === "ai" ? t("pay.reason.ai") : reason === "books" ? t("pay.reason.books") : reason === "voiceAsk" ? t("pay.reason.voiceAsk") : "";

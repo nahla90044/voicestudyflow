@@ -102,10 +102,11 @@ export function SubscriptionCard() {
           )}
           <Pressable
             onPress={async () => {
-              const ok = await restore();
+              const r = await restore();
               invalidatePlan();
               setPlan(await getPlan(true));
-              Alert.alert(ok ? t("pay.restoredTitle") : t("pay.noRestoreTitle"), ok ? t("pay.restoredBody") : t("pay.noRestoreBody"));
+              if (r === "conflict") Alert.alert(t("pay.conflictTitle"), t("pay.conflictBody"));
+              else Alert.alert(r === "ok" ? t("pay.restoredTitle") : t("pay.noRestoreTitle"), r === "ok" ? t("pay.restoredBody") : t("pay.noRestoreBody"));
             }}
             style={[styles.btn, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
           >

@@ -5,7 +5,7 @@
 //   https://jhfufoltmjhauqvgqezv.functions.supabase.co/apple-notifications  (Production وSandbox، النسخة 2)
 // منشور بلا تحقّق JWT (Apple لا ترسل رمز دخول) — الحماية بتوقيع Apple نفسه.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isActive, isTrial, PRODUCT_PLAN, verifyNotification, verifyTransaction } from "../_shared/apple.ts";
+import { isActive, isTrial, PAGE_PACKS, PRODUCT_PLAN, verifyNotification, verifyRenewalInfo, verifyTransaction } from "../_shared/apple.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
     auth: { persistSession: false },
   });
-  let note;
+  let note: Awaited<ReturnType<typeof verifyNotification>>;
   try {
     const body = await req.json();
     note = await verifyNotification(String(body?.signedPayload ?? ""));
@@ -26,8 +26,9 @@ Deno.serve(async (req) => {
   const type = String(note.notificationType ?? "");
   const id = String(note.notificationUUID ?? "");
   const signedTx = note.data?.signedTransactionInfo;
+  const renewalJws = note.data?.signedRenewalInfo;
   if (!signedTx) return new Response("ok (no transaction)", { status: 200 }); // TEST وغيره
-  let t;
+  let t: Awaited<ReturnType<typeof verifyTransaction>>;
   try {
     t = await verifyTransaction(signedTx);
   } catch (e) {
@@ -42,39 +43,79 @@ Deno.serve(async (req) => {
     userId = data?.user_id ?? "";
   }
 
-  // نفس الإشعار لو وصل مرتين يُعالج مرة واحدة
-  if (id) {
-    const seen = await admin.from("store_events").insert({ id: `apple:${id}`, user_id: userId || null, type, product_id: t.productId ?? null });
+  // نفس الإشعار لو وصل مرتين يُعالج مرة واحدة. إن فشلت المعالجة نحذف البصمة ونرجع 500
+  // فتعيد Apple الإرسال (كانت البصمة تُسجَّل قبل المعالجة فيُعامل الإعادة كتكرار ويضيع التحديث).
+  const eventId = id ? `apple:${id}` : "";
+  if (eventId) {
+    const seen = await admin.from("store_events").insert({ id: eventId, user_id: userId || null, type, product_id: t.productId ?? null });
     if (seen.error?.code === "23505") return new Response("ok (duplicate)", { status: 200 });
   }
-  if (!userId) return new Response("ok (unlinked)", { status: 200 });
-
-  if (t.originalTransactionId) {
-    await admin.from("apple_transactions").upsert({
-      original_transaction_id: t.originalTransactionId,
-      user_id: userId,
-      product_id: t.productId,
-      environment: String(t.environment ?? ""),
-      expires_at: t.expiresDate ? new Date(t.expiresDate).toISOString() : null,
-      updated_at: new Date().toISOString(),
-    });
+  try {
+    const result = await handle();
+    return new Response(result, { status: 200 });
+  } catch (e) {
+    console.error("notification handling failed", String(e));
+    if (eventId) await admin.from("store_events").delete().eq("id", eventId);
+    return new Response("retry", { status: 500 });
   }
 
-  const { data: current } = await admin.from("entitlements").select("expires_at").eq("user_id", userId).maybeSingle();
-  if (current && current.expires_at === null) return new Response("ok (comp)", { status: 200 });
+  async function handle(): Promise<string> {
+    // باقة الصفحات (شراء استهلاكي): لا علاقة لها بالاشتراك إطلاقًا. كانت تصل هنا بلا تاريخ
+    // انتهاء فتُعامل كاشتراك منتهٍ وتحذف اشتراك المستخدم! الآن: الاسترجاع يسحب صفحاتها فقط.
+    if (PAGE_PACKS[String(t.productId)]) {
+      if ((type === "REFUND" || type === "REVOKE" || t.revocationDate) && t.transactionId) {
+        const { error } = await admin.rpc("refund_pages", { p_tx: t.transactionId });
+        if (error) throw error;
+      }
+      return "ok (pages)";
+    }
 
-  const plan = PRODUCT_PLAN[String(t.productId)];
-  if (plan && isActive(t)) {
-    await admin.from("entitlements").upsert({
-      user_id: userId,
-      plan_id: plan,
-      trial: isTrial(t),
-      expires_at: new Date(t.expiresDate!).toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-  } else if (["EXPIRED", "REFUND", "REVOKE", "GRACE_PERIOD_EXPIRED"].includes(type) || !isActive(t)) {
-    // الإلغاء وحده (DID_CHANGE_RENEWAL_STATUS) لا يسحب: يستمر حتى تاريخ الانتهاء
-    await admin.from("entitlements").delete().eq("user_id", userId);
+    if (!userId) return "ok (unlinked)";
+
+    if (t.originalTransactionId) {
+      const { error } = await admin.from("apple_transactions").upsert({
+        original_transaction_id: t.originalTransactionId,
+        user_id: userId,
+        product_id: t.productId,
+        environment: String(t.environment ?? ""),
+        expires_at: t.expiresDate ? new Date(t.expiresDate).toISOString() : null,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    }
+
+    const { data: current } = await admin.from("entitlements").select("expires_at").eq("user_id", userId).maybeSingle();
+    if (current && current.expires_at === null) return "ok (comp)";
+
+    const plan = PRODUCT_PLAN[String(t.productId)];
+    if (!plan) return "ok (unknown product)";
+
+    // مهلة الدفع (Billing Grace Period): فشل التجديد لا يسحب الاشتراك ما دامت Apple تمنح مهلة
+    let graceUntil = 0;
+    const signedRenewal = renewalJws;
+    if (signedRenewal && !t.revocationDate) {
+      try {
+        graceUntil = Number((await verifyRenewalInfo(signedRenewal)).gracePeriodExpiresDate ?? 0);
+      } catch {
+        // بلا مهلة
+      }
+    }
+    const until = Math.max(isActive(t) ? t.expiresDate! : 0, graceUntil > Date.now() ? graceUntil : 0);
+
+    if (until > 0 && type !== "REFUND" && type !== "REVOKE") {
+      const { error } = await admin.from("entitlements").upsert({
+        user_id: userId,
+        plan_id: plan,
+        trial: isTrial(t),
+        expires_at: new Date(until).toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    } else if (["EXPIRED", "REFUND", "REVOKE", "GRACE_PERIOD_EXPIRED"].includes(type) || until === 0) {
+      // الإلغاء وحده (DID_CHANGE_RENEWAL_STATUS) لا يسحب: يستمر حتى تاريخ الانتهاء
+      const { error } = await admin.from("entitlements").delete().eq("user_id", userId);
+      if (error) throw error;
+    }
+    return "ok";
   }
-  return new Response("ok", { status: 200 });
 });

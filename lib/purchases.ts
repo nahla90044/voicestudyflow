@@ -51,21 +51,36 @@ export function purchasesAvailable(): boolean {
   return ENABLED && Platform.OS === "ios" && !!iap();
 }
 
-let userId = "";
 let connecting: Promise<boolean> | null = null;
 let pending: ((r: BuyResult) => void) | null = null;
 const products = new Map<string, any>();
 
-/** يرسل معاملات Apple الموقّعة للسيرفر ليتحقّق منها ويحدّث الاشتراك */
-async function sendToServer(tokens: (string | null | undefined)[]): Promise<string | null> {
+type ServerReply = { reached: boolean; plan: string | null; credited: number; conflict: boolean; handled: number };
+
+/** هوية الحساب المفتوح الآن (من الجلسة مباشرة — لا قيمة محفوظة قد تبقى من حساب سابق) */
+async function currentUid(): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? "";
+}
+
+/** يرسل معاملات Apple الموقّعة للسيرفر ليتحقّق منها ويحدّث الاشتراك.
+ *  يعيد المحاولة عند الفشل (٤ مرات بفواصل متزايدة): محاولة واحدة فاشلة كانت تترك المشترك «مجانيًا». */
+async function sendToServer(tokens: (string | null | undefined)[]): Promise<ServerReply> {
   const jws = tokens.filter((x): x is string => !!x);
-  if (!jws.length) return null;
-  try {
-    const { data } = await supabase.functions.invoke("apple-verify", { body: { jws } });
-    return (data as { plan?: string | null })?.plan ?? null;
-  } catch {
-    return null;
+  const none: ServerReply = { reached: false, plan: null, credited: 0, conflict: false, handled: 0 };
+  if (!jws.length) return { ...none, reached: true };
+  for (let i = 0; i < 4; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 1000 * 2 ** (i - 1)));
+    try {
+      const { data, error } = await supabase.functions.invoke("apple-verify", { body: { jws } });
+      if (error || !data) continue;
+      const d = data as { plan?: string | null; credited?: number; conflict?: boolean; handled?: number };
+      return { reached: true, plan: d.plan ?? null, credited: Number(d.credited ?? 0), conflict: !!d.conflict, handled: Number(d.handled ?? 0) };
+    } catch {
+      // نعيد المحاولة
+    }
   }
+  return none;
 }
 
 /** اتصال واحد بالمتجر + مستمع المشتريات (يُنهي المعاملة بعد تحقّق السيرفر) */
@@ -78,16 +93,20 @@ function connect(): Promise<boolean> {
       await m.initConnection();
       m.purchaseUpdatedListener(async (purchase: any) => {
         if (!ALL_SKUS.includes(purchase?.productId)) return;
-        await sendToServer([purchase.purchaseToken]);
-        try {
-          // الصفحات الإضافية استهلاكية: تُنهى بعد إضافتها للرصيد على السيرفر
-          await m.finishTransaction({ purchase, isConsumable: purchase.productId === PAGES_SKU });
-        } catch {
-          // منتهية مسبقًا
+        const reply = await sendToServer([purchase.purchaseToken]);
+        // لا ننهي المعاملة قبل أن يعالجها السيرفر فعلًا: غير المنتهية تعيدها Apple عند الفتح التالي
+        // (كانت تُنهى دائمًا، فإن فشل السيرفر لحظتها ضاعت باقة الصفحات رغم الدفع)
+        const done = reply.reached && (reply.handled > 0 || reply.conflict);
+        if (done) {
+          try {
+            await m.finishTransaction({ purchase, isConsumable: purchase.productId === PAGES_SKU });
+          } catch {
+            // منتهية مسبقًا
+          }
         }
         const { invalidatePlan } = await import("./plan");
         invalidatePlan();
-        pending?.("ok");
+        pending?.(reply.plan || reply.credited ? "ok" : reply.conflict ? "conflict" : "pending");
         pending = null;
       });
       m.purchaseErrorListener((e: any) => {
@@ -114,7 +133,6 @@ function connect(): Promise<boolean> {
 /** يُستدعى بعد الدخول: يربط المشتريات بهوية المستخدم ويزامن الاشتراك الفعّال مع السيرفر */
 export async function initPurchases(appUserId: string): Promise<void> {
   if (!purchasesAvailable() || !appUserId) return;
-  userId = appUserId;
   if (!(await connect())) return;
   try {
     const subs = await iap()!.getActiveSubscriptions(SKUS);
@@ -124,16 +142,21 @@ export async function initPurchases(appUserId: string): Promise<void> {
   }
 }
 
-export type BuyResult = "ok" | "cancelled" | "unavailable" | "failed";
+// pending = دُفع لكن السيرفر لم يؤكد بعد (يكتمل تلقائيًا عند الفتح التالي)
+// conflict = اشتراك Apple هذا مربوط بحساب آخر في التطبيق
+export type BuyResult = "ok" | "pending" | "conflict" | "cancelled" | "unavailable" | "failed";
 
 export async function buy(key: ProductKey): Promise<BuyResult> {
   if (!purchasesAvailable() || !(await connect())) return "unavailable";
   if (!products.has(PRODUCTS[key])) return "unavailable";
+  // الشراء يُربط دائمًا بالحساب المفتوح الآن؛ بلا حساب لا شراء (كان يُرسل بلا هوية فيُنسب لأي حساب)
+  const userId = await currentUid();
+  if (!userId) return "failed";
   return new Promise<BuyResult>((resolve) => {
     pending = resolve;
     iap()!
       .requestPurchase({
-        request: { apple: { sku: PRODUCTS[key], ...(userId ? { appAccountToken: userId } : {}) } },
+        request: { apple: { sku: PRODUCTS[key], appAccountToken: userId } },
         type: "subs",
       })
       .catch((e: any) => {
@@ -149,11 +172,13 @@ export async function buy(key: ProductKey): Promise<BuyResult> {
 export async function buyPages(): Promise<BuyResult> {
   if (!purchasesAvailable() || !(await connect())) return "unavailable";
   if (!products.has(PAGES_SKU)) return "unavailable";
+  const userId = await currentUid();
+  if (!userId) return "failed";
   return new Promise<BuyResult>((resolve) => {
     pending = resolve;
     iap()!
       .requestPurchase({
-        request: { apple: { sku: PAGES_SKU, ...(userId ? { appAccountToken: userId } : {}) } },
+        request: { apple: { sku: PAGES_SKU, appAccountToken: userId } },
         type: "in-app",
       })
       .catch((e: any) => {
@@ -172,8 +197,10 @@ export async function pagesPrice(): Promise<string | null> {
 }
 
 /** استعادة المشتريات: الاشتراك مربوط بحساب Apple فيعود على أي جهاز */
-export async function restore(): Promise<boolean> {
-  if (!purchasesAvailable() || !(await connect())) return false;
+export type RestoreResult = "ok" | "none" | "conflict";
+
+export async function restore(): Promise<RestoreResult> {
+  if (!purchasesAvailable() || !(await connect())) return "none";
   const m = iap()!;
   try {
     await m.restorePurchases();
@@ -182,12 +209,12 @@ export async function restore(): Promise<boolean> {
   }
   try {
     const all = await m.getAvailablePurchases();
-    const plan = await sendToServer((all ?? []).filter((p: any) => SKUS.includes(p.productId)).map((p: any) => p.purchaseToken));
+    const reply = await sendToServer((all ?? []).filter((p: any) => SKUS.includes(p.productId)).map((p: any) => p.purchaseToken));
     const { invalidatePlan } = await import("./plan");
     invalidatePlan();
-    return !!plan;
+    return reply.plan ? "ok" : reply.conflict ? "conflict" : "none";
   } catch {
-    return false;
+    return "none";
   }
 }
 

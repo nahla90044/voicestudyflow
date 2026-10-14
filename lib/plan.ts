@@ -28,23 +28,22 @@ export function planOf(planId: string): Exclude<Plan, "owner" | "free"> {
 
 let cached: { plan: Plan; at: number } | null = null;
 
-/** الخطة الحالية: المالكة أولًا، ثم المتجر (فوري)، ثم السيرفر */
+/** الخطة الحالية: المالكة أولًا، ثم السيرفر (هو الذي يطبّق الحدود)، والمتجر احتياط بلا شبكة فقط.
+ *  (كان المتجر أولًا: أي حساب على نفس الجهاز يظهر مدفوعًا بينما السيرفر يعامله مجانيًا) */
 export async function getPlan(force = false): Promise<Plan> {
   if (!force && cached && Date.now() - cached.at < 60_000) return cached.plan;
   let plan: Plan = "free";
   if (await isOwner()) plan = "owner";
   else {
-    const store = await storeActivePlan();
-    if (store) plan = store;
-    else {
-      try {
-        const uid = await getUserId();
-        const { data } = await supabase.from("entitlements").select("plan_id,expires_at").eq("user_id", uid).maybeSingle();
-        const active = !!data && (data.expires_at === null || new Date(data.expires_at).getTime() > Date.now());
-        if (active) plan = planOf(String(data!.plan_id));
-      } catch {
-        // بلا شبكة → مجاني للعرض؛ السيرفر يقرّر عند الطلب
-      }
+    try {
+      const uid = await getUserId();
+      const { data, error } = await supabase.from("entitlements").select("plan_id,expires_at").eq("user_id", uid).maybeSingle();
+      if (error) throw error;
+      const active = !!data && (data.expires_at === null || new Date(data.expires_at).getTime() > Date.now());
+      if (active) plan = planOf(String(data!.plan_id));
+    } catch {
+      // بلا شبكة → نعرض ما يقوله المتجر مؤقتًا؛ السيرفر يقرّر عند الطلب
+      plan = (await storeActivePlan()) ?? "free";
     }
   }
   cached = { plan, at: Date.now() };

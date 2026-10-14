@@ -21,6 +21,18 @@ Deno.serve(async (req) => {
   if (!list.length) return json({ error: "bad request" }, 400);
 
   const { admin } = caller;
+  // هل الحساب ما زال موجودًا؟ (حساب محذوف لا «يملك» اشتراكًا — فتنجح الاستعادة على الحساب الجديد)
+  const alive = new Map<string, boolean>();
+  async function exists(uid: string): Promise<boolean> {
+    if (!alive.has(uid)) {
+      const { data } = await admin.auth.admin.getUserById(uid).catch(() => ({ data: { user: null } }));
+      alive.set(uid, !!data?.user);
+    }
+    return alive.get(uid)!;
+  }
+  const me = caller.id.toLowerCase();
+  let conflict = false;
+  let handled = 0; // معاملات عولجت فعلًا (أو عولجت سابقًا) — التطبيق لا ينهي المعاملة إلا بعدها
   let best: { plan: string; expires: number; trial: boolean } | null = null;
   let credited = 0;
   for (const jws of list) {
@@ -43,13 +55,37 @@ Deno.serve(async (req) => {
           p_pages: packPages,
         });
         if (added) credited += packPages;
+        handled++; // أُضيفت الآن أو سابقًا (نفس المعاملة لا تُضاف مرتين)
+      } else if (t.revocationDate) {
+        handled++; // مسترجعة: لا تُضاف، لكنها عولجت (فلا تعيدها Apple كل مرة)
       }
       continue;
     }
     const plan = PRODUCT_PLAN[String(t.productId)];
     if (!plan || !t.originalTransactionId) continue;
-    // معاملة اشتُريت بحساب آخر في تطبيقنا (appAccountToken مختلف) → لا نمنحها لهذا الحساب
-    if (t.appAccountToken && t.appAccountToken.toLowerCase() !== caller.id.toLowerCase()) continue;
+    // اشتراك Apple واحد = حساب واحد في تطبيقنا. نرفض منحه لهذا الحساب إن كان لحساب آخر موجود:
+    //  - اشتُري بحساب آخر (appAccountToken مختلف) وذلك الحساب ما زال موجودًا
+    //  - أو مربوط سابقًا بحساب آخر موجود (معاملة بلا appAccountToken كانت تُنسب لأي حساب يرسلها)
+    // أما إن حُذف الحساب الأصلي فالاستعادة على الحساب الجديد مسموحة.
+    const token = (t.appAccountToken ?? "").toLowerCase();
+    if (token && token !== me && (await exists(token))) {
+      conflict = true;
+      continue;
+    }
+    const { data: owner } = await admin
+      .from("apple_transactions")
+      .select("user_id")
+      .eq("original_transaction_id", t.originalTransactionId)
+      .maybeSingle();
+    const prev = String(owner?.user_id ?? "").toLowerCase();
+    if (prev && prev !== me && token !== me && (await exists(prev))) {
+      conflict = true;
+      continue;
+    }
+    // انتقال مشروع (اشتُري بهذا الحساب، أو الحساب السابق محذوف): نسحب الاشتراك من المالك السابق
+    if (prev && prev !== me) {
+      await admin.from("entitlements").delete().eq("user_id", prev).not("expires_at", "is", null);
+    }
     await admin.from("apple_transactions").upsert({
       original_transaction_id: t.originalTransactionId,
       user_id: caller.id,
@@ -58,6 +94,7 @@ Deno.serve(async (req) => {
       expires_at: t.expiresDate ? new Date(t.expiresDate).toISOString() : null,
       updated_at: new Date().toISOString(),
     });
+    handled++;
     if (isActive(t)) {
       const rankOf = (p: string) => (p.startsWith("premium") ? 3 : p.startsWith("pro") ? 2 : 1);
       const rank = rankOf(plan);
@@ -70,7 +107,7 @@ Deno.serve(async (req) => {
 
   // اشتراك ممنوح يدويًا بلا تاريخ انتهاء لا يُغيَّر
   const { data: current } = await admin.from("entitlements").select("expires_at").eq("user_id", caller.id).maybeSingle();
-  if (current && current.expires_at === null) return json({ plan: "comp", credited });
+  if (current && current.expires_at === null) return json({ plan: "comp", credited, conflict, handled });
 
   if (best) {
     await admin.from("entitlements").upsert({
@@ -80,7 +117,7 @@ Deno.serve(async (req) => {
       expires_at: new Date(best.expires).toISOString(),
       updated_at: new Date().toISOString(),
     });
-    return json({ plan: best.plan, expires_at: new Date(best.expires).toISOString(), credited });
+    return json({ plan: best.plan, expires_at: new Date(best.expires).toISOString(), credited, conflict, handled });
   }
-  return json({ plan: null, credited });
+  return json({ plan: null, credited, conflict, handled });
 });

@@ -6,6 +6,7 @@ import { Buffer } from "node:buffer";
 import {
   Environment,
   SignedDataVerifier,
+  type JWSRenewalInfoDecodedPayload,
   type JWSTransactionDecodedPayload,
   type ResponseBodyV2DecodedPayload,
 } from "npm:@apple/app-store-server-library@3.1.0";
@@ -44,6 +45,19 @@ export async function verifyTransaction(jws: string): Promise<JWSTransactionDeco
   for (const v of verifiers) {
     try {
       return await v.verifyAndDecodeTransaction(jws);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last;
+}
+
+/** معلومات التجديد الموقّعة (داخل الإشعار) — فيها مهلة الدفع gracePeriodExpiresDate. */
+export async function verifyRenewalInfo(jws: string): Promise<JWSRenewalInfoDecodedPayload> {
+  let last: unknown;
+  for (const v of verifiers) {
+    try {
+      return await v.verifyAndDecodeRenewalInfo(jws);
     } catch (e) {
       last = e;
     }
