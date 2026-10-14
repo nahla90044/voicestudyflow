@@ -1,17 +1,17 @@
 // app/auth.tsx
 // شاشة الحساب: إنشاء حساب جديد (ببريد + كلمة مرور وتأكيد بالبريد) أو تسجيل دخول.
 // بعد أول دخول مؤكَّد تُرحَّل بيانات الجهاز القديمة تلقائيًا إلى الحساب.
-import { codeDigits } from "../lib/arabicNumbers";
-import { VersionTag } from "../components/brand/version-tag";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CodePad } from "../components/brand/code-pad";
 import { ScreenBackground } from "../components/brand/screen-background";
+import { VersionTag } from "../components/brand/version-tag";
 import { BrandMark } from "../components/brand/logo";
 import { Gradients, Palette, Radius, Spacing } from "../constants/design";
 import {
@@ -26,10 +26,19 @@ import {
   verifyLoginCode,
 } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
+import { supabase } from "../lib/supabase";
 import { setUserName } from "../lib/settings";
 import { ONBOARDING_KEY } from "./onboarding";
 
 type Mode = "signup" | "login";
+
+// حد أقصى لأي طلب دخول/رمز: طلب عالق (شبكة ضعيفة أو التطبيق رجع من الخلفية) كان يُبقي
+// الأزرار معطّلة فتبدو الشاشة معلّقة. بعد المهلة نُظهر رسالة ونرجّع الأزرار.
+const AUTH_TIMEOUT_MS = 20_000;
+function withTimeout<T>(p: Promise<T>): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), AUTH_TIMEOUT_MS))]);
+}
+const isTimeout = (e: unknown) => String((e as Error)?.message ?? "") === "TIMEOUT";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -104,7 +113,7 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { needsConfirm } = await signUpEmail(e, password, name);
+        const { needsConfirm } = await withTimeout(signUpEmail(e, password, name));
         await clearUserCache(); // امسح أي بيانات حساب سابق على الجهاز قبل تهيئة الحساب الجديد
         if (name.trim()) await setUserName(name.trim()); // يُحيّا باسمه الذي سجّله (بعد المسح)
         if (needsConfirm) {
@@ -113,7 +122,7 @@ export default function AuthScreen() {
           await finishLogin();
         }
       } else {
-        await signInWithEmail(e, password);
+        await withTimeout(signInWithEmail(e, password));
         await clearUserCache(); // امسح بيانات أي حساب سابق على الجهاز — منعًا لتسرّب الإحصاءات/البطاقات/الاسم
         if (await mfaChallengeRequired().catch(() => false)) {
           setMfaMode(true); // يحتاج تحدّي 2FA قبل الدخول
@@ -124,7 +133,9 @@ export default function AuthScreen() {
       setFailCount(0); // نجاح → صفّر العدّاد
     } catch (ex: any) {
       const m = String(ex?.message ?? "");
-      if (/rate ?limit|too many|429/i.test(m)) {
+      if (isTimeout(ex)) {
+        setErr(t("auth.err.timeout"));
+      } else if (/rate ?limit|too many|429/i.test(m)) {
         setErr(t("auth.err.rateLimit"));
       } else if (/already registered|exists/i.test(m)) {
         setErr(t("auth.err.exists"));
@@ -170,31 +181,41 @@ export default function AuthScreen() {
     // رمز أُرسل لنفس البريد قبل أقل من دقيقة: نعرض شاشة الرمز مباشرة بدل التجاهل الصامت
     if (resendIn > 0 && e === codeEmail) {
       setErr("");
+      Keyboard.dismiss();
       setOtpMode(true);
       return;
     }
     setErr("");
     setBusy(true);
     try {
-      await sendLoginCode(e);
+      await withTimeout(sendLoginCode(e));
       setCodeEmail(e);
       setOtpCode("");
+      Keyboard.dismiss();
       setOtpMode(true);
       setResendIn(60);
     } catch (ex: any) {
       const m = String(ex?.message ?? "");
-      setErr(/rate ?limit|too many|429|seconds/i.test(m) ? t("auth.err.rateLimit") : t("auth.err.generic"));
+      setErr(isTimeout(ex) ? t("auth.err.timeout") : /rate ?limit|too many|429|seconds/i.test(m) ? t("auth.err.rateLimit") : t("auth.err.generic"));
     } finally {
       setBusy(false);
     }
   }
 
-  async function onVerifyCode() {
-    if (otpCode.length < 6) return;
+  async function onVerifyCode(codeArg?: string) {
+    const code = codeArg ?? otpCode;
+    if (code.length < 6 || busy) return;
     setErr("");
     setBusy(true);
+    const e = email.trim().toLowerCase();
     try {
-      await verifyLoginCode(email, otpCode);
+      try {
+        await withTimeout(verifyLoginCode(e, code));
+      } catch (ex) {
+        // ربما نجح الدخول فعلًا رغم المهلة/الخطأ (الرمز يُستهلك مرة واحدة) → نتأكد من الجلسة
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user?.email?.toLowerCase() !== e) throw ex;
+      }
       await clearUserCache(); // كالدخول العادي: لا تتسرّب بيانات حساب سابق على الجهاز
       setRecovering(true);
       setOtpMode(false);
@@ -204,8 +225,9 @@ export default function AuthScreen() {
       } else {
         setNewPwMode(true);
       }
-    } catch {
-      setErr(t("auth.code.invalid"));
+    } catch (ex) {
+      setOtpCode(""); // نفرّغ الخانات ليُكتب الرمز من جديد مباشرة
+      setErr(isTimeout(ex) ? t("auth.err.timeout") : t("auth.code.invalid"));
     } finally {
       setBusy(false);
     }
@@ -216,7 +238,7 @@ export default function AuthScreen() {
     setErr("");
     setBusy(true);
     try {
-      await setNewPassword(newPw);
+      await withTimeout(setNewPassword(newPw));
       await finishLogin();
     } catch {
       setErr(t("auth.newPw.failed"));
@@ -225,12 +247,13 @@ export default function AuthScreen() {
     }
   }
 
-  async function onVerifyMfa() {
-    if (mfaCode.trim().length < 6) return;
+  async function onVerifyMfa(codeArg?: string) {
+    const code = codeArg ?? mfaCode;
+    if (code.length < 6 || busy) return;
     setErr("");
     setBusy(true);
     try {
-      await solveMfaChallenge(mfaCode);
+      await withTimeout(solveMfaChallenge(code));
       if (recovering) {
         // جاء من الاستعادة → الجلسة صارت aal2، فتعيين كلمة المرور سيقبل الآن
         setMfaMode(false);
@@ -238,8 +261,9 @@ export default function AuthScreen() {
       } else {
         await finishLogin();
       }
-    } catch {
-      setErr(t("twofa.invalidCode"));
+    } catch (ex) {
+      setMfaCode("");
+      setErr(isTimeout(ex) ? t("auth.err.timeout") : t("twofa.invalidCode"));
     } finally {
       setBusy(false);
     }
@@ -298,20 +322,9 @@ export default function AuthScreen() {
                 <Ionicons name="mail-open" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
                 <Text style={styles.confirmTitle}>{t("auth.code.title")}</Text>
                 <Text style={styles.confirmBody}>{t("auth.code.body", { email: email.trim() })}</Text>
-                <TextInput
-                  value={otpCode}
-                  onChangeText={(v) => setOtpCode(codeDigits(v, 8))}
-                  placeholder="••••••"
-                  placeholderTextColor={Palette.textDim}
-                  keyboardType="number-pad"
-                  textContentType="oneTimeCode"
-                  autoComplete="one-time-code"
-                  autoFocus
-                  maxLength={8}
-                  style={[styles.input, { textAlign: "center", letterSpacing: 6, marginTop: 14 }]}
-                />
+                <CodePad value={otpCode} onChange={(v) => { setOtpCode(v); if (err) setErr(""); }} disabled={busy} onComplete={(c) => onVerifyCode(c)} />
                 {!!err && <Text style={styles.err}>{err}</Text>}
-                <Pressable onPress={onVerifyCode} style={styles.submit} disabled={busy || otpCode.length < 6}>
+                <Pressable onPress={() => onVerifyCode()} style={styles.submit} disabled={busy || otpCode.length < 6}>
                   <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
                     {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.code.cta")}</Text>}
                   </LinearGradient>
@@ -335,17 +348,9 @@ export default function AuthScreen() {
                 <Ionicons name="shield-checkmark" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
                 <Text style={styles.confirmTitle}>{t("twofa.challengeTitle")}</Text>
                 <Text style={styles.confirmBody}>{t("twofa.challengeBody")}</Text>
-                <TextInput
-                  value={mfaCode}
-                  onChangeText={(v) => setMfaCode(codeDigits(v, 6))}
-                  placeholder={t("twofa.codePlaceholder")}
-                  placeholderTextColor={Palette.textDim}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  style={[styles.input, { textAlign: "center", letterSpacing: 6, marginTop: 14 }]}
-                />
+                <CodePad value={mfaCode} onChange={(v) => { setMfaCode(v); if (err) setErr(""); }} disabled={busy} onComplete={(c) => onVerifyMfa(c)} />
                 {!!err && <Text style={styles.err}>{err}</Text>}
-                <Pressable onPress={onVerifyMfa} style={styles.submit} disabled={busy || mfaCode.length < 6}>
+                <Pressable onPress={() => onVerifyMfa()} style={styles.submit} disabled={busy || mfaCode.length < 6}>
                   <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
                     {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("twofa.challengeCta")}</Text>}
                   </LinearGradient>

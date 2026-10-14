@@ -1,10 +1,10 @@
 // app/two-factor.tsx
 // التحقق الثنائي (2FA / TOTP): تفعيل عبر مسح رمز QR بتطبيق مصادقة، أو إيقافه.
-import { codeDigits } from "../lib/arabicNumbers";
+import { CodePad } from "../components/brand/code-pad";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
@@ -137,15 +137,7 @@ export default function TwoFactorScreen() {
               <Text selectable style={styles.secret}>{enroll.secret}</Text>
 
               <Text style={[styles.step, { textAlign: dir.textAlign, marginTop: 14 }]}>{t("twofa.step2")}</Text>
-              <TextInput
-                value={code}
-                onChangeText={(v) => setCode(codeDigits(v, 6))}
-                placeholder={t("twofa.codePlaceholder")}
-                placeholderTextColor={Palette.textDim}
-                keyboardType="number-pad"
-                style={styles.input}
-                maxLength={6}
-              />
+              <CodePad value={code} onChange={setCode} disabled={busy} />
               <Pressable onPress={confirmEnroll} style={[styles.btn, styles.btnPrimary]} disabled={busy || code.length < 6}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnTxt}>{t("twofa.verify")}</Text>}
               </Pressable>
