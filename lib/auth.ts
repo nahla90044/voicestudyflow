@@ -34,7 +34,7 @@ export async function getSession(): Promise<Session | null> {
 
 // حسابات المالكة (نهلة — المطوّرة): مجانية دائمًا بكل المزايا (كتب غير محدودة، خانة سؤال الصفحة…).
 // عند إضافة الاشتراكات: تُستثنى هذه الحسابات من صفحة الدفع ومن حدود الاستخدام على السيرفر أيضًا.
-const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com"]);
+const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com", "nahla.m.o@icloud.com"]);
 
 /** هل الحساب الحالي هو حساب المالك؟ (لإظهار ميزات مقيّدة عليه فقط) */
 export async function isOwner(): Promise<boolean> {

@@ -11,7 +11,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 export type Plan = "owner" | "premium" | "pro" | "plus" | "free";
 
 // نفس القائمة في lib/auth.ts (OWNER_EMAILS) — حسابا المالكة.
-const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com"]);
+const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com", "nahla.m.o@icloud.com"]);
 
 // حدود الخطط (اتفقنا عليها مع نهلة ٩ أكتوبر — رابحة حتى مع الاستهلاك الكامل):
 //  الصفحات: صفحة الكتاب تُحسب مرة واحدة في الشهر (إعادة الاستماع مجانية).
