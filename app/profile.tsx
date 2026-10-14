@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { SubscriptionCard } from "../components/brand/subscription-card";
+import { VersionTag } from "../components/brand/version-tag";
 import { Radius, Spacing } from "../constants/design";
 import { deleteAccountPermanently, resetAccountData } from "../lib/account";
 import { getDisplayName, getSession, updateName } from "../lib/auth";
@@ -283,6 +284,7 @@ export default function ProfileScreen() {
         </Pressable>
 
         {busy ? <ActivityIndicator color={pal.accent} style={{ marginTop: 18 }} /> : null}
+        <VersionTag color={pal.dim} />
       </ScrollView>
     </SceneScreen>
   );

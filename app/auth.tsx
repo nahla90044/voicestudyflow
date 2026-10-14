@@ -2,6 +2,7 @@
 // شاشة الحساب: إنشاء حساب جديد (ببريد + كلمة مرور وتأكيد بالبريد) أو تسجيل دخول.
 // بعد أول دخول مؤكَّد تُرحَّل بيانات الجهاز القديمة تلقائيًا إلى الحساب.
 import { codeDigits } from "../lib/arabicNumbers";
+import { VersionTag } from "../components/brand/version-tag";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -463,6 +464,7 @@ export default function AuthScreen() {
                 </Pressable>
               </View>
             )}
+            <VersionTag color={Palette.textDim} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
