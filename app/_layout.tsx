@@ -13,6 +13,7 @@ import { checkMinVersion, onUpdateRequired } from "../lib/appVersion";
 import { rescueCachedMusic } from "../lib/sfx";
 import { Palette } from "../constants/design";
 import { getSession, isOwner } from "../lib/auth";
+import { applyUpdateOnLaunch } from "../lib/otaUpdate";
 import { initPurchases } from "../lib/purchases";
 import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
@@ -48,6 +49,8 @@ export default function RootLayout() {
   useEffect(() => {
     (async () => {
       try {
+        // تحديث هوائي جديد؟ يُطبَّق الآن أثناء السبلاش (وإلا كان يتأخر فتحتين)
+        await applyUpdateOnLaunch();
         const seen = await AsyncStorage.getItem(ONBOARDING_KEY);
         // التسجيل إلزامي: لازم حساب ببريد مؤكّد قبل الدخول للتطبيق
         const session = await getSession().catch(() => null);
