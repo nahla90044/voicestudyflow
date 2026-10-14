@@ -50,7 +50,8 @@ export default function AuthScreen() {
   // استعادة الدخول برمز البريد (بديل رابط إعادة التعيين)
   const [otpMode, setOtpMode] = useState(false);
   const [otpCode, setOtpCode] = useState("");
-  const [resendIn, setResendIn] = useState(0); // Supabase يسمح برمز كل ٦٠ ثانية
+  const [resendIn, setResendIn] = useState(0); // Supabase يسمح برمز كل ٦٠ ثانية (لكل بريد)
+  const [codeEmail, setCodeEmail] = useState(""); // البريد الذي أُرسل له آخر رمز
   const [recovering, setRecovering] = useState(false); // دخل بالرمز → نعرض كلمة مرور جديدة بعد 2FA
   const [newPwMode, setNewPwMode] = useState(false);
   const [newPw, setNewPw] = useState("");
@@ -164,11 +165,18 @@ export default function AuthScreen() {
   async function onForgot() {
     const e = email.trim().toLowerCase();
     if (!e || !e.includes("@")) return setErr(t("auth.err.emailFirst"));
-    if (resendIn > 0) return;
+    if (busy) return; // ضغطة مكررة أثناء الإرسال — كانت ترسل طلبين فيرفض الثاني
+    // رمز أُرسل لنفس البريد قبل أقل من دقيقة: نعرض شاشة الرمز مباشرة بدل التجاهل الصامت
+    if (resendIn > 0 && e === codeEmail) {
+      setErr("");
+      setOtpMode(true);
+      return;
+    }
     setErr("");
     setBusy(true);
     try {
       await sendLoginCode(e);
+      setCodeEmail(e);
       setOtpCode("");
       setOtpMode(true);
       setResendIn(60);
@@ -307,13 +315,18 @@ export default function AuthScreen() {
                     {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.code.cta")}</Text>}
                   </LinearGradient>
                 </Pressable>
-                <Pressable onPress={onForgot} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }} disabled={busy || resendIn > 0}>
-                  <Text style={[styles.switchTxt, resendIn > 0 && { color: Palette.textDim }]}>
+                <Pressable
+                  onPress={onForgot}
+                  disabled={busy || resendIn > 0}
+                  style={[styles.bigLink, (busy || resendIn > 0) && { opacity: 0.55 }]}
+                >
+                  <Ionicons name="refresh" size={18} color={Palette.neonCyan} />
+                  <Text style={styles.bigLinkTxt}>
                     {resendIn > 0 ? t("auth.code.resendIn", { sec: resendIn }) : t("auth.code.resend")}
                   </Text>
                 </Pressable>
-                <Pressable onPress={() => { setOtpMode(false); setOtpCode(""); setErr(""); }} hitSlop={6} style={{ marginTop: 10, alignSelf: "center" }}>
-                  <Text style={styles.switchTxt}>{t("common.back")}</Text>
+                <Pressable onPress={() => { setOtpMode(false); setOtpCode(""); setErr(""); }} hitSlop={8} style={{ marginTop: 14, alignSelf: "center" }}>
+                  <Text style={styles.switchTxt}>{t("auth.code.editEmail")}</Text>
                 </Pressable>
               </View>
             ) : mfaMode ? (
@@ -429,8 +442,9 @@ export default function AuthScreen() {
                 </View>
 
                 {mode === "login" ? (
-                  <Pressable onPress={onForgot} hitSlop={6} style={{ alignSelf: dir.isRTL ? "flex-start" : "flex-end", marginTop: 8 }}>
-                    <Text style={styles.forgotTxt}>{t("auth.forgot.link")}</Text>
+                  <Pressable onPress={onForgot} disabled={busy} style={[styles.bigLink, { marginTop: 12 }, busy && { opacity: 0.55 }]}>
+                    {busy ? <ActivityIndicator size="small" color={Palette.neonCyan} /> : <Ionicons name="key-outline" size={18} color={Palette.neonCyan} />}
+                    <Text style={styles.bigLinkTxt}>{t("auth.forgot.link")}</Text>
                   </Pressable>
                 ) : null}
 
@@ -505,6 +519,20 @@ const styles = StyleSheet.create({
   note: { color: Palette.textDim, fontSize: 12, lineHeight: 20, textAlign: "center", marginTop: 16 },
   switchTxt: { color: Palette.neonCyan, fontSize: 14, fontWeight: "700" },
   forgotTxt: { color: Palette.neonCyan, fontSize: 13, fontWeight: "700" },
+  // أزرار الاستعادة: كبيرة وواضحة (كانت رابطًا صغيرًا لا يُلاحظ)
+  bigLink: {
+    marginTop: 16,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Palette.neonCyan,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  bigLinkTxt: { color: Palette.neonCyan, fontSize: 16, fontWeight: "800" },
   confirmTitle: { color: Palette.text, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 12 },
   confirmBody: { color: Palette.textMuted, fontSize: 14, lineHeight: 24, textAlign: "center", marginTop: 10 },
 });

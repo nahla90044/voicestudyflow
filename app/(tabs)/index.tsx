@@ -42,7 +42,7 @@ export default function HomeScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const scene = useScene();
-  const { width } = useWindowDimensions();
+  const { width, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // جولة الرئيسية (مرة أولى، وتعود بزر «؟»)
   const coach = useCoachTour(
@@ -240,7 +240,8 @@ export default function HomeScreen() {
     readiness: ready?.score ?? 0,
   });
   const pal = scene.pal;
-  const heroH = Math.round(width * 1.06);
+  // على الآيباد كان المشهد بطول الشاشة كلها (١٫٠٦ × العرض) فلا يظهر غيره؛ نحدّه بنصف الشاشة تقريبًا
+  const heroH = Math.round(Math.min(width * 1.06, winH * 0.55));
   const headline = t(`scene.${scene.id}.title`).split("|");
   const sceneSub =
     scene.id === "sky"
@@ -260,7 +261,7 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
         {/* المشهد + التحية */}
         <View style={{ height: heroH }}>
-          <View style={StyleSheet.absoluteFill}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <SceneArt id={scene.id} growth={growth} width={width} height={heroH} />
           </View>
           <View style={[styles.heroInner, { paddingTop: insets.top + 6, justifyContent: headTop ? "flex-start" : "space-between" }]}>
