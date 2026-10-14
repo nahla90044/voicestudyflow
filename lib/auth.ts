@@ -178,6 +178,23 @@ export async function clearUserCache(): Promise<void> {
 
 /** تسجيل الخروج ومسح كاش بيانات المستخدم محليًا. */
 export async function signOut() {
+  // أوقف أي قراءة قبل الخروج: الشريط العائم، الصوت، موسيقى الخلفية، وبطاقة القراءة في الجزيرة.
+  // (تسكير الشاشة وحده لا يوقف القراءة — هذا فقط عند «تسجيل الخروج».)
+  // استيراد عند الحاجة: player يستورد auth، فالاستيراد في الأعلى يصنع حلقة.
+  try {
+    const [{ close }, { stopSpeaking }, { stopAmbient }, { closeReadingCard }] = await Promise.all([
+      import("./player"),
+      import("./voice"),
+      import("./sfx"),
+      import("./readingCard"),
+    ]);
+    close();
+    await stopSpeaking().catch(() => {});
+    stopAmbient();
+    closeReadingCard();
+  } catch {
+    // غير حرج — نكمل الخروج
+  }
   await supabase.auth.signOut();
   await clearUserCache(); // امسح كاش الحساب حتى لا يظهر للمستخدم التالي
 }
