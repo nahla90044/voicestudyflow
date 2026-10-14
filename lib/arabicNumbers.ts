@@ -68,3 +68,13 @@ export function numbersToArabicWords(text: string): string {
     return Number.isFinite(n) ? intToArabicWords(n) : m;
   });
 }
+
+/** أرقام رمز (دخول/تحقق): يحوّل الأرقام العربية (٠-٩) والفارسية (۰-۹) إلى لاتينية ويحذف ما عداها —
+ *  لوحة المفاتيح العربية تكتب ٠١٢٣ فكانت تُحذف ولا يُقبل الرمز. */
+export function codeDigits(v: string, max: number): string {
+  return v
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[^0-9]/g, "")
+    .slice(0, max);
+}

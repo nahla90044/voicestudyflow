@@ -1,6 +1,7 @@
 // app/auth.tsx
 // شاشة الحساب: إنشاء حساب جديد (ببريد + كلمة مرور وتأكيد بالبريد) أو تسجيل دخول.
 // بعد أول دخول مؤكَّد تُرحَّل بيانات الجهاز القديمة تلقائيًا إلى الحساب.
+import { codeDigits } from "../lib/arabicNumbers";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -290,7 +291,7 @@ export default function AuthScreen() {
                 <Text style={styles.confirmBody}>{t("auth.code.body", { email: email.trim() })}</Text>
                 <TextInput
                   value={otpCode}
-                  onChangeText={(v) => setOtpCode(v.replace(/[^0-9]/g, "").slice(0, 8))}
+                  onChangeText={(v) => setOtpCode(codeDigits(v, 8))}
                   placeholder="••••••"
                   placeholderTextColor={Palette.textDim}
                   keyboardType="number-pad"
@@ -322,7 +323,7 @@ export default function AuthScreen() {
                 <Text style={styles.confirmBody}>{t("twofa.challengeBody")}</Text>
                 <TextInput
                   value={mfaCode}
-                  onChangeText={(v) => setMfaCode(v.replace(/[^0-9]/g, "").slice(0, 6))}
+                  onChangeText={(v) => setMfaCode(codeDigits(v, 6))}
                   placeholder={t("twofa.codePlaceholder")}
                   placeholderTextColor={Palette.textDim}
                   keyboardType="number-pad"

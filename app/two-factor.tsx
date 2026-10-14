@@ -1,5 +1,6 @@
 // app/two-factor.tsx
 // التحقق الثنائي (2FA / TOTP): تفعيل عبر مسح رمز QR بتطبيق مصادقة، أو إيقافه.
+import { codeDigits } from "../lib/arabicNumbers";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -138,7 +139,7 @@ export default function TwoFactorScreen() {
               <Text style={[styles.step, { textAlign: dir.textAlign, marginTop: 14 }]}>{t("twofa.step2")}</Text>
               <TextInput
                 value={code}
-                onChangeText={(v) => setCode(v.replace(/[^0-9]/g, "").slice(0, 6))}
+                onChangeText={(v) => setCode(codeDigits(v, 6))}
                 placeholder={t("twofa.codePlaceholder")}
                 placeholderTextColor={Palette.textDim}
                 keyboardType="number-pad"
