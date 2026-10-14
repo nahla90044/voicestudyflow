@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Palette, Radius, Spacing } from "../../constants/design";
@@ -64,7 +64,13 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
           <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={() => setOpen(false)} />
 
           {/* اللوحة على اليمين */}
-          <View style={[styles.panel, { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14 }]}>
+          <View style={[styles.panel, { paddingTop: insets.top + 14 }]}>
+            {/* محتوى قابل للتمرير: على الشاشات القصيرة (أو مع خط كبير) كان زر الخروج يُقصّ ولا يمكن الوصول إليه */}
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 14 }}
+              showsVerticalScrollIndicator={false}
+            >
             <View style={[styles.head, { flexDirection: dir.row }]}>
               <BrandMark size={42} />
               <View style={{ flex: 1 }}>
@@ -108,7 +114,8 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
               <Ionicons name="chevron-back" size={18} color={Palette.textDim} />
             </Pressable>
 
-            <View style={{ flex: 1 }} />
+            {/* يدفع زر الخروج للأسفل حين يتّسع المكان، ولا يقصّه حين يضيق */}
+            <View style={{ flex: 1, minHeight: 20 }} />
 
             {/* تسجيل الخروج — واضح وسريع */}
             <Pressable onPress={onSignOut} style={[styles.signOut, { flexDirection: dir.row }]}>
@@ -118,6 +125,7 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
 
             <Text style={styles.footerMail}>Nahlah@Nahlah.io</Text>
             <Text style={styles.madeIn}>{t("drawer.madeIn")}</Text>
+            </ScrollView>
           </View>
         </View>
       </Modal>
