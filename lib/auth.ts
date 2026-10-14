@@ -156,6 +156,7 @@ const PRESERVE_KEYS = new Set([
   "vsf_onboarded_v1",
   "vsf_device_user_id",
   "howto-tour-seen-v1",
+  "voice:read_style", // طريقة القراءة المفضّلة (إعداد جهاز)
 ]);
 
 /** يمسح كل بيانات المستخدم المخزّنة محليًا (كتب/خطط/بطاقات/إحصاءات/تظليلات…)
@@ -166,6 +167,10 @@ export async function clearUserCache(): Promise<void> {
     const toRemove = keys.filter(
       (k) =>
         !PRESERVE_KEYS.has(k) &&
+        // الجولة التعريفية وإرشادات الصفحات: تُعرض مرة واحدة على الجهاز (وتعود بزر «؟»)، لا بعد كل خروج
+        !k.startsWith("vsf_onboarded_") &&
+        !k.startsWith("vsf_coach_") &&
+        !k.startsWith("howto-tour-seen") &&
         // لا تمسح جلسة Supabase نفسها (توكن الدخول) وإلا خرج المستخدم من حسابه
         !k.startsWith("sb-") &&
         !k.startsWith("supabase.auth."),
