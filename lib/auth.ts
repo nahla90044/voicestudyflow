@@ -36,13 +36,21 @@ export async function getSession(): Promise<Session | null> {
 // عند إضافة الاشتراكات: تُستثنى هذه الحسابات من صفحة الدفع ومن حدود الاستخدام على السيرفر أيضًا.
 const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com", "nahla.m.o@icloud.com"]);
 
-/** هل الحساب الحالي هو حساب المالك؟ (لإظهار ميزات مقيّدة عليه فقط) */
+/** هل الحساب الحالي هو حساب المالك؟ القائمة الثابتة أولًا، ثم السيرفر (جدول app_owners) —
+ *  فأي بريد يُضاف للسيرفر يُتعرَّف عليه فورًا بلا تحديث للتطبيق. النتيجة محفوظة لكل مستخدم. */
+let ownerCache: { uid: string; owner: boolean } | null = null;
 export async function isOwner(): Promise<boolean> {
   try {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    return OWNER_EMAILS.has(user?.email?.trim().toLowerCase() ?? "");
+    if (!user) return false;
+    if (OWNER_EMAILS.has(user.email?.trim().toLowerCase() ?? "")) return true;
+    if (ownerCache?.uid === user.id) return ownerCache.owner;
+    const { data, error } = await supabase.rpc("am_i_owner");
+    if (error) return false; // بلا شبكة: لا نحفظ النتيجة، نعيد السؤال لاحقًا
+    ownerCache = { uid: user.id, owner: data === true };
+    return ownerCache.owner;
   } catch {
     return false;
   }

@@ -60,7 +60,9 @@ export async function getCaller(req: Request): Promise<Caller> {
   const email = (user.email ?? "").trim().toLowerCase();
   const providers = ((user.app_metadata?.providers as string[] | undefined) ?? []).concat((user.identities ?? []).map((i) => i.provider));
   const apple = providers.includes("apple") || TRIAL_OK_EMAILS.has(email);
-  if (OWNER_EMAILS.has(email)) return { id: user.id, plan: "owner", admin, apple };
+  // المطوّرة: القائمة الثابتة أو جدول app_owners (يُضاف له أي بريد جديد بلا نشر)
+  const owner = OWNER_EMAILS.has(email) || (!!email && !!(await admin.from("app_owners").select("email").eq("email", email).maybeSingle()).data);
+  if (owner) return { id: user.id, plan: "owner", admin, apple };
 
   const { data: ent } = await admin.from("entitlements").select("plan_id,expires_at,trial").eq("user_id", user.id).maybeSingle();
   const active = !!ent && (ent.expires_at === null || new Date(ent.expires_at).getTime() > Date.now());

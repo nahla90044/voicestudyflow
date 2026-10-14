@@ -38,6 +38,22 @@ export function SubscriptionCard() {
   const limits = plan === "owner" ? null : LIMITS[plan];
   const store = purchasesAvailable();
 
+  // حساب المطوّرة: بطاقة ذهبية واضحة (كل المزايا مجانًا، بلا حدود ولا أزرار شراء)
+  if (plan === "owner") {
+    const gold = pal.dark ? "#E8BE4F" : "#A9790F";
+    return (
+      <SceneCard style={[styles.card, { borderWidth: 1.5, borderColor: gold, backgroundColor: gold + (pal.dark ? "1F" : "14") }]}>
+        <View style={[styles.head, { flexDirection: dir.row }]}>
+          <View style={[styles.icon, { backgroundColor: gold }]}>
+            <Ionicons name="star" size={18} color={pal.dark ? "#2A1E00" : "#FFFFFF"} />
+          </View>
+          <Text style={[styles.plan, { color: gold, textAlign: dir.textAlign }]}>{t("sub.plan.owner")}</Text>
+        </View>
+        <Text style={[styles.label, { color: pal.dim, textAlign: dir.textAlign }]}>{t("sub.owner.desc")}</Text>
+      </SceneCard>
+    );
+  }
+
   return (
     <SceneCard style={styles.card}>
       <View style={[styles.head, { flexDirection: dir.row }]}>
@@ -58,7 +74,7 @@ export function SubscriptionCard() {
           )}
         </>
       )}
-      {store && plan !== "owner" && (
+      {store && (
         <View style={[styles.row, { flexDirection: dir.row }]}>
           {plan !== "premium" && (
             <Pressable onPress={() => requestPaywall("upgrade", true)} style={[styles.btn, { backgroundColor: pal.accent, borderColor: pal.accent }]}>
