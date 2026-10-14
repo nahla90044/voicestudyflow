@@ -10,6 +10,7 @@ import {
   Image,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollView as GHScrollView } from "react-native-gesture-handler";
+import { InkLayer, InkToolbar, INK_COLORS } from "../../components/reader/ink-layer";
+import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../../lib/ink";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
@@ -586,6 +590,40 @@ export default function ReaderScreen() {
   const [prefsLoaded, setPrefsLoaded] = useState(false); // اكتمل استرجاع الصفحة المحفوظة
   const scrollRef = useRef<ScrollView>(null);
   const pdfScrollRef = useRef<ScrollView>(null);
+  // كتابة قلم الآيباد على الصفحة والهامش (الآيباد فقط)
+  const isPad = Platform.OS === "ios" && Platform.isPad;
+  const [penOn, setPenOn] = useState(false);
+  const [inkTool, setInkTool] = useState<InkTool>("pen");
+  const [inkColor, setInkColor] = useState<string>(INK_COLORS[0]);
+  const [inkStrokes, setInkStrokes] = useState<Stroke[]>([]);
+  const inkHistory = useRef<Stroke[][]>([]); // للتراجع
+  const [pageAreaW, setPageAreaW] = useState(0);
+  useEffect(() => {
+    if (!isPad || !bookId) return;
+    let on = true;
+    inkHistory.current = [];
+    setInkStrokes([]);
+    void loadInk(bookId, page, (remote) => on && setInkStrokes(remote)).then((s0) => on && setInkStrokes(s0));
+    return () => {
+      on = false;
+    };
+  }, [isPad, bookId, page]);
+  function changeInk(next: Stroke[]) {
+    if (!bookId) return;
+    inkHistory.current = [...inkHistory.current.slice(-30), inkStrokes];
+    setInkStrokes(next);
+    saveInk(bookId, page, next);
+  }
+  function undoInk() {
+    const prev = inkHistory.current.pop();
+    if (prev && bookId) {
+      setInkStrokes(prev);
+      saveInk(bookId, page, prev);
+    }
+  }
+  // الهوامش تظهر في وضع القلم، أو إن كانت فيها كتابة سابقة
+  const showMargins = isPad && (penOn || hasMarginInk(inkStrokes));
+  const marginPx = showMargins && pageAreaW > 0 ? Math.round(pageAreaW * 0.11) : 0;
   const pdfViewH = useRef(0);
   const pdfContentH = useRef(0);
   const textViewH = useRef(0);
@@ -2736,7 +2774,7 @@ export default function ReaderScreen() {
             )}
           </ScrollView>
         ) : (
-          <View style={{ flex: 1, overflow: "hidden" }} {...pager.panHandlers}>
+          <View style={{ flex: 1, overflow: "hidden" }} {...(penOn ? {} : pager.panHandlers)}>
           <Animated.View style={{ flex: 1, transform: [{ translateX: pagerX }] }}>
             {/* الصفحتان المجاورتان خارج الشاشة — تنزلقان للداخل مع السحب */}
             {pageImg && (isArabicText ? nbr.next : nbr.prev) ? (
@@ -2754,7 +2792,7 @@ export default function ReaderScreen() {
               />
             ) : null}
             {pageImg ? (
-              <ScrollView
+              <GHScrollView
                 ref={pdfScrollRef}
                 style={{ flex: 1 }}
                 contentContainerStyle={[styles.pdfImgWrap, fullText && styles.pdfImgWrapFull]}
@@ -2775,6 +2813,11 @@ export default function ReaderScreen() {
                   setDetached(true);
                 }}
               >
+                <View
+                  // حاوية الصفحة + الهامش (الهامش للكتابة بالقلم على الآيباد)
+                  style={[{ direction: "ltr", width: "100%", paddingHorizontal: marginPx }, showMargins && penOn && styles.inkMarginBg]}
+                  onLayout={(e) => setPageAreaW(e.nativeEvent.layout.width)}
+                >
                 <View
                   // إحداثيات الصفحة من اليسار دائمًا (بدونها تنقلب يمين↔يسار في الواجهة العربية)
                   style={{ direction: "ltr" }}
@@ -2821,7 +2864,23 @@ export default function ReaderScreen() {
                     />
                   ) : null}
                 </View>
-              </ScrollView>
+                {/* طبقة قلم الآيباد فوق الصفحة والهامش */}
+                {isPad && pdfImgW2 > 0 && (penOn || inkStrokes.length > 0) ? (
+                  <InkLayer
+                    strokes={inkStrokes}
+                    onChange={changeInk}
+                    active={penOn}
+                    tool={inkTool}
+                    color={inkColor}
+                    imgW={pdfImgW2}
+                    offsetX={marginPx}
+                    width={pdfImgW2 + marginPx * 2}
+                    height={pdfImgW2 / (pageImgAspect || 0.7)}
+                    scrollRef={pdfScrollRef}
+                  />
+                ) : null}
+                </View>
+              </GHScrollView>
             ) : (
               <View style={styles.empty}>
                 {pageImgLoading ? (
@@ -2837,6 +2896,28 @@ export default function ReaderScreen() {
                 )}
               </View>
             )}
+            {penOn ? (
+              <View pointerEvents="box-none" style={styles.inkBarWrap}>
+                <InkToolbar
+                  tool={inkTool}
+                  color={inkColor}
+                  onTool={setInkTool}
+                  onColor={setInkColor}
+                  onUndo={undoInk}
+                  onClear={() => changeInk([])}
+                  onDone={() => setPenOn(false)}
+                  labels={{
+                    marker: t("reader.ink.marker"),
+                    eraser: t("reader.ink.eraser"),
+                    undo: t("reader.ink.undo"),
+                    clear: t("reader.ink.clear"),
+                    clearConfirm: t("reader.ink.clearConfirm"),
+                    cancel: t("common.cancel"),
+                    done: t("reader.ink.done"),
+                  }}
+                />
+              </View>
+            ) : null}
             {/* زر «تابع القارئ» بعد سحب الصفحة يدويًا أثناء القراءة */}
             {detached && speaking && !lensOpen ? (
               <Pressable onPress={followReader} style={styles.followPill}>
@@ -3112,6 +3193,9 @@ export default function ReaderScreen() {
               />
               <InTool icon={paper ? "moon-outline" : "sunny-outline"} label={paper ? t("reader.tools.night") : t("reader.tools.paper")} onPress={togglePaper} />
               <InTool icon="expand-outline" label={t("reader.tools.fullscreen")} onPress={() => setFullText(true)} />
+              {isPad && viewMode === "pdf" ? (
+                <InTool icon="pencil-outline" label={t("reader.ink.title")} on={penOn} onPress={() => setPenOn((v) => !v)} />
+              ) : null}
               <InTool
                 icon={fullyLoaded && !ingesting ? "checkmark-circle" : ingesting ? "stop-circle-outline" : "cloud-download-outline"}
                 label={fullyLoaded ? t("reader.tool.loaded") : t("reader.tool.download")}
@@ -4345,6 +4429,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "rgba(246,213,138,0.18)", // تظليل السطر خفيف
   },
+  inkMarginBg: { backgroundColor: "rgba(255,255,255,0.05)" },
+  inkBarWrap: { position: "absolute", top: 10, left: 0, right: 0, alignItems: "center", zIndex: 20 },
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "transparent" },
   pdfImgWrapFull: { paddingBottom: 96 }, // مساحة للأزرار العائمة بالأسفل
   textScroll: { flex: 1, backgroundColor: "transparent" },
