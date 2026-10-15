@@ -7,7 +7,10 @@ import { createMp3Encoder } from "npm:wasm-media-encoders@0.7.0";
 export const GEMINI_MODEL = Deno.env.get("GEMINI_TTS_MODEL") ?? "gemini-3.8-flash-lite-tts";
 export const GEMINI_KBPS = 48;
 const RATE = 24000;
-const TIMEOUT_MS = 25_000;
+// ميزانية زمن واحدة لكل جملة (كل المحاولات معًا): كانت كل محاولة ٢٥ث مستقلة، فتصل الجملة
+// الواحدة لأكثر من دقيقة والتطبيق ينتظر. الآن: ١٨ث للجملة كاملة، وطريقة القراءة تأخذ ٩ث كحد أقصى.
+const BUDGET_MS = 18_000;
+const STYLED_MAX_MS = 9_000;
 
 // أصوات جيميناي المسموحة (نفس أصوات حاكي) — أي اسم غيرها يُرفض ويُستبدل بالافتراضي
 export const GEMINI_VOICES = new Set([
@@ -124,6 +127,8 @@ export async function geminiMp3(voiceName: string, text: string, style: ReadStyl
   const vertexKey = Deno.env.get("GOOGLE_TTS_API_KEY");
   const studioKey = Deno.env.get("GEMINI_API_KEY");
   if (!vertexKey && !studioKey) throw new Error("Missing GEMINI_API_KEY");
+  const deadline = Date.now() + BUDGET_MS;
+  const left = () => deadline - Date.now();
   if (style !== "normal" && studioKey) {
     try {
       return await streamTts(
@@ -136,6 +141,7 @@ export async function geminiMp3(voiceName: string, text: string, style: ReadStyl
           generation_config: { speech_config: [{ voice: voiceName }] },
           stream: true,
         }),
+        Math.min(STYLED_MAX_MS, left()),
       );
     } catch (e) {
       console.error(`styled tts (${style}) failed, reading normally:`, (e as Error).message.slice(0, 200));
@@ -151,19 +157,22 @@ export async function geminiMp3(voiceName: string, text: string, style: ReadStyl
         `https://aiplatform.googleapis.com/v1/projects/${VERTEX_PROJECT}/locations/global/publishers/google/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`,
         vertexKey,
         body,
+        left(),
       );
     } catch (e) {
-      if (!studioKey) throw e;
+      // لا وقت كافٍ لمحاولة أخرى → نُرجع الخطأ فورًا فيكمل التطبيق بصوت الجهاز بدل الانتظار
+      if (!studioKey || left() < 4000) throw e;
       console.error("vertex tts failed, falling back:", (e as Error).message.slice(0, 200));
     }
   }
-  return streamTts(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, studioKey!, body);
+  if (left() < 3000) throw new Error("gemini 504: time budget exhausted");
+  return streamTts(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, studioKey!, body, left());
 }
 
-async function streamTts(url: string, key: string, body: string): Promise<{ mp3: Uint8Array; seconds: number }> {
+async function streamTts(url: string, key: string, body: string, timeoutMs: number): Promise<{ mp3: Uint8Array; seconds: number }> {
   // حد أقصى للانتظار: طلب عالق لا يُعلّق القراءة دقائق — نلغيه ويكمل التطبيق بصوت الجهاز
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => abort.abort(), Math.max(1000, timeoutMs));
   try {
   const res = await fetch(url, {
     method: "POST",

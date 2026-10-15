@@ -1665,7 +1665,7 @@ export default function ReaderScreen() {
           setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
         },
-        onFallback: (reason) => setVoiceWarn(/USER_QUOTA/.test(reason) ? "" : reason),
+        onFallback: (reason) => setVoiceWarn(/USER_QUOTA/.test(reason) ? "" : /TTS_SLOW|TTS_TIMEOUT|PLAY_TIMEOUT|TIMEOUT|504/.test(reason) ? t("reader.voice.slow") : reason),
         onError: (e) => {
           const msg = (e as any)?.message ?? "خطأ";
           if (msg === "QUOTA") {

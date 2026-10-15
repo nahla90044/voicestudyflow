@@ -290,14 +290,14 @@ export async function ensureAudioMode() {
   // مهم: لا نسمح لفشل ضبط الوضع بإسقاط التشغيل (في Expo Go قد لا تتوفر
   // خاصية التشغيل بالخلفية) — نجرّب إعدادًا أبسط بدلًا من رمي الخطأ.
   try {
-    await setAudioModeAsync({
+    await within(setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
       // "doNotMix" (مثل حاكي): وحده يجعل iOS يعرض مشغّل «قيد التشغيل» في الجزيرة
       // العائمة وشاشة القفل بأزرار تعمل والجوال مقفل. مع "mixWithOthers" يختفي المشغّل.
       // (السرد والموسيقى الخلفية مشغّلان داخل نفس التطبيق فيعملان معًا.)
       interruptionMode: "doNotMix",
-    });
+    }), 3000, "AUDIO_MODE_TIMEOUT");
   } catch {
     try {
       await setAudioModeAsync({ playsInSilentMode: true });
@@ -307,6 +307,14 @@ export async function ensureAudioMode() {
   }
   audioModeReady = true;
 }
+
+// حدود زمنية تمنع «التعليق»: لا شيء في مسار الصوت ينتظر بلا نهاية
+function within<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(tag)), ms))]);
+}
+const TTS_REQUEST_MS = 24_000; // طلب السيرفر نفسه (ميزانية السيرفر ١٨ث + الشبكة)
+const TTS_WAIT_MS = 15_000; // بعدها تُقرأ الجملة بصوت الجهاز فورًا ويكمل التوليد بالخلفية
+const PLAY_START_MS = 8_000; // ملف لم يبدأ تشغيله خلالها → نكمل بصوت الجهاز بدل التوقف
 
 // رمز تشغيل يتغيّر مع كل إيقاف — يُلغي أي صوت كان قيد التحضير (يمنع التراكب)
 let playToken = 0;
@@ -409,7 +417,27 @@ export function isHumanVoiceEnabled(): boolean {
 // فكّ base64 السريع (جدول بحث) — انظر lib/base64.ts
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
-async function synthToFile(
+// طلب واحد لكل جملة في نفس الوقت: الجملة الحالية والتحميل المسبق كانا يطلبان نفس الجملة
+// مرتين فيتضاعف الحمل والتأخير. الطلب الثاني ينتظر الأول.
+const synthInflight = new Map<string, Promise<{ file: File; starts: number[] }>>();
+
+function synthToFile(
+  text: string,
+  gender: VoiceGender,
+  voiceId?: string,
+  expressive?: boolean,
+  page?: PageRef
+): Promise<{ file: File; starts: number[] }> {
+  const vid = voiceId || VOICE_IDS[gender];
+  const key = cacheFileFor(text, styleCacheKey(vid, expressive)).uri;
+  const running = synthInflight.get(key);
+  if (running) return running;
+  const job = synthToFileNow(text, gender, voiceId, expressive, page).finally(() => synthInflight.delete(key));
+  synthInflight.set(key, job);
+  return job;
+}
+
+async function synthToFileNow(
   text: string,
   gender: VoiceGender,
   voiceId?: string,
@@ -434,9 +462,13 @@ async function synthToFile(
 
   // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
   // لا يوجد مفتاح صوت داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
-  const { data, error } = await supabase.functions.invoke("tts", {
-    body: { text, gender, voiceId: vid, style, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
-  });
+  const { data, error } = await within(
+    supabase.functions.invoke("tts", {
+      body: { text, gender, voiceId: vid, style, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
+    }),
+    TTS_REQUEST_MS,
+    "TTS_TIMEOUT"
+  );
   if (error) {
     // نسخة لم تعد مدعومة (426) → قفل التطبيق بشاشة التحديث
     if ((error as { context?: { status?: number } })?.context?.status === 426) markUpdateRequired();
@@ -636,7 +668,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const gender = opts.gender ?? "female";
 
     step = "توليد الصوت";
-    const { file, starts } = await synthToFile(clean, gender, opts.voiceId, opts.expressive, opts.page);
+    const { file, starts } = await within(synthToFile(clean, gender, opts.voiceId, opts.expressive, opts.page), TTS_WAIT_MS, "TTS_SLOW");
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
 
     step = "وضع الصوت";
@@ -670,9 +702,11 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const toOrigFrac = makeSpokenToOrigFrac(text ?? "", clean);
 
     let finished = false;
+    let started = false;
     player.addListener("playbackStatusUpdate", (status) => {
       // مشغّل قديم استُبدل (بدأ تشغيل أحدث) → تجاهله تمامًا حتى لا يتراكب ويتسارع
       if (myToken !== playToken) return;
+      if (status.playing || (status.currentTime ?? 0) > 0) started = true;
       if (opts.onProgress) {
         let frac = 0;
         const t = status.currentTime ?? 0;
@@ -710,6 +744,18 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     step = "التشغيل";
     silenceAllExcept(player); // ضمان: لا صوت آخر يقرأ بالتوازي
     player.play();
+    // حارس: ملف تالف أو مشغّل لم يبدأ → لا نعلق صامتين؛ نحذف الملف (يُولَّد من جديد لاحقًا)
+    // ونكمل الجملة بصوت الجهاز فيستمر التسلسل
+    setTimeout(() => {
+      if (started || finished || myToken !== playToken) return;
+      finished = true;
+      try {
+        file.delete();
+      } catch {}
+      if (currentPlayer === player) disposePlayer();
+      opts.onFallback?.("PLAY_TIMEOUT");
+      speakWithDevice(clean, opts);
+    }, PLAY_START_MS);
     holdAudioSession(false); // بدأ السرد فعلًا → لا حاجة للمقطع الصامت
     // أزرار شاشة القفل (تشغيل/إيقاف + «قيد التشغيل») لهذا المقطع. التفعيل يخص مركز
     // «قيد التشغيل» فقط ولا يمسّ جلسة الصوت، فلا يُحدث تقطيعًا في الصوت.
