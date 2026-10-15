@@ -7,7 +7,7 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
-import { Palette } from "../../constants/design";
+import { useScene } from "../../lib/scene";
 
 type Props = {
   value: string;
@@ -21,6 +21,9 @@ type Props = {
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"] as const;
 
 export function CodePad({ value, onChange, length = 6, disabled, onComplete }: Props) {
+  const { pal } = useScene();
+  // ضغط الزر: درجة أغمق قليلًا من خلفيته (على الفاتح والداكن)
+  const pressedBg = pal.dark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)";
   function press(k: string) {
     if (disabled) return;
     Haptics.selectionAsync().catch(() => {});
@@ -39,8 +42,16 @@ export function CodePad({ value, onChange, length = 6, disabled, onComplete }: P
           const filled = i < value.length;
           const current = i === value.length && !disabled;
           return (
-            <View key={i} style={[styles.box, filled && styles.boxFilled, current && styles.boxCurrent]}>
-              <Text style={styles.boxTxt}>{value[i] ?? ""}</Text>
+            <View
+              key={i}
+              style={[
+                styles.box,
+                { backgroundColor: pal.card, borderColor: pal.cardBorder },
+                filled && { borderColor: pal.accent },
+                current && { borderColor: pal.accent, borderWidth: 2 },
+              ]}
+            >
+              <Text style={[styles.boxTxt, { color: pal.ink }]}>{value[i] ?? ""}</Text>
             </View>
           );
         })}
@@ -58,12 +69,12 @@ export function CodePad({ value, onChange, length = 6, disabled, onComplete }: P
               disabled={disabled}
               accessibilityRole="button"
               accessibilityLabel={k === "del" ? "حذف" : k}
-              style={({ pressed }) => [styles.key, styles.keyBtn, pressed && styles.keyPressed]}
+              style={({ pressed }) => [styles.key, styles.keyBtn, { backgroundColor: pal.soft, borderColor: pal.cardBorder }, pressed && { backgroundColor: pressedBg }]}
             >
               {k === "del" ? (
-                <Ionicons name="backspace-outline" size={26} color={Palette.text} />
+                <Ionicons name="backspace-outline" size={26} color={pal.ink} />
               ) : (
-                <Text style={styles.keyTxt}>{k}</Text>
+                <Text style={[styles.keyTxt, { color: pal.ink }]}>{k}</Text>
               )}
             </Pressable>
           )
@@ -81,22 +92,17 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: Palette.border,
-    backgroundColor: Palette.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  boxFilled: { borderColor: Palette.neonViolet },
-  boxCurrent: { borderColor: Palette.neonCyan },
-  boxTxt: { color: Palette.text, fontSize: 24, fontWeight: "800" },
+  boxTxt: { fontSize: 24, fontWeight: "800" },
   pad: { flexDirection: "row", direction: "ltr", flexWrap: "wrap", justifyContent: "space-between", rowGap: 10 },
   key: { width: "31%", height: 58 },
   keyBtn: {
     borderRadius: 14,
-    backgroundColor: Palette.surfaceStrong,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
   },
-  keyPressed: { backgroundColor: Palette.primarySoft },
-  keyTxt: { color: Palette.text, fontSize: 26, fontWeight: "700" },
+  keyTxt: { fontSize: 26, fontWeight: "700" },
 });

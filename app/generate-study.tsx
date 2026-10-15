@@ -5,17 +5,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GradientButton } from "../components/brand/gradient-button";
-import { ScreenBackground } from "../components/brand/screen-background";
-import { Palette, Radius, Spacing } from "../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { Radius, Spacing } from "../constants/design";
 import { aiAssist, generateFlashcards } from "../lib/ai";
 import { getUserId } from "../lib/auth";
 import { addCards } from "../lib/flashcards";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
+import { useScene } from "../lib/scene";
 import { generateUnitQuiz } from "../lib/syllabus";
 import { supabase } from "../lib/supabase";
 import { setUnitContent } from "../lib/unitContent";
@@ -46,6 +45,7 @@ async function collectRangeText(pdfPath: string, from: number, to: number, maxCh
 export default function GenerateStudyScreen() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
 
   const [books, setBooks] = useState<Book[]>([]);
   const [bookId, setBookId] = useState<string>("");
@@ -152,112 +152,157 @@ export default function GenerateStudyScreen() {
   }
 
   return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        <View style={[styles.header, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={Palette.text} />
+    <SceneScreen>
+      <SceneBanner
+        title={t("generate.title")}
+        height={150}
+        left={
+          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel={t("common.back")}>
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={pal.ink} />
+            </SceneIconButton>
           </Pressable>
-          <Text style={styles.headerTitle}>{t("generate.title")}</Text>
-          <View style={styles.iconBtn} />
+        }
+      />
+
+      {books.length === 0 ? (
+        <View style={styles.center}>
+          <Ionicons name="library-outline" size={56} color={pal.dim} />
+          <Text style={[styles.dim, { color: pal.dim }]}>{t("generate.noBooks")}</Text>
         </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* الكتاب */}
+          <Text style={[styles.section, { color: pal.ink, textAlign: dir.textAlign }]}>{t("generate.book")}</Text>
+          {books.map((b) => (
+            <Pressable key={b.id} onPress={() => selectBook(b)}>
+              <SceneCard
+                padded={false}
+                style={[styles.row, bookId === b.id && { borderColor: pal.accent, borderWidth: 1.5 }]}
+              >
+                <Text style={[styles.rowTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>📖 {b.title}</Text>
+                {bookId === b.id ? <Ionicons name="checkmark-circle" size={20} color={pal.accent} /> : null}
+              </SceneCard>
+            </Pressable>
+          ))}
 
-        {books.length === 0 ? (
-          <View style={styles.center}>
-            <Ionicons name="library-outline" size={56} color={Palette.textDim} />
-            <Text style={styles.dim}>{t("generate.noBooks")}</Text>
-          </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            {/* الكتاب */}
-            <Text style={[styles.section, { textAlign: dir.textAlign }]}>{t("generate.book")}</Text>
-            {books.map((b) => (
-              <Pressable key={b.id} onPress={() => selectBook(b)} style={[styles.row, bookId === b.id && styles.rowOn]}>
-                <Text style={[styles.rowTxt, { textAlign: dir.textAlign }]} numberOfLines={1}>📖 {b.title}</Text>
-                {bookId === b.id ? <Ionicons name="checkmark-circle" size={20} color={Palette.neonCyan} /> : null}
-              </Pressable>
-            ))}
-
-            {/* الجزء */}
-            <Text style={[styles.section, { textAlign: dir.textAlign }]}>{t("generate.scope")}</Text>
-            <View style={[styles.chips, { flexDirection: dir.row }]}>
-              <Pressable onPress={() => setWhole(true)} style={[styles.chip, whole && styles.chipOn]}>
-                <Text style={[styles.chipTxt, whole && styles.chipTxtOn]}>{t("generate.wholeBook")}</Text>
-              </Pressable>
-              <Pressable onPress={() => setWhole(false)} style={[styles.chip, !whole && styles.chipOn]}>
-                <Text style={[styles.chipTxt, !whole && styles.chipTxtOn]}>{t("generate.pageRange")}</Text>
-              </Pressable>
-            </View>
-            {!whole ? (
-              <View style={[styles.rangeRow, { flexDirection: dir.row }]}>
-                <Text style={styles.rangeLbl}>{t("generate.from")}</Text>
-                <TextInput value={from} onChangeText={setFrom} keyboardType="number-pad" style={styles.numInput} placeholderTextColor={Palette.placeholder} />
-                <Text style={styles.rangeLbl}>{t("generate.to")}</Text>
-                <TextInput value={to} onChangeText={setTo} keyboardType="number-pad" style={styles.numInput} placeholderTextColor={Palette.placeholder} />
-                {totalPages > 0 ? <Text style={styles.rangeHint}>/ {totalPages}</Text> : null}
-              </View>
-            ) : null}
-
-            {/* النوع */}
-            <Text style={[styles.section, { textAlign: dir.textAlign }]}>{t("generate.type")}</Text>
-            <View style={[styles.chips, { flexDirection: dir.row }]}>
-              {(["cards", "quiz", "summary"] as GenType[]).map((ty) => (
-                <Pressable key={ty} onPress={() => setType(ty)} style={[styles.chip, type === ty && styles.chipOn]}>
-                  <Text style={[styles.chipTxt, type === ty && styles.chipTxtOn]}>{t(`generate.type.${ty}`)}</Text>
+          {/* الجزء */}
+          <Text style={[styles.section, { color: pal.ink, textAlign: dir.textAlign }]}>{t("generate.scope")}</Text>
+          <View style={[styles.chips, { flexDirection: dir.row }]}>
+            {[true, false].map((w) => {
+              const on = whole === w;
+              return (
+                <Pressable
+                  key={String(w)}
+                  onPress={() => setWhole(w)}
+                  style={[styles.chip, { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder }]}
+                >
+                  <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]}>
+                    {w ? t("generate.wholeBook") : t("generate.pageRange")}
+                  </Text>
                 </Pressable>
-              ))}
+              );
+            })}
+          </View>
+          {!whole ? (
+            <View style={[styles.rangeRow, { flexDirection: dir.row }]}>
+              <Text style={[styles.rangeLbl, { color: pal.dim }]}>{t("generate.from")}</Text>
+              <TextInput
+                value={from}
+                onChangeText={setFrom}
+                keyboardType="number-pad"
+                style={[styles.numInput, { backgroundColor: pal.card, borderColor: pal.cardBorder, color: pal.ink }]}
+                placeholderTextColor={pal.dim}
+                selectionColor={pal.accent}
+              />
+              <Text style={[styles.rangeLbl, { color: pal.dim }]}>{t("generate.to")}</Text>
+              <TextInput
+                value={to}
+                onChangeText={setTo}
+                keyboardType="number-pad"
+                style={[styles.numInput, { backgroundColor: pal.card, borderColor: pal.cardBorder, color: pal.ink }]}
+                placeholderTextColor={pal.dim}
+                selectionColor={pal.accent}
+              />
+              {totalPages > 0 ? <Text style={[styles.rangeHint, { color: pal.dim }]}>/ {totalPages}</Text> : null}
             </View>
+          ) : null}
 
-            {/* العدد (لا يظهر للملخّص) */}
-            {type !== "summary" ? (
-              <>
-                <Text style={[styles.section, { textAlign: dir.textAlign }]}>{t("generate.count")}</Text>
-                <View style={[styles.chips, { flexDirection: dir.row }]}>
-                  {COUNTS.map((c) => (
-                    <Pressable key={c} onPress={() => setCount(c)} style={[styles.chip, count === c && styles.chipOn]}>
-                      <Text style={[styles.chipTxt, count === c && styles.chipTxtOn]}>{c}</Text>
+          {/* النوع */}
+          <Text style={[styles.section, { color: pal.ink, textAlign: dir.textAlign }]}>{t("generate.type")}</Text>
+          <View style={[styles.chips, { flexDirection: dir.row }]}>
+            {(["cards", "quiz", "summary"] as GenType[]).map((ty) => {
+              const on = type === ty;
+              return (
+                <Pressable
+                  key={ty}
+                  onPress={() => setType(ty)}
+                  style={[styles.chip, { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder }]}
+                >
+                  <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]}>{t(`generate.type.${ty}`)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* العدد (لا يظهر للملخّص) */}
+          {type !== "summary" ? (
+            <>
+              <Text style={[styles.section, { color: pal.ink, textAlign: dir.textAlign }]}>{t("generate.count")}</Text>
+              <View style={[styles.chips, { flexDirection: dir.row }]}>
+                {COUNTS.map((c) => {
+                  const on = count === c;
+                  return (
+                    <Pressable
+                      key={c}
+                      onPress={() => setCount(c)}
+                      style={[styles.chip, { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder }]}
+                    >
+                      <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]}>{c}</Text>
                     </Pressable>
-                  ))}
-                </View>
-              </>
-            ) : null}
-
-            {busy ? (
-              <View style={styles.busy}>
-                <ActivityIndicator color={Palette.neonViolet} />
-                <Text style={styles.dim}>{status}</Text>
+                  );
+                })}
               </View>
-            ) : (
-              <GradientButton title={t("generate.action")} icon="sparkles" onPress={onGenerate} style={{ marginTop: Spacing.lg }} />
-            )}
-            <View style={{ height: 30 }} />
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </ScreenBackground>
+            </>
+          ) : null}
+
+          {busy ? (
+            <View style={styles.busy}>
+              <ActivityIndicator color={pal.accent} />
+              <Text style={[styles.dim, { color: pal.dim }]}>{status}</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={onGenerate}
+              style={[styles.cta, { backgroundColor: pal.accent, flexDirection: dir.row }]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="sparkles" size={18} color={pal.onAccent} />
+              <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{t("generate.action")}</Text>
+            </Pressable>
+          )}
+          <View style={{ height: 30 }} />
+        </ScrollView>
+      )}
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: { flexDirection: "row-reverse", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: 8 },
-  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
-  headerTitle: { flex: 1, textAlign: "center", color: Palette.text, fontSize: 18, fontWeight: "900" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 10 },
-  dim: { color: Palette.textDim, fontSize: 14, textAlign: "center", lineHeight: 22 },
+  dim: { fontSize: 14, textAlign: "center", lineHeight: 22 },
   scroll: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: 8 },
-  section: { color: Palette.text, fontSize: 15, fontWeight: "900", marginTop: Spacing.lg, marginBottom: 2 },
-  row: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: 10, padding: Spacing.md, borderRadius: Radius.lg, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  rowOn: { borderColor: Palette.neonCyan },
-  rowTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "800" },
+  section: { fontSize: 15, fontWeight: "900", marginTop: Spacing.lg, marginBottom: 2 },
+  row: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", gap: 10, padding: Spacing.md, borderRadius: Radius.lg },
+  rowTxt: { flex: 1, fontSize: 15, fontWeight: "800" },
   chips: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8 },
-  chip: { paddingVertical: 10, paddingHorizontal: 18, borderRadius: Radius.pill, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  chipOn: { backgroundColor: Palette.neonViolet, borderColor: Palette.neonViolet },
-  chipTxt: { color: Palette.text, fontSize: 14, fontWeight: "800" },
-  chipTxtOn: { color: "#fff" },
+  chip: { paddingVertical: 10, paddingHorizontal: 18, borderRadius: Radius.pill, borderWidth: 1 },
+  chipTxt: { fontSize: 14, fontWeight: "800" },
   rangeRow: { flexDirection: "row-reverse", alignItems: "center", gap: 8, marginTop: 4 },
-  rangeLbl: { color: Palette.textMuted, fontSize: 14, fontWeight: "700" },
-  numInput: { width: 64, paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md, backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder, color: Palette.text, fontSize: 15, fontWeight: "800", textAlign: "center" },
-  rangeHint: { color: Palette.textDim, fontSize: 14, fontWeight: "700" },
+  rangeLbl: { fontSize: 14, fontWeight: "700" },
+  numInput: { width: 64, paddingVertical: 8, paddingHorizontal: 10, borderRadius: Radius.md, borderWidth: 1, fontSize: 15, fontWeight: "800", textAlign: "center" },
+  rangeHint: { fontSize: 14, fontWeight: "700" },
   busy: { alignItems: "center", gap: 10, marginTop: Spacing.xl },
+  cta: { alignItems: "center", justifyContent: "center", gap: 8, minHeight: 54, borderRadius: Radius.pill, marginTop: Spacing.lg },
+  ctaTxt: { fontSize: 16, fontWeight: "900" },
 });

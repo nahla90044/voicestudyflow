@@ -2,22 +2,23 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
+  ActivityIndicator,
   Alert,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GlassCard } from "../../components/brand/glass-card";
-import { GradientButton } from "../../components/brand/gradient-button";
-import { ScreenBackground } from "../../components/brand/screen-background";
-import { ScreenHeader } from "../../components/brand/screen-header";
-import { Gradients, Palette } from "../../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
+import { Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
+import { useScene } from "../../lib/scene";
 import { FREE_BOOKS_BASE, FREE_BOOKS_UNLOCKED, getBookLimit } from "../../lib/perks";
 import { requestPaywall } from "../../lib/plan";
 import { extractPdfPageText } from "../../lib/pdfText";
@@ -45,6 +46,7 @@ export default function AddBookScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
 
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState("60");
@@ -271,111 +273,163 @@ export default function AddBookScreen() {
     }
   }
 
+  // ألوان الحقول: نفس نمط الملف الشخصي (مقروءة في المشهد الفاتح والداكن)
+  const inputColors = { backgroundColor: pal.dark ? pal.soft : pal.bg, borderColor: pal.cardBorder, color: pal.ink };
+  const planDisabled = !canCreatePlan || busy;
+
   return (
-    <ScreenBackground>
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader
-        icon="add-circle"
+    <SceneScreen>
+      <SceneBanner
         title={t("addBook.header.title")}
         subtitle={t("addBook.header.subtitle")}
-        color={Palette.neonViolet}
-        style={{ marginHorizontal: 0, marginTop: 0 }}
+        height={150}
+        left={
+          // تُفتح من زر «+» في المكتبة → زر رجوع (لا القائمة الجانبية)
+          <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace("/library"))} hitSlop={8} accessibilityLabel={t("common.back")}>
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={pal.ink} />
+            </SceneIconButton>
+          </Pressable>
+        }
       />
 
-      <GlassCard contentStyle={styles.formCard} glow={Palette.neonViolet}>
-        <GradientButton
-          title={file ? t("addBook.fileChosen") : t("addBook.pickFile")}
-          icon="document-attach"
-          variant="ghost"
-          onPress={pickPdf}
-          disabled={busy}
-        />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <SceneCard style={styles.formCard}>
+          <Pressable
+            onPress={pickPdf}
+            disabled={busy}
+            style={[
+              styles.pickBtn,
+              { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: file ? pal.accent : pal.cardBorder },
+              busy && styles.disabled,
+            ]}
+          >
+            <Ionicons name={file ? "checkmark-circle" : "document-attach"} size={20} color={pal.accent} />
+            <Text style={[styles.pickTxt, { color: pal.ink }]} numberOfLines={1}>
+              {file ? t("addBook.fileChosen") : t("addBook.pickFile")}
+            </Text>
+          </Pressable>
 
-        <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("addBook.titleLabel")}</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder={t("addBook.titlePlaceholder")}
-          placeholderTextColor="#8aa0b8"
-          style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
-          editable={!busy}
-        />
+          <Text style={[styles.label, { color: pal.ink, textAlign: dir.textAlign }]}>{t("addBook.titleLabel")}</Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder={t("addBook.titlePlaceholder")}
+            placeholderTextColor={pal.dim}
+            selectionColor={pal.accent}
+            style={[styles.input, inputColors, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+            editable={!busy}
+          />
 
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.label, { textAlign: dir.textAlign }]} numberOfLines={1}>{t("addBook.pageCountLabel")}</Text>
-            <TextInput
-              value={pageCountManual}
-              onChangeText={setPageCountManual}
-              keyboardType="number-pad"
-              style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
-              editable={!busy}
-              placeholder={t("addBook.pageCountPlaceholder")}
-              placeholderTextColor="#8aa0b8"
-            />
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.label, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>{t("addBook.pageCountLabel")}</Text>
+              <TextInput
+                value={pageCountManual}
+                onChangeText={setPageCountManual}
+                keyboardType="number-pad"
+                style={[styles.input, inputColors, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+                editable={!busy}
+                placeholder={t("addBook.pageCountPlaceholder")}
+                placeholderTextColor={pal.dim}
+                selectionColor={pal.accent}
+              />
+            </View>
+
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.label, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>{t("addBook.dailyMinutesLabel")}</Text>
+              <TextInput
+                value={minutes}
+                onChangeText={setMinutes}
+                keyboardType="number-pad"
+                style={[styles.input, inputColors, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+                editable={!busy}
+                selectionColor={pal.accent}
+              />
+            </View>
           </View>
 
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.label, { textAlign: dir.textAlign }]} numberOfLines={1}>{t("addBook.dailyMinutesLabel")}</Text>
-            <TextInput
-              value={minutes}
-              onChangeText={setMinutes}
-              keyboardType="number-pad"
-              style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
-              editable={!busy}
-            />
-          </View>
-        </View>
+          {/* حفظ فقط: زر ثانوي بإطار */}
+          <Pressable
+            onPress={() => save(false)}
+            disabled={busy}
+            style={[
+              styles.btn,
+              { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "66", borderWidth: 1 },
+              busy && busyMode !== "save" && styles.disabled,
+            ]}
+          >
+            {busyMode === "save" ? (
+              <ActivityIndicator color={pal.accent} />
+            ) : (
+              <>
+                <Ionicons name="save" size={18} color={pal.accent} />
+                <Text style={[styles.btnTxt, { color: pal.ink }]}>{t("addBook.saveOnly")}</Text>
+              </>
+            )}
+          </Pressable>
 
-        <GradientButton
-          title={t("addBook.saveOnly")}
-          icon="save"
-          onPress={() => save(false)}
-          loading={busyMode === "save"}
-          disabled={busy}
-        />
+          {/* حفظ وإنشاء خطة: الزر الرئيسي بلون المشهد */}
+          <Pressable
+            onPress={() => save(true)}
+            disabled={planDisabled}
+            style={[
+              styles.btn,
+              { flexDirection: dir.row, backgroundColor: pal.accent },
+              planDisabled && busyMode !== "plan" && styles.disabled,
+            ]}
+          >
+            {busyMode === "plan" ? (
+              <ActivityIndicator color={pal.onAccent} />
+            ) : (
+              <>
+                <Ionicons name="sparkles" size={18} color={pal.onAccent} />
+                <Text style={[styles.btnTxt, { color: pal.onAccent }]}>{t("addBook.saveAndPlan")}</Text>
+              </>
+            )}
+          </Pressable>
 
-        <GradientButton
-          title={t("addBook.saveAndPlan")}
-          icon="sparkles"
-          colors={Gradients.neon}
-          onPress={() => save(true)}
-          loading={busyMode === "plan"}
-          disabled={!canCreatePlan || busy}
-        />
-
-        <Text style={[styles.hint, { textAlign: dir.textAlign }]}>
-          {t("addBook.agreement.note")}
-        </Text>
-      </GlassCard>
-    </SafeAreaView>
-    </ScreenBackground>
+          <Text style={[styles.hint, { color: pal.dim, textAlign: dir.textAlign }]}>
+            {t("addBook.agreement.note")}
+          </Text>
+        </SceneCard>
+      </ScrollView>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "transparent", padding: 16, gap: 12 },
-  formCard: { padding: 16, gap: 12 },
-  h1: { color: "#fff", fontSize: 26, fontWeight: "900", marginBottom: 6, textAlign: "right" },
-  label: { color: "#c9d4e2", fontWeight: "900", textAlign: "right" },
-  hint: { color: "#9fb3c8", textAlign: "right", marginTop: 4, fontSize: 12 },
+  scroll: { paddingHorizontal: Spacing.lg, paddingTop: 6, paddingBottom: 40 },
+  formCard: { gap: 12 },
+  label: { fontWeight: "800", fontSize: 13 },
+  hint: { marginTop: 4, fontSize: 12, fontWeight: "600", lineHeight: 18 },
   input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 14,
-    padding: 14,
-    color: "#fff",
-    textAlign: "right",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 15,
+    fontWeight: "700",
   },
   row: { flexDirection: "row", gap: 12, alignItems: "flex-end" },
-  btn: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
+  pickBtn: {
+    height: 54,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 14,
   },
-  btnTxt: { color: "#fff", fontWeight: "900", fontSize: 16 },
+  pickTxt: { fontWeight: "900", fontSize: 15, flexShrink: 1 },
+  btn: {
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  btnTxt: { fontWeight: "900", fontSize: 15 },
+  disabled: { opacity: 0.5 },
 });

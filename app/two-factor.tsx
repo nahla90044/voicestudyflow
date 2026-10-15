@@ -5,13 +5,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
-import { ScreenBackground } from "../components/brand/screen-background";
-import { Palette, Radius, Spacing } from "../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { Radius, Spacing } from "../constants/design";
 import { enrollMfa, hasMfaEnabled, listMfaFactors, unenrollMfa, verifyMfa } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
+import { useScene } from "../lib/scene";
 
 // يحوّل قيمة qr_code من Supabase إلى نص SVG صالح للعرض
 function toSvgXml(qr: string): string {
@@ -33,6 +34,8 @@ export default function TwoFactorScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
   const [enabled, setEnabled] = useState(false);
@@ -99,84 +102,83 @@ export default function TwoFactorScreen() {
     ]);
   }
 
+  // ألوان المشهد؛ زر الإيقاف أحمر مقروء على الفاتح والداكن
+  const danger = pal.dark ? "#E5525F" : "#C62F3B";
+
   return (
-    <ScreenBackground>
-      <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
-        <View style={[styles.head, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={24} color={Palette.text} />
+    <SceneScreen>
+      <SceneBanner
+        title={t("twofa.title")}
+        height={150}
+        left={
+          <Pressable onPress={() => router.back()} hitSlop={8} accessibilityLabel={t("common.back")}>
+            <SceneIconButton>
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={20} color={pal.ink} />
+            </SceneIconButton>
           </Pressable>
-          <Text style={styles.title}>{t("twofa.title")}</Text>
-          <View style={{ width: 38 }} />
-        </View>
+        }
+      />
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Text style={[styles.subtitle, { textAlign: dir.textAlign }]}>{t("twofa.subtitle")}</Text>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
+        <Text style={[styles.subtitle, { color: pal.dim, textAlign: dir.textAlign }]}>{t("twofa.subtitle")}</Text>
 
-          {loading ? (
-            <ActivityIndicator color={Palette.neonCyan} style={{ marginTop: 30 }} />
-          ) : enabled ? (
-            <View style={styles.card}>
-              <View style={[styles.statusRow, { flexDirection: dir.row }]}>
-                <Ionicons name="shield-checkmark" size={22} color={Palette.neonCyan} />
-                <Text style={styles.statusOn}>{t("twofa.statusOn")}</Text>
+        {loading ? (
+          <ActivityIndicator color={pal.accent} style={{ marginTop: 30 }} />
+        ) : enabled ? (
+          <SceneCard style={styles.card}>
+            <View style={[styles.statusRow, { flexDirection: dir.row }]}>
+              <Ionicons name="shield-checkmark" size={22} color={pal.accent} />
+              <Text style={[styles.statusTxt, { color: pal.accent }]}>{t("twofa.statusOn")}</Text>
+            </View>
+            <Pressable onPress={confirmDisable} style={[styles.btn, { backgroundColor: danger }]} disabled={busy}>
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={[styles.btnTxt, { color: "#fff" }]}>{t("twofa.disable")}</Text>}
+            </Pressable>
+          </SceneCard>
+        ) : enroll ? (
+          <SceneCard style={styles.card}>
+            <Text style={[styles.step, { color: pal.ink, textAlign: dir.textAlign }]}>{t("twofa.step1")}</Text>
+            {enroll.svg ? (
+              <View style={styles.qrBox}>
+                <SvgXml xml={enroll.svg} width={216} height={216} />
               </View>
-              <Pressable onPress={confirmDisable} style={[styles.btn, styles.btnDanger]} disabled={busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnTxt}>{t("twofa.disable")}</Text>}
-              </Pressable>
-            </View>
-          ) : enroll ? (
-            <View style={styles.card}>
-              <Text style={[styles.step, { textAlign: dir.textAlign }]}>{t("twofa.step1")}</Text>
-              {enroll.svg ? (
-                <View style={styles.qrBox}>
-                  <SvgXml xml={enroll.svg} width={216} height={216} />
-                </View>
-              ) : null}
-              <Text style={[styles.secretLabel, { textAlign: dir.textAlign }]}>{t("twofa.secretLabel")}</Text>
-              <Text selectable style={styles.secret}>{enroll.secret}</Text>
+            ) : null}
+            <Text style={[styles.secretLabel, { color: pal.dim, textAlign: dir.textAlign }]}>{t("twofa.secretLabel")}</Text>
+            <Text selectable style={[styles.secret, { color: pal.accent, backgroundColor: pal.soft }]}>{enroll.secret}</Text>
 
-              <Text style={[styles.step, { textAlign: dir.textAlign, marginTop: 14 }]}>{t("twofa.step2")}</Text>
-              <CodePad value={code} onChange={setCode} disabled={busy} />
-              <Pressable onPress={confirmEnroll} style={[styles.btn, styles.btnPrimary]} disabled={busy || code.length < 6}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnTxt}>{t("twofa.verify")}</Text>}
-              </Pressable>
+            <Text style={[styles.step, { color: pal.ink, textAlign: dir.textAlign, marginTop: 14 }]}>{t("twofa.step2")}</Text>
+            <CodePad value={code} onChange={setCode} disabled={busy} />
+            <Pressable onPress={confirmEnroll} style={[styles.btn, { backgroundColor: pal.accent }]} disabled={busy || code.length < 6}>
+              {busy ? <ActivityIndicator color={pal.onAccent} /> : <Text style={[styles.btnTxt, { color: pal.onAccent }]}>{t("twofa.verify")}</Text>}
+            </Pressable>
+          </SceneCard>
+        ) : (
+          <SceneCard style={styles.card}>
+            <View style={[styles.statusRow, { flexDirection: dir.row }]}>
+              <Ionicons name="shield-outline" size={22} color={pal.dim} />
+              <Text style={[styles.statusTxt, { color: pal.dim }]}>{t("twofa.statusOff")}</Text>
             </View>
-          ) : (
-            <View style={styles.card}>
-              <View style={[styles.statusRow, { flexDirection: dir.row }]}>
-                <Ionicons name="shield-outline" size={22} color={Palette.textMuted} />
-                <Text style={styles.statusOff}>{t("twofa.statusOff")}</Text>
-              </View>
-              <Pressable onPress={startEnroll} style={[styles.btn, styles.btnPrimary]} disabled={busy}>
-                {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnTxt}>{t("twofa.enable")}</Text>}
-              </Pressable>
-            </View>
-          )}
-        </ScrollView>
-      </SafeAreaView>
-    </ScreenBackground>
+            <Pressable onPress={startEnroll} style={[styles.btn, { backgroundColor: pal.accent }]} disabled={busy}>
+              {busy ? <ActivityIndicator color={pal.onAccent} /> : <Text style={[styles.btnTxt, { color: pal.onAccent }]}>{t("twofa.enable")}</Text>}
+            </Pressable>
+          </SceneCard>
+        )}
+      </ScrollView>
+    </SceneScreen>
   );
 }
 
+// التخطيط فقط هنا؛ الألوان من المشهد داخل المكوّن
 const styles = StyleSheet.create({
-  head: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingHorizontal: Spacing.lg, paddingTop: 6 },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder },
-  title: { color: Palette.text, fontSize: 20, fontWeight: "900" },
-  scroll: { padding: Spacing.lg, gap: 8 },
-  subtitle: { color: Palette.textDim, fontSize: 14, fontWeight: "600", marginBottom: 8, lineHeight: 22 },
-  card: { backgroundColor: Palette.bgElevated, borderRadius: Radius.lg, borderWidth: 1, borderColor: Palette.border, padding: 18, gap: 12 },
+  scroll: { padding: Spacing.lg, paddingTop: 4, gap: 8 },
+  subtitle: { fontSize: 14, fontWeight: "600", marginBottom: 8, lineHeight: 22 },
+  card: { padding: 18, gap: 12 },
   statusRow: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
-  statusOn: { color: Palette.neonCyan, fontSize: 17, fontWeight: "900" },
-  statusOff: { color: Palette.textMuted, fontSize: 17, fontWeight: "900" },
-  step: { color: Palette.text, fontSize: 15, fontWeight: "800", lineHeight: 24 },
+  statusTxt: { fontSize: 17, fontWeight: "900" },
+  step: { fontSize: 15, fontWeight: "800", lineHeight: 24 },
   // هامش أبيض واسع (quiet zone) ضروري لقراءة QR، وحوافّ شبه مستقيمة حتى لا تُقصّ زواياه
   qrBox: { backgroundColor: "#fff", borderRadius: 8, padding: 28, alignSelf: "center" },
-  secretLabel: { color: Palette.textDim, fontSize: 13, fontWeight: "700" },
-  secret: { color: Palette.neonCyan, fontSize: 16, fontWeight: "900", letterSpacing: 2, textAlign: "center", backgroundColor: Palette.surface, borderRadius: 10, paddingVertical: 10 },
-  input: { backgroundColor: Palette.surface, borderWidth: 1, borderColor: Palette.glassBorder, borderRadius: Radius.md, paddingVertical: 13, paddingHorizontal: 14, color: Palette.text, fontSize: 20, fontWeight: "900", textAlign: "center", letterSpacing: 6 },
+  secretLabel: { fontSize: 13, fontWeight: "700" },
+  secret: { fontSize: 16, fontWeight: "900", letterSpacing: 2, textAlign: "center", borderRadius: 10, paddingVertical: 10 },
   btn: { borderRadius: Radius.md, paddingVertical: 15, alignItems: "center", justifyContent: "center" },
-  btnPrimary: { backgroundColor: Palette.neonViolet },
-  btnDanger: { backgroundColor: "#ff5d6c" },
-  btnTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  btnTxt: { fontSize: 16, fontWeight: "900" },
 });

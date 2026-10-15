@@ -8,13 +8,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { GlassCard } from "../../components/brand/glass-card";
-import { GradientButton } from "../../components/brand/gradient-button";
-import { ScreenBackground } from "../../components/brand/screen-background";
-import { ScreenHeader } from "../../components/brand/screen-header";
-import { Gradients, Palette } from "../../constants/design";
+import { Ionicons } from "@expo/vector-icons";
+import { AppDrawer } from "../../components/brand/app-drawer";
+import { SceneBanner, SceneCard, SceneScreen } from "../../components/brand/scene-screen";
+import { Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
+import { useScene } from "../../lib/scene";
 import { supabase } from "../../lib/supabase";
 
 type Book = {
@@ -28,6 +27,7 @@ type Book = {
 export default function ArchiveScreen() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   const [rows, setRows] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -119,13 +119,12 @@ export default function ArchiveScreen() {
   }
 
   return (
-    <ScreenBackground>
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <ScreenHeader
-        icon="file-tray-full"
+    <SceneScreen>
+      <SceneBanner
         title={t("explore.header.title")}
         subtitle={t("explore.header.subtitle")}
-        color={Palette.neonPink}
+        height={150}
+        left={<AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />}
       />
 
       <FlatList
@@ -133,72 +132,67 @@ export default function ArchiveScreen() {
         refreshing={loading}
         onRefresh={load}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 40 }}
+        contentContainerStyle={{ paddingHorizontal: Spacing.lg, paddingTop: 6, gap: 12, paddingBottom: 40 }}
         renderItem={({ item }) => (
           <Pressable onLongPress={() => deleteForever(item)}>
-            <GlassCard contentStyle={styles.cardRow} glow={Palette.neonPink}>
+            <SceneCard style={[styles.cardRow, { flexDirection: dir.row }]}>
+            <View style={[styles.icon, { backgroundColor: pal.soft }]}>
+              <Ionicons name="file-tray-full-outline" size={20} color={pal.accent} />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { textAlign: dir.textAlign }]} numberOfLines={1}>
+              <Text style={[styles.title, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text style={[styles.meta, { textAlign: dir.textAlign }]}>
+              <Text style={[styles.meta, { color: pal.dim, textAlign: dir.textAlign }]}>
                 {item.archived_at
                   ? t("explore.archivedOn", { date: item.archived_at.slice(0, 10) })
                   : "—"}
               </Text>
-              <Text style={[styles.hint, { textAlign: dir.textAlign }]} numberOfLines={1}>
+              <Text style={[styles.hint, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
                 {t("explore.longPressHint")}
               </Text>
             </View>
 
-            <GradientButton
-              title={t("explore.restore")}
-              icon="arrow-undo"
-              colors={Gradients.success}
+            <Pressable
               onPress={() => restore(item)}
-            />
-            </GlassCard>
+              style={[styles.btn, { flexDirection: dir.row, backgroundColor: pal.accent }]}
+              accessibilityRole="button"
+            >
+              <Ionicons name="arrow-undo" size={16} color={pal.onAccent} />
+              <Text style={[styles.btnTxt, { color: pal.onAccent }]}>{t("explore.restore")}</Text>
+            </Pressable>
+            </SceneCard>
           </Pressable>
         )}
         ListEmptyComponent={
           <View style={{ padding: 24 }}>
-            <Text style={{ color: "#9fb3c8", textAlign: dir.textAlign }}>
+            <Text style={{ color: pal.dim, textAlign: dir.textAlign, fontWeight: "600" }}>
               {t("explore.empty")}
             </Text>
           </View>
         }
       />
-    </SafeAreaView>
-    </ScreenBackground>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "transparent" },
-  header: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
-  h1: { color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "right" },
-  sub: { color: "#9fb3c8", textAlign: "right", marginTop: 6 },
-
   cardRow: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     gap: 12,
     padding: 14,
+    borderRadius: 22,
   },
-  title: { color: "#fff", fontWeight: "900", textAlign: "right" },
-  meta: { color: "#c9d4e2", textAlign: "right", marginTop: 6, fontSize: 12 },
-  hint: {
-    color: "rgba(201,212,226,0.55)",
-    textAlign: "right",
-    marginTop: 6,
-    fontSize: 11,
-  },
-
+  icon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  title: { fontWeight: "900", fontSize: 15 },
+  meta: { marginTop: 4, fontSize: 12, fontWeight: "600" },
+  hint: { marginTop: 4, fontSize: 11, opacity: 0.8 },
   btn: {
+    alignItems: "center",
+    gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 12,
-    backgroundColor: "#2ecc71",
+    borderRadius: 14,
   },
-  btnTxt: { color: "#0b1220", fontWeight: "900" },
+  btnTxt: { fontWeight: "900", fontSize: 14 },
 });

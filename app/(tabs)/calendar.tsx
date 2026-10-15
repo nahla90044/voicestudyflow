@@ -13,10 +13,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GlassCard } from "../../components/brand/glass-card";
-import { ScreenBackground } from "../../components/brand/screen-background";
-import { ScreenHeader } from "../../components/brand/screen-header";
-import { Palette, Radius } from "../../constants/design";
+import { AppDrawer } from "../../components/brand/app-drawer";
+import { SceneBanner, SceneCard, SceneScreen } from "../../components/brand/scene-screen";
+import { Radius } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import {
   DEFAULT_SESSION_TYPE,
@@ -27,6 +26,7 @@ import {
 import { supabase } from "../../lib/supabase";
 import { getUnitForDate } from "../../lib/syllabus";
 import { useDir, useI18n } from "../../lib/i18n";
+import { useScene } from "../../lib/scene";
 
 type ViewMode = "daily" | "weekly" | "monthly";
 
@@ -172,6 +172,8 @@ export default function CalendarScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const tone = useTones();
+  const { pal } = tone;
   const [mode, setMode] = useState<ViewMode>("weekly");
   const [cursorISO, setCursorISO] = useState(todayISO());
 
@@ -533,25 +535,24 @@ export default function CalendarScreen() {
   }
 
   return (
-    <ScreenBackground>
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
+    <SceneScreen>
       {/* Header */}
-      <ScreenHeader
-        icon="calendar"
+      <SceneBanner
         title={t("calendar.header.title")}
         subtitle={t("calendar.header.subtitle")}
-        color={Palette.neonCyan}
+        height={150}
+        left={<AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />}
       />
 
       {/* Chart بدل Tabs */}
-      <GlassCard style={styles.chartCardOuter} contentStyle={styles.chartCardC} glow={Palette.neonCyan}>
+      <SceneCard padded={false} style={[styles.chartCardOuter, styles.chartCardC]}>
         <View style={{ flexDirection: dir.row, justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={[styles.chartTitle, { textAlign: dir.textAlign }]}>{t("calendar.chart.title")}</Text>
-          <Text style={styles.chartPct}>{chart.pct}%</Text>
+          <Text style={[styles.chartTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("calendar.chart.title")}</Text>
+          <Text style={[styles.chartPct, { color: pal.accent }]}>{chart.pct}%</Text>
         </View>
 
-        <View style={styles.barBg}>
-          <View style={[styles.barFill, { width: `${chart.pct}%` }]} />
+        <View style={[styles.barBg, { backgroundColor: pal.track }]}>
+          <View style={[styles.barFill, { width: `${chart.pct}%`, backgroundColor: pal.accent }]} />
         </View>
 
         <View style={[styles.chartRow, { flexDirection: dir.row }]}>
@@ -559,21 +560,29 @@ export default function CalendarScreen() {
           <MiniStat label={t("calendar.chart.more")} value={chart.more} tint="orange" />
           <MiniStat label={t("calendar.chart.pending")} value={chart.pending} tint="blue" />
         </View>
-      </GlassCard>
+      </SceneCard>
 
       {/* Date row: سهم يمين + الأسبوع في المنتصف + سهم يسار */}
       <View style={[styles.dateRow, { flexDirection: dir.row }]}>
-        <Pressable onPress={goPrev} style={styles.navBtn} hitSlop={10}>
-          <Ionicons name="chevron-forward" size={20} color={Palette.primary} />
+        <Pressable
+          onPress={goPrev}
+          style={[styles.navBtn, { backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}
+          hitSlop={10}
+        >
+          <Ionicons name="chevron-forward" size={20} color={pal.accent} />
         </Pressable>
 
         <View style={styles.rangeCenter}>
-          <Text style={styles.rangeCaption}>{range.caption}</Text>
-          <Text style={styles.rangeValue} numberOfLines={1}>{range.value}</Text>
+          <Text style={[styles.rangeCaption, { color: pal.accent }]}>{range.caption}</Text>
+          <Text style={[styles.rangeValue, { color: pal.ink }]} numberOfLines={1}>{range.value}</Text>
         </View>
 
-        <Pressable onPress={goNext} style={styles.navBtn} hitSlop={10}>
-          <Ionicons name="chevron-back" size={20} color={Palette.primary} />
+        <Pressable
+          onPress={goNext}
+          style={[styles.navBtn, { backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}
+          hitSlop={10}
+        >
+          <Ionicons name="chevron-back" size={20} color={pal.accent} />
         </Pressable>
       </View>
 
@@ -587,7 +596,7 @@ export default function CalendarScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
         {/* Header section actions */}
         <View style={[styles.sectionHeader, { flexDirection: dir.row }]}>
-          <Text style={styles.sectionTitle}>
+          <Text style={[styles.sectionTitle, { color: pal.dim }]}>
             {mode === "daily" ? t("calendar.schedule.daily") : mode === "weekly" ? t("calendar.schedule.weekly") : t("calendar.schedule.monthly")}
           </Text>
         </View>
@@ -595,7 +604,7 @@ export default function CalendarScreen() {
         {/* محتوى حسب الوضع */}
         {loading ? (
           <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
-            <Text style={{ color: "#9fb3c8", textAlign: dir.textAlign }}>{t("common.loading")}</Text>
+            <Text style={{ color: pal.dim, textAlign: dir.textAlign }}>{t("common.loading")}</Text>
           </View>
         ) : mode === "daily" ? (
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
@@ -618,41 +627,44 @@ export default function CalendarScreen() {
               const pct = total ? Math.round((done / total) * 100) : 0;
 
               return (
-                <View
+                <SceneCard
                   key={d}
+                  padded={false}
                   style={[
                     styles.weekDayCard,
-                    isWeekend && styles.weekDayWeekend,
-                    isToday && styles.weekDayToday,
+                    isWeekend && { backgroundColor: pal.dark ? "rgba(246,184,128,0.06)" : "rgba(168,100,30,0.05)", borderColor: tone.warn + "40" },
+                    isToday && { backgroundColor: pal.soft, borderColor: pal.accent + "88", borderWidth: 1 },
                   ]}
                 >
                   <View style={[styles.weekDayHead, { flexDirection: dir.row }]}>
-                    <View style={[styles.weekDayBadge, isToday && { backgroundColor: Palette.primary }]}>
-                      <Text style={styles.weekDayNum}>{Number(d.slice(8, 10))}</Text>
+                    <View style={[styles.weekDayBadge, { backgroundColor: isToday ? pal.accent : pal.track }]}>
+                      <Text style={[styles.weekDayNum, { color: isToday ? pal.onAccent : pal.ink }]}>{Number(d.slice(8, 10))}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.weekDayName, { textAlign: dir.textAlign }]}>
+                      <Text style={[styles.weekDayName, { color: pal.ink, textAlign: dir.textAlign }]}>
                         {t(ايام_الاسبوع_KEYS[idx])}
                         {isWeekend ? `  • ${t("calendar.weekend")}` : ""}
                       </Text>
-                      <Text style={[styles.weekDayDate, { textAlign: dir.textAlign }]}>{d}</Text>
+                      <Text style={[styles.weekDayDate, { color: pal.dim, textAlign: dir.textAlign }]}>{d}</Text>
                     </View>
 
                     {total > 0 ? (
                       <Text
                         style={[
                           styles.pctTag,
-                          { color: pct === 100 ? Palette.success : pct > 0 ? Palette.warn : Palette.textDim },
+                          { color: pct === 100 ? tone.success : pct > 0 ? tone.warn : pal.dim },
                         ]}
                       >
                         {pct}%
                       </Text>
                     ) : null}
-                    {isToday ? <Text style={styles.todayTag}>{t("calendar.today")}</Text> : null}
+                    {isToday ? (
+                      <Text style={[styles.todayTag, { color: pal.onAccent, backgroundColor: pal.accent }]}>{t("calendar.today")}</Text>
+                    ) : null}
                   </View>
 
                   {list.length === 0 ? (
-                    <Text style={[styles.weekDayEmpty, { textAlign: dir.textAlign }]}>{t("calendar.none")}</Text>
+                    <Text style={[styles.weekDayEmpty, { color: pal.dim, textAlign: dir.textAlign }]}>{t("calendar.none")}</Text>
                   ) : (
                     <View style={{ gap: 8, marginTop: 8 }}>
                       {list.map((b) => (
@@ -665,63 +677,68 @@ export default function CalendarScreen() {
                       ))}
                     </View>
                   )}
-                </View>
+                </SceneCard>
               );
             })}
           </View>
         ) : (
           <View style={{ paddingHorizontal: 16 }}>
-            {/* رؤوس أيام الأسبوع */}
-            <View style={[styles.monthHeadRow, { flexDirection: dir.row }]}>
-              {DAYS_EN_KEYS.map((dKey, i) => (
-                <Text
-                  key={dKey}
-                  style={[styles.monthHeadCell, WEEKEND_IDX.includes(i) && { color: Palette.warn }]}
-                >
-                  {t(dKey)}
-                </Text>
-              ))}
-            </View>
-
-            {/* شبكة أيام الشهر */}
-            <View style={[styles.monthGrid, { flexDirection: dir.row }]}>
-              {monthMatrix.map((d, i) => {
-                const inMonth = monthKey(d) === monthKey(cursorISO);
-                const isToday = d === todayISO();
-                const isWeekend = WEEKEND_IDX.includes(i % 7);
-                const st = monthStatsByDay.get(d);
-                const dotColor = st
-                  ? st.done === st.total
-                    ? Palette.success
-                    : st.done > 0
-                    ? Palette.warn
-                    : Palette.neonCyan
-                  : null;
-                return (
-                  <Pressable
-                    key={d}
-                    onPress={() => {
-                      setCursorISO(d);
-                      setMode("daily");
-                    }}
-                    style={[styles.monthCell, isWeekend && styles.monthCellWeekend]}
+            <SceneCard padded={false} style={styles.monthCard}>
+              {/* رؤوس أيام الأسبوع */}
+              <View style={[styles.monthHeadRow, { flexDirection: dir.row }]}>
+                {DAYS_EN_KEYS.map((dKey, i) => (
+                  <Text
+                    key={dKey}
+                    style={[styles.monthHeadCell, { color: WEEKEND_IDX.includes(i) ? tone.warn : pal.dim }]}
                   >
-                    <Text
+                    {t(dKey)}
+                  </Text>
+                ))}
+              </View>
+
+              {/* شبكة أيام الشهر */}
+              <View style={[styles.monthGrid, { flexDirection: dir.row }]}>
+                {monthMatrix.map((d, i) => {
+                  const inMonth = monthKey(d) === monthKey(cursorISO);
+                  const isToday = d === todayISO();
+                  const isWeekend = WEEKEND_IDX.includes(i % 7);
+                  const st = monthStatsByDay.get(d);
+                  const dotColor = st
+                    ? st.done === st.total
+                      ? tone.success
+                      : st.done > 0
+                      ? tone.warn
+                      : pal.accent
+                    : null;
+                  return (
+                    <Pressable
+                      key={d}
+                      onPress={() => {
+                        setCursorISO(d);
+                        setMode("daily");
+                      }}
                       style={[
-                        styles.monthCellTxt,
-                        !inMonth && styles.monthCellDim,
-                        isToday && { color: "#fff", backgroundColor: Palette.primary },
+                        styles.monthCell,
+                        isWeekend && [styles.monthCellWeekend, { backgroundColor: pal.dark ? "rgba(246,184,128,0.06)" : "rgba(168,100,30,0.05)" }],
                       ]}
                     >
-                      {Number(d.slice(8, 10))}
-                    </Text>
-                    {dotColor ? <View style={[styles.monthDot, { backgroundColor: dotColor }]} /> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
+                      <Text
+                        style={[
+                          styles.monthCellTxt,
+                          { color: inMonth ? pal.ink : pal.dim, opacity: inMonth ? 1 : 0.45 },
+                          isToday && { color: pal.onAccent, backgroundColor: pal.accent, opacity: 1 },
+                        ]}
+                      >
+                        {Number(d.slice(8, 10))}
+                      </Text>
+                      {dotColor ? <View style={[styles.monthDot, { backgroundColor: dotColor }]} /> : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </SceneCard>
 
-            <Text style={styles.monthHint}>
+            <Text style={[styles.monthHint, { color: pal.dim }]}>
               {t("calendar.monthHint")}
             </Text>
           </View>
@@ -731,11 +748,11 @@ export default function CalendarScreen() {
       {/* ✅ Summary sheet (tap) */}
       <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={() => setSheetOpen(false)}>
         <Pressable style={styles.mask} onPress={() => setSheetOpen(false)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable style={[styles.sheet, { backgroundColor: pal.card, borderColor: pal.cardBorder }]} onPress={() => {}}>
             {selected ? (
               <>
                 {/* عنوان: اسم الكتاب/المادة بوضوح */}
-                <Text style={styles.sheetTitle} numberOfLines={2}>
+                <Text style={[styles.sheetTitle, { color: pal.ink }]} numberOfLines={2}>
                   {selected.kind === "session"
                     ? selected.bookTitle || t("calendar.fallback.session")
                     : selected.title}
@@ -743,16 +760,19 @@ export default function CalendarScreen() {
 
                 {/* نوع الجلسة — قابل للتغيير */}
                 {selected.kind === "session" ? (
-                  <Pressable onPress={() => chooseSessionType(selected)} style={[styles.typeChip, { flexDirection: dir.row }]}>
-                    <Ionicons name="pricetag-outline" size={13} color={Palette.neonCyan} />
-                    <Text style={styles.typeChipTxt}>
+                  <Pressable
+                    onPress={() => chooseSessionType(selected)}
+                    style={[styles.typeChip, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}
+                  >
+                    <Ionicons name="pricetag-outline" size={13} color={pal.accent} />
+                    <Text style={[styles.typeChipTxt, { color: pal.ink }]}>
                       {sessionTypes[selected.id] || DEFAULT_SESSION_TYPE}
                     </Text>
-                    <Ionicons name="chevron-down" size={13} color={Palette.textDim} />
+                    <Ionicons name="chevron-down" size={13} color={pal.dim} />
                   </Pressable>
                 ) : null}
 
-                <Text style={styles.sheetMeta}>
+                <Text style={[styles.sheetMeta, { color: pal.dim }]}>
                   {selected.dateISO}
                   {selected.minutesPlanned ? ` · ${t("calendar.sheet.minutes", { count: selected.minutesPlanned })}` : ""}
                   {selected.kind === "session" && selected.pagesTarget
@@ -762,21 +782,21 @@ export default function CalendarScreen() {
 
                 {/* المنهج اليوم */}
                 {selected.kind === "session" && (unitLoading || unitLabel) ? (
-                  <View style={[styles.unitChip, { flexDirection: dir.row }]}>
-                    <Ionicons name="reader-outline" size={15} color={Palette.neonCyan} />
-                    <Text style={styles.unitChipTxt} numberOfLines={2}>
+                  <View style={[styles.unitChip, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.track }]}>
+                    <Ionicons name="reader-outline" size={15} color={pal.accent} />
+                    <Text style={[styles.unitChipTxt, { color: pal.ink }]} numberOfLines={2}>
                       {unitLoading ? t("calendar.unit.loading") : t("calendar.unit.label", { unit: unitLabel ?? "" })}
                     </Text>
                   </View>
                 ) : null}
 
                 {/* الحالة — اختيار واحد واضح (أيقونة فوق نص موسّط) */}
-                <Text style={styles.sheetLabel}>{t("calendar.status.label")}</Text>
+                <Text style={[styles.sheetLabel, { color: pal.dim }]}>{t("calendar.status.label")}</Text>
                 <View style={[styles.statusRow, { flexDirection: dir.row }]}>
                   {([
-                    { k: "done", label: t("common.done"), icon: "checkmark-circle", on: Palette.success },
-                    { k: "more_time", label: t("calendar.status.moreTime"), icon: "time-outline", on: Palette.warn },
-                    { k: "pending", label: t("calendar.status.notDone"), icon: "ellipse-outline", on: Palette.textMuted },
+                    { k: "done", label: t("common.done"), icon: "checkmark-circle", on: tone.success },
+                    { k: "more_time", label: t("calendar.status.moreTime"), icon: "time-outline", on: tone.warn },
+                    { k: "pending", label: t("calendar.status.notDone"), icon: "ellipse-outline", on: pal.accent },
                   ] as const).map((opt) => {
                     const active = selected.status === opt.k;
                     return (
@@ -785,11 +805,12 @@ export default function CalendarScreen() {
                         onPress={() => setStatus(selected, opt.k as TaskStatus)}
                         style={[
                           styles.statusPill,
+                          { backgroundColor: pal.track, borderColor: pal.cardBorder },
                           active && { backgroundColor: opt.on + "26", borderColor: opt.on },
                         ]}
                       >
-                        <Ionicons name={opt.icon} size={22} color={active ? opt.on : Palette.textMuted} />
-                        <Text style={[styles.statusPillTxt, active && { color: opt.on }]} numberOfLines={1}>
+                        <Ionicons name={opt.icon} size={22} color={active ? opt.on : pal.dim} />
+                        <Text style={[styles.statusPillTxt, { color: active ? opt.on : pal.dim }]} numberOfLines={1}>
                           {opt.label}
                         </Text>
                       </Pressable>
@@ -799,19 +820,25 @@ export default function CalendarScreen() {
 
                 {/* أزرار حقيقية */}
                 {selected.kind === "session" && selected.bookId ? (
-                  <Pressable onPress={() => openBookFromSession(selected)} style={[styles.sheetPrimary, { flexDirection: dir.row }]}>
-                    <Ionicons name="book" size={18} color="#0b1220" />
-                    <Text style={styles.sheetPrimaryTxt}>{t("calendar.sheet.openBook")}</Text>
+                  <Pressable
+                    onPress={() => openBookFromSession(selected)}
+                    style={[styles.sheetPrimary, { flexDirection: dir.row, backgroundColor: pal.accent }]}
+                  >
+                    <Ionicons name="book" size={18} color={pal.onAccent} />
+                    <Text style={[styles.sheetPrimaryTxt, { color: pal.onAccent }]}>{t("calendar.sheet.openBook")}</Text>
                   </Pressable>
                 ) : null}
 
                 <View style={[styles.sheetFooter, { flexDirection: dir.row }]}>
-                  <Pressable onPress={() => setSheetOpen(false)} style={styles.closeBtn}>
-                    <Text style={styles.closeBtnTxt}>{t("common.close")}</Text>
+                  <Pressable
+                    onPress={() => setSheetOpen(false)}
+                    style={[styles.closeBtn, { backgroundColor: pal.track, borderColor: pal.cardBorder }]}
+                  >
+                    <Text style={[styles.closeBtnTxt, { color: pal.ink }]}>{t("common.close")}</Text>
                   </Pressable>
                   <Pressable onPress={() => handleDelete(selected)} style={[styles.deleteBtn, { flexDirection: dir.row }]} hitSlop={6}>
-                    <Ionicons name="trash-outline" size={15} color={Palette.danger} />
-                    <Text style={styles.sheetDanger}>{t("common.delete")}</Text>
+                    <Ionicons name="trash-outline" size={15} color={tone.danger} />
+                    <Text style={[styles.sheetDanger, { color: tone.danger }]}>{t("common.delete")}</Text>
                   </Pressable>
                 </View>
               </>
@@ -822,13 +849,17 @@ export default function CalendarScreen() {
 
       {/* ✅ Fullscreen zoom */}
       <Modal visible={fullOpen} animationType="slide" onRequestClose={() => setFullOpen(false)} presentationStyle="fullScreen">
-        <SafeAreaView style={styles.modalSafe} edges={["top", "left", "right"]}>
+        <SafeAreaView style={[styles.modalSafe, { backgroundColor: pal.bg }]} edges={["top", "left", "right"]}>
           <View style={[styles.modalHeader, { flexDirection: dir.row }]}>
-            <Text style={styles.modalTitle}>
+            <Text style={[styles.modalTitle, { color: pal.ink }]}>
               {mode === "daily" ? t("calendar.zoom.day") : mode === "weekly" ? t("calendar.zoom.week") : t("calendar.zoom.month")}
             </Text>
-            <Pressable onPress={() => setFullOpen(false)} style={styles.modalCloseBtn} hitSlop={12}>
-              <Text style={styles.modalCloseTxt}>{t("common.close")}</Text>
+            <Pressable
+              onPress={() => setFullOpen(false)}
+              style={[styles.modalCloseBtn, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+              hitSlop={12}
+            >
+              <Text style={[styles.modalCloseTxt, { color: pal.ink }]}>{t("common.close")}</Text>
             </Pressable>
           </View>
 
@@ -846,14 +877,14 @@ export default function CalendarScreen() {
                 {weekDays.map((d, idx) => {
                   const list = blocksByDay.get(d) ?? [];
                   return (
-                    <View key={d} style={styles.bigBlock}>
-                      <Text style={[styles.bigBlockTitle, { textAlign: dir.textAlign }]}>
+                    <SceneCard key={d} padded={false} style={styles.bigBlock}>
+                      <Text style={[styles.bigBlockTitle, { color: pal.ink, textAlign: dir.textAlign }]}>
                         {t(ايام_الاسبوع_KEYS[idx])} • {d}
                       </Text>
 
                       <View style={{ gap: 10, marginTop: 10 }}>
                         {list.length === 0 ? (
-                          <Text style={[styles.muted, { textAlign: dir.textAlign }]}>{t("calendar.none")}</Text>
+                          <Text style={[styles.muted, { color: pal.dim, textAlign: dir.textAlign }]}>{t("calendar.none")}</Text>
                         ) : (
                           list.map((b) => (
                             <BlockCard
@@ -866,7 +897,7 @@ export default function CalendarScreen() {
                           ))
                         )}
                       </View>
-                    </View>
+                    </SceneCard>
                   );
                 })}
               </View>
@@ -876,31 +907,32 @@ export default function CalendarScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
-    </ScreenBackground>
+    </SceneScreen>
   );
 }
 
 /* ---------------- Components ---------------- */
 
+// ألوان الحالة (منجز/وقت إضافي/حذف) مقروءة على المشاهد الفاتحة والداكنة
+function useTones() {
+  const { pal } = useScene();
+  return {
+    pal,
+    success: pal.dark ? "#7FD69B" : "#2F7D4A",
+    warn: pal.dark ? "#F6B880" : "#A8641E",
+    danger: pal.dark ? "#FF8C96" : "#B83A44",
+  };
+}
+
 function MiniStat({ label, value, tint }: { label: string; value: number; tint: "blue" | "green" | "orange" }) {
-  const bg =
-    tint === "green"
-      ? "rgba(46,204,113,0.18)"
-      : tint === "orange"
-      ? "rgba(255,165,0,0.18)"
-      : "rgba(79,140,255,0.18)";
-  const bd =
-    tint === "green"
-      ? "rgba(46,204,113,0.35)"
-      : tint === "orange"
-      ? "rgba(255,165,0,0.35)"
-      : "rgba(79,140,255,0.35)";
+  const tone = useTones();
+  const { pal } = tone;
+  const c = tint === "green" ? tone.success : tint === "orange" ? tone.warn : pal.accent;
 
   return (
-    <View style={[styles.miniStat, { backgroundColor: bg, borderColor: bd }]}>
-      <Text style={styles.miniStatVal}>{value}</Text>
-      <Text style={styles.miniStatLab}>{label}</Text>
+    <View style={[styles.miniStat, { backgroundColor: c + "1F", borderColor: c + "55" }]}>
+      <Text style={[styles.miniStatVal, { color: c }]}>{value}</Text>
+      <Text style={[styles.miniStatLab, { color: pal.dim }]}>{label}</Text>
     </View>
   );
 }
@@ -914,15 +946,17 @@ function ModeBtn({
   active: boolean;
   onPress: () => void;
 }) {
+  const { pal } = useScene();
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.modeBtn,
-        active && { backgroundColor: Palette.primary, borderColor: Palette.primary },
+        { backgroundColor: pal.card, borderColor: pal.cardBorder },
+        active && { backgroundColor: pal.accent, borderColor: pal.accent },
       ]}
     >
-      <Text style={[styles.modeTxt, active && { color: "#fff" }]}>{label}</Text>
+      <Text style={[styles.modeTxt, { color: active ? pal.onAccent : pal.dim }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -930,10 +964,11 @@ function ModeBtn({
 function Empty() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
   return (
-    <View style={styles.emptyCard}>
-      <Text style={[styles.emptyTxt, { textAlign: dir.textAlign }]}>{t("calendar.emptyRange")}</Text>
-    </View>
+    <SceneCard padded={false} style={styles.emptyCard}>
+      <Text style={[styles.emptyTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{t("calendar.emptyRange")}</Text>
+    </SceneCard>
   );
 }
 
@@ -953,10 +988,12 @@ function BlockCard({
 }) {
   const { t } = useI18n();
   const dir = useDir();
+  const tone = useTones();
+  const { pal } = tone;
   const done = b.status === "done";
   const more = b.status === "more_time";
 
-  const leftColor = b.kind === "session" ? (b.color ?? "rgba(46,204,113,0.35)") : "rgba(79,140,255,0.35)";
+  const leftColor = b.kind === "session" ? (b.color ?? tone.success) : pal.accent;
   const badgeTxt =
     b.kind === "session"
       ? (b.bookTitle ? t("calendar.block.book", { title: b.bookTitle }) : t("calendar.block.session"))
@@ -964,28 +1001,33 @@ function BlockCard({
 
   return (
     <Pressable onPress={onPress} onLongPress={onLongPress} style={[styles.block, compact && styles.blockCompact, big && styles.blockBig]}>
-      <View style={[styles.blockInner, { borderLeftColor: leftColor, opacity: done ? 0.65 : 1 }]}>
+      <View
+        style={[
+          styles.blockInner,
+          { backgroundColor: pal.card, borderColor: pal.cardBorder, borderLeftColor: leftColor, opacity: done ? 0.65 : 1 },
+        ]}
+      >
         <View style={[styles.blockTop, { flexDirection: dir.row }]}>
-          <View style={[styles.badge, more && { borderColor: "rgba(255,165,0,0.45)" }]}>
-            <Text style={styles.badgeTxt} numberOfLines={1}>{badgeTxt}</Text>
+          <View style={[styles.badge, { backgroundColor: pal.soft, borderColor: more ? tone.warn + "73" : pal.track }]}>
+            <Text style={[styles.badgeTxt, { color: pal.ink }]} numberOfLines={1}>{badgeTxt}</Text>
           </View>
 
           {/* ✅ أيقونات ثابتة داخل الإطار (حل السلة خارج الاطار) */}
           <View style={[styles.iconRow, { flexDirection: dir.row }]}>
-            <View style={[styles.stateDot, done ? styles.dotDone : more ? styles.dotMore : styles.dotPending]} />
+            <View style={[styles.stateDot, { backgroundColor: done ? tone.success : more ? tone.warn : pal.accent }]} />
           </View>
         </View>
 
-        <Text style={[styles.blockTitle, big && { fontSize: 14 }, { textAlign: dir.textAlign }]} numberOfLines={2}>
+        <Text style={[styles.blockTitle, { color: pal.ink }, big && { fontSize: 14 }, { textAlign: dir.textAlign }]} numberOfLines={2}>
           {b.title}
         </Text>
 
-        <Text style={[styles.blockMeta, { textAlign: dir.textAlign }]} numberOfLines={1}>
+        <Text style={[styles.blockMeta, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
           {b.dateISO} • {b.time ?? "—"} • {done ? t("calendar.block.done") : more ? t("calendar.block.more") : t("calendar.block.pending")}
         </Text>
 
         {b.kind === "session" ? (
-          <Text style={[styles.blockMeta, { textAlign: dir.textAlign }]} numberOfLines={1}>
+          <Text style={[styles.blockMeta, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={1}>
             {b.minutesPlanned ? t("calendar.block.minutes", { count: b.minutesPlanned }) : ""}
             {b.pagesTarget ? ` • ${t("calendar.block.pages", { done: b.pagesDone ?? 0, target: b.pagesTarget })}` : ""}
           </Text>
@@ -1007,6 +1049,7 @@ function MonthList({
   big?: boolean;
 }) {
   const dir = useDir();
+  const { pal } = useScene();
   const grouped = useMemo(() => {
     const m = new Map<string, CalendarBlock[]>();
     for (const b of blocks) {
@@ -1022,27 +1065,23 @@ function MonthList({
   return (
     <View style={{ paddingHorizontal: 16, gap: 12 }}>
       {grouped.map(([dateISO, list]) => (
-        <View key={dateISO} style={[styles.bigBlock, big && { padding: 16 }]}>
-          <Text style={[styles.bigBlockTitle, { textAlign: dir.textAlign }]}>{dateISO}</Text>
+        <SceneCard key={dateISO} padded={false} style={[styles.bigBlock, big && { padding: 16 }]}>
+          <Text style={[styles.bigBlockTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{dateISO}</Text>
           <View style={{ gap: 10, marginTop: 10 }}>
             {list.map((b) => (
               <BlockCard key={b.id} b={b} big={big} onPress={() => onPress(b)} onLongPress={() => onLongPress(b)} />
             ))}
           </View>
-        </View>
+        </SceneCard>
       ))}
     </View>
   );
 }
 
 /* ---------------- Styles ---------------- */
+// الألوان كلها تُمرَّر مباشرة من pal (لأنها تتبدّل مع المشهد) — هنا التخطيط فقط
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "transparent" },
-
-  headerRow: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8 },
-  h1: { color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "right" },
-
   chartCardOuter: {
     marginHorizontal: 16,
     marginBottom: 10,
@@ -1050,11 +1089,12 @@ const styles = StyleSheet.create({
   chartCardC: {
     padding: 14,
     gap: 10,
+    borderRadius: Radius.lg,
   },
-  chartTitle: { color: Palette.text, fontWeight: "900", textAlign: "right", fontSize: 16 },
-  chartPct: { color: Palette.neonCyan, fontWeight: "900", fontSize: 18 },
-  barBg: { height: 12, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.10)", overflow: "hidden" },
-  barFill: { height: "100%", backgroundColor: "#4f8cff" },
+  chartTitle: { fontWeight: "900", textAlign: "right", fontSize: 16 },
+  chartPct: { fontWeight: "900", fontSize: 18 },
+  barBg: { height: 12, borderRadius: 999, overflow: "hidden" },
+  barFill: { height: "100%", borderRadius: 999 },
   chartRow: { flexDirection: "row-reverse", gap: 10 },
 
   miniStat: {
@@ -1066,8 +1106,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
   },
-  miniStatVal: { color: "#fff", fontWeight: "900", fontSize: 18 },
-  miniStatLab: { color: "#c9d4e2", fontWeight: "800" },
+  miniStatVal: { fontWeight: "900", fontSize: 18 },
+  miniStatLab: { fontWeight: "800" },
 
   dateRow: {
     paddingHorizontal: 16,
@@ -1078,15 +1118,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   rangeCenter: { flex: 1, alignItems: "center" },
-  rangeCaption: { color: Palette.primary, fontWeight: "800", fontSize: 12, marginBottom: 2 },
-  rangeValue: { color: Palette.text, fontWeight: "900", fontSize: 15, letterSpacing: 0.3 },
+  rangeCaption: { fontWeight: "800", fontSize: 12, marginBottom: 2 },
+  rangeValue: { fontWeight: "900", fontSize: 15, letterSpacing: 0.3 },
   navBtn: {
     width: 44,
     height: 44,
     borderRadius: Radius.md,
-    backgroundColor: Palette.primarySoft,
     borderWidth: 1,
-    borderColor: Palette.primary + "55",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1102,28 +1140,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 11,
     borderRadius: Radius.pill,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
   },
-  modeTxt: { color: Palette.textMuted, fontWeight: "900" },
+  modeTxt: { fontWeight: "900" },
 
   // --- قائمة الأيام (الأسبوعي) ---
   weekDayCard: {
     borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-    backgroundColor: Palette.surface,
     padding: 12,
-  },
-  weekDayToday: {
-    borderColor: Palette.primary + "88",
-    backgroundColor: Palette.primarySoft,
-  },
-  weekDayWeekend: {
-    borderColor: "rgba(241,196,15,0.30)",
-    backgroundColor: "rgba(241,196,15,0.06)",
   },
   pctTag: { fontSize: 14, fontWeight: "900" },
   weekDayHead: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
@@ -1131,16 +1156,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: Radius.md,
-    backgroundColor: Palette.surfaceStrong,
     alignItems: "center",
     justifyContent: "center",
   },
-  weekDayNum: { color: "#fff", fontWeight: "900", fontSize: 16 },
-  weekDayName: { color: Palette.text, fontWeight: "900", fontSize: 15, textAlign: "right" },
-  weekDayDate: { color: Palette.textDim, fontSize: 12, textAlign: "right", marginTop: 1 },
+  weekDayNum: { fontWeight: "900", fontSize: 16 },
+  weekDayName: { fontWeight: "900", fontSize: 15, textAlign: "right" },
+  weekDayDate: { fontSize: 12, textAlign: "right", marginTop: 1 },
   todayTag: {
-    color: "#fff",
-    backgroundColor: Palette.primary,
     fontSize: 11,
     fontWeight: "800",
     paddingHorizontal: 8,
@@ -1148,11 +1170,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     overflow: "hidden",
   },
-  weekDayEmpty: { color: Palette.textDim, fontSize: 12, textAlign: "right", marginTop: 8 },
+  weekDayEmpty: { fontSize: 12, textAlign: "right", marginTop: 8 },
 
   // --- شبكة التقويم الشهري ---
+  monthCard: { padding: 10, borderRadius: Radius.lg },
   monthHeadRow: { flexDirection: "row-reverse", marginBottom: 8 },
-  monthHeadCell: { flex: 1, textAlign: "center", color: Palette.textDim, fontWeight: "800", fontSize: 12 },
+  monthHeadCell: { flex: 1, textAlign: "center", fontWeight: "800", fontSize: 12 },
   monthGrid: { flexDirection: "row-reverse", flexWrap: "wrap" },
   monthCell: {
     width: `${100 / 7}%`,
@@ -1161,9 +1184,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 2,
   },
-  monthCellWeekend: { backgroundColor: "rgba(241,196,15,0.05)", borderRadius: Radius.sm },
+  monthCellWeekend: { borderRadius: Radius.sm },
   monthCellTxt: {
-    color: Palette.text,
     fontWeight: "800",
     fontSize: 15,
     width: 36,
@@ -1173,15 +1195,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
   },
-  monthCellDim: { color: "rgba(159,179,200,0.35)" },
   monthDot: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: Palette.neonCyan,
     marginTop: 2,
   },
-  monthHint: { color: Palette.textDim, fontSize: 12, textAlign: "center", marginTop: 12 },
+  monthHint: { fontSize: 12, textAlign: "center", marginTop: 12 },
 
   sectionHeader: {
     paddingHorizontal: 16,
@@ -1191,33 +1211,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  sectionTitle: { color: Palette.text, fontWeight: "900", fontSize: 15 },
-
-  zoomBtn: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: Radius.md,
-    backgroundColor: Palette.primarySoft,
-    borderWidth: 1,
-    borderColor: Palette.primary + "55",
-  },
-  zoomTxt: { color: Palette.text, fontWeight: "900" },
-
-  // weekly grid
-  weekGrid: { flexDirection: "row-reverse", gap: 12, paddingVertical: 12 },
-  dayCol: {
-    width: 220,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    padding: 12,
-  },
-  dow: { color: "#9fb3c8", fontWeight: "900", fontSize: 12, textAlign: "right" },
-  dayNum: { color: "#fff", fontWeight: "900", fontSize: 20, marginTop: 6, textAlign: "right" },
+  sectionTitle: { fontWeight: "900", fontSize: 15 },
 
   // blocks
   block: { borderRadius: 14 },
@@ -1227,9 +1221,7 @@ const styles = StyleSheet.create({
   blockInner: {
     padding: 12,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderWidth: StyleSheet.hairlineWidth,
     borderLeftWidth: 4,
     gap: 6,
   },
@@ -1240,11 +1232,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
   },
-  badgeTxt: { color: "#fff", fontWeight: "900", fontSize: 12 },
+  badgeTxt: { fontWeight: "900", fontSize: 12 },
 
   iconRow: {
     flexDirection: "row-reverse",
@@ -1254,25 +1244,19 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   stateDot: { width: 10, height: 10, borderRadius: 999 },
-  dotDone: { backgroundColor: "#2ecc71" },
-  dotMore: { backgroundColor: "#ff9f43" },
-  dotPending: { backgroundColor: "#4f8cff" },
 
-  blockTitle: { color: "#fff", fontWeight: "900", fontSize: 13, textAlign: "right" },
-  blockMeta: { color: "#c9d4e2", fontSize: 12, textAlign: "right" },
+  blockTitle: { fontWeight: "900", fontSize: 13, textAlign: "right" },
+  blockMeta: { fontSize: 12, textAlign: "right" },
 
   emptyCard: {
     marginHorizontal: 16,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.06)",
     padding: 14,
   },
-  emptyTxt: { color: "#9fb3c8", textAlign: "right", fontWeight: "800" },
+  emptyTxt: { textAlign: "right", fontWeight: "800" },
 
   // fullscreen modal
-  modalSafe: { flex: 1, backgroundColor: "#0b1220" },
+  modalSafe: { flex: 1 },
   modalHeader: {
     paddingHorizontal: 16,
     paddingTop: 18,
@@ -1281,31 +1265,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  modalTitle: { color: "#fff", fontWeight: "900", fontSize: 20 },
+  modalTitle: { fontWeight: "900", fontSize: 20 },
   modalCloseBtn: {
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  modalCloseTxt: { color: "#fff", fontWeight: "900", fontSize: 16 },
+  modalCloseTxt: { fontWeight: "900", fontSize: 16 },
 
   bigBlock: {
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
     padding: 14,
   },
-  bigBlockTitle: { color: "#fff", fontWeight: "900", textAlign: "right" },
-  muted: { color: "#9fb3c8", textAlign: "right" },
+  bigBlockTitle: { fontWeight: "900", textAlign: "right" },
+  muted: { textAlign: "right" },
 
   // summary sheet
   mask: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
@@ -1314,13 +1293,11 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 560,
     borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-    backgroundColor: Palette.bgElevated,
+    borderWidth: StyleSheet.hairlineWidth,
     padding: 20,
   },
-  sheetTitle: { color: Palette.text, fontWeight: "900", fontSize: 20, textAlign: "center" },
-  sheetMeta: { color: Palette.textMuted, textAlign: "center", marginTop: 8, lineHeight: 22, fontSize: 13 },
+  sheetTitle: { fontWeight: "900", fontSize: 20, textAlign: "center" },
+  sheetMeta: { textAlign: "center", marginTop: 8, lineHeight: 22, fontSize: 13 },
 
   unitChip: {
     flexDirection: "row-reverse",
@@ -1330,11 +1307,9 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
   },
-  unitChipTxt: { flex: 1, color: Palette.text, fontSize: 13, fontWeight: "800", textAlign: "center" },
+  unitChipTxt: { flex: 1, fontSize: 13, fontWeight: "800", textAlign: "center" },
 
   typeChip: {
     alignSelf: "center",
@@ -1345,13 +1320,11 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: Radius.pill,
-    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
   },
-  typeChipTxt: { color: Palette.text, fontSize: 13, fontWeight: "900" },
+  typeChipTxt: { fontSize: 13, fontWeight: "900" },
 
-  sheetLabel: { color: Palette.textDim, fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 16, marginBottom: 8 },
+  sheetLabel: { fontSize: 12, fontWeight: "800", textAlign: "center", marginTop: 16, marginBottom: 8 },
   statusRow: { flexDirection: "row-reverse", gap: 8 },
   statusPill: {
     flex: 1,
@@ -1360,11 +1333,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
   },
-  statusPillTxt: { color: Palette.textMuted, fontWeight: "800", fontSize: 12.5, textAlign: "center" },
+  statusPillTxt: { fontWeight: "800", fontSize: 12.5, textAlign: "center" },
 
   sheetPrimary: {
     flexDirection: "row-reverse",
@@ -1374,19 +1345,16 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingVertical: 14,
     borderRadius: Radius.lg,
-    backgroundColor: Palette.neonCyan,
   },
-  sheetPrimaryTxt: { color: "#0b1220", fontWeight: "900", fontSize: 15 },
+  sheetPrimaryTxt: { fontWeight: "900", fontSize: 15 },
   sheetFooter: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginTop: 14 },
   deleteBtn: { flexDirection: "row-reverse", alignItems: "center", gap: 5, paddingVertical: 8, paddingHorizontal: 6 },
-  sheetDanger: { color: Palette.danger, fontWeight: "800", fontSize: 14 },
+  sheetDanger: { fontWeight: "800", fontSize: 14 },
   closeBtn: {
     paddingVertical: 10,
     paddingHorizontal: 28,
     borderRadius: Radius.md,
-    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
   },
-  closeBtnTxt: { color: Palette.text, fontWeight: "800", fontSize: 14 },
+  closeBtnTxt: { fontWeight: "800", fontSize: 14 },
 });

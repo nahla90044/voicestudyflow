@@ -6,14 +6,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CodePad } from "../components/brand/code-pad";
-import { ScreenBackground } from "../components/brand/screen-background";
+import { SceneArt } from "../components/brand/scene-art";
+import { SceneCard, SceneScreen } from "../components/brand/scene-screen";
 import { VersionTag } from "../components/brand/version-tag";
 import { BrandMark } from "../components/brand/logo";
-import { Gradients, Palette, Radius, Spacing } from "../constants/design";
+import { Radius, Spacing } from "../constants/design";
 import {
   clearUserCache,
   mfaChallengeRequired,
@@ -26,6 +27,8 @@ import {
   verifyLoginCode,
 } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
+import { useScene } from "../lib/scene";
+import { sceneGrowth } from "../lib/sceneCore";
 import { supabase } from "../lib/supabase";
 import { setUserName } from "../lib/settings";
 import { ONBOARDING_KEY } from "./onboarding";
@@ -44,6 +47,8 @@ export default function AuthScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const dir = useDir();
+  const { id, pal } = useScene();
+  const { width } = useWindowDimensions();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -269,31 +274,65 @@ export default function AuthScreen() {
     }
   }
 
+  // ألوان المشهد (صباح فاتح / مساء وليل داكن) — تُحسب كل رسم حتى تتبدّل مع وقت اليوم
+  const errColor = pal.dark ? "#FF8A8A" : "#C62F3B";
+  const th = {
+    card: { padding: Spacing.xl },
+    title: { color: pal.ink },
+    confirmTitle: { color: pal.ink },
+    confirmBody: { color: pal.dim },
+    // في المشهد الفاتح حدود البطاقة باهتة جدًا → حدود الحقول أوضح (pal.track)
+    input: { backgroundColor: pal.soft, borderColor: pal.dark ? pal.cardBorder : pal.track, color: pal.ink },
+    label: { color: pal.dim },
+    tabs: { backgroundColor: pal.track },
+    tabOn: { backgroundColor: pal.accent },
+    tabTxt: { color: pal.dim },
+    tabTxtOn: { color: pal.onAccent },
+    orTxt: { color: pal.dim },
+    err: { color: errColor },
+    submit: { backgroundColor: pal.accent },
+    submitTxt: { color: pal.onAccent },
+    link: { color: pal.accent },
+    bigLink: { borderColor: pal.accent },
+  };
+  const growth = sceneGrowth(id, { pagesToday: 3, unitsDone: 2, unitCount: 6, readiness: 50 });
+  const artH = (width * 470) / 390;
+
   return (
-    <ScreenBackground>
+    <SceneScreen>
+      {/* مقطع من مشهد اليوم أعلى الشاشة يتلاشى في الخلفية (كالجولة وشاشة الاشتراك) */}
+      <View style={[styles.art, { height: ART_H }]} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, { overflow: "hidden", opacity: pal.dark ? 0.75 : 0.9 }]}>
+          <View style={{ position: "absolute", left: 0, right: 0, top: Math.min(0, ART_H - artH) }}>
+            <SceneArt id={id} growth={growth} width={width} height={artH} />
+          </View>
+        </View>
+        <LinearGradient colors={[pal.bg + "00", pal.bg + "CC", pal.bg]} locations={[0.3, 0.75, 1]} style={StyleSheet.absoluteFill} />
+      </View>
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
             <View style={styles.logo}>
               <BrandMark size={78} />
             </View>
-            <Text style={styles.title}>VoiceStudyFlow</Text>
+            <Text style={[styles.title, th.title]}>VoiceStudyFlow</Text>
 
             {newPwMode ? (
-              <View style={styles.card}>
-                <Ionicons name="key" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
-                <Text style={styles.confirmTitle}>{t("auth.newPw.title")}</Text>
-                <Text style={styles.confirmBody}>{t("auth.newPw.body")}</Text>
+              <SceneCard style={th.card}>
+                <Ionicons name="key" size={40} color={pal.accent} style={{ alignSelf: "center" }} />
+                <Text style={[styles.confirmTitle, th.confirmTitle]}>{t("auth.newPw.title")}</Text>
+                <Text style={[styles.confirmBody, th.confirmBody]}>{t("auth.newPw.body")}</Text>
                 <View style={[styles.pwWrap, { marginTop: 14 }]}>
                   <TextInput
                     value={newPw}
                     onChangeText={setNewPw}
                     placeholder={t("auth.passwordHint")}
-                    placeholderTextColor={Palette.textDim}
+                    placeholderTextColor={pal.dim}
                     secureTextEntry={!showPw}
                     autoFocus
                     style={[
                       styles.input,
+                      th.input,
                       { textAlign: dir.textAlign, writingDirection: dir.writingDirection },
                       dir.isRTL ? { paddingLeft: 46 } : { paddingRight: 46 },
                     ]}
@@ -303,83 +342,75 @@ export default function AuthScreen() {
                     style={[styles.eyeBtn, dir.isRTL ? { left: 6 } : { right: 6 }]}
                     hitSlop={8}
                   >
-                    <Ionicons name={showPw ? "eye-outline" : "eye-off-outline"} size={20} color={Palette.textDim} />
+                    <Ionicons name={showPw ? "eye-outline" : "eye-off-outline"} size={20} color={pal.dim} />
                   </Pressable>
                 </View>
-                {!!err && <Text style={styles.err}>{err}</Text>}
-                <Pressable onPress={onSaveNewPw} style={styles.submit} disabled={busy || newPw.length < 6}>
-                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.newPw.cta")}</Text>}
-                  </LinearGradient>
+                {!!err && <Text style={[styles.err, th.err]}>{err}</Text>}
+                <Pressable onPress={onSaveNewPw} style={[styles.submit, th.submit]} disabled={busy || newPw.length < 6}>
+                  {busy ? <ActivityIndicator color={pal.onAccent} /> : <Text style={[styles.submitTxt, th.submitTxt]}>{t("auth.newPw.cta")}</Text>}
                 </Pressable>
                 {/* التخطّي آمن: يمكن الدخول برمز البريد في أي وقت لاحق */}
                 <Pressable onPress={finishLogin} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }} disabled={busy}>
-                  <Text style={styles.switchTxt}>{t("auth.newPw.skip")}</Text>
+                  <Text style={[styles.switchTxt, th.link]}>{t("auth.newPw.skip")}</Text>
                 </Pressable>
-              </View>
+              </SceneCard>
             ) : otpMode ? (
-              <View style={styles.card}>
-                <Ionicons name="mail-open" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
-                <Text style={styles.confirmTitle}>{t("auth.code.title")}</Text>
-                <Text style={styles.confirmBody}>{t("auth.code.body", { email: email.trim() })}</Text>
+              <SceneCard style={th.card}>
+                <Ionicons name="mail-open" size={40} color={pal.accent} style={{ alignSelf: "center" }} />
+                <Text style={[styles.confirmTitle, th.confirmTitle]}>{t("auth.code.title")}</Text>
+                <Text style={[styles.confirmBody, th.confirmBody]}>{t("auth.code.body", { email: email.trim() })}</Text>
                 <CodePad value={otpCode} onChange={(v) => { setOtpCode(v); if (err) setErr(""); }} disabled={busy} onComplete={(c) => onVerifyCode(c)} />
-                {!!err && <Text style={styles.err}>{err}</Text>}
-                <Pressable onPress={() => onVerifyCode()} style={styles.submit} disabled={busy || otpCode.length < 6}>
-                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.code.cta")}</Text>}
-                  </LinearGradient>
+                {!!err && <Text style={[styles.err, th.err]}>{err}</Text>}
+                <Pressable onPress={() => onVerifyCode()} style={[styles.submit, th.submit]} disabled={busy || otpCode.length < 6}>
+                  {busy ? <ActivityIndicator color={pal.onAccent} /> : <Text style={[styles.submitTxt, th.submitTxt]}>{t("auth.code.cta")}</Text>}
                 </Pressable>
                 <Pressable
                   onPress={onForgot}
                   disabled={busy || resendIn > 0}
-                  style={[styles.bigLink, (busy || resendIn > 0) && { opacity: 0.55 }]}
+                  style={[styles.bigLink, th.bigLink, (busy || resendIn > 0) && { opacity: 0.55 }]}
                 >
-                  <Ionicons name="refresh" size={18} color={Palette.neonCyan} />
-                  <Text style={styles.bigLinkTxt}>
+                  <Ionicons name="refresh" size={18} color={pal.accent} />
+                  <Text style={[styles.bigLinkTxt, th.link]}>
                     {resendIn > 0 ? t("auth.code.resendIn", { sec: resendIn }) : t("auth.code.resend")}
                   </Text>
                 </Pressable>
                 <Pressable onPress={() => { setOtpMode(false); setOtpCode(""); setErr(""); }} hitSlop={8} style={{ marginTop: 14, alignSelf: "center" }}>
-                  <Text style={styles.switchTxt}>{t("auth.code.editEmail")}</Text>
+                  <Text style={[styles.switchTxt, th.link]}>{t("auth.code.editEmail")}</Text>
                 </Pressable>
-              </View>
+              </SceneCard>
             ) : mfaMode ? (
-              <View style={styles.card}>
-                <Ionicons name="shield-checkmark" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
-                <Text style={styles.confirmTitle}>{t("twofa.challengeTitle")}</Text>
-                <Text style={styles.confirmBody}>{t("twofa.challengeBody")}</Text>
+              <SceneCard style={th.card}>
+                <Ionicons name="shield-checkmark" size={40} color={pal.accent} style={{ alignSelf: "center" }} />
+                <Text style={[styles.confirmTitle, th.confirmTitle]}>{t("twofa.challengeTitle")}</Text>
+                <Text style={[styles.confirmBody, th.confirmBody]}>{t("twofa.challengeBody")}</Text>
                 <CodePad value={mfaCode} onChange={(v) => { setMfaCode(v); if (err) setErr(""); }} disabled={busy} onComplete={(c) => onVerifyMfa(c)} />
-                {!!err && <Text style={styles.err}>{err}</Text>}
-                <Pressable onPress={() => onVerifyMfa()} style={styles.submit} disabled={busy || mfaCode.length < 6}>
-                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("twofa.challengeCta")}</Text>}
-                  </LinearGradient>
+                {!!err && <Text style={[styles.err, th.err]}>{err}</Text>}
+                <Pressable onPress={() => onVerifyMfa()} style={[styles.submit, th.submit]} disabled={busy || mfaCode.length < 6}>
+                  {busy ? <ActivityIndicator color={pal.onAccent} /> : <Text style={[styles.submitTxt, th.submitTxt]}>{t("twofa.challengeCta")}</Text>}
                 </Pressable>
                 <Pressable onPress={() => { setMfaMode(false); setMfaCode(""); setErr(""); setRecovering(false); }} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }}>
-                  <Text style={styles.switchTxt}>{t("common.back")}</Text>
+                  <Text style={[styles.switchTxt, th.link]}>{t("common.back")}</Text>
                 </Pressable>
-              </View>
+              </SceneCard>
             ) : awaitingConfirm ? (
-              <View style={styles.card}>
-                <Ionicons name="mail-unread" size={40} color={Palette.neonCyan} style={{ alignSelf: "center" }} />
-                <Text style={styles.confirmTitle}>{t("auth.confirm.title")}</Text>
-                <Text style={styles.confirmBody}>
+              <SceneCard style={th.card}>
+                <Ionicons name="mail-unread" size={40} color={pal.accent} style={{ alignSelf: "center" }} />
+                <Text style={[styles.confirmTitle, th.confirmTitle]}>{t("auth.confirm.title")}</Text>
+                <Text style={[styles.confirmBody, th.confirmBody]}>
                   {t("auth.confirm.sentTo")}{"\n"}
-                  <Text style={{ color: Palette.text, fontWeight: "900" }}>{email.trim()}</Text>
+                  <Text style={{ color: pal.ink, fontWeight: "900" }}>{email.trim()}</Text>
                   {"\n"}{t("auth.confirm.instructions")}
                 </Text>
-                {!!err && <Text style={styles.err}>{err}</Text>}
-                <Pressable onPress={onConfirmedLogin} style={styles.submit} disabled={busy}>
-                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
-                    {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitTxt}>{t("auth.confirm.cta")}</Text>}
-                  </LinearGradient>
+                {!!err && <Text style={[styles.err, th.err]}>{err}</Text>}
+                <Pressable onPress={onConfirmedLogin} style={[styles.submit, th.submit]} disabled={busy}>
+                  {busy ? <ActivityIndicator color={pal.onAccent} /> : <Text style={[styles.submitTxt, th.submitTxt]}>{t("auth.confirm.cta")}</Text>}
                 </Pressable>
                 <Pressable onPress={() => setAwaitingConfirm(false)} hitSlop={6} style={{ marginTop: 14, alignSelf: "center" }}>
-                  <Text style={styles.switchTxt}>{t("common.back")}</Text>
+                  <Text style={[styles.switchTxt, th.link]}>{t("common.back")}</Text>
                 </Pressable>
-              </View>
+              </SceneCard>
             ) : (
-              <View style={styles.card}>
+              <SceneCard style={th.card}>
                 {Platform.OS === "ios" && AppleAuthentication ? (
                   <>
                     <AppleAuthentication.AppleAuthenticationButton
@@ -389,51 +420,52 @@ export default function AuthScreen() {
                       style={styles.appleBtn}
                       onPress={onApple}
                     />
-                    <Text style={styles.orTxt}>{t("auth.or")}</Text>
+                    <Text style={[styles.orTxt, th.orTxt]}>{t("auth.or")}</Text>
                   </>
                 ) : null}
-                <View style={[styles.tabs, { flexDirection: dir.row }]}>
-                  <Pressable onPress={() => setMode("signup")} style={[styles.tab, mode === "signup" && styles.tabOn]}>
-                    <Text style={[styles.tabTxt, mode === "signup" && styles.tabTxtOn]}>{t("auth.tab.signup")}</Text>
+                <View style={[styles.tabs, th.tabs, { flexDirection: dir.row }]}>
+                  <Pressable onPress={() => setMode("signup")} style={[styles.tab, mode === "signup" && th.tabOn]}>
+                    <Text style={[styles.tabTxt, th.tabTxt, mode === "signup" && th.tabTxtOn]}>{t("auth.tab.signup")}</Text>
                   </Pressable>
-                  <Pressable onPress={() => setMode("login")} style={[styles.tab, mode === "login" && styles.tabOn]}>
-                    <Text style={[styles.tabTxt, mode === "login" && styles.tabTxtOn]}>{t("auth.tab.login")}</Text>
+                  <Pressable onPress={() => setMode("login")} style={[styles.tab, mode === "login" && th.tabOn]}>
+                    <Text style={[styles.tabTxt, th.tabTxt, mode === "login" && th.tabTxtOn]}>{t("auth.tab.login")}</Text>
                   </Pressable>
                 </View>
 
                 {mode === "signup" ? (
                   <>
-                    <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("auth.name")}</Text>
+                    <Text style={[styles.label, th.label, { textAlign: dir.textAlign }]}>{t("auth.name")}</Text>
                     <TextInput
                       value={name}
                       onChangeText={setName}
                       placeholder={t("auth.nameHint")}
-                      placeholderTextColor={Palette.textDim}
-                      style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+                      placeholderTextColor={pal.dim}
+                      style={[styles.input, th.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                     />
                   </>
                 ) : null}
 
-                <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("auth.email")}</Text>
+                <Text style={[styles.label, th.label, { textAlign: dir.textAlign }]}>{t("auth.email")}</Text>
                 <TextInput
                   value={email}
                   onChangeText={setEmail}
                   placeholder="you@email.com"
-                  placeholderTextColor={Palette.textDim}
+                  placeholderTextColor={pal.dim}
                   autoCapitalize="none"
                   keyboardType="email-address"
-                  style={[styles.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+                  style={[styles.input, th.input, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
                 />
-                <Text style={[styles.label, { textAlign: dir.textAlign }]}>{t("auth.password")}</Text>
+                <Text style={[styles.label, th.label, { textAlign: dir.textAlign }]}>{t("auth.password")}</Text>
                 <View style={styles.pwWrap}>
                   <TextInput
                     value={password}
                     onChangeText={setPassword}
                     placeholder={t("auth.passwordHint")}
-                    placeholderTextColor={Palette.textDim}
+                    placeholderTextColor={pal.dim}
                     secureTextEntry={!showPw}
                     style={[
                       styles.input,
+                      th.input,
                       { textAlign: dir.textAlign, writingDirection: dir.writingDirection },
                       dir.isRTL ? { paddingLeft: 46 } : { paddingRight: 46 },
                     ]}
@@ -443,37 +475,35 @@ export default function AuthScreen() {
                     style={[styles.eyeBtn, dir.isRTL ? { left: 6 } : { right: 6 }]}
                     hitSlop={8}
                   >
-                    <Ionicons name={showPw ? "eye-outline" : "eye-off-outline"} size={20} color={Palette.textDim} />
+                    <Ionicons name={showPw ? "eye-outline" : "eye-off-outline"} size={20} color={pal.dim} />
                   </Pressable>
                 </View>
 
                 {mode === "login" ? (
-                  <Pressable onPress={onForgot} disabled={busy} style={[styles.bigLink, { marginTop: 12 }, busy && { opacity: 0.55 }]}>
-                    {busy ? <ActivityIndicator size="small" color={Palette.neonCyan} /> : <Ionicons name="key-outline" size={18} color={Palette.neonCyan} />}
-                    <Text style={styles.bigLinkTxt}>{t("auth.forgot.link")}</Text>
+                  <Pressable onPress={onForgot} disabled={busy} style={[styles.bigLink, th.bigLink, { marginTop: 12 }, busy && { opacity: 0.55 }]}>
+                    {busy ? <ActivityIndicator size="small" color={pal.accent} /> : <Ionicons name="key-outline" size={18} color={pal.accent} />}
+                    <Text style={[styles.bigLinkTxt, th.link]}>{t("auth.forgot.link")}</Text>
                   </Pressable>
                 ) : null}
 
-                {!!err && <Text style={styles.err}>{err}</Text>}
+                {!!err && <Text style={[styles.err, th.err]}>{err}</Text>}
 
-                <Pressable onPress={onSubmit} style={styles.submit} disabled={busy || lockSeconds > 0}>
-                  <LinearGradient colors={Gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGrad}>
-                    {busy ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : lockSeconds > 0 ? (
-                      <Text style={styles.submitTxt}>{t("auth.err.locked", { sec: lockSeconds })}</Text>
-                    ) : (
-                      <Text style={styles.submitTxt}>{mode === "signup" ? t("auth.cta.signup") : t("auth.cta.login")}</Text>
-                    )}
-                  </LinearGradient>
+                <Pressable onPress={onSubmit} style={[styles.submit, th.submit]} disabled={busy || lockSeconds > 0}>
+                  {busy ? (
+                    <ActivityIndicator color={pal.onAccent} />
+                  ) : lockSeconds > 0 ? (
+                    <Text style={[styles.submitTxt, th.submitTxt]}>{t("auth.err.locked", { sec: lockSeconds })}</Text>
+                  ) : (
+                    <Text style={[styles.submitTxt, th.submitTxt]}>{mode === "signup" ? t("auth.cta.signup") : t("auth.cta.login")}</Text>
+                  )}
                 </Pressable>
-              </View>
+              </SceneCard>
             )}
-            <VersionTag color={Palette.textDim} />
+            <VersionTag color={pal.dim} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </ScreenBackground>
+    </SceneScreen>
   );
 }
 
@@ -486,60 +516,49 @@ try {
   AppleAuthentication = null;
 }
 
+// ارتفاع مقطع المشهد خلف الشعار
+const ART_H = 300;
+
+// التخطيط فقط هنا؛ الألوان من المشهد داخل المكوّن (c)
 const styles = StyleSheet.create({
+  art: { position: "absolute", top: 0, left: 0, right: 0 },
   appleBtn: { width: "100%", height: 50 },
-  orTxt: { color: Palette.textDim, fontSize: 12.5, fontWeight: "600", textAlign: "center", marginVertical: 14 },
+  orTxt: { fontSize: 12.5, fontWeight: "600", textAlign: "center", marginVertical: 14 },
   safe: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center", padding: Spacing.xl },
   logo: { width: 78, height: 78, borderRadius: 24, alignItems: "center", justifyContent: "center", alignSelf: "center" },
-  title: { color: Palette.text, fontSize: 24, fontWeight: "900", textAlign: "center", marginTop: 14, marginBottom: 20 },
-  card: {
-    backgroundColor: Palette.bgElevated,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Palette.border,
-    padding: Spacing.xl,
-  },
-  tabs: { flexDirection: "row-reverse", backgroundColor: Palette.surface, borderRadius: Radius.md, padding: 4, marginBottom: 18 },
+  title: { fontSize: 24, fontWeight: "900", textAlign: "center", marginTop: 14, marginBottom: 20 },
+  tabs: { flexDirection: "row-reverse", borderRadius: Radius.md, padding: 4, marginBottom: 18 },
   tab: { flex: 1, paddingVertical: 11, borderRadius: Radius.sm, alignItems: "center" },
-  tabOn: { backgroundColor: Palette.neonViolet },
-  tabTxt: { color: Palette.textMuted, fontWeight: "900", fontSize: 15 },
-  tabTxtOn: { color: "#fff" },
-  label: { color: Palette.textMuted, fontSize: 13, fontWeight: "700", textAlign: "right", marginBottom: 6, marginTop: 10 },
+  tabTxt: { fontWeight: "900", fontSize: 15 },
+  label: { fontSize: 13, fontWeight: "700", textAlign: "right", marginBottom: 6, marginTop: 10 },
   input: {
-    backgroundColor: Palette.surface,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
     borderRadius: Radius.md,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    color: Palette.text,
     fontSize: 16,
     textAlign: "right",
   },
   pwWrap: { position: "relative", justifyContent: "center" },
   eyeBtn: { position: "absolute", top: 0, bottom: 0, justifyContent: "center", paddingHorizontal: 8 },
-  err: { color: "#ff8a8a", fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 12 },
-  submit: { marginTop: 20, borderRadius: Radius.lg, overflow: "hidden" },
-  submitGrad: { paddingVertical: 16, alignItems: "center", justifyContent: "center" },
-  submitTxt: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  note: { color: Palette.textDim, fontSize: 12, lineHeight: 20, textAlign: "center", marginTop: 16 },
-  switchTxt: { color: Palette.neonCyan, fontSize: 14, fontWeight: "700" },
-  forgotTxt: { color: Palette.neonCyan, fontSize: 13, fontWeight: "700" },
+  err: { fontSize: 13, fontWeight: "700", textAlign: "center", marginTop: 12 },
+  submit: { marginTop: 20, borderRadius: Radius.lg, paddingVertical: 16, alignItems: "center", justifyContent: "center" },
+  submitTxt: { fontSize: 16, fontWeight: "900" },
+  switchTxt: { fontSize: 14, fontWeight: "700" },
   // أزرار الاستعادة: كبيرة وواضحة (كانت رابطًا صغيرًا لا يُلاحظ)
   bigLink: {
     marginTop: 16,
     minHeight: 48,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: Palette.neonCyan,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingHorizontal: 16,
   },
-  bigLinkTxt: { color: Palette.neonCyan, fontSize: 16, fontWeight: "800" },
-  confirmTitle: { color: Palette.text, fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 12 },
-  confirmBody: { color: Palette.textMuted, fontSize: 14, lineHeight: 24, textAlign: "center", marginTop: 10 },
+  bigLinkTxt: { fontSize: 16, fontWeight: "800" },
+  confirmTitle: { fontSize: 20, fontWeight: "900", textAlign: "center", marginTop: 12 },
+  confirmBody: { fontSize: 14, lineHeight: 24, textAlign: "center", marginTop: 10 },
 });

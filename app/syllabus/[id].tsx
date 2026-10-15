@@ -6,16 +6,14 @@ import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-import { GlassCard } from "../../components/brand/glass-card";
 import { BuzanMindMap } from "../../components/brand/mindmap";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
-import { GradientButton } from "../../components/brand/gradient-button";
-import { ScreenBackground } from "../../components/brand/screen-background";
-import { Palette, Radius, Spacing } from "../../constants/design";
+import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
+import { Radius, Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
+import { useScene } from "../../lib/scene";
 import {
   generateMindmap,
   generateSyllabus,
@@ -45,6 +43,9 @@ function fmtRange(s: UnitSchedule): string {
 export default function SyllabusScreen() {
   const { t } = useI18n();
   const dir = useDir();
+  const { pal } = useScene();
+  // ألوان الحالة بدرجات تُقرأ على المشهد الفاتح والداكن (كما في صفحة الكتاب)
+  const tone = pal.dark ? { good: "#7BD8A4", bad: "#FF8A96" } : { good: "#2F7D4A", bad: "#B83A48" };
   const { id, title, pdf_path } = useLocalSearchParams<{
     id?: string;
     title?: string;
@@ -323,286 +324,326 @@ export default function SyllabusScreen() {
     } catch {}
   }
 
+  const backBtn = (
+    <Pressable onPress={() => router.back()} hitSlop={8}>
+      <SceneIconButton>
+        <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={pal.ink} />
+      </SceneIconButton>
+    </Pressable>
+  );
+  const printBtn = syl ? (
+    <Pressable onPress={onPrint} hitSlop={8}>
+      <SceneIconButton>
+        <Ionicons name="print" size={20} color={pal.ink} />
+      </SceneIconButton>
+    </Pressable>
+  ) : undefined;
+  // زر ثانوي بألوان المشهد (بديل الأزرار النيون القديمة)
+  const pillStyle = { backgroundColor: pal.soft, borderColor: pal.cardBorder };
+
   return (
-    <ScreenBackground>
-      <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-        {/* رأس */}
-        <View style={[styles.header, { flexDirection: dir.row }]}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn} hitSlop={8}>
-            <Ionicons name="chevron-forward" size={22} color={Palette.text} />
-          </Pressable>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {t("syllabus.title")}
-          </Text>
-          {syl ? (
-            <Pressable onPress={onPrint} style={styles.iconBtn} hitSlop={8}>
-              <Ionicons name="print" size={20} color={Palette.text} />
-            </Pressable>
-          ) : (
-            <View style={styles.iconBtn} />
-          )}
+    <SceneScreen>
+      <SceneBanner title={t("syllabus.title")} height={130} left={backBtn} right={printBtn} />
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={pal.accent} />
         </View>
-
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={Palette.primary} />
-          </View>
-        ) : !syl ? (
-          <View style={styles.center}>
-            <Ionicons name="sparkles" size={40} color={Palette.neonViolet} />
-            <Text style={styles.emptyTitle}>{t("syllabus.empty.title")}</Text>
-            <Text style={styles.emptySub}>
-              {t("syllabus.empty.sub")}
+      ) : !syl ? (
+        <View style={styles.center}>
+          <Ionicons name="sparkles" size={40} color={pal.accent} />
+          <Text style={[styles.emptyTitle, { color: pal.ink }]}>{t("syllabus.empty.title")}</Text>
+          <Text style={[styles.emptySub, { color: pal.dim }]}>
+            {t("syllabus.empty.sub")}
+          </Text>
+          {!!err && <Text style={[styles.err, { color: tone.bad }]}>{err}</Text>}
+          {busy ? (
+            // شريط تقدّم واضح: يطمئن المستخدم أن التطبيق يعمل ويوضّح ما تبقّى
+            <View style={styles.genWrap}>
+              <View style={[styles.genHead, { flexDirection: dir.row }]}>
+                <Text style={[styles.genMsg, { color: pal.ink }]}>{genMsg}</Text>
+                <Text style={[styles.genPct, { color: pal.accent }]}>{genPct}%</Text>
+              </View>
+              <View style={[styles.genTrack, { backgroundColor: pal.track }]}>
+                <View style={[styles.genFill, { width: `${genPct}%`, backgroundColor: pal.accent }]} />
+              </View>
+              <Text style={[styles.genHint, { color: pal.dim }]}>{t("syllabus.gen.hint")}</Text>
+            </View>
+          ) : (
+            <Pressable
+              onPress={onGenerate}
+              style={({ pressed }) => [
+                styles.cta,
+                { backgroundColor: pal.accent, flexDirection: dir.row, marginTop: Spacing.lg, opacity: pressed ? 0.9 : 1 },
+              ]}
+            >
+              <Ionicons name="sparkles" size={18} color={pal.onAccent} />
+              <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{t("syllabus.empty.generate")}</Text>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={startReading}
+            style={[styles.readNowBtn, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.accent }]}
+          >
+            <Ionicons name="book" size={18} color={pal.accent} />
+            <Text style={[styles.readNowTxt, { color: pal.ink }]}>{t("syllabus.readNowFull")}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* عنوان + تقدّم */}
+          <SceneCard style={styles.progCard}>
+            <Text style={[styles.bookTitle, { color: pal.ink }]} numberOfLines={3}>
+              {syl.title ?? bookTitle}
             </Text>
-            {!!err && <Text style={styles.err}>{err}</Text>}
-            {busy ? (
-              // شريط تقدّم واضح: يطمئن المستخدم أن التطبيق يعمل ويوضّح ما تبقّى
-              <View style={styles.genWrap}>
-                <View style={[styles.genHead, { flexDirection: dir.row }]}>
-                  <Text style={styles.genMsg}>{genMsg}</Text>
-                  <Text style={styles.genPct}>{genPct}%</Text>
-                </View>
-                <View style={styles.genTrack}>
-                  <View style={[styles.genFill, { width: `${genPct}%` }]} />
-                </View>
-                <Text style={styles.genHint}>{t("syllabus.gen.hint")}</Text>
-              </View>
-            ) : (
-              <GradientButton
-                title={t("syllabus.empty.generate")}
-                icon="sparkles"
-                onPress={onGenerate}
-                style={{ marginTop: Spacing.lg, alignSelf: "stretch" }}
-              />
-            )}
-            <Pressable onPress={startReading} style={styles.readNowBtn}>
-              <Ionicons name="book" size={18} color={Palette.text} />
-              <Text style={styles.readNowTxt}>{t("syllabus.readNowFull")}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            {/* عنوان + تقدّم */}
-            <GlassCard contentStyle={styles.progCard} glow={Palette.neonViolet}>
-              <Text style={styles.bookTitle} numberOfLines={3}>
-                {syl.title ?? bookTitle}
+            <View style={[styles.progRow, { flexDirection: dir.row }]}>
+              <Text style={[styles.progPct, { color: pal.accent }]}>{pct}%</Text>
+              <Text style={[styles.progLabel, { color: pal.dim }]}>
+                {t("syllabus.progress.completed", { completed, total })}
               </Text>
-              <View style={[styles.progRow, { flexDirection: dir.row }]}>
-                <Text style={styles.progPct}>{pct}%</Text>
-                <Text style={styles.progLabel}>
-                  {t("syllabus.progress.completed", { completed, total })}
-                </Text>
-              </View>
-              <View style={styles.progTrack}>
-                <View style={[styles.progFill, { width: `${pct}%` }]} />
-              </View>
-              {sched.length === 0 && (
-                <Text style={[styles.noPlanHint, { marginTop: 12 }]}>
-                  {t("syllabus.noPlanHint")}
-                </Text>
-              )}
-            </GlassCard>
+            </View>
+            <View style={[styles.progTrack, { backgroundColor: pal.track }]}>
+              <View style={[styles.progFill, { width: `${pct}%`, backgroundColor: pal.accent }]} />
+            </View>
+            {sched.length === 0 && (
+              <Text style={[styles.noPlanHint, { marginTop: 12, color: pal.dim }]}>
+                {t("syllabus.noPlanHint")}
+              </Text>
+            )}
+          </SceneCard>
 
-            {/* زر الدخول للقراءة — بارز فوق الوحدات */}
-            <Pressable onPress={startReading} style={styles.readNowBtn}>
-              <Ionicons name="book" size={18} color={Palette.text} />
-              <Text style={styles.readNowTxt}>{t("syllabus.readNow")}</Text>
-            </Pressable>
+          {/* زر الدخول للقراءة — بارز فوق الوحدات */}
+          <Pressable
+            onPress={startReading}
+            style={({ pressed }) => [
+              styles.cta,
+              { backgroundColor: pal.accent, flexDirection: dir.row, opacity: pressed ? 0.9 : 1 },
+            ]}
+          >
+            <Ionicons name="book" size={18} color={pal.onAccent} />
+            <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{t("syllabus.readNow")}</Text>
+          </Pressable>
 
-            {/* الوحدات (تشيك ليست) */}
-            {syl.units.map((u, i) => {
-              const isDone = done[i];
-              return (
-                <Pressable key={i} onPress={() => toggle(i)} style={styles.unitWrap}>
-                  <GlassCard contentStyle={styles.unitCard} glow={isDone ? Palette.neonCyan : undefined}>
-                    <View style={[styles.unitHead, { flexDirection: dir.row }]}>
-                      <View style={[styles.check, isDone && styles.checkOn]}>
-                        {isDone && <Ionicons name="checkmark" size={16} color="#0b1220" />}
-                      </View>
-                      <Text style={[styles.unitTitle, isDone && styles.unitTitleDone, { textAlign: dir.textAlign }]}>
-                        {i + 1}. {u.title}
+          {/* الوحدات (تشيك ليست) */}
+          {syl.units.map((u, i) => {
+            const isDone = done[i];
+            return (
+              <Pressable key={i} onPress={() => toggle(i)} style={styles.unitWrap}>
+                <SceneCard style={[styles.unitCard, isDone && { borderColor: pal.accent }]}>
+                  <View style={[styles.unitHead, { flexDirection: dir.row }]}>
+                    <View
+                      style={[
+                        styles.check,
+                        { borderColor: pal.track },
+                        isDone && { backgroundColor: pal.accent, borderColor: pal.accent },
+                      ]}
+                    >
+                      {isDone && <Ionicons name="checkmark" size={16} color={pal.onAccent} />}
+                    </View>
+                    <Text
+                      style={[
+                        styles.unitTitle,
+                        { color: pal.ink, textAlign: dir.textAlign },
+                        isDone && [styles.unitTitleDone, { color: pal.dim }],
+                      ]}
+                    >
+                      {i + 1}. {u.title}
+                    </Text>
+                  </View>
+                  {sched[i] && (
+                    <View style={[styles.schedRow, { flexDirection: dir.row }]}>
+                      <Ionicons name="calendar-outline" size={13} color={pal.accent} />
+                      <Text style={[styles.schedTxt, { color: pal.accent }]}>
+                        {t("syllabus.studyOn")}: {fmtRange(sched[i])}{"  ·  "}
+                        {sched[i].dayTo !== sched[i].dayFrom
+                          ? t("syllabus.dayRange", { from: sched[i].dayFrom, to: sched[i].dayTo })
+                          : t("syllabus.day", { day: sched[i].dayFrom })}
                       </Text>
                     </View>
-                    {sched[i] && (
-                      <View style={[styles.schedRow, { flexDirection: dir.row }]}>
-                        <Ionicons name="calendar-outline" size={13} color={Palette.neonCyan} />
-                        <Text style={styles.schedTxt}>
-                          {t("syllabus.studyOn")}: {fmtRange(sched[i])}{"  ·  "}
-                          {sched[i].dayTo !== sched[i].dayFrom
-                            ? t("syllabus.dayRange", { from: sched[i].dayFrom, to: sched[i].dayTo })
-                            : t("syllabus.day", { day: sched[i].dayFrom })}
-                        </Text>
-                      </View>
-                    )}
-                    {u.topics.map((topic, k) => (
-                      <View key={k} style={[styles.topicRow, { flexDirection: dir.row }]}>
-                        <Text style={styles.topicDot}>•</Text>
-                        <Text style={[styles.topicTxt, { textAlign: dir.textAlign }]}>{topic}</Text>
-                      </View>
-                    ))}
-                    {!!u.outcome && (
-                      <Text style={[styles.outcome, { textAlign: dir.textAlign }]}>🎯 {u.outcome}</Text>
-                    )}
-
-                    <View style={[styles.unitActions, { flexDirection: dir.row }]}>
-                      <Pressable
-                        onPress={() =>
-                          router.push({
-                            pathname: "/unit-summary",
-                            params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
-                          })
-                        }
-                        style={[styles.quizBtn, styles.sumBtn, { flexDirection: dir.row }]}
-                      >
-                        <Ionicons name="headset" size={15} color={Palette.neonCyan} />
-                        <Text style={[styles.quizBtnTxt, { color: Palette.neonCyan }]}>
-                          {t("syllabus.action.summary")}
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() =>
-                          router.push({
-                            pathname: "/unit-quiz",
-                            params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
-                          })
-                        }
-                        style={[styles.quizBtn, { flex: 1, marginTop: 0, flexDirection: dir.row }]}
-                      >
-                        <Ionicons name="help-circle" size={15} color={Palette.neonViolet} />
-                        <Text style={styles.quizBtnTxt}>
-                          {t("syllabus.action.quiz")}
-                        </Text>
-                      </Pressable>
+                  )}
+                  {u.topics.map((topic, k) => (
+                    <View key={k} style={[styles.topicRow, { flexDirection: dir.row }]}>
+                      <Text style={[styles.topicDot, { color: pal.accent }]}>•</Text>
+                      <Text style={[styles.topicTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{topic}</Text>
                     </View>
+                  ))}
+                  {!!u.outcome && (
+                    <Text style={[styles.outcome, { color: tone.good, textAlign: dir.textAlign }]}>🎯 {u.outcome}</Text>
+                  )}
 
+                  <View style={[styles.unitActions, { flexDirection: dir.row }]}>
                     <Pressable
-                      onPress={() => startMindmap(i)}
-                      disabled={mmLoading}
-                      style={[styles.quizBtn, styles.mmBtn, { flexDirection: dir.row }]}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/unit-summary",
+                          params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
+                        })
+                      }
+                      style={[styles.quizBtn, styles.sumBtn, pillStyle, { flexDirection: dir.row }]}
                     >
-                      {mmLoading && mmUnit === i ? (
-                        <ActivityIndicator size="small" color="#a3e635" />
-                      ) : (
-                        <Ionicons name="git-network" size={15} color="#a3e635" />
-                      )}
-                      <Text style={[styles.quizBtnTxt, { color: "#bef264" }]}>
-                        {mmLoading && mmUnit === i ? t("syllabus.action.drawing") : t("syllabus.action.mindmap")}
+                      <Ionicons name="headset" size={15} color={pal.accent} />
+                      <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>
+                        {t("syllabus.action.summary")}
                       </Text>
                     </Pressable>
-                  </GlassCard>
-                </Pressable>
-              );
-            })}
 
-            {/* نصائح */}
-            {!!syl.tips?.length && (
-              <GlassCard contentStyle={styles.tipsCard} glow={Palette.neonCyan}>
-                <Text style={[styles.tipsTitle, { textAlign: dir.textAlign }]}>{t("syllabus.tipsTitle")}</Text>
-                {syl.tips.map((tip, i) => (
-                  <View key={i} style={[styles.topicRow, { flexDirection: dir.row }]}>
-                    <Text style={styles.topicDot}>•</Text>
-                    <Text style={[styles.topicTxt, { textAlign: dir.textAlign }]}>{tip}</Text>
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: "/unit-quiz",
+                          params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
+                        })
+                      }
+                      style={[styles.quizBtn, pillStyle, { flex: 1, marginTop: 0, flexDirection: dir.row }]}
+                    >
+                      <Ionicons name="help-circle" size={15} color={pal.accent} />
+                      <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>
+                        {t("syllabus.action.quiz")}
+                      </Text>
+                    </Pressable>
                   </View>
-                ))}
-              </GlassCard>
+
+                  <Pressable
+                    onPress={() => startMindmap(i)}
+                    disabled={mmLoading}
+                    style={[styles.quizBtn, styles.mmBtn, pillStyle, { flexDirection: dir.row }]}
+                  >
+                    {mmLoading && mmUnit === i ? (
+                      <ActivityIndicator size="small" color={pal.accent} />
+                    ) : (
+                      <Ionicons name="git-network" size={15} color={pal.accent} />
+                    )}
+                    <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>
+                      {mmLoading && mmUnit === i ? t("syllabus.action.drawing") : t("syllabus.action.mindmap")}
+                    </Text>
+                  </Pressable>
+                </SceneCard>
+              </Pressable>
+            );
+          })}
+
+          {/* نصائح */}
+          {!!syl.tips?.length && (
+            <SceneCard style={styles.tipsCard}>
+              <Text style={[styles.tipsTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("syllabus.tipsTitle")}</Text>
+              {syl.tips.map((tip, i) => (
+                <View key={i} style={[styles.topicRow, { flexDirection: dir.row }]}>
+                  <Text style={[styles.topicDot, { color: pal.accent }]}>•</Text>
+                  <Text style={[styles.topicTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{tip}</Text>
+                </View>
+              ))}
+            </SceneCard>
+          )}
+
+          {/* دور مستقل عن طابعة الهيدر: إعادة توليد المنهج كاملًا من الكتاب
+              (يعيد بناء الوحدات بالفهرس الكامل بدل النسخة القديمة المختصرة). */}
+          <Pressable
+            onPress={busy ? undefined : onGenerate}
+            style={({ pressed }) => [
+              styles.ghostBtn,
+              {
+                flexDirection: dir.row,
+                backgroundColor: pal.card,
+                borderColor: pal.cardBorder,
+                marginTop: Spacing.md,
+                opacity: busy ? 0.5 : pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            {busy ? (
+              <ActivityIndicator color={pal.ink} />
+            ) : (
+              <>
+                <Ionicons name="refresh" size={18} color={pal.ink} />
+                <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("syllabus.regenerate")}</Text>
+              </>
             )}
+          </Pressable>
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      )}
 
-            {/* دور مستقل عن طابعة الهيدر: إعادة توليد المنهج كاملًا من الكتاب
-                (يعيد بناء الوحدات بالفهرس الكامل بدل النسخة القديمة المختصرة). */}
-            <GradientButton
-              title={t("syllabus.regenerate")}
-              icon="refresh"
-              variant="ghost"
-              onPress={onGenerate}
-              loading={busy}
-              style={{ marginTop: Spacing.md }}
-            />
-            <View style={{ height: 24 }} />
-          </ScrollView>
-        )}
-
-        {/* مودال الخريطة الذهنية */}
-        <Modal
-          visible={mmUnit !== null && !!mm}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setMmUnit(null)}
-        >
-          <View style={styles.quizMask}>
-            <View style={styles.quizSheet}>
-              <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
-                <Text style={styles.quizHeaderTxt}>🗺️ {t("syllabus.mindmap.title")}</Text>
-                <View style={{ flexDirection: dir.row, alignItems: "center", gap: 14 }}>
-                  <Pressable onPress={printMindmap} hitSlop={8}>
-                    <Ionicons name="print-outline" size={21} color={Palette.textMuted} />
-                  </Pressable>
-                  <Pressable onPress={() => setMmUnit(null)} hitSlop={8}>
-                    <Ionicons name="close" size={22} color={Palette.textMuted} />
-                  </Pressable>
-                </View>
+      {/* مودال الخريطة الذهنية */}
+      <Modal
+        visible={mmUnit !== null && !!mm}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMmUnit(null)}
+      >
+        <View style={styles.quizMask}>
+          <View style={[styles.quizSheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]}>
+            <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
+              <Text style={[styles.quizHeaderTxt, { color: pal.ink }]}>🗺️ {t("syllabus.mindmap.title")}</Text>
+              <View style={{ flexDirection: dir.row, alignItems: "center", gap: 14 }}>
+                <Pressable onPress={printMindmap} hitSlop={8}>
+                  <Ionicons name="print-outline" size={21} color={pal.dim} />
+                </Pressable>
+                <Pressable onPress={() => setMmUnit(null)} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={pal.dim} />
+                </Pressable>
               </View>
-
-              <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
-                {/* خريطة شعاعية (توني بوزان) — عرض ثابت داخل حاوية عادية.
-                    أزلنا التكبير المتداخل (ScrollView داخل ScrollView) لأنه كان
-                    يُوقف الإيماءات ويجمّد الصفحة؛ التفاصيل الكاملة في القائمة بالأسفل. */}
-                {mm ? (
-                  <View style={[styles.mmCanvasWrap, styles.mmCanvas]}>
-                    <BuzanMindMap map={mm} size={320} />
-                  </View>
-                ) : null}
-                <Text style={styles.mmHint}>{t("syllabus.mindmap.hintList")}</Text>
-
-                {/* العقدة المركزية (قائمة) */}
-                <View style={styles.mmCenter}>
-                  <Text style={styles.mmCenterTxt}>{mm?.center}</Text>
-                </View>
-                <View style={styles.mmStem} />
-
-                {/* الفروع */}
-                {mm?.branches.map((b, bi) => {
-                  const c = MM_COLORS[bi % MM_COLORS.length];
-                  return (
-                    <View key={bi} style={[styles.mmBranch2, { borderColor: c + "66" }]}>
-                      <View style={[styles.mmBranchHead, { backgroundColor: c + "22", flexDirection: dir.row }]}>
-                        <View style={[styles.mmDot, { backgroundColor: c }]} />
-                        <Text style={[styles.mmBranchLabel, { color: c, textAlign: dir.textAlign }]}>{b.label}</Text>
-                      </View>
-                      {b.points.map((p, pi) => (
-                        <View key={pi} style={[styles.mmPointRow, { flexDirection: dir.row }]}>
-                          <Text style={[styles.mmPointDash, { color: c }]}>—</Text>
-                          <Text style={[styles.mmPointTxt, { textAlign: dir.textAlign }]}>{p}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })}
-              </ScrollView>
             </View>
+
+            <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
+              {/* خريطة شعاعية (توني بوزان) — عرض ثابت داخل حاوية عادية.
+                  أزلنا التكبير المتداخل (ScrollView داخل ScrollView) لأنه كان
+                  يُوقف الإيماءات ويجمّد الصفحة؛ التفاصيل الكاملة في القائمة بالأسفل.
+                  خلفية الرسم تبقى داكنة لأن نصوص BuzanMindMap فاتحة ثابتة. */}
+              {mm ? (
+                <View style={[styles.mmCanvasWrap, styles.mmCanvas, { borderColor: pal.cardBorder }]}>
+                  <BuzanMindMap map={mm} size={320} />
+                </View>
+              ) : null}
+              <Text style={[styles.mmHint, { color: pal.dim }]}>{t("syllabus.mindmap.hintList")}</Text>
+
+              {/* العقدة المركزية (قائمة) */}
+              <View style={[styles.mmCenter, { backgroundColor: pal.accent }]}>
+                <Text style={[styles.mmCenterTxt, { color: pal.onAccent }]}>{mm?.center}</Text>
+              </View>
+              <View style={[styles.mmStem, { backgroundColor: pal.track }]} />
+
+              {/* الفروع */}
+              {mm?.branches.map((b, bi) => {
+                const c = MM_COLORS[bi % MM_COLORS.length];
+                return (
+                  <View key={bi} style={[styles.mmBranch2, { borderColor: c + "66", backgroundColor: pal.card }]}>
+                    <View style={[styles.mmBranchHead, { backgroundColor: c + "22", flexDirection: dir.row }]}>
+                      <View style={[styles.mmDot, { backgroundColor: c }]} />
+                      <Text style={[styles.mmBranchLabel, { color: pal.ink, textAlign: dir.textAlign }]}>{b.label}</Text>
+                    </View>
+                    {b.points.map((p, pi) => (
+                      <View key={pi} style={[styles.mmPointRow, { flexDirection: dir.row }]}>
+                        <Text style={[styles.mmPointDash, { color: c }]}>—</Text>
+                        <Text style={[styles.mmPointTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{p}</Text>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
+            </ScrollView>
           </View>
-        </Modal>
-      </SafeAreaView>
-    </ScreenBackground>
+        </View>
+      </Modal>
+    </SceneScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  header: {
-    flexDirection: "row-reverse",
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.xl, gap: 8 },
+  emptyTitle: { fontSize: 19, fontWeight: "900", textAlign: "center", marginTop: 10 },
+  emptySub: { fontSize: 14, lineHeight: 24, textAlign: "center" },
+  cta: { alignSelf: "stretch", height: 54, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", gap: 10 },
+  ctaTxt: { fontSize: 15.5, fontWeight: "900" },
+  ghostBtn: {
+    alignSelf: "stretch",
+    height: 50,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    justifyContent: "center",
     gap: 8,
   },
-  iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
-  headerTitle: { flex: 1, textAlign: "center", color: Palette.text, fontSize: 18, fontWeight: "900" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: Spacing.xl, gap: 8 },
-  emptyTitle: { color: Palette.text, fontSize: 19, fontWeight: "900", textAlign: "center", marginTop: 10 },
-  emptySub: { color: Palette.textMuted, fontSize: 14, lineHeight: 24, textAlign: "center" },
   readNowBtn: {
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
@@ -610,171 +651,114 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 6,
     paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: Palette.surface,
+    borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: Palette.neonCyan + "88",
   },
-  readNowTxt: { color: Palette.text, fontSize: 16, fontWeight: "900" },
-  err: { color: Palette.warn, fontSize: 13, textAlign: "center", marginTop: 8, fontWeight: "700" },
+  readNowTxt: { fontSize: 16, fontWeight: "900" },
+  err: { fontSize: 13, textAlign: "center", marginTop: 8, fontWeight: "700" },
 
   genWrap: { alignSelf: "stretch", marginTop: Spacing.lg, gap: 8 },
-  genHead: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
-  genMsg: { color: Palette.text, fontSize: 14, fontWeight: "800" },
-  genPct: { color: Palette.neonViolet, fontSize: 15, fontWeight: "900" },
-  genTrack: { height: 10, borderRadius: 5, backgroundColor: Palette.surface, overflow: "hidden" },
-  genFill: { height: "100%", borderRadius: 5, backgroundColor: Palette.neonViolet },
-  genHint: { color: Palette.textDim, fontSize: 12, textAlign: "center", lineHeight: 19, marginTop: 4 },
+  genHead: { alignItems: "center", justifyContent: "space-between" },
+  genMsg: { fontSize: 14, fontWeight: "800" },
+  genPct: { fontSize: 15, fontWeight: "900" },
+  genTrack: { height: 10, borderRadius: 5, overflow: "hidden" },
+  genFill: { height: "100%", borderRadius: 5 },
+  genHint: { fontSize: 12, textAlign: "center", lineHeight: 19, marginTop: 4 },
 
-  scroll: { paddingHorizontal: Spacing.md, paddingBottom: Spacing.xl, gap: 12 },
+  scroll: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, gap: 12 },
   progCard: { padding: Spacing.lg },
-  bookTitle: { color: Palette.text, fontSize: 17, fontWeight: "900", textAlign: "center", lineHeight: 28 },
-  progRow: { flexDirection: "row-reverse", alignItems: "baseline", justifyContent: "center", gap: 10, marginTop: 12 },
-  progPct: { color: Palette.neonCyan, fontSize: 28, fontWeight: "900" },
-  progLabel: { color: Palette.textMuted, fontSize: 13, fontWeight: "700" },
-  progTrack: { height: 10, borderRadius: 5, backgroundColor: Palette.surface, marginTop: 10, overflow: "hidden" },
-  progFill: { height: "100%", borderRadius: 5, backgroundColor: Palette.neonCyan },
+  bookTitle: { fontSize: 17, fontWeight: "900", textAlign: "center", lineHeight: 28 },
+  progRow: { alignItems: "baseline", justifyContent: "center", gap: 10, marginTop: 12 },
+  progPct: { fontSize: 28, fontWeight: "900" },
+  progLabel: { fontSize: 13, fontWeight: "700" },
+  progTrack: { height: 10, borderRadius: 5, marginTop: 10, overflow: "hidden" },
+  progFill: { height: "100%", borderRadius: 5 },
 
   unitWrap: {},
   unitCard: { padding: Spacing.md },
-  unitHead: { flexDirection: "row-reverse", alignItems: "center", gap: 10 },
+  unitHead: { alignItems: "center", gap: 10 },
   check: {
     width: 26,
     height: 26,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: Palette.glassBorder,
     alignItems: "center",
     justifyContent: "center",
   },
-  checkOn: { backgroundColor: Palette.neonCyan, borderColor: Palette.neonCyan },
-  unitTitle: { flex: 1, color: Palette.text, fontSize: 16, fontWeight: "800", lineHeight: 26 },
-  unitTitleDone: { color: Palette.textDim, textDecorationLine: "line-through" },
+  unitTitle: { flex: 1, fontSize: 16, fontWeight: "800", lineHeight: 26 },
+  unitTitleDone: { textDecorationLine: "line-through" },
   schedRow: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     gap: 6,
     marginTop: 8,
     paddingStart: 36,
   },
-  schedTxt: { color: Palette.neonCyan, fontSize: 12.5, fontWeight: "800" },
+  schedTxt: { fontSize: 12.5, fontWeight: "800" },
   noPlanHint: {
-    color: Palette.textDim,
     fontSize: 12.5,
     textAlign: "center",
     lineHeight: 20,
     paddingHorizontal: 8,
   },
-  topicRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 6, marginTop: 6, paddingStart: 36 },
-  topicDot: { color: Palette.neonViolet, fontSize: 15, lineHeight: 22 },
-  topicTxt: { flex: 1, color: Palette.textMuted, fontSize: 14, lineHeight: 22 },
-  outcome: { color: Palette.success ?? Palette.neonCyan, fontSize: 13, fontWeight: "700", marginTop: 8, paddingStart: 36, lineHeight: 21 },
+  topicRow: { alignItems: "flex-start", gap: 6, marginTop: 6, paddingStart: 36 },
+  topicDot: { fontSize: 15, lineHeight: 22 },
+  topicTxt: { flex: 1, fontSize: 14, lineHeight: 22 },
+  outcome: { fontSize: 13, fontWeight: "700", marginTop: 8, paddingStart: 36, lineHeight: 21 },
 
   tipsCard: { padding: Spacing.md },
-  tipsTitle: { color: Palette.text, fontSize: 16, fontWeight: "900", marginBottom: 4 },
+  tipsTitle: { fontSize: 16, fontWeight: "900", marginBottom: 4 },
 
   quizBtn: {
-    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
     marginTop: 12,
     paddingVertical: 9,
     borderRadius: Radius.pill,
-    backgroundColor: "rgba(124,92,255,0.14)",
     borderWidth: 1,
-    borderColor: "rgba(124,92,255,0.4)",
   },
-  quizBtnTxt: { color: "#cdbdff", fontSize: 13, fontWeight: "800" },
-  unitActions: { flexDirection: "row-reverse", gap: 8, marginTop: 12 },
-  sumBtn: {
-    marginTop: 0,
-    backgroundColor: "rgba(34,211,238,0.12)",
-    borderColor: "rgba(34,211,238,0.4)",
-  },
-  sumPlay: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 13,
-    borderRadius: Radius.lg,
-    backgroundColor: Palette.neonCyan,
-    marginBottom: Spacing.md,
-  },
-  sumPlayTxt: { color: "#0b1220", fontSize: 15, fontWeight: "900" },
-  sumText: { color: Palette.textMuted, fontSize: 15, lineHeight: 28, textAlign: "right" },
-  mmBtn: { marginTop: 8, backgroundColor: "rgba(163,230,53,0.10)", borderColor: "rgba(163,230,53,0.4)" },
+  quizBtnTxt: { fontSize: 13, fontWeight: "800" },
+  unitActions: { gap: 8, marginTop: 12 },
+  sumBtn: { marginTop: 0, flex: 1 },
+  mmBtn: { marginTop: 8 },
   mmCanvasWrap: {
     backgroundColor: "#0b1220",
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
     maxHeight: 340,
   },
   mmCanvas: { alignItems: "center", justifyContent: "center", padding: 8 },
-  mmHint: { color: Palette.textDim, fontSize: 11.5, textAlign: "center", marginTop: 8, marginBottom: 12 },
+  mmHint: { fontSize: 11.5, textAlign: "center", marginTop: 8, marginBottom: 12 },
   mmCenter: {
     alignSelf: "center",
     paddingVertical: 14,
     paddingHorizontal: 22,
     borderRadius: Radius.lg,
-    backgroundColor: Palette.neonViolet,
     maxWidth: "90%",
   },
-  mmCenterTxt: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center" },
-  mmStem: { alignSelf: "center", width: 2, height: 18, backgroundColor: Palette.glassBorder },
+  mmCenterTxt: { fontSize: 16, fontWeight: "900", textAlign: "center" },
+  mmStem: { alignSelf: "center", width: 2, height: 18 },
   mmBranch2: {
     borderWidth: 1,
     borderRadius: Radius.lg,
-    backgroundColor: Palette.surface,
     marginBottom: 10,
     overflow: "hidden",
   },
-  mmBranchHead: { flexDirection: "row-reverse", alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  mmBranchHead: { alignItems: "center", gap: 8, paddingVertical: 10, paddingHorizontal: 14 },
   mmDot: { width: 10, height: 10, borderRadius: 5 },
-  mmBranchLabel: { flex: 1, fontSize: 15, fontWeight: "900", textAlign: "right" },
-  mmPointRow: { flexDirection: "row-reverse", alignItems: "flex-start", gap: 8, paddingHorizontal: 16, paddingVertical: 5 },
+  mmBranchLabel: { flex: 1, fontSize: 15, fontWeight: "900" },
+  mmPointRow: { alignItems: "flex-start", gap: 8, paddingHorizontal: 16, paddingVertical: 5 },
   mmPointDash: { fontSize: 14, fontWeight: "900", lineHeight: 22 },
-  mmPointTxt: { flex: 1, color: Palette.textMuted, fontSize: 14, lineHeight: 22, textAlign: "right" },
+  mmPointTxt: { flex: 1, fontSize: 14, lineHeight: 22 },
 
   quizMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   quizSheet: {
-    backgroundColor: Palette.bgElevated,
     borderTopLeftRadius: Radius.xl,
     borderTopRightRadius: Radius.xl,
     borderWidth: 1,
-    borderColor: Palette.glassBorder,
     padding: Spacing.lg,
     maxHeight: "82%",
   },
-  quizHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.md },
-  quizHeaderTxt: { color: Palette.text, fontSize: 15, fontWeight: "900" },
-  quizQ: { color: Palette.text, fontSize: 18, fontWeight: "900", textAlign: "right", lineHeight: 30, marginBottom: Spacing.md },
-  quizOpt: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: Radius.lg,
-    backgroundColor: Palette.surface,
-    borderWidth: 1,
-    borderColor: Palette.glassBorder,
-    marginBottom: 10,
-  },
-  quizOptCorrect: { backgroundColor: "rgba(46,204,113,0.18)", borderColor: Palette.success },
-  quizOptWrong: { backgroundColor: "rgba(231,76,60,0.16)", borderColor: Palette.danger },
-  quizOptTxt: { flex: 1, color: Palette.text, fontSize: 15, fontWeight: "700", textAlign: "right" },
-  quizResult: { alignItems: "center", paddingVertical: Spacing.lg, gap: 10 },
-  quizScoreBig: { color: Palette.neonCyan, fontSize: 44, fontWeight: "900" },
-  quizResultMsg: { color: Palette.textMuted, fontSize: 15, fontWeight: "700", textAlign: "center" },
-  levelPill: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: Radius.pill, borderWidth: 1.5 },
-  levelPillTxt: { fontSize: 15, fontWeight: "900" },
-  diffRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  diffBadge: { paddingVertical: 5, paddingHorizontal: 14, borderRadius: Radius.pill, borderWidth: 1.5 },
-  diffBadgeTxt: { fontSize: 13, fontWeight: "900" },
-  dotsRow: { flexDirection: "row-reverse", alignItems: "center", gap: 6 },
-  qDot: { width: 8, height: 8, borderRadius: 4 },
+  quizHeader: { alignItems: "center", justifyContent: "space-between", marginBottom: Spacing.md },
+  quizHeaderTxt: { fontSize: 15, fontWeight: "900" },
 });

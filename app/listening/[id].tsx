@@ -3,15 +3,17 @@
 // إن كان القارئ مفتوحًا لنفس الكتاب نرجع إليه (لا نفتح قارئًا ثانيًا يقرأ بالتوازي).
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator } from "react-native";
 
-import { Palette } from "../../constants/design";
+import { SceneScreen } from "../../components/brand/scene-screen";
 import { getUserId } from "../../lib/auth";
 import { getOpenReaderBook } from "../../lib/readingCard";
+import { useScene } from "../../lib/scene";
 import { supabase } from "../../lib/supabase";
 
 export default function ListeningRedirect() {
   const router = useRouter();
+  const { pal } = useScene();
   const { id } = useLocalSearchParams<{ id: string }>();
 
   useEffect(() => {
@@ -34,8 +36,8 @@ export default function ListeningRedirect() {
   }, [id, router]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: Palette.bg, alignItems: "center", justifyContent: "center" }}>
-      <ActivityIndicator color={Palette.text} />
-    </View>
+    <SceneScreen style={{ alignItems: "center", justifyContent: "center" }}>
+      <ActivityIndicator color={pal.accent} />
+    </SceneScreen>
   );
 }
