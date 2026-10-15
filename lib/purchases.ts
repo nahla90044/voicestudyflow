@@ -35,7 +35,9 @@ export const TERMS_URL = "https://www.apple.com/legal/internet-services/itunes/d
 export const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL ?? "https://voicestudyflow.app/privacy";
 export const MANAGE_URL = "https://apps.apple.com/account/subscriptions";
 
-const ENABLED = process.env.EXPO_PUBLIC_IAP === "1";
+// الشراء مفعّل دائمًا (المنتجات مسجّلة في App Store Connect). كان مربوطًا بـ EXPO_PUBLIC_IAP فقط،
+// والتحديثات الهوائية لم تكن تحمله فاختفت أزرار الشراء (رفض آبل ١٥ أكتوبر). يُطفأ صراحةً بـ "0" فقط.
+const ENABLED = process.env.EXPO_PUBLIC_IAP !== "0";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function iap(): any | null {
