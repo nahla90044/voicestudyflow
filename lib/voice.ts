@@ -19,6 +19,7 @@ import { requestPaywall } from "./plan";
 import { numbersToArabicWords } from "./arabicNumbers";
 import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
 import { markUpdateRequired } from "./appVersion";
+import { base64ToBytes } from "./base64";
 import { supabase } from "./supabase";
 
 /* -------- سجلّ عام لكل مشغّلات السرد: صوت واحد فقط في أي لحظة -------- */
@@ -405,26 +406,7 @@ export function isHumanVoiceEnabled(): boolean {
   return true;
 }
 
-// فكّ ترميز base64 إلى بايتات — أمتن من الاعتماد على كتابة الملف بترميز base64
-const B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-function base64ToBytes(b64: string): Uint8Array {
-  const clean = b64.replace(/[^A-Za-z0-9+/]/g, "");
-  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
-  const outLen = Math.floor((clean.length * 3) / 4) - pad;
-  const bytes = new Uint8Array(outLen);
-  let p = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const c0 = B64_CHARS.indexOf(clean[i]);
-    const c1 = B64_CHARS.indexOf(clean[i + 1]);
-    const c2 = clean[i + 2] ? B64_CHARS.indexOf(clean[i + 2]) : 0;
-    const c3 = clean[i + 3] ? B64_CHARS.indexOf(clean[i + 3]) : 0;
-    const n = (c0 << 18) | (c1 << 12) | (c2 << 6) | c3;
-    if (p < outLen) bytes[p++] = (n >> 16) & 255;
-    if (p < outLen) bytes[p++] = (n >> 8) & 255;
-    if (p < outLen) bytes[p++] = n & 255;
-  }
-  return bytes;
-}
+// فكّ base64 السريع (جدول بحث) — انظر lib/base64.ts
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
 async function synthToFile(

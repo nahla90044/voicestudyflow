@@ -51,6 +51,23 @@ Deno.serve(async (req: Request) => {
     if (owner !== user.id && owner !== "samples") return json({ error: "Forbidden" }, 403);
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+    // الطريقة الجديدة (format: "url"): JPEG خفيف يُولَّد مرة واحدة ويُحفظ في bucket «page-img»،
+    // ويُعاد رابط موقّع يُنزّله التطبيق مباشرة. النسخ الأقدم (بلا format) تبقى على base64 PNG.
+    const asUrl = body.format === "url";
+    const cachePath = `${pdfPath}/p${page}-s3.jpg`;
+    if (asUrl) {
+      // مولّدة سابقًا؟ نبحث عنها في مجلدها، ثم نعيد رابطًا موقّعًا لها
+      const slash = cachePath.lastIndexOf("/");
+      const { data: found } = await sb.storage
+        .from("page-img")
+        .list(cachePath.slice(0, slash), { search: cachePath.slice(slash + 1), limit: 1 });
+      if (found?.some((f) => f.name === cachePath.slice(slash + 1))) {
+        const { data: signed } = await sb.storage.from("page-img").createSignedUrl(cachePath, 3600);
+        if (signed?.signedUrl) return json({ url: signed.signedUrl, page });
+      }
+    }
+
     const { data: file, error: dErr } = await sb.storage.from("pdfs").download(pdfPath);
     if (dErr || !file) throw dErr ?? new Error("Failed to download PDF");
 
@@ -61,8 +78,21 @@ Deno.serve(async (req: Request) => {
     const pg = doc.loadPage(p - 1);
     // دقة عالية (scale 3) لنص واضح عند التكبير
     const pix = pg.toPixmap(mupdf.Matrix.scale(3, 3), mupdf.ColorSpace.DeviceRGB, false);
-    const png = pix.asPNG() as Uint8Array;
 
+    if (asUrl) {
+      // JPEG بجودة عالية: النص واضح عند التكبير، والحجم أصغر بكثير من PNG
+      const jpg = pix.asJPEG(88, false) as Uint8Array;
+      const path = `${pdfPath}/p${p}-s3.jpg`;
+      const { error: upErr } = await sb.storage.from("page-img").upload(path, jpg, { contentType: "image/jpeg", upsert: true });
+      if (!upErr) {
+        const { data: signed } = await sb.storage.from("page-img").createSignedUrl(path, 3600);
+        if (signed?.signedUrl) return json({ url: signed.signedUrl, page: p, totalPages });
+      }
+      // تعذّر الحفظ → نرسلها مباشرة (base64) كي لا تتعطل القراءة
+      return json({ image: bytesToBase64(jpg), page: p, totalPages, mime: "image/jpeg" });
+    }
+
+    const png = pix.asPNG() as Uint8Array;
     return json({ image: bytesToBase64(png), page: p, totalPages });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

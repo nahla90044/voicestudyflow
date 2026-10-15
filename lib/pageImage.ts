@@ -3,29 +3,10 @@
 // فتُعرض في القارئ قابلة للتكبير والتحريك وتتابع القراءة.
 import { Directory, File, Paths } from "expo-file-system";
 
+import { base64ToBytes } from "./base64";
 import { supabase } from "./supabase";
 
 const DIR = "page-img";
-
-const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-function base64ToBytes(b64: string): Uint8Array {
-  const clean = b64.replace(/[^A-Za-z0-9+/]/g, "");
-  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
-  const outLen = Math.floor((clean.length * 3) / 4) - pad;
-  const bytes = new Uint8Array(outLen);
-  let p = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const n =
-      (B64.indexOf(clean[i]) << 18) |
-      (B64.indexOf(clean[i + 1]) << 12) |
-      ((clean[i + 2] ? B64.indexOf(clean[i + 2]) : 0) << 6) |
-      (clean[i + 3] ? B64.indexOf(clean[i + 3]) : 0);
-    if (p < outLen) bytes[p++] = (n >> 16) & 255;
-    if (p < outLen) bytes[p++] = (n >> 8) & 255;
-    if (p < outLen) bytes[p++] = n & 255;
-  }
-  return bytes;
-}
 
 function hashKey(s: string): string {
   let h = 0x811c9dc5;
@@ -42,18 +23,60 @@ function cacheDir(): Directory {
   return d;
 }
 
-/** يُرجع مسار صورة الصفحة محليًا (من التخزين أو يجلبها ويخزّنها). */
-export async function getPageImage(pdfPath: string, page: number): Promise<string | null> {
-  if (!pdfPath) return null;
-  const file = new File(cacheDir(), `${hashKey(pdfPath)}_${page}.png`);
-  if (file.exists && (file.size ?? 0) > 0) return file.uri;
+// حد أقصى لانتظار السيرفر/التنزيل: طلب عالق كان يُبقي الصفحة «تُحمَّل» حتى الخروج من الكتاب
+const TIMEOUT_MS = 30_000;
+function within<T>(p: Promise<T>, ms = TIMEOUT_MS): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error("TIMEOUT")), ms))]);
+}
 
-  const { data, error } = await supabase.functions.invoke("page-image", {
-    body: { pdfPath, page },
-  });
-  const img = (data as { image?: string })?.image;
-  if (error || !img) return null;
+// طلب واحد فقط لكل صفحة في نفس الوقت (الصفحة الحالية والتحميل المسبق كانا يطلبان نفس الصفحة مرتين)
+const inflight = new Map<string, Promise<string | null>>();
+
+/** يُرجع مسار صورة الصفحة محليًا (من التخزين أو يجلبها ويخزّنها). */
+export function getPageImage(pdfPath: string, page: number): Promise<string | null> {
+  if (!pdfPath) return Promise.resolve(null);
+  const key = `${pdfPath}#${page}`;
+  const running = inflight.get(key);
+  if (running) return running;
+  const job = fetchPageImage(pdfPath, page).finally(() => inflight.delete(key));
+  inflight.set(key, job);
+  return job;
+}
+
+async function fetchPageImage(pdfPath: string, page: number): Promise<string | null> {
+  const dir = cacheDir();
+  const base = `${hashKey(pdfPath)}_${page}`;
+  // صور محفوظة سابقًا (PNG القديمة أو JPEG الجديدة)
+  for (const ext of ["jpg", "png"]) {
+    const f = new File(dir, `${base}.${ext}`);
+    if (f.exists && (f.size ?? 0) > 0) return f.uri;
+  }
+
+  // الطريقة السريعة: رابط مباشر يُنزَّل خارج واجهة التطبيق (بلا base64 في JavaScript)
   try {
+    const { data, error } = await within(supabase.functions.invoke("page-image", { body: { pdfPath, page, format: "url" } }));
+    const d = data as { url?: string; image?: string; mime?: string } | null;
+    if (!error && d?.url) {
+      const target = new File(dir, `${base}.jpg`);
+      if (target.exists) target.delete();
+      const got = await within(File.downloadFileAsync(d.url, target));
+      if (got.exists && (got.size ?? 0) > 0) return got.uri;
+    } else if (!error && d?.image) {
+      // السيرفر تعذّر عليه الحفظ فأرسلها مباشرة
+      const f = new File(dir, `${base}.${d.mime === "image/jpeg" ? "jpg" : "png"}`);
+      f.write(base64ToBytes(d.image));
+      return f.uri;
+    }
+  } catch {
+    // نكمل بالطريقة القديمة
+  }
+
+  // احتياط: الطريقة القديمة (base64 PNG) بفكّ سريع
+  try {
+    const { data, error } = await within(supabase.functions.invoke("page-image", { body: { pdfPath, page } }));
+    const img = (data as { image?: string })?.image;
+    if (error || !img) return null;
+    const file = new File(dir, `${base}.png`);
     file.write(base64ToBytes(img));
     return file.uri;
   } catch {
