@@ -11,6 +11,9 @@ const json = (b: unknown, status = 200) =>
 Deno.serve(async (req) => {
   const caller = await getCaller(req);
   if (!caller) return json({ error: "unauthorized" }, 401);
+  // سجل تشخيص مختصر (جدول iap_log) — لمعرفة سبب أي فشل في الشراء بدقة
+  const log = (stage: string, product: string | null, detail = "") =>
+    caller.admin.from("iap_log").insert({ user_id: caller.id, stage, product_id: product, detail: detail.slice(0, 500) }).then(() => {}, () => {});
   let list: string[] = [];
   try {
     const body = await req.json();
@@ -41,8 +44,18 @@ Deno.serve(async (req) => {
       t = await verifyTransaction(jws);
     } catch (e) {
       console.error("verify failed", String(e));
+      // سبب فشل التحقق بالتفصيل (للتشخيص)
+      const ex = e as { status?: unknown; message?: string; cause?: unknown };
+      await caller.admin.from("iap_log").insert({
+        user_id: caller.id,
+        stage: "verify_failed",
+        detail: `status=${String(ex?.status)} msg=${ex?.message ?? ""} cause=${String(ex?.cause ?? "")}`.slice(0, 1000),
+        product_id: null,
+      }).then(() => {}, () => {});
+
       continue;
     }
+    await log("verified", String(t.productId), `env=${t.environment} token=${t.appAccountToken ? "yes" : "no"} active=${isActive(t)}`);
     // صفحات إضافية (شراء استهلاكي): تُضاف للرصيد مرة واحدة لكل معاملة
     const packPages = PAGE_PACKS[String(t.productId)];
     if (packPages) {
@@ -70,6 +83,7 @@ Deno.serve(async (req) => {
     const token = (t.appAccountToken ?? "").toLowerCase();
     if (token && token !== me && (await exists(token))) {
       conflict = true;
+      await log("conflict_token", String(t.productId));
       continue;
     }
     const { data: owner } = await admin
@@ -80,6 +94,7 @@ Deno.serve(async (req) => {
     const prev = String(owner?.user_id ?? "").toLowerCase();
     if (prev && prev !== me && token !== me && (await exists(prev))) {
       conflict = true;
+      await log("conflict_owner", String(t.productId));
       continue;
     }
     // انتقال مشروع (اشتُري بهذا الحساب، أو الحساب السابق محذوف): نسحب الاشتراك من المالك السابق
