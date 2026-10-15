@@ -78,25 +78,30 @@ export function splitForReading(
 
   const seen = opts.seenHeaders ?? new Set<string>();
   const headerLines: string[] = [];
-  let i = 0;
   let announce = false;
-  // افحص حتى ٣ أسطر صدرية قصيرة (محتملة الترويسة)
-  while (i < lines.length && i < 3) {
-    const line = lines[i];
-    if (line.length > 80) break; // سطر طويل = محتوى
-    const n = headerNorm(line);
-    if (n.length < 4) break;
-    if (seen.has(n)) {
-      i++; // ترويسة معروفة (متكرّرة) → احذفها
-      continue;
+  // سطر «ترويسة محتملة»: قصير وفيه حروف كافية (عنوان الكتاب/الوحدة في رأس الصفحة أو ذيلها)
+  const headerish = (l: string) => l.length <= 80 && headerNorm(l).length >= 4;
+  const drop = new Set<number>();
+  const scan = (idxs: number[], isTop: boolean) => {
+    for (const i of idxs) {
+      const line = lines[i];
+      if (!headerish(line)) break; // وصلنا للمحتوى
+      const n = headerNorm(line);
+      if (seen.has(n)) {
+        drop.add(i); // ترويسة/تذييل رُئي من قبل → لا يُعاد قراءته
+      } else {
+        // جديد → يُقرأ هذه المرة فقط، ويُسجَّل (كل أسطر الترويسة لا أولها فقط)
+        headerLines.push(n);
+        if (isTop && UNIT_RE.test(line)) announce = true; // عنوان وحدة جديد → أعلن رقم الصفحة
+      }
     }
-    // سطر صدري جديد → يُقرأ أول مرة (نتوقّف هنا فنُبقيه وما بعده)
-    headerLines.push(n);
-    if (UNIT_RE.test(line)) announce = true; // عنوان وحدة جديد → أعلن رقم الصفحة
-    break;
-  }
+  };
+  // أعلى الصفحة (حتى ٣ أسطر) وأسفلها (حتى سطرين) — كانت الأسفل لا تُفحص إطلاقًا
+  const topIdx = [0, 1, 2].filter((i) => i < lines.length);
+  scan(topIdx, true);
+  if (lines.length >= 3) scan([lines.length - 1, lines.length - 2].filter((i) => i > 0 && !topIdx.includes(i)), false);
 
-  lines = lines.slice(i);
+  lines = lines.filter((_, i) => !drop.has(i));
   if (announce && opts.page && lines.length) lines = [`صفحة ${opts.page}.`, ...lines];
 
   return { chunks: splitSentences(lines.join("\n")), headerLines };

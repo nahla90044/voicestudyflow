@@ -11,7 +11,10 @@ import { extractPdfPageText, getPreciseText } from "./pdfText";
 import { setLastPage, setLastSentence } from "./readerPrefs";
 import { focusEvery, getFocusLevel } from "./settings";
 import { recordActivity } from "./stats";
-import { splitSentences } from "./textUtils";
+import { splitForReading } from "./textUtils";
+
+// الترويسات المقروءة لكل كتاب (الشريط العائم) — لا تُعاد في كل صفحة
+const seenHeaders = new Map<string, Set<string>>();
 import { closeReadingCard, nextSpeed, onReadingAction, syncReadingCard } from "./readingCard";
 import {
   holdAudioSession,
@@ -175,7 +178,12 @@ async function loadPage(p: number, my: number): Promise<boolean> {
     let text = res.text;
     if ((state.precise || res.ocr) && text.trim()) text = await getPreciseText(state.pdfPath, res.page, text, !!res.ocr);
     if (my !== token || !state) return false;
-    sents = splitSentences(text);
+    // نفس معالجة القارئ للترويسة المتكررة: تُقرأ أول مرة فقط (لكل كتاب)
+    const seen = seenHeaders.get(state.pdfPath) ?? new Set<string>();
+    seenHeaders.set(state.pdfPath, seen);
+    const out = splitForReading(text, { seenHeaders: seen, page: res.page });
+    out.headerLines.forEach((h) => seen.add(h));
+    sents = out.chunks;
     sentsPage = res.page;
     patch({ loading: false, totalPages: res.totalPages || state.totalPages });
     return true;

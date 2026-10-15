@@ -1294,15 +1294,17 @@ export default function ReaderScreen() {
   // يتخطّى الترويسة المتكرّرة (نفس بداية الصفحة السابقة) فتُقرأ مرة واحدة
   // يجهّز مقاطع الصفحة للقراءة/العرض (مرة واحدة لكل صفحة) مع معالجة الترويسة المتكرّرة:
   // عنوان الوحدة ورقم الصفحة يُقرآن أول مرة فقط، ثم يُحذفان من الصفحات التالية للوحدة.
-  function getReadingSentences(pageText: string, p: number): string[] {
-    const cached = processedRef.current.get(p);
+  // precise: نص التشكيل/الممسوح ضوئيًا (كان يتجاوز معالجة الترويسة فتُقرأ في كل صفحة)
+  function getReadingSentences(pageText: string, p: number, precise = false): string[] {
+    const key = precise ? -p : p; // كاش منفصل لنص التشكيل (نفس الصفحة، نص مختلف)
+    const cached = processedRef.current.get(key);
     if (cached) return cached;
     const { chunks, headerLines } = splitForReading(pageText, {
       seenHeaders: seenHeadersRef.current,
       page: p,
     });
     headerLines.forEach((h) => seenHeadersRef.current.add(h));
-    processedRef.current.set(p, chunks);
+    processedRef.current.set(key, chunks);
     return chunks;
   }
 
@@ -1518,10 +1520,9 @@ export default function ReaderScreen() {
       }
       if (!playingRef.current) return;
       // الترجمة/التشكيل تغيّر النص → تقسيم بسيط؛ وإلا معالجة الترويسة (عنوان+صفحة مرة واحدة)
-      const sents =
-        listenArabicRef.current || precise
-          ? splitSentences(pageText)
-          : getReadingSentences(pageText, res.page);
+      const sents = listenArabicRef.current
+        ? splitSentences(pageText)
+        : getReadingSentences(pageText, res.page, precise);
       setSentences(sents);
       offsetsRef.current = [];
       matchVoiceToText(sents.slice(0, 8).join(" "));
@@ -1582,7 +1583,7 @@ export default function ReaderScreen() {
       let txt = res.text;
       if (listenArabicRef.current) txt = await translatePage(res.page, txt);
       else if (precise) txt = await tashkeelPage(res.page, txt, !!res.ocr);
-      const sents = listenArabicRef.current || precise ? splitSentences(txt) : getReadingSentences(txt, res.page);
+      const sents = listenArabicRef.current ? splitSentences(txt) : getReadingSentences(txt, res.page, precise);
       const vId = pickVoice();
       const pageRef = { book: pdfPath, page: res.page };
       for (const s of sents.slice(0, 2)) await prefetchText(s, { voiceId: vId, page: pageRef });
@@ -1611,7 +1612,8 @@ export default function ReaderScreen() {
   }
 
   // يقرأ جملة واحدة ثم ينتقل للتالية (أو للصفحة التالية)
-  function playSentence(sents: string[], i: number, p: number, total: number) {
+  /** fromWord: يبدأ من كلمة معيّنة داخل الجملة (النقر على كلمة في منتصفها) — للجملة الأولى فقط */
+  function playSentence(sents: string[], i: number, p: number, total: number, fromWord = 0) {
     if (!playingRef.current) return;
 
     if (i >= sents.length) {
@@ -1646,19 +1648,23 @@ export default function ReaderScreen() {
       // لموضع العدسة: كم مقطعًا/كلمات قبل هذا المقطع وإجماليها
       let wordsBefore = 0;
       for (let k = 0; k < i; k++) wordsBefore += (sents[k].match(/\S+/g) || []).length;
-      const curWords = (sents[i].match(/\S+/g) || []).length || 1;
+      const curWordList = sents[i].match(/\S+/g) || [];
+      const curWords = curWordList.length || 1;
       const totalWords = sents.reduce((a, s) => a + (s.match(/\S+/g) || []).length, 0) || 1;
-      speakText(sents[i], {
+      // البدء من منتصف الجملة: نقرأ من الكلمة المختارة إلى آخرها، والتظليل يبقى على مواضعه الصحيحة
+      const fw = fromWord > 0 && fromWord < curWordList.length ? fromWord : 0;
+      const spokenText = fw > 0 ? curWordList.slice(fw).join(" ") : sents[i];
+      speakText(spokenText, {
         voiceId: pickVoice(),
         page: pageRef,
         rate: rateRef.current,
         // هايلايت كلمة-بكلمة: التقدّم من توقيت ElevenLabs الحقيقي → الكلمة المنطوقة
         onProgress: (frac) => {
           // frac الآن دقيق (من توقيت الحروف الحقيقي بعد محاذاته بالنص المعروض)
-          setActiveWord(wordIndexAtFraction(sents[i], frac));
+          setActiveWord(fw + wordIndexAtFraction(spokenText, frac));
           // تقدّم القراءة (لتظليل الكلمة على الـPDF/العدسة) — في وضع PDF أو العدسة فقط
           if (pdfFollowRef.current) {
-            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + frac * curWords) / totalWords)));
+            setReadProgress(Math.min(1, Math.max(0, (wordsBefore + fw + frac * (curWords - fw)) / totalWords)));
           }
         },
         onDone: () => {
@@ -2002,23 +2008,24 @@ export default function ReaderScreen() {
 
   // لمس كلمة → عرض معناها حسب سياقها
   // يبدأ القراءة من جملة محددة في الصفحة الحالية
-  function readFromSentence(i: number) {
+  function readFromSentence(i: number, fromWord = 0) {
     stop();
     setActiveSentence(i);
+    setStatus("");
     playingRef.current = true;
     setSpeaking(true);
     playStartRef.current = Date.now();
     recordActivity({});
-    playSentence(sentences, i, page, totalPages || sentences.length);
+    playSentence(sentences, i, page, totalPages || sentences.length, fromWord);
   }
 
   // كلمة: ضغطة = معنى/تحديد، ضغطتان سريعتان = اقرأ من هنا
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function onWordPress(i: number, tok: string, s: string) {
+  function onWordPress(i: number, tok: string, s: string, wordIdx = 0) {
     if (tapTimerRef.current) {
       clearTimeout(tapTimerRef.current);
       tapTimerRef.current = null;
-      readFromSentence(i); // ضغطتان → القراءة من هذه الجملة
+      readFromSentence(i, wordIdx); // ضغطتان → القراءة من هذه الكلمة بالضبط
       return;
     }
     tapTimerRef.current = setTimeout(() => {
@@ -2049,12 +2056,76 @@ export default function ReaderScreen() {
     const prev = pageTapRef.current;
     if (prev && now - prev.t < 320 && Math.abs(prev.x - locX) < 30 && Math.abs(prev.y - locY) < 30) {
       pageTapRef.current = null;
-      const i = sentenceAtPoint(locX, locY);
-      if (i >= 0) readFromSentence(i);
+      const at = wordAtPoint(locX, locY);
+      if (at) readFromSentence(at.sentence, at.word);
       return;
     }
     pageTapRef.current = { t: now, x: locX, y: locY };
   }
+  /**
+   * أي كلمة تحت الإصبع بالضبط؟ من مواضع كلمات الصفحة ومحاذاتها مع الكلمات المنطوقة:
+   * يُرجع رقم الجملة ورقم الكلمة داخلها، فتبدأ القراءة من الكلمة نفسها حتى لو في منتصف الجملة.
+   * (كان يُبحث عن الجملة من مستطيلاتها فقط، فبعض الجمل لا يمكن الوصول إليها، والبدء دائمًا من أولها)
+   */
+  function wordAtPoint(locX: number, locY: number): { sentence: number; word: number } | null {
+    if (!pdfImgW2 || !sentences.length) return null;
+    const H = pdfImgW2 / (pageImgAspect || 0.7);
+    const x = locX / pdfImgW2;
+    const y = locY / H;
+    const { map, starts } = hl;
+    if (pageWords.length && map.length) {
+      // أقرب صندوق كلمة للإصبع (المسافة العمودية أهم: نفس السطر أولًا)
+      let bi = -1;
+      let bd = Infinity;
+      pageWords.forEach((b, idx) => {
+        const dx = x < b.x ? b.x - x : x > b.x + b.w ? x - (b.x + b.w) : 0;
+        const dy = y < b.y ? b.y - y : y > b.y + b.h ? y - (b.y + b.h) : 0;
+        const d = dy * 2 + dx;
+        if (d < bd) {
+          bd = d;
+          bi = idx;
+        }
+      });
+      if (bi >= 0 && bd < 0.06) {
+        // الكلمات المنطوقة المرتبطة بهذا الصندوق (قد يحوي الصندوق عبارة كاملة)
+        let ks: number[] = [];
+        map.forEach((m, k) => m === bi && ks.push(k));
+        if (!ks.length) {
+          // صندوق بلا مقابل منطوق (عنوان/رقم) → أقرب كلمة منطوقة بعده في الصفحة
+          let best = -1;
+          let bestGap = Infinity;
+          map.forEach((m, k) => {
+            const gap = m >= bi ? m - bi : (bi - m) * 3;
+            if (gap < bestGap) {
+              bestGap = gap;
+              best = k;
+            }
+          });
+          ks = best >= 0 ? [best] : [];
+        }
+        if (ks.length) {
+          let k = ks[0];
+          if (ks.length > 1) {
+            const b = pageWords[bi];
+            const frac = Math.min(1, Math.max(0, (x - b.x) / Math.max(b.w, 1e-6)));
+            const pos = isArabicText ? 1 - frac : frac; // العربي من اليمين
+            k = ks[Math.min(ks.length - 1, Math.floor(pos * ks.length))];
+          }
+          // الجملة: آخر جملة (لها كلمات) تبدأ قبل هذه الكلمة أو عندها
+          let si = 0;
+          for (let j = 0; j < starts.length; j++) {
+            const len = (sentences[j]?.match(/\S+/g) || []).length;
+            if (starts[j] <= k && len > 0) si = j;
+          }
+          return { sentence: si, word: Math.max(0, k - starts[si]) };
+        }
+      }
+    }
+    // بلا مواضع كلمات موثوقة: الجملة الأقرب (من أولها)
+    const si = sentenceAtPoint(locX, locY);
+    return si >= 0 ? { sentence: si, word: 0 } : null;
+  }
+
   /** أي جملة تحت النقطة؟ من مستطيلات الجمل، وإلا أقرب جملة عموديًا */
   function sentenceAtPoint(locX: number, locY: number): number {
     if (!pdfImgW2 || !sentences.length) return -1;
@@ -2761,7 +2832,7 @@ export default function ReaderScreen() {
                           return (
                             <Text
                               key={wi}
-                              onPress={() => onWordPress(i, tok, s)}
+                              onPress={() => onWordPress(i, tok, s, s.split(/(\s+)/).slice(0, wi).filter((x) => /\S/.test(x)).length)}
                               onLongPress={highlightMode ? undefined : () => void saveToMyWords(tok, s)}
                               suppressHighlighting
                               style={spoken ? styles.wordSpoken : undefined}
