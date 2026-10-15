@@ -1665,15 +1665,19 @@ export default function ReaderScreen() {
           setActiveWord(-1);
           playSentence(sents, i + 1, p, total);
         },
-        onFallback: (reason) => setVoiceWarn(/USER_QUOTA/.test(reason) ? "" : /TTS_SLOW|TTS_TIMEOUT|PLAY_TIMEOUT|TIMEOUT|504/.test(reason) ? t("reader.voice.slow") : reason),
+        // الصوت يتأخر (شبكة ضعيفة) → مؤشر واضح بدل الصمت، والمحاولة تتكرر تلقائيًا بنفس الصوت
+        onWaiting: (w) => setVoiceWarn(w ? t("reader.voice.preparing") : ""),
         onError: (e) => {
-          const msg = (e as any)?.message ?? "خطأ";
-          if (msg === "QUOTA") {
-            setVoiceWarn("");
-            setStatus("⏸️ الصوت البشري غير متاح مؤقتًا. المحاولة لاحقًا ممكنة.");
+          const msg = (e as any)?.message ?? "";
+          setVoiceWarn("");
+          if (msg === "USER_QUOTA") {
+            setStatus(""); // شاشة الاشتراك ظهرت
+          } else if (msg === "QUOTA") {
+            setStatus(t("reader.voice.quota"));
           } else {
-            setStatus(`تعذّر تشغيل الصوت: ${msg}`);
+            setStatus(t("reader.voice.unavailable"));
           }
+          resumeIdxRef.current = i; // زر التشغيل يستأنف من نفس الجملة التي تعذّرت
           stop();
         },
       });

@@ -218,6 +218,9 @@ async function playFrom(p: number, i: number, my: number) {
       onDone: () => {
         if (my === token) void playFrom(p, i + 1, my);
       },
+      onWaiting: (w) => {
+        if (my === token) patch({ loading: w });
+      },
       onError: () => {
         if (my === token) pause();
       },

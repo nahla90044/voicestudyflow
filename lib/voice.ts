@@ -59,8 +59,10 @@ export type SpeakCallbacks = {
   onStart?: () => void;
   onDone?: () => void;
   onError?: (e: unknown) => void;
-  // يُستدعى عند فشل الصوت البشري والرجوع لصوت الجهاز (للتشخيص)
+  // يُستدعى عند تبديل الصوت (مثل انتهاء الصوت الفاخر) — للتشخيص
   onFallback?: (reason: string) => void;
+  // الصوت يتأخر ويُعاد المحاولة تلقائيًا (true) / بدأ أو توقف الانتظار (false) — لمؤشر «جارٍ تجهيز الصوت»
+  onWaiting?: (waiting: boolean) => void;
   // تقدّم التشغيل 0..1 (لتحديد الكلمة المقروءة)
   onProgress?: (fraction: number) => void;
 };
@@ -313,8 +315,11 @@ function within<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(tag)), ms))]);
 }
 const TTS_REQUEST_MS = 24_000; // طلب السيرفر نفسه (ميزانية السيرفر ١٨ث + الشبكة)
-const TTS_WAIT_MS = 15_000; // بعدها تُقرأ الجملة بصوت الجهاز فورًا ويكمل التوليد بالخلفية
-const PLAY_START_MS = 8_000; // ملف لم يبدأ تشغيله خلالها → نكمل بصوت الجهاز بدل التوقف
+// لا صوت آلي إطلاقًا (قرار نهلة ١٥ أكتوبر): عند البطء نُظهر «جارٍ تجهيز الصوت» ونعيد المحاولة
+// بنفس الصوت، وإن تعذّر نهائيًا نُبلغ بوضوح (VOICE_UNAVAILABLE) بدل التعليق الصامت.
+const WAITING_AFTER_MS = 5_000; // بعدها يظهر مؤشر الانتظار
+const TTS_RETRIES = 3; // محاولات إضافية بعد الأولى
+const PLAY_START_MS = 8_000; // ملف لم يبدأ تشغيله خلالها → نحذفه ونولّده من جديد مرة واحدة
 
 // رمز تشغيل يتغيّر مع كل إيقاف — يُلغي أي صوت كان قيد التحضير (يمنع التراكب)
 let playToken = 0;
@@ -417,6 +422,9 @@ export function isHumanVoiceEnabled(): boolean {
 // فكّ base64 السريع (جدول بحث) — انظر lib/base64.ts
 
 /** يولّد ملف صوت mp3 من النص — عبر المفتاح المحلي (تطوير) أو الدالة السحابية (إنتاج). */
+// جمل أُعيد توليدها بعد ملف لم يبدأ (مرة واحدة فقط لكل جملة)
+const playRetried = new Set<string>();
+
 // طلب واحد لكل جملة في نفس الوقت: الجملة الحالية والتحميل المسبق كانا يطلبان نفس الجملة
 // مرتين فيتضاعف الحمل والتأخير. الطلب الثاني ينتظر الأول.
 const synthInflight = new Map<string, Promise<{ file: File; starts: number[] }>>();
@@ -668,9 +676,30 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     const gender = opts.gender ?? "female";
 
     step = "توليد الصوت";
-    const { file, starts } = await within(synthToFile(clean, gender, opts.voiceId, opts.expressive, opts.page), TTS_WAIT_MS, "TTS_SLOW");
+    let synth: { file: File; starts: number[] } | null = null;
+    const waitingTimer = setTimeout(() => {
+      if (myToken === playToken) opts.onWaiting?.(true);
+    }, WAITING_AFTER_MS);
+    try {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          synth = await synthToFile(clean, gender, opts.voiceId, opts.expressive, opts.page);
+          break;
+        } catch (e) {
+          const m = String((e as Error)?.message ?? e);
+          // الحصص والنسخ القديمة ليست مشكلة شبكة → لا إعادة
+          if (/QUOTA|UPDATE_REQUIRED/i.test(m) || attempt >= TTS_RETRIES || myToken !== playToken) throw e;
+          opts.onWaiting?.(true);
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          if (myToken !== playToken) return;
+        }
+      }
+    } finally {
+      clearTimeout(waitingTimer);
+    }
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
-
+    opts.onWaiting?.(false);
+    const { file, starts } = synth!;
     step = "وضع الصوت";
     await ensureAudioMode();
     if (myToken !== playToken) return;
@@ -753,36 +782,42 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
         file.delete();
       } catch {}
       if (currentPlayer === player) disposePlayer();
-      opts.onFallback?.("PLAY_TIMEOUT");
-      speakWithDevice(clean, opts);
+      if (playRetried.has(clean)) {
+        playRetried.delete(clean);
+        opts.onWaiting?.(false);
+        opts.onError?.(new Error("VOICE_UNAVAILABLE"));
+        return;
+      }
+      playRetried.add(clean);
+      void speakText(text, opts); // يُولَّد الملف من جديد (حُذف التالف)
     }, PLAY_START_MS);
     holdAudioSession(false); // بدأ السرد فعلًا → لا حاجة للمقطع الصامت
     // أزرار شاشة القفل (تشغيل/إيقاف + «قيد التشغيل») لهذا المقطع. التفعيل يخص مركز
     // «قيد التشغيل» فقط ولا يمسّ جلسة الصوت، فلا يُحدث تقطيعًا في الصوت.
     activateLockScreen(player);
   } catch (e) {
+    if (myToken !== playToken) return; // أوقف المستخدم القراءة أثناء التحضير → لا رسائل
     const reason = `[${step}] ${(e as Error)?.message ?? String(e)}`;
-    console.warn("VSF_TTS_FALLBACK", reason);
+    console.warn("VSF_TTS_FAIL", reason);
     // انتهت صفحات الصوت الفاخر هذا الشهر → نكمل نفس الجملة بالصوت الأساسي (بلا انقطاع)
     if (/PREMIUM_QUOTA/.test(reason) && isPremiumVoice(opts.voiceId)) {
       premiumListeners.forEach((fn) => fn());
       return speakText(text, { ...opts, voiceId: standardVoiceFor(opts.voiceId) });
     }
-    // انتهت دقائق المستخدم الشهرية → نكمل بصوت الجهاز (لا تتوقف القراءة) ونعرض الاشتراك
+    opts.onWaiting?.(false);
+    // انتهت حصة المستخدم → شاشة الاشتراك، وتتوقف القراءة (بلا صوت آلي)
     if (/USER_QUOTA/.test(reason)) {
       requestPaywall("voice");
-      opts.onFallback?.(reason);
-      speakWithDevice(clean, opts);
+      opts.onError?.(new Error("USER_QUOTA"));
       return;
     }
-    // نفاد رصيد حساب الصوت نفسه → لا نرجع لصوت آلي مفاجئ؛ نبلّغ بوضوح ونتوقّف
+    // نفاد رصيد حساب الصوت نفسه
     if (/QUOTA/i.test(reason)) {
       opts.onError?.(new Error("QUOTA"));
       return;
     }
-    // أخطاء أخرى (شبكة مثلًا) → رجوع لصوت الجهاز ليكمل التسلسل
-    opts.onFallback?.(reason);
-    speakWithDevice(clean, opts);
+    // تعذّر بعد كل المحاولات (انقطاع شبكة مثلًا) → رسالة واضحة، لا صوت آلي
+    opts.onError?.(new Error("VOICE_UNAVAILABLE"));
   }
 }
 
@@ -826,56 +861,7 @@ export async function prefetchText(
   }
 }
 
-/* --------- اختيار أفضل صوت جهاز + التفريق ذكر/أنثى --------- */
-
-function guessGender(name = "", id = ""): VoiceGender | null {
-  const s = (name + " " + id).toLowerCase();
-  const female = ["female", "woman", "zira", "mary", "laila", "layla", "noura", "hala", "salma", "fatima", "samantha", "tessa", "amira", "f-"];
-  const male = ["male", "man", "majid", "maged", "ahmad", "ahmed", "omar", "tarik", "hamed", "daniel", "fred", "m-"];
-  if (female.some((k) => s.includes(k))) return "female";
-  if (male.some((k) => s.includes(k))) return "male";
-  return null;
-}
-
-async function pickDeviceVoiceId(lang: VoiceLang, gender: VoiceGender): Promise<string | undefined> {
-  try {
-    const all = await Speech.getAvailableVoicesAsync();
-    const prefix = lang === "ar" ? "ar" : "en";
-    const matches = all.filter((v) => v.language?.toLowerCase().startsWith(prefix));
-    if (matches.length === 0) return undefined;
-
-    // الأعلى جودة أولاً
-    matches.sort((a, b) => Number(b.quality ?? 0) - Number(a.quality ?? 0));
-
-    // فضّل الصوت المطابق للجنس
-    const byGender = matches.find((v) => guessGender(v.name, v.identifier) === gender);
-    return (byGender ?? matches[0]).identifier;
-  } catch {
-    return undefined;
-  }
-}
-
-/** صوت الجهاز المدمّج (احتياطي) مع محاولة مطابقة الجنس وأفضل جودة. */
-async function speakWithDevice(text: string, opts: SpeakOptions) {
-  const lang = opts.lang ?? "ar";
-  const gender = opts.gender ?? "female";
-  const voice = await pickDeviceVoiceId(lang, gender);
-
-  Speech.stop();
-  holdAudioSession(false);
-  Speech.speak(text, {
-    language: lang === "ar" ? "ar-SA" : "en-US",
-    voice,
-    // نخفّض حدة الصوت قليلاً للذكر ونرفعها قليلاً للأنثى لزيادة التمييز
-    rate: opts.rate ?? 0.95,
-    pitch: opts.pitch ?? (gender === "male" ? 0.85 : 1.1),
-    onDone: () => opts.onDone?.(),
-    onStopped: () => opts.onDone?.(),
-    onError: (e) => opts.onError?.(e),
-  });
-}
-
-/** إيقاف الصوت (السحابي وصوت الجهاز معاً). */
+/** إيقاف الصوت. (لا صوت آلي في التطبيق إطلاقًا — Speech.stop احتياط لأي نطق قديم عالق) */
 // يوقف المقطع الحالي فقط (يُبقي المشغّل التالي المُحمّل مسبقًا للتشغيل المتواصل)
 function stopCurrentOnly(): void {
   playToken++; // يُبطل أي صوت قيد التحضير حتى لا يشتغل بعد الإيقاف
