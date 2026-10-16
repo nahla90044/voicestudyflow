@@ -5,9 +5,10 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BuzanMindMap } from "../../components/brand/mindmap";
+import { BuzanMindMap, MM_COLORS, mindmapSvg } from "../../components/brand/mindmap";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
@@ -25,7 +26,6 @@ import {
   type UnitSchedule,
 } from "../../lib/syllabus";
 
-const MM_COLORS = ["#7c5cff", "#4f8cff", "#22d3ee", "#2ecc71", "#f5a623", "#ff6b9d"];
 
 const AR_MONTHS = [
   "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
@@ -68,6 +68,11 @@ export default function SyllabusScreen() {
   const [mmUnit, setMmUnit] = useState<number | null>(null);
   const [mmLoading, setMmLoading] = useState(false);
   const [mm, setMm] = useState<MindMap | null>(null);
+  const [mmFull, setMmFull] = useState(false);
+  const [mmW, setMmW] = useState(0);
+  const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const mmTheme = { dark: !!pal.dark, bg: pal.card, ink: pal.ink, dim: pal.dim };
 
   async function loadSchedule(unitCount: number) {
     try {
@@ -234,90 +239,43 @@ export default function SyllabusScreen() {
     } catch {}
   }
 
-  // طباعة الخريطة الذهنية بشكلها **الشجري** الحقيقي (SVG): عقدة مركزية يمينًا،
-  // وفروع منحنية متفرّعة يسارًا، وتحت كل فرع نقاطه — كما تظهر على الشاشة تمامًا.
+  // طباعة الخريطة الذهنية: صفحة أفقية بالخريطة الشعاعية نفسها (نفس التخطيط في التطبيق،
+  // بلا تداخل)، ثم صفحة «المخطط الكامل» بالنصوص كاملة بلا اختصار.
   async function printMindmap() {
     if (!mm) return;
     const esc = (s: string) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const clip = (s: string, n: number) => {
-      const x = (s || "").trim();
-      return x.length > n ? x.slice(0, n - 1) + "…" : x;
-    };
-    const centerLines = (s: string): string[] => {
-      const words = (s || "").split(/\s+/);
-      if (words.length <= 2) return [s || ""];
-      const mid = Math.ceil(words.length / 2);
-      return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
-    };
-
-    // هندسة الشجرة (وحدات SVG) — الجذر يمينًا، الفروع تتفرّع يسارًا (RTL)
-    const W = 1240;
-    const ROW = 48;
-    const BR_GAP = 32;
-    const ROOT_RX = 118;
-    const ROOT_RY = 62;
-    const X_ROOT = W - 150; // مركز العقدة الجذرية
-    const X_BRANCH = 560; // عقد الفروع
-    const X_POINT = 300; // النقاط الفرعية
-
-    let y = 80;
-    const layout = mm.branches.map((b) => {
-      const pts = b.points;
-      const startY = y;
-      const pointYs = pts.map((_, j) => startY + j * ROW);
-      const by = startY + ((Math.max(1, pts.length) - 1) / 2) * ROW;
-      y += Math.max(1, pts.length) * ROW + BR_GAP;
-      return { label: b.label, pts, pointYs, by };
-    });
-    const H = Math.max(y + 40, ROOT_RY * 2 + 160);
-    const rootY = H / 2;
-
-    const parts: string[] = [];
-    layout.forEach((b, i) => {
-      const c = MM_COLORS[i % MM_COLORS.length];
-      const rootEdge = X_ROOT - ROOT_RX;
-      // فرع منحنٍ من الجذر إلى عقدة الفرع
-      parts.push(
-        `<path d="M ${rootEdge} ${rootY} C ${(rootEdge + X_BRANCH) / 2} ${rootY} ${(rootEdge + X_BRANCH) / 2} ${b.by} ${X_BRANCH} ${b.by}" stroke="${c}" stroke-width="6" fill="none" stroke-linecap="round"/>`
-      );
-      parts.push(`<circle cx="${X_BRANCH}" cy="${b.by}" r="14" fill="${c}"/>`);
-      parts.push(
-        `<text x="${X_BRANCH + 24}" y="${b.by + 8}" fill="${c}" font-size="25" font-weight="800" text-anchor="start">${esc(clip(b.label, 32))}</text>`
-      );
-      // النقاط الفرعية — كل نقطة على سطر بمنحنى خاص
-      b.pts.forEach((p, j) => {
-        const py = b.pointYs[j];
-        parts.push(
-          `<path d="M ${X_BRANCH} ${b.by} C ${(X_POINT + X_BRANCH) / 2} ${b.by} ${(X_POINT + X_BRANCH) / 2} ${py} ${X_POINT} ${py}" stroke="${c}" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>`
-        );
-        parts.push(`<circle cx="${X_POINT}" cy="${py}" r="7" fill="${c}"/>`);
-        parts.push(
-          `<text x="${X_POINT - 18}" y="${py + 7}" fill="#20304a" font-size="22" text-anchor="end">${esc(clip(p, 34))}</text>`
-        );
-      });
-    });
-    // العقدة المركزية
-    parts.push(`<ellipse cx="${X_ROOT}" cy="${rootY}" rx="${ROOT_RX}" ry="${ROOT_RY}" fill="#5b3df5"/>`);
-    const clines = centerLines(mm.center);
-    clines.forEach((ln, k) => {
-      parts.push(
-        `<text x="${X_ROOT}" y="${rootY - (clines.length - 1) * 16 + k * 32 + 8}" fill="#ffffff" font-size="25" font-weight="800" text-anchor="middle">${esc(clip(ln, 15))}</text>`
-      );
-    });
-
-    const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'SF Arabic', sans-serif">${parts.join("")}</svg>`;
-
+    const outline = mm.branches
+      .map((b, i) => {
+        const c = MM_COLORS[i % MM_COLORS.length];
+        return `<div class="br" style="border-color:${c}55"><div class="bh" style="background:${c}1A;color:${c}"><span class="dot" style="background:${c}"></span>${esc(b.label)}</div><ul>${b.points
+          .map((p) => `<li><span class="pd" style="background:${c}"></span>${esc(p)}</li>`)
+          .join("")}</ul></div>`;
+      })
+      .join("");
     const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8">
       <style>
         @page { size: landscape; margin: 14px; }
-        * { font-family: -apple-system, 'SF Arabic', sans-serif; }
-        body { margin: 0; padding: 16px; color: #14233a; }
-        h1 { font-size: 20px; text-align: center; margin: 0 0 10px; }
-        .wrap { width: 100%; }
+        * { font-family: -apple-system, 'SF Arabic', sans-serif; box-sizing: border-box; }
+        body { margin: 0; color: #14233a; }
+        h1 { font-size: 20px; text-align: center; margin: 4px 0 6px; }
+        .map { height: calc(100vh - 50px); display: flex; align-items: center; justify-content: center; page-break-after: always; }
+        .map svg { max-height: 100%; width: auto; max-width: 100%; }
+        h2 { font-size: 18px; margin: 6px 0 12px; }
+        .center { display: inline-block; background: linear-gradient(135deg,#7C5CFF,#00B4D8); color: #fff; font-weight: 800; padding: 8px 18px; border-radius: 999px; margin-bottom: 14px; }
+        .grid { columns: 2; column-gap: 16px; }
+        .br { break-inside: avoid; border: 1.5px solid; border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+        .bh { font-weight: 800; font-size: 15px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+        .dot { width: 10px; height: 10px; border-radius: 5px; display: inline-block; }
+        ul { list-style: none; margin: 0; padding: 6px 12px 10px; }
+        li { font-size: 13.5px; line-height: 1.8; display: flex; gap: 8px; align-items: baseline; }
+        .pd { width: 6px; height: 6px; border-radius: 3px; flex: none; display: inline-block; transform: translateY(-2px); }
       </style></head><body>
       <h1>🗺️ ${esc(t("syllabus.mindmap.title"))} — ${esc(bookTitle)}</h1>
-      <div class="wrap">${svg}</div>
+      <div class="map">${mindmapSvg(mm)}</div>
+      <h2>${esc(t("syllabus.mindmap.outline"))}</h2>
+      <div class="center">${esc(mm.center)}</div>
+      <div class="grid">${outline}</div>
     </body></html>`;
     try {
       await Print.printAsync({ html });
@@ -585,14 +543,20 @@ export default function SyllabusScreen() {
             </View>
 
             <ScrollView contentContainerStyle={{ paddingBottom: 12 }} showsVerticalScrollIndicator={false}>
-              {/* خريطة شعاعية (توني بوزان) — عرض ثابت داخل حاوية عادية.
-                  أزلنا التكبير المتداخل (ScrollView داخل ScrollView) لأنه كان
-                  يُوقف الإيماءات ويجمّد الصفحة؛ التفاصيل الكاملة في القائمة بالأسفل.
-                  خلفية الرسم تبقى داكنة لأن نصوص BuzanMindMap فاتحة ثابتة. */}
+              {/* خريطة شعاعية (توني بوزان) بألوان المشهد. لا تكبير متداخل هنا (كان يجمّد
+                  الإيماءات)؛ الضغط يفتحها بملء الشاشة مع تكبير بالأصابع. */}
               {mm ? (
-                <View style={[styles.mmCanvasWrap, styles.mmCanvas, { borderColor: pal.cardBorder }]}>
-                  <BuzanMindMap map={mm} size={320} />
-                </View>
+                <Pressable
+                  onPress={() => setMmFull(true)}
+                  onLayout={(e) => setMmW(e.nativeEvent.layout.width)}
+                  style={[styles.mmCanvasWrap, styles.mmCanvas, { borderColor: pal.cardBorder, backgroundColor: pal.card }]}
+                >
+                  {mmW > 0 ? <BuzanMindMap map={mm} size={mmW - 16} theme={mmTheme} /> : null}
+                  <View style={[styles.mmZoomChip, { backgroundColor: pal.accent }]}>
+                    <Ionicons name="expand" size={14} color={pal.onAccent} />
+                    <Text style={[styles.mmZoomTxt, { color: pal.onAccent }]}>{t("syllabus.mindmap.enlarge")}</Text>
+                  </View>
+                </Pressable>
               ) : null}
               <Text style={[styles.mmHint, { color: pal.dim }]}>{t("syllabus.mindmap.hintList")}</Text>
 
@@ -622,6 +586,33 @@ export default function SyllabusScreen() {
               })}
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      {/* الخريطة بملء الشاشة: تكبير وتحريك بالأصابع (ScrollView واحد غير متداخل) */}
+      <Modal visible={mmFull && !!mm} animationType="fade" onRequestClose={() => setMmFull(false)} supportedOrientations={["portrait", "landscape"]}>
+        <View style={[styles.mmFull, { backgroundColor: pal.bg }]}>
+          {mm ? (
+            <ScrollView
+              maximumZoomScale={3}
+              minimumZoomScale={1}
+              bouncesZoom
+              centerContent
+              contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            >
+              <BuzanMindMap map={mm} size={Math.max(winW, winH) * 1.05} theme={mmTheme} />
+            </ScrollView>
+          ) : null}
+          <Pressable
+            onPress={() => setMmFull(false)}
+            hitSlop={8}
+            accessibilityLabel={t("common.close")}
+            style={[styles.mmFullClose, { top: insets.top + 8, [dir.isRTL ? "left" : "right"]: 16, backgroundColor: pal.soft }]}
+          >
+            <Ionicons name="close" size={24} color={pal.ink} />
+          </Pressable>
         </View>
       </Modal>
     </SceneScreen>
@@ -722,11 +713,14 @@ const styles = StyleSheet.create({
   sumBtn: { marginTop: 0, flex: 1 },
   mmBtn: { marginTop: 8 },
   mmCanvasWrap: {
-    backgroundColor: "#0b1220",
     borderRadius: Radius.lg,
     borderWidth: 1,
-    maxHeight: 340,
+    overflow: "hidden",
   },
+  mmZoomChip: { position: "absolute", bottom: 10, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  mmZoomTxt: { fontSize: 12, fontWeight: "800" },
+  mmFull: { flex: 1 },
+  mmFullClose: { position: "absolute", width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   mmCanvas: { alignItems: "center", justifyContent: "center", padding: 8 },
   mmHint: { fontSize: 11.5, textAlign: "center", marginTop: 8, marginBottom: 12 },
   mmCenter: {
