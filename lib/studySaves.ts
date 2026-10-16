@@ -72,33 +72,66 @@ const BASE_CSS = `
   h1 { font-size: 22px; margin: 0 0 4px; color: #1F3527; }
 `;
 
-/** عرض تقديمي كامل: شريحة في كل صفحة (أفقي) بتصميم واضح للطباعة */
+/** نفس تدرّجات شرائح التطبيق (components/brand/slide-view) */
+const PDF_GRADIENTS: [string, string][] = [
+  ["#5B4BF5", "#2A9DF4"],
+  ["#E8505B", "#B8338C"],
+  ["#0E8F7E", "#2563EB"],
+  ["#E07A1F", "#C2410C"],
+  ["#7C3AED", "#DB2777"],
+  ["#0369A1", "#4F46E5"],
+  ["#15803D", "#0E7490"],
+  ["#9D174D", "#6D28D9"],
+];
+
+/** عرض تقديمي كامل: غلاف ثم شريحة في كل صفحة أفقية — بنفس تصميم التطبيق (تدرّج، نقاط مرقّمة) */
 export function slidesHtml(opts: { bookTitle: string; title: string; slides: Slide[]; rtl: boolean }): string {
   const dir = opts.rtl ? "rtl" : "ltr";
+  const start = opts.rtl ? "right" : "left";
+  const end = opts.rtl ? "left" : "right";
+  const n = opts.slides.length;
   const pages = opts.slides
-    .map(
-      (s, i) => `
-    <section class="slide">
-      <div class="num">${i + 1} / ${opts.slides.length}</div>
-      <div class="emoji">${esc(s.emoji || "📌")}</div>
-      <h2>${esc(s.title)}</h2>
-      <ul>${s.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
-    </section>`
-    )
+    .map((s, i) => {
+      const [c1, c2] = PDF_GRADIENTS[i % PDF_GRADIENTS.length];
+      const summary = i === n - 1 && n > 2;
+      const items = s.bullets
+        .map((b, j) => `<li><span class="n" style="color:${c1}">${summary ? "✓" : j + 1}</span><span>${esc(b)}</span></li>`)
+        .join("");
+      return `
+    <section class="slide" style="background:linear-gradient(225deg, ${c1}, ${c2})">
+      <div class="orb o1"></div><div class="orb o2"></div>
+      <div class="wm">${i + 1}</div>
+      <div class="bar"><div style="width:${((i + 1) / n) * 100}%"></div></div>
+      <div class="top"><div class="medal">${esc(s.emoji || "📌")}</div><div><div class="chip">${opts.rtl ? `${i + 1} من ${n}` : `${i + 1} of ${n}`}</div><h2>${esc(s.title)}</h2></div></div>
+      <ul>${items}</ul>
+    </section>`;
+    })
     .join("");
   return `<!doctype html><html dir="${dir}" lang="${opts.rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>
     ${BASE_CSS}
-    @page { size: landscape; margin: 18px; }
-    .cover { height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; page-break-after: always; }
-    .cover h1 { font-size: 34px; }
-    .cover .head { font-size: 16px; }
-    .slide { height: 100vh; padding: 36px 56px; page-break-after: always; border: 2px solid #E5E7EB; border-radius: 22px; position: relative; }
-    .slide .num { position: absolute; top: 18px; ${opts.rtl ? "left" : "right"}: 24px; color: #9CA3AF; font-size: 13px; }
-    .slide .emoji { font-size: 44px; }
-    .slide h2 { font-size: 30px; margin: 10px 0 18px; color: #2F7D4A; }
-    .slide li { font-size: 22px; line-height: 1.7; margin-bottom: 8px; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { size: landscape; margin: 0; }
+    section { height: 100vh; page-break-after: always; position: relative; overflow: hidden; color: #fff; }
+    .cover { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; background: linear-gradient(225deg, #5B4BF5, #2A9DF4); }
+    .cover h1 { font-size: 46px; color: #fff; margin: 10px 40px; line-height: 1.4; }
+    .cover .sub { font-size: 18px; opacity: .85; }
+    .cover .brand { position: absolute; bottom: 26px; font-size: 13px; opacity: .7; letter-spacing: 1px; }
+    .slide { padding: 46px 64px; display: flex; flex-direction: column; justify-content: center; }
+    .orb { position: absolute; border-radius: 50%; background: rgba(255,255,255,.13); }
+    .o1 { width: 360px; height: 360px; top: -120px; ${end}: -100px; }
+    .o2 { width: 260px; height: 260px; bottom: -90px; ${start}: -70px; opacity: .6; }
+    .wm { position: absolute; bottom: -70px; ${end}: 30px; font-size: 300px; font-weight: 900; color: rgba(255,255,255,.08); line-height: 1; }
+    .bar { position: absolute; top: 0; left: 0; right: 0; height: 7px; background: rgba(255,255,255,.2); }
+    .bar div { height: 7px; background: #fff; float: ${start}; }
+    .top { display: flex; align-items: center; gap: 22px; margin-bottom: 26px; position: relative; color: #fff; }
+    .medal { width: 92px; height: 92px; border-radius: 50%; background: rgba(255,255,255,.22); box-shadow: 0 0 0 6px rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; font-size: 48px; flex: none; }
+    .chip { display: inline-block; font-size: 13px; font-weight: 800; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.35); }
+    h2 { color: #fff; font-size: 34px; margin: 8px 0 0; line-height: 1.35; text-shadow: 0 2px 8px rgba(0,0,0,.2); }
+    ul { list-style: none; margin: 0; padding: 0; position: relative; }
+    li { display: flex; gap: 14px; align-items: flex-start; font-size: 21px; line-height: 1.65; font-weight: 600; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2); border-radius: 18px; padding: 12px 16px; margin-bottom: 12px; break-inside: avoid; }
+    .n { width: 32px; height: 32px; border-radius: 50%; background: #fff; font-weight: 900; font-size: 16px; display: flex; align-items: center; justify-content: center; flex: none; margin-top: 2px; }
   </style></head><body>
-    <section class="cover"><div class="head">${esc(opts.bookTitle)}</div><h1>${esc(opts.title)}</h1><div class="head">VoiceStudyFlow</div></section>
+    <section class="cover"><div class="orb o1"></div><div class="orb o2"></div><div class="sub">${esc(opts.bookTitle)}</div><h1>${esc(opts.title)}</h1><div class="sub">${opts.rtl ? "عدد الشرائح" : "Slides"}: ${n}</div><div class="brand">VoiceStudyFlow</div></section>
     ${pages}
   </body></html>`;
 }

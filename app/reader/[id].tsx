@@ -25,6 +25,7 @@ import { InkLayer, InkToolbar, INK_COLORS } from "../../components/reader/ink-la
 import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../../lib/ink";
 
 import { LinearGradient } from "expo-linear-gradient";
+import { SlideView } from "../../components/brand/slide-view";
 import { StatusBar } from "expo-status-bar";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
 import { addSave, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
@@ -4059,33 +4060,7 @@ export default function ReaderScreen() {
                 </Text>
               </View>
             ) : (
-              (() => {
-                const s = pageSlides[slideIdx];
-                const c = MM_PRES_COLORS[slideIdx % MM_PRES_COLORS.length];
-                return (
-                  <View style={[styles.slideCard, { borderColor: c + "66", shadowColor: c }]}>
-                    <LinearGradient
-                      colors={[c + "26", "transparent"]}
-                      start={{ x: 1, y: 0 }}
-                      end={{ x: 0, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                    <View style={[styles.slideBadge, { backgroundColor: c + "22", borderColor: c + "66" }]}>
-                      <Text style={styles.slideEmoji}>{s.emoji}</Text>
-                    </View>
-                    <Text style={[styles.slideTitle, { color: c }]}>{s.title}</Text>
-                    <View style={[styles.slideDivider, { backgroundColor: c }]} />
-                    <ScrollView style={styles.slideBulletsScroll} contentContainerStyle={styles.slideBullets}>
-                      {s.bullets.map((b, bi) => (
-                        <View key={bi} style={styles.slideBulletRow}>
-                          <View style={[styles.slideDot, { backgroundColor: c }]} />
-                          <Text style={styles.slideBulletTxt}>{b}</Text>
-                        </View>
-                      ))}
-                    </ScrollView>
-                  </View>
-                );
-              })()
+              <SlideView slide={pageSlides[slideIdx]} index={slideIdx} total={pageSlides.length} />
             )}
           </View>
 
@@ -4164,7 +4139,6 @@ export default function ReaderScreen() {
 }
 
 // ألوان شرائح العرض: هادئة تنسجم مع سماء الليل (ذهبي أولًا)
-const MM_PRES_COLORS = ["#F6D58A", "#A9C7FF", "#9FE0C4", "#F2B48A", "#E6A9D2", "#C9B8FF"];
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: SKY.bg },

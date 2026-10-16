@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { SlideView } from "../../components/brand/slide-view";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
@@ -102,19 +103,9 @@ export default function SavedItemScreen() {
       ) : item.kind === "slides" ? (
         <View style={[styles.body, { paddingBottom: insets.bottom + 16 }]}>
           {cur ? (
-            <SceneCard style={styles.slideCard}>
-              <Text style={[styles.counter, { color: pal.dim }]}>{`${slide + 1} / ${slides.length}`}</Text>
-              <Text style={styles.emoji}>{cur.emoji}</Text>
-              <Text style={[styles.slideTitle, { color: pal.accent, textAlign: dir.textAlign }]}>{cur.title}</Text>
-              <ScrollView style={{ flexGrow: 0 }}>
-                {cur.bullets.map((b, i) => (
-                  <View key={i} style={[styles.bulletRow, { flexDirection: dir.row }]}>
-                    <View style={[styles.dot, { backgroundColor: pal.accent }]} />
-                    <Text style={[styles.bullet, { color: pal.ink, textAlign: dir.textAlign }]}>{b}</Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </SceneCard>
+            <View style={styles.stage}>
+              <SlideView slide={cur} index={Math.min(slide, slides.length - 1)} total={slides.length} maxBulletsHeight={420} />
+            </View>
           ) : null}
           <View style={[styles.nav, { flexDirection: dir.row }]}>
             <Pressable
@@ -154,13 +145,7 @@ export default function SavedItemScreen() {
 const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, gap: 12, flexGrow: 1 },
   empty: { textAlign: "center", marginTop: 40, paddingHorizontal: 24 },
-  slideCard: { flex: 1, gap: 10, paddingTop: 22 },
-  counter: { position: "absolute", top: 14, right: 18, fontSize: 12, fontWeight: "700" },
-  emoji: { fontSize: 40 },
-  slideTitle: { fontSize: 24, fontWeight: "900", lineHeight: 34 },
-  bulletRow: { gap: 10, alignItems: "flex-start", marginBottom: 10 },
-  dot: { width: 8, height: 8, borderRadius: 4, marginTop: 10 },
-  bullet: { flex: 1, fontSize: 18, lineHeight: 30, fontWeight: "600" },
+  stage: { flex: 1, justifyContent: "center" },
   nav: { justifyContent: "space-between", gap: 12 },
   navBtn: { flex: 1, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   q: { fontSize: 15, fontWeight: "800", lineHeight: 24 },
