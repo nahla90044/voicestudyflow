@@ -4,7 +4,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
@@ -12,6 +12,7 @@ import { aiAssist } from "../lib/ai";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
+import { addSave, bookIdForPdf, sharePdf, textHtml } from "../lib/studySaves";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
@@ -49,6 +50,42 @@ export default function UnitSummaryScreen() {
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
   const [playing, setPlaying] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const docTitle = `${t("syllabus.summary.label")}${unitTitle ? ` — ${unitTitle}` : ""}`;
+
+  /** حفظ الملخّص في «محفوظات الكتاب» (تبويب المحفوظات في صفحة الكتاب) */
+  async function onSave() {
+    if (!text || saveBusy || saved) return;
+    setSaveBusy(true);
+    try {
+      const bookId = await bookIdForPdf(pdfPath);
+      if (!bookId) throw new Error("NO_BOOK");
+      await addSave({
+        book_id: bookId,
+        kind: "assistant",
+        title: docTitle,
+        scope: pageMode ? "page" : "unit",
+        page_from: pageMode ? pageNum : null,
+        page_to: pageMode ? pageNum : null,
+        content: { text },
+      });
+      setSaved(true);
+      Alert.alert(t("save.savedTitle"), t("save.savedBody"));
+    } catch {
+      Alert.alert(t("save.failedTitle"), t("save.failedBody"));
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+  async function onPdf() {
+    if (!text) return;
+    try {
+      await sharePdf(textHtml({ bookTitle, title: docTitle, text, rtl: dir.isRTL }), docTitle);
+    } catch {
+      Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));
+    }
+  }
 
   useEffect(() => {
     let on = true;
@@ -170,6 +207,29 @@ export default function UnitSummaryScreen() {
             <Text style={[styles.playTxt, { color: pal.onAccent }]}>{playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
           </Pressable>
 
+          {/* حفظ في «محفوظات الكتاب» + ملف PDF */}
+          <View style={[styles.saveRow, { flexDirection: dir.row }]}>
+            <Pressable
+              onPress={onSave}
+              disabled={saveBusy || saved}
+              style={({ pressed }) => [styles.saveBtn, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
+            >
+              {saveBusy ? (
+                <ActivityIndicator size="small" color={pal.accent} />
+              ) : (
+                <Ionicons name={saved ? "bookmark" : "bookmark-outline"} size={18} color={pal.accent} />
+              )}
+              <Text style={[styles.saveTxt, { color: pal.ink }]}>{saved ? t("save.savedTitle") : t("save.save")}</Text>
+            </Pressable>
+            <Pressable
+              onPress={onPdf}
+              style={({ pressed }) => [styles.saveBtn, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Ionicons name="document-text-outline" size={18} color={pal.accent} />
+              <Text style={[styles.saveTxt, { color: pal.ink }]}>{t("save.pdf")}</Text>
+            </Pressable>
+          </View>
+
           <SceneCard style={styles.card}>
             {!!unitTitle && (
               <Text style={[styles.unitTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{unitTitle}</Text>
@@ -198,5 +258,8 @@ const styles = StyleSheet.create({
   },
   playTxt: { fontSize: 16, fontWeight: "900" },
   card: { padding: Spacing.lg },
+  saveRow: { gap: 10 },
+  saveBtn: { flex: 1, height: 48, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", gap: 8 },
+  saveTxt: { fontSize: 15, fontWeight: "800" },
   body: { fontSize: 16, lineHeight: 30 },
 });

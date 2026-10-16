@@ -48,6 +48,13 @@ export async function addSave(s: Omit<StudySave, "id" | "created_at">): Promise<
   return String((data as { id: string }).id);
 }
 
+/** معرّف الكتاب من مسار ملفه (للشاشات التي تصلها pdf_path فقط، مثل الملخّص) */
+export async function bookIdForPdf(pdfPath: string): Promise<string | null> {
+  if (!pdfPath) return null;
+  const { data } = await within(supabase.from("books").select("id").eq("pdf_path", pdfPath).limit(1).maybeSingle());
+  return data ? String((data as { id: string }).id) : null;
+}
+
 export async function removeSave(id: string): Promise<void> {
   const { error } = await within(supabase.from("study_saves").delete().eq("id", id));
   if (error) throw error;
