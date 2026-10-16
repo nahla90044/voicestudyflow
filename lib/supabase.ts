@@ -28,4 +28,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 /** رقم نسخة التطبيق الحالية (من app.json) */
+/** للطلبات المباشرة (البثّ) التي لا تمرّ بعميل supabase */
+export const SUPABASE_FUNCTIONS_URL = `${SUPABASE_URL}/functions/v1`;
+export const SUPABASE_PUBLIC_KEY = SUPABASE_ANON_KEY as string;
 export const APP_VERSION = Constants.expoConfig?.version ?? "0";

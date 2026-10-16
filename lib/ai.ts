@@ -2,7 +2,9 @@
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
 import { getCurrentLang } from "./i18n";
 import { requestPaywall } from "./plan";
-import { supabase } from "./supabase";
+import { fetch as streamFetch } from "expo/fetch";
+
+import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
 
 export type AiAction =
   | "studysummary"
@@ -263,6 +265,63 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 /** يطلب من Claude (عبر السيرفر) تلخيص النص أو الإجابة عن سؤال أو توليد اختبار. */
+/**
+ * طلب ذكاء ببثّ مباشر (الملخّص الشامل): onText يُستدعى بالنص المتراكم كلما وصل جزء،
+ * فتعرض الواجهة الأقسام المكتملة فورًا. يعيد النص الكامل. مهلة: لا جديد خلال ٤٥ث → خطأ.
+ */
+export async function aiAssistStream(action: AiAction, text: string, onText: (soFar: string) => void, targetLang?: string): Promise<string> {
+  const lang = targetLang ?? getCurrentLang();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token ?? SUPABASE_PUBLIC_KEY;
+  const ctrl = new AbortController();
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    if (idle) clearTimeout(idle);
+    idle = setTimeout(() => ctrl.abort(), 45000);
+  };
+  arm();
+  try {
+    const res = await streamFetch(`${SUPABASE_FUNCTIONS_URL}/ai-assist`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_PUBLIC_KEY,
+        "x-vsf-version": APP_VERSION,
+      },
+      body: JSON.stringify({ action, text, targetLang: lang, stream: true }),
+      signal: ctrl.signal,
+    });
+    const type = res.headers.get("content-type") ?? "";
+    // ردّ JSON بدل البثّ = خطأ أو انتهاء الحصة
+    if (!res.ok || type.includes("application/json")) {
+      const j = (await res.json().catch(() => ({}))) as { userQuota?: boolean; error?: string };
+      if (j?.userQuota) {
+        requestPaywall("ai");
+        throw new Error("USER_QUOTA");
+      }
+      throw new Error(j?.error || `HTTP_${res.status}`);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("NO_STREAM");
+    const dec = new TextDecoder();
+    let all = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      arm();
+      all += dec.decode(value, { stream: true });
+      onText(all);
+    }
+    all += dec.decode();
+    const err = all.match(/\[\[STREAM_ERROR:([^\]]*)\]\]/);
+    if (err) throw new Error(err[1] || "STREAM_ERROR");
+    return all;
+  } finally {
+    if (idle) clearTimeout(idle);
+  }
+}
+
 export async function aiAssist(
   action: AiAction,
   text: string,

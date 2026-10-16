@@ -9,13 +9,13 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
-import { aiAssist } from "../lib/ai";
+import { aiAssist, aiAssistStream } from "../lib/ai";
 import { bookPages, getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
-import { parseStudySummary, summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
+import { parsePartialSummary, parseStudySummary, summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
 import { unitText } from "../lib/unitScope";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
@@ -54,6 +54,7 @@ export default function UnitSummaryScreen() {
   const [sum, setSum] = useState<StudySummary | null>(null);
   const text = sum ? summaryToText(sum) : "";
   const [err, setErr] = useState("");
+  const [streaming, setStreaming] = useState(false); // الأقسام تظهر أولًا بأول
   const [playing, setPlaying] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -129,8 +130,29 @@ export default function UnitSummaryScreen() {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
-        // ملخّص شامل لوحدة كاملة قد يأخذ دقيقة أو أكثر
-        const parsed = parseStudySummary(await aiAssist("studysummary", ctx, undefined, undefined, undefined, 150000));
+        // بثّ مباشر: يظهر العنوان ثم كل قسم فور اكتماله (خلال ثوانٍ) بينما يُكتب الباقي
+        let raw = "";
+        let lastPaint = 0;
+        if (on) setStreaming(true);
+        try {
+          raw = await aiAssistStream("studysummary", ctx, (soFar) => {
+            const now = Date.now();
+            if (!on || now - lastPaint < 250) return;
+            lastPaint = now;
+            const part = parsePartialSummary(soFar);
+            if (part && (part.sections.length || part.title)) {
+              setSum(part);
+              setLoading(false);
+            }
+          });
+        } catch (e) {
+          if ((e as Error).message === "USER_QUOTA") throw e;
+          // تعذّر البثّ ولم يظهر شيء → طلب عادي كاحتياط
+          if (!raw) raw = await aiAssist("studysummary", ctx, undefined, undefined, undefined, 150000);
+        } finally {
+          if (on) setStreaming(false);
+        }
+        const parsed = parseStudySummary(raw);
         if (!parsed) {
           if (on) setErr(t("syllabus.err.summary"));
           return;
@@ -200,7 +222,7 @@ export default function UnitSummaryScreen() {
         }
       />
 
-      {loading ? (
+      {loading && !sum ? (
         <View style={styles.center}>
           <ActivityIndicator color={pal.accent} />
           <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.preparing")}</Text>
@@ -216,7 +238,8 @@ export default function UnitSummaryScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Pressable
             onPress={togglePlay}
-            style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
+            disabled={streaming}
+            style={({ pressed }) => [styles.playBtn, streaming && { opacity: 0.5 }, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
           >
             <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
             <Text style={[styles.playTxt, { color: pal.onAccent }]}>{playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
@@ -226,8 +249,8 @@ export default function UnitSummaryScreen() {
           <View style={[styles.saveRow, { flexDirection: dir.row }]}>
             <Pressable
               onPress={onSave}
-              disabled={saveBusy || saved}
-              style={({ pressed }) => [styles.saveBtn, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
+              disabled={saveBusy || saved || streaming}
+              style={({ pressed }) => [styles.saveBtn, streaming && { opacity: 0.5 }, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
             >
               {saveBusy ? (
                 <ActivityIndicator size="small" color={pal.accent} />
@@ -238,7 +261,8 @@ export default function UnitSummaryScreen() {
             </Pressable>
             <Pressable
               onPress={onPdf}
-              style={({ pressed }) => [styles.saveBtn, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
+              disabled={streaming}
+              style={({ pressed }) => [styles.saveBtn, streaming && { opacity: 0.5 }, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
             >
               <Ionicons name="document-text-outline" size={18} color={pal.accent} />
               <Text style={[styles.saveTxt, { color: pal.ink }]}>{t("save.pdf")}</Text>
@@ -246,6 +270,12 @@ export default function UnitSummaryScreen() {
           </View>
 
           {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} /> : null}
+          {streaming ? (
+            <View style={[styles.writing, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
+              <ActivityIndicator size="small" color={pal.accent} />
+              <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.writingRest")}</Text>
+            </View>
+          ) : null}
           <View style={{ height: 24 }} />
         </ScrollView>
       )}
@@ -268,6 +298,7 @@ const styles = StyleSheet.create({
   },
   playTxt: { fontSize: 16, fontWeight: "900" },
   card: { padding: Spacing.lg },
+  writing: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: Radius.lg },
   saveRow: { gap: 10 },
   saveBtn: { flex: 1, height: 48, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", gap: 8 },
   saveTxt: { fontSize: 15, fontWeight: "800" },

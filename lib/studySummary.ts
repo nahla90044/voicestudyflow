@@ -51,29 +51,84 @@ function block(b: any): SummaryBlock | null {
   }
 }
 
-/** يحلّل ردّ الذكاء. ردّ غير صالح (أو مقطوع) → قسم نصي واحد بدل لا شيء */
+function section(o: any): SummarySection | null {
+  const sec = {
+    emoji: str(o?.emoji) || "📌",
+    heading: str(o?.heading),
+    blocks: (Array.isArray(o?.blocks) ? o.blocks : []).map(block).filter(Boolean) as SummaryBlock[],
+  };
+  return sec.heading || sec.blocks.length ? sec : null;
+}
+
+/** قيمة نصية مكتملة لمفتاح في JSON جزئي (مثل "title") أو "" إن لم تكتمل بعد */
+function partialString(raw: string, key: string): string {
+  const m = raw.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+  if (!m) return "";
+  try {
+    return str(JSON.parse(`"${m[1]}"`));
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * قراءة جزئية أثناء البثّ: العنوان والتمهيد متى اكتملا، وكل قسم اكتمل قوسه — دون انتظار البقية.
+ * يمسح مصفوفة sections بعدّاد أقواس يتجاهل ما داخل النصوص.
+ */
+export function parsePartialSummary(raw: string): StudySummary | null {
+  const out: StudySummary = { title: partialString(raw, "title"), intro: partialString(raw, "intro"), sections: [], keypoints: [] };
+  const k = raw.search(/"sections"\s*:\s*\[/);
+  if (k >= 0) {
+    let i = raw.indexOf("[", k) + 1;
+    let depth = 0;
+    let begin = -1;
+    let inStr = false;
+    for (; i < raw.length; i++) {
+      const ch = raw[i];
+      if (inStr) {
+        if (ch === "\\") i++;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === "{") {
+        if (depth === 0) begin = i;
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0 && begin >= 0) {
+          try {
+            const sec = section(JSON.parse(raw.slice(begin, i + 1)));
+            if (sec) out.sections.push(sec);
+          } catch {
+            // قسم غير صالح → نتخطاه
+          }
+          begin = -1;
+        }
+      } else if (ch === "]" && depth === 0) break; // انتهت مصفوفة الأقسام
+    }
+  }
+  return out.title || out.intro || out.sections.length ? out : null;
+}
+
+/** يحلّل ردّ الذكاء. ردّ غير صالح (أو مقطوع) → ما اكتمل منه، أو قسم نصي واحد بدل لا شيء */
 export function parseStudySummary(raw: string): StudySummary | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (m) {
     try {
       const o = JSON.parse(m[0]);
-      const sections: SummarySection[] = (Array.isArray(o?.sections) ? o.sections : [])
-        .map((s: any) => ({
-          emoji: str(s?.emoji) || "📌",
-          heading: str(s?.heading),
-          blocks: (Array.isArray(s?.blocks) ? s.blocks : []).map(block).filter(Boolean) as SummaryBlock[],
-        }))
-        .filter((s: SummarySection) => s.heading || s.blocks.length);
+      const sections = (Array.isArray(o?.sections) ? o.sections : []).map(section).filter(Boolean) as SummarySection[];
       if (sections.length) return { title: str(o?.title), intro: str(o?.intro), sections, keypoints: strs(o?.keypoints) };
     } catch {
-      // نكمل للاحتياطي
+      // ردّ مقطوع → نأخذ ما اكتمل منه
+      const part = parsePartialSummary(raw);
+      if (part?.sections.length) return part;
     }
   }
   const plain = raw.replace(/[{}\[\]"]/g, "").trim();
   if (!plain) return null;
   return { title: "", intro: "", sections: [{ emoji: "📌", heading: "", blocks: [{ type: "text", text: plain }] }], keypoints: [] };
 }
-
 /** نص للاستماع (بلا جداول مرسومة: كل صف جملة) */
 export function summaryToSpeech(s: StudySummary): string {
   const out: string[] = [];

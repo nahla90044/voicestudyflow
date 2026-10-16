@@ -179,6 +179,27 @@ Deno.serve(async (req: Request) => {
       messages: [{ role: "user", content: userContent }],
     };
 
+    // بثّ مباشر (الملخّص الشامل): النص يُرسل أولًا بأول فيظهر أول قسم خلال ثوانٍ
+    // بدل انتظار الملخّص كاملًا (قد يتجاوز دقيقة). الحصة خُصمت أعلاه مرة واحدة.
+    if (body.stream === true && action === "studysummary") {
+      const enc = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(ctrl) {
+          try {
+            const st = client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
+            for await (const ev of st) {
+              if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") ctrl.enqueue(enc.encode(ev.delta.text));
+            }
+          } catch (e) {
+            ctrl.enqueue(enc.encode(`\n[[STREAM_ERROR:${(e as Error).message}]]`));
+          } finally {
+            ctrl.close();
+          }
+        },
+      });
+      return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" } });
+    }
+
     const msg = await client.messages.create(params as Parameters<typeof client.messages.create>[0]);
 
     const result = msg.content
