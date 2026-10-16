@@ -17,6 +17,10 @@
 function norm(w: string): string {
   return w
     .replace(/[ً-ْٰـ]/g, "")
+    // توحيد أشكال الحروف (أ/إ/آ←ا، ة←ه، ى←ي) — كانت تُعدّ كلمات مختلفة فتضعف المطابقة
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
     .replace(/[^0-9A-Za-zء-ي٠-٩ٮ-ۓ۰-۹]/g, "")
     .toLowerCase();
 }
@@ -42,12 +46,34 @@ export function alignSpokenToBoxes(spoken: string[], boxes: string[]): number[] 
     const s = S[si];
     if (!s) continue;
     const limit = Math.min(B.length, bi + LOOKAHEAD);
+    let found = -1;
     for (let k = bi; k < limit; k++) {
       if (B[k] === s) {
-        anchor[si] = k;
-        bi = k + 1;
+        found = k;
         break;
       }
+    }
+    // إعادة تزامن: كتلة كلمات في الصفحة لا تُقرأ (ترويسة متخطّاة، حاشية، جدول) أطول من
+    // النظرة الأمامية → نبحث أبعد، لكن بمطابقة كلمتين متتاليتين حتى لا نقفز لتطابق عابر.
+    // (بدونها كانت المطابقة تفشل للصفحة كلها فيختفي التظليل في صفحات ويظهر في أخرى)
+    if (found < 0 && si + 1 < S.length && S[si + 1]) {
+      // ثلاث كلمات متتالية أولًا (أوثق: الترويسة قد تبدأ بنفس كلمتي المحتوى)، ثم كلمتان
+      for (const n of [3, 2]) {
+        if (si + n > S.length) continue;
+        for (let k = limit; k + n <= B.length; k++) {
+          let ok = true;
+          for (let j = 0; j < n && ok; j++) ok = B[k + j] === S[si + j];
+          if (ok) {
+            found = k;
+            break;
+          }
+        }
+        if (found >= 0) break;
+      }
+    }
+    if (found >= 0) {
+      anchor[si] = found;
+      bi = found + 1;
     }
   }
 
