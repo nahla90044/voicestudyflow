@@ -6,13 +6,17 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
+import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
+import { SummaryView } from "../components/brand/summary-view";
 import { aiAssist } from "../lib/ai";
+import { bookPages, getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
-import { addSave, bookIdForPdf, sharePdf, textHtml } from "../lib/studySaves";
+import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
+import { parseStudySummary, summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
+import { unitText } from "../lib/unitScope";
 import { getSyllabus } from "../lib/syllabus";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
@@ -42,12 +46,13 @@ export default function UnitSummaryScreen() {
   const pageNum = Number(page);
   const pageMode = Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة) بدل وحدة منهج
   const srcId = pageMode ? pageNum : unitIdx;
-  const kind = pageMode ? "pagesummary" : "summary";
+  const kind = pageMode ? "pagestudysummary" : "studysummary"; // v2: ملخّص شامل منظّم (JSON)
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
 
   const [loading, setLoading] = useState(true);
-  const [text, setText] = useState("");
+  const [sum, setSum] = useState<StudySummary | null>(null);
+  const text = sum ? summaryToText(sum) : "";
   const [err, setErr] = useState("");
   const [playing, setPlaying] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
@@ -68,7 +73,7 @@ export default function UnitSummaryScreen() {
         scope: pageMode ? "page" : "unit",
         page_from: pageMode ? pageNum : null,
         page_to: pageMode ? pageNum : null,
-        content: { text },
+        content: { text, summary: sum ?? undefined },
       });
       setSaved(true);
       Alert.alert(t("save.savedTitle"), t("save.savedBody"));
@@ -79,9 +84,9 @@ export default function UnitSummaryScreen() {
     }
   }
   async function onPdf() {
-    if (!text) return;
+    if (!sum) return;
     try {
-      await sharePdf(textHtml({ bookTitle, title: docTitle, text, rtl: dir.isRTL }), docTitle);
+      if (sum) await sharePdf(summaryHtml({ bookTitle, title: docTitle, summary: sum, rtl: dir.isRTL }), docTitle);
     } catch {
       Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));
     }
@@ -92,36 +97,46 @@ export default function UnitSummaryScreen() {
     (async () => {
       try {
         // مخزَّن مسبقًا؟ اعرضه فورًا بلا ذكاء
-        const cached = await getUnitContent<string>(pdfPath, srcId, kind);
-        if (cached) {
-          if (on) setText(stripMarkdown(cached));
+        const cached = await getUnitContent<StudySummary>(pdfPath, srcId, kind);
+        if (cached?.sections?.length) {
+          if (on) setSum(cached);
           return;
         }
-        // نصّ المصدر: صفحة القارئ الحالية، أو محتوى وحدة المنهج
+        // نصّ المصدر الحقيقي: الصفحة الحالية، أو كل صفحات الوحدة (من نطاقها في المنهج)
         let ctx = "";
         if (pageMode) {
-          const res = await extractPdfPageText(pdfPath, pageNum);
-          ctx = (res.text || "").slice(0, 4000);
+          ctx = await unitText(pdfPath, pageNum, pageNum);
+          if (!ctx.trim()) ctx = ((await extractPdfPageText(pdfPath, pageNum)).text || "").slice(0, 6000);
         } else {
           const r = await getSyllabus(pdfPath);
-          const u = r?.data.units[unitIdx];
+          const units = r?.data.units ?? [];
+          const u = units[unitIdx];
           if (u) {
-            ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${
-              u.outcome ? ` الهدف: ${u.outcome}.` : ""
-            } اشرح هذه النقاط بإيجاز في فقرة متصلة مناسبة للاستماع.`;
+            const pages = await bookPages(pdfPath).catch(() => []);
+            const last = pages.reduce((m, p) => Math.max(m, p.page), 0);
+            const ranges = (await getCachedUnitRanges(pdfPath)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
+            const rg = ranges[unitIdx];
+            if (rg) ctx = await unitText(pdfPath, rg.from, rg.to);
+            // بلا نص للصفحات بعد → من نقاط المنهج (أفضل من لا شيء)
+            if (!ctx.trim()) {
+              ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${u.outcome ? ` الهدف: ${u.outcome}.` : ""}`;
+            } else {
+              ctx = `عنوان الوحدة: ${u.title}\n\n${ctx}`;
+            }
           }
         }
         if (!ctx.trim()) {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
-        const out = (await aiAssist("summarize", ctx)).trim();
-        if (!out) {
+        // ملخّص شامل لوحدة كاملة قد يأخذ دقيقة أو أكثر
+        const parsed = parseStudySummary(await aiAssist("studysummary", ctx, undefined, undefined, undefined, 150000));
+        if (!parsed) {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
-        setUnitContent(pdfPath, srcId, kind, out);
-        if (on) setText(stripMarkdown(out));
+        setUnitContent(pdfPath, srcId, kind, parsed);
+        if (on) setSum(parsed);
       } catch {
         if (on) setErr(t("syllabus.err.summary"));
       } finally {
@@ -157,7 +172,7 @@ export default function UnitSummaryScreen() {
     } else if (text) {
       setPlaying(true);
       void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
-      speakText(text, {
+      speakText(sum ? summaryToSpeech(sum) : text, {
         voiceId: DEFAULT_VOICE_ID,
         onDone: () => setPlaying(false),
         onError: () => setPlaying(false),
@@ -188,7 +203,7 @@ export default function UnitSummaryScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={pal.accent} />
-          <Text style={[styles.dim, { color: pal.dim }]}>{t("syllabus.action.summary")}…</Text>
+          <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.preparing")}</Text>
         </View>
       ) : err ? (
         <View style={styles.center}>
@@ -230,12 +245,7 @@ export default function UnitSummaryScreen() {
             </Pressable>
           </View>
 
-          <SceneCard style={styles.card}>
-            {!!unitTitle && (
-              <Text style={[styles.unitTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{unitTitle}</Text>
-            )}
-            <Text style={[styles.body, { color: pal.ink, textAlign: dir.textAlign }]}>{text}</Text>
-          </SceneCard>
+          {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} /> : null}
           <View style={{ height: 24 }} />
         </ScrollView>
       )}

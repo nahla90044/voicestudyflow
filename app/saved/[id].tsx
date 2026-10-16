@@ -8,6 +8,8 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SlideView } from "../../components/brand/slide-view";
+import { SummaryView } from "../../components/brand/summary-view";
+import { summaryHtml } from "../../lib/studySummary";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
@@ -41,6 +43,8 @@ export default function SavedItemScreen() {
       const html =
         item.kind === "slides"
           ? slidesHtml({ bookTitle, title: item.title, slides, rtl: dir.isRTL })
+          : item.content.summary
+          ? summaryHtml({ bookTitle, title: item.title, summary: item.content.summary, rtl: dir.isRTL })
           : textHtml({ bookTitle, title: item.title, text: item.content.text ?? "", question: item.content.question, rtl: dir.isRTL });
       await sharePdf(html, item.title);
     } catch {
@@ -131,11 +135,15 @@ export default function SavedItemScreen() {
               <Text style={[styles.q, { color: pal.ink, textAlign: dir.textAlign }]}>{item.content.question}</Text>
             </SceneCard>
           ) : null}
-          <SceneCard>
-            <Text selectable style={[styles.text, { color: pal.ink, textAlign: dir.textAlign }]}>
-              {item.content.text}
-            </Text>
-          </SceneCard>
+          {item.content.summary ? (
+            <SummaryView summary={item.content.summary} bookTitle={bookTitle} />
+          ) : (
+            <SceneCard>
+              <Text selectable style={[styles.text, { color: pal.ink, textAlign: dir.textAlign }]}>
+                {item.content.text}
+              </Text>
+            </SceneCard>
+          )}
         </ScrollView>
       )}
     </SceneScreen>

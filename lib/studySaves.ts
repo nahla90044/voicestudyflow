@@ -6,6 +6,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
 import { resolveLayout, splitHead, type Slide } from "./ai";
+import type { StudySummary } from "./studySummary";
 import { supabase } from "./supabase";
 
 export type SaveKind = "slides" | "assistant";
@@ -18,7 +19,7 @@ export type StudySave = {
   scope: "page" | "unit" | null;
   page_from: number | null;
   page_to: number | null;
-  content: { slides?: Slide[]; text?: string; question?: string };
+  content: { slides?: Slide[]; text?: string; question?: string; summary?: StudySummary };
   created_at: string;
 };
 

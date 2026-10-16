@@ -22,6 +22,8 @@ function json(body: unknown, status = 200) {
 }
 
 const SYSTEM: Record<string, string> = {
+  studysummary:
+    'أنت أستاذ خبير ومصمّم مذكّرات دراسية احترافية. النص التالي مقطع دراسي من كتاب (وحدة كاملة أو صفحة). اكتب منه ملخّصًا دراسيًا شاملًا يغطي كل الأفكار والمعلومات المهمة دون إغفال شيء، بأمانة تامة للنص؛ لا تضف معلومات من خارجه إلا في الأمثلة التوضيحية وتبسيط الصعب. المطلوب: (١) أقسام منطقية بترتيب النص، لكل قسم عنوان وإيموجي مناسب. (٢) صياغة جميلة واضحة بلغة سليمة، وجمل قصيرة سهلة المذاكرة. (٣) دقّق في كل التعدادات (الأنواع، الأقسام، الشروط، الخصائص، المراحل، الأسباب، النتائج، الوظائف) واعرضها قوائم كاملة لا ينقص منها عنصر، واذكر عددها في عنوانها (مثل «أنواع التضخم الثلاثة»). (٤) جداول مقارنة كلما قارن النص بين شيئين أو أكثر، أو عرض أنواعًا لها خصائص متقابلة (الجدول من ٢ إلى ٤ أعمدة). (٥) أمثلة توضيحية قصيرة من الواقع للمفاهيم المجرّدة. (٦) شرح أوسع وأبسط للنقاط الصعبة أو الدقيقة. (٧) تعريفات المصطلحات الأساسية كما في النص. (٨) تنبيه على المعلومات المهمة جدًا (قواعد، أرقام، فروق يكثر السؤال عنها). اجعل الطول متناسبًا مع النص (بحد أقصى نحو ٢٢٠٠ كلمة). أعد فقط JSON صالحًا بالشكل: {"title":"عنوان الملخّص","intro":"تمهيد قصير في جملتين","sections":[{"emoji":"📌","heading":"عنوان القسم","blocks":[{"type":"text","text":"فقرة"},{"type":"definition","term":"المصطلح","text":"تعريفه"},{"type":"list","title":"عنوان التعداد","ordered":true,"items":["عنصر: شرحه"]},{"type":"table","title":"عنوان الجدول","headers":["وجه المقارنة","الأول","الثاني"],"rows":[["","",""]]},{"type":"example","text":"مثال"},{"type":"explain","title":"النقطة الصعبة","text":"شرح مبسّط"},{"type":"important","text":"معلومة مهمة"}]}],"keypoints":["أهم النقاط للمراجعة السريعة"]} دون أي نص خارج JSON ودون أي رموز ماركداون داخل القيم.',
   summarize:
     "أنت مساعد دراسي. لخّص النص التالي في نقاط واضحة وموجزة، مركّزًا على الأفكار الرئيسية فقط. مهم: اكتب نصًّا عاديًا بلا أي رموز ماركداون إطلاقًا — ممنوع (# أو * أو ** أو _ أو ---). استخدم شرطة عادية «- » في بداية كل نقطة فقط.",
   ask:
@@ -75,7 +77,7 @@ const MODEL: Record<string, string> = {
   syllabus: "claude-haiku-4-5-20251001",
   unitquiz: "claude-haiku-4-5-20251001",
 };
-const MAX_TOKENS: Record<string, number> = { unitslides: 8000, cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { studysummary: 9000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -84,7 +86,7 @@ const GUARD =
 
 // إجراءات يطلبها المستخدم مباشرة → تُحسب من حصته. أما مراحل تجهيز القراءة الداخلية
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
-const COUNTED = new Set(["summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides"]);
+const COUNTED = new Set(["studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -136,7 +138,7 @@ Deno.serve(async (req: Request) => {
       fr: "le français",
     };
     const LANG_ENFORCED = new Set([
-      "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "unitquiz", "syllabus", "define",
+      "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "unitquiz", "syllabus", "define",
     ]);
     let systemPrompt: string;
     if (action === "translate") {

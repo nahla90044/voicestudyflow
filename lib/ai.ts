@@ -5,6 +5,7 @@ import { requestPaywall } from "./plan";
 import { supabase } from "./supabase";
 
 export type AiAction =
+  | "studysummary"
   | "summarize"
   | "ask"
   | "quiz"
@@ -267,7 +268,8 @@ export async function aiAssist(
   text: string,
   question?: string,
   targetLang?: string, // رمز اللغة الهدف (للترجمة يختاره المستخدم؛ وإلا لغة الواجهة)
-  count?: number // عدد مطلوب من البطاقات/الأسئلة (للتوليد المخصّص)
+  count?: number, // عدد مطلوب من البطاقات/الأسئلة (للتوليد المخصّص)
+  timeoutMs = 60000 // الملخّص الشامل لوحدة كاملة يحتاج أطول
 ): Promise<string> {
   if (!text.trim()) return "";
 
@@ -279,7 +281,7 @@ export async function aiAssist(
     supabase.functions.invoke("ai-assist", {
       body: { action, text, question, targetLang: lang, count },
     }),
-    60000,
+    timeoutMs,
     action
   );
 
