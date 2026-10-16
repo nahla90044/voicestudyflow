@@ -229,18 +229,22 @@ const MUSIC_EMOJI: Record<string, string> = {
   optimistic: "☀️",
 };
 
-function splitLongSlides(slides: Slide[], maxBullets = 3): Slide[] {
+function splitLongSlides(slides: Slide[]): Slide[] {
   const out: Slide[] = [];
   for (const s of slides) {
-    if (s.bullets.length <= maxBullets) {
+    // حدّ النقاط حسب التخطيط (البطاقات ٢×٢ والخطوات تتسع لأربع)؛ المقارنة لا تُقسم
+    const max = s.layout === "cards" || s.layout === "steps" || s.layout === "summary" ? 4 : s.layout === "cover" ? 5 : 3;
+    if (s.layout === "compare" || s.bullets.length <= max) {
       out.push(s);
       continue;
     }
-    for (let i = 0; i < s.bullets.length; i += maxBullets) {
+    for (let i = 0; i < s.bullets.length; i += max) {
       out.push({
-        emoji: s.emoji,
+        ...s,
         title: i === 0 ? s.title : `${s.title} (تكملة)`,
-        bullets: s.bullets.slice(i, i + maxBullets),
+        bullets: s.bullets.slice(i, i + max),
+        // الرقم/الاقتباس يبقى في الجزء الأول فقط
+        ...(i > 0 && (s.layout === "stat" || s.layout === "quote") ? { layout: "list" as const, highlight: undefined } : {}),
       });
     }
   }
@@ -1160,7 +1164,9 @@ export default function ReaderScreen() {
 
   // نصّ الشريحة للسرد الصوتي: العنوان ثم النقاط
   function slideSpeech(s: Slide): string {
-    return `${s.title}. ${s.bullets.join("، ")}.`;
+    const cols = (s.columns ?? []).map((c) => `${c.title}: ${c.bullets.join("، ")}`).join(". ");
+    const pts = s.bullets.map((b) => b.replace(/[:：]/, "، ")).join("، ");
+    return [s.title, s.highlight, cols, pts].filter((x) => x && x.trim()).join(". ") + ".";
   }
 
   // سرد العرض شريحة بشريحة بصوت ElevenLabs (مع موسيقى خلفية ومؤثّر انتقال)

@@ -22,7 +22,37 @@ export type AiAction =
   | "fixspacing"
   | "moderate";
 
-export type Slide = { emoji: string; title: string; bullets: string[] };
+/** تخطيطات الشرائح (بأسلوب Gamma): يختار الذكاء الأنسب لمحتوى كل شريحة */
+export type SlideLayout = "cover" | "list" | "cards" | "steps" | "compare" | "stat" | "quote" | "summary";
+export const SLIDE_LAYOUTS: SlideLayout[] = ["cover", "list", "cards", "steps", "compare", "stat", "quote", "summary"];
+export type SlideColumn = { title: string; bullets: string[] };
+export type Slide = {
+  emoji: string;
+  title: string;
+  bullets: string[];
+  /** غائب في العروض القديمة → يُستنتج عند العرض */
+  layout?: SlideLayout;
+  /** رقم/مصطلح بارز (stat)، أو جملة مقتبسة (quote)، أو سطر تعريفي (cover) */
+  highlight?: string;
+  /** عمودا المقارنة (compare) */
+  columns?: SlideColumn[];
+};
+
+/** التخطيط الفعلي: المحدد من الذكاء، أو مستنتج للعروض القديمة */
+export function resolveLayout(s: Slide, index: number, total: number): SlideLayout {
+  if (s.layout) return s.layout;
+  if (index === 0 && total > 1) return "cover";
+  if (index === total - 1 && total > 2) return "summary";
+  if (s.bullets.filter((b) => splitHead(b).head).length >= 2) return "cards";
+  return "list";
+}
+
+/** «عنوان: شرح» → جزآن (النقطتان في أول ٤٠ حرفًا فقط) */
+export function splitHead(b: string): { head: string; body: string } {
+  const i = b.search(/[:：]/);
+  if (i > 0 && i <= 40) return { head: b.slice(0, i).trim(), body: b.slice(i + 1).trim() };
+  return { head: "", body: b };
+}
 
 export type Moderation = { allowed: boolean; category: string; advice: string };
 
@@ -58,16 +88,34 @@ export async function generateSlides(text: string, lang: "ar" | "en" | "fr" = "a
 function parseSlides(raw: string): Slide[] {
   const m = raw.match(/\[[\s\S]*\]/);
   if (!m) return [];
+  const strs = (v: any): string[] => (Array.isArray(v) ? v.map((x: any) => String(x).trim()).filter(Boolean) : []);
   try {
     const arr = JSON.parse(m[0]);
     if (!Array.isArray(arr)) return [];
     return arr
-      .map((s: any) => ({
-        emoji: String(s?.emoji ?? "📌").trim() || "📌",
-        title: String(s?.title ?? "").trim(),
-        bullets: Array.isArray(s?.bullets) ? s.bullets.map((b: any) => String(b).trim()).filter(Boolean) : [],
-      }))
-      .filter((s: Slide) => s.title || s.bullets.length);
+      .map((s: any): Slide => {
+        const out: Slide = {
+          emoji: String(s?.emoji ?? "📌").trim() || "📌",
+          title: String(s?.title ?? "").trim(),
+          bullets: strs(s?.bullets),
+        };
+        const highlight = String(s?.highlight ?? "").trim();
+        if (highlight) out.highlight = highlight;
+        const columns: SlideColumn[] = Array.isArray(s?.columns)
+          ? s.columns.map((c: any) => ({ title: String(c?.title ?? "").trim(), bullets: strs(c?.bullets) })).filter((c: SlideColumn) => c.title || c.bullets.length)
+          : [];
+        let layout = SLIDE_LAYOUTS.includes(s?.layout) ? (s.layout as SlideLayout) : undefined;
+        // تخطيط بلا بياناته اللازمة → قائمة عادية (لا شريحة فارغة)
+        if (layout === "compare") {
+          if (columns.length >= 2) out.columns = columns.slice(0, 2);
+          else layout = "list";
+          if (layout === "list" && !out.bullets.length) out.bullets = columns.flatMap((c) => c.bullets);
+        }
+        if ((layout === "stat" || layout === "quote") && !highlight) layout = "list";
+        if (layout) out.layout = layout;
+        return out;
+      })
+      .filter((s: Slide) => s.title || s.bullets.length || s.columns?.length);
   } catch {
     return [];
   }
