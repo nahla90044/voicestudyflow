@@ -40,3 +40,34 @@ test("a row split across two columns gives two separate rects", () => {
   const { rects } = sentenceRects(["left side right side"], cols);
   assert.equal(rects[0].length, 2);
 });
+
+// حالات كانت تُطفئ التظليل (صفحات ممسوحة مصحَّحة، تشكيل، سوابق ملتصقة، دمج/فصل)
+const line = (ws: string[]) => ws.map((t, i) => box(t, 0.9 - i * 0.1, 0.1));
+
+test("OCR page corrected before reading still highlights (one-letter fixes)", () => {
+  // الصورة: أخطاء مسح؛ المقروء: النص بعد التصحيح
+  const page = line(["الاقتصاد", "الكلى", "يدرس", "السلوك", "العام", "للاقتصاذ", "ككل"]);
+  const { confidence, rects } = sentenceRects(["الاقتصاد الكلي يدرس السلوك العام للاقتصاد ككل"], page);
+  assert.ok(confidence >= 0.5, `confidence ${confidence}`);
+  assert.equal(rects[0].length, 1);
+});
+
+test("attached conjunction/article prefixes still match", () => {
+  const page = line(["والتضخم", "يرفع", "الأسعار", "وبالتالي", "تقل", "القوة"]);
+  const { confidence } = sentenceRects(["التضخم يرفع أسعار وبالتالي تقل قوة"], page);
+  assert.ok(confidence >= 0.8, `confidence ${confidence}`);
+});
+
+test("word split in two boxes, or two words glued in one box", () => {
+  const split = line(["البنك", "المر", "كزي", "يرفع", "الفائدة"]);
+  assert.ok(sentenceRects(["البنك المركزي يرفع الفائدة"], split).confidence >= 0.75);
+  const glued = line(["فيهذا", "الفصل", "نتعلم", "الأنواع"]);
+  assert.ok(sentenceRects(["في هذا الفصل نتعلم الأنواع"], glued).confidence >= 0.8);
+});
+
+test("a sentence with no matching words is not drawn in a guessed place", () => {
+  const page = line(["الاقتصاد", "الكلي", "يدرس", "السلوك"]);
+  const { rects } = sentenceRects(["الاقتصاد الكلي يدرس السلوك.", "Completely different english words here."], page);
+  assert.equal(rects[0].length, 1);
+  assert.equal(rects[1].length, 0);
+});

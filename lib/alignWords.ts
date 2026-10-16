@@ -25,6 +25,49 @@ function norm(w: string): string {
     .toLowerCase();
 }
 
+/** بلا السوابق الملتصقة (و/ف/ب/ك/ل + ال) — «والاقتصاد» تطابق «الاقتصاد» و«اقتصاد» */
+function stem(w: string): string {
+  let x = w;
+  if (x.length > 3 && /^[وف]/.test(x)) x = x.slice(1);
+  if (x.length > 3 && /^[بكل]/.test(x) && !/^ل[ل]/.test(x)) x = x.slice(1);
+  if (x.length > 4 && x.startsWith("ال")) x = x.slice(2);
+  else if (x.length > 3 && x.startsWith("ل") && w.startsWith("لل")) x = x.slice(1);
+  return x;
+}
+
+/** مسافة تحرير محدودة (تتوقف مبكرًا بعد الحد) */
+function within(a: string, b: string, max: number): boolean {
+  if (Math.abs(a.length - b.length) > max) return false;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > max) return false;
+    prev = cur;
+  }
+  return prev[b.length] <= max;
+}
+
+/**
+ * تطابق مرن بين كلمة منطوقة وكلمة الصفحة (بعد norm): حرفي، أو بعد نزع السوابق،
+ * أو بفرق حرف (حرفين للكلمات الطويلة). الصفحات الممسوحة تُصحَّح قبل القراءة
+ * والتشكيل قد يغيّر حرفًا — فالمطابقة الحرفية وحدها كانت تُطفئ التظليل.
+ */
+export function same(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const sa = stem(a);
+  const sb = stem(b);
+  if (sa === sb) return true;
+  const n = Math.min(sa.length, sb.length);
+  if (n >= 4) return within(sa, sb, n >= 8 ? 2 : 1);
+  return false;
+}
+
 /** إلى أي مدى ننظر أمامًا بحثًا عن تطابق قبل أن نعدّه مفقودًا. */
 const LOOKAHEAD = 8;
 
@@ -33,6 +76,9 @@ const LOOKAHEAD = 8;
  * الكلمات التي لا يقابلها صندوق (أرقام موسَّعة مثلًا) تأخذ فهرس آخر تطابق،
  * فيظلّ التظليل ثابتًا مكانه بدل أن يقفز عشوائيًا.
  */
+/** مراسي آخر محاذاة (للثقة: كم كلمة وُجد لها مقابل فعلًا) */
+let lastAnchors: number[] = [];
+
 export function alignSpokenToBoxes(spoken: string[], boxes: string[]): number[] {
   const S = spoken.map(norm);
   const B = boxes.map(norm);
@@ -47,9 +93,21 @@ export function alignSpokenToBoxes(spoken: string[], boxes: string[]): number[] 
     if (!s) continue;
     const limit = Math.min(B.length, bi + LOOKAHEAD);
     let found = -1;
+    let merged = false; // كلمتان منطوقتان = صندوق واحد (دمج)
     for (let k = bi; k < limit; k++) {
-      if (B[k] === s) {
+      if (same(s, B[k])) {
         found = k;
+        break;
+      }
+      // كلمة واحدة مقسومة على صندوقين في الصفحة (مسح ضوئي/مسافة زائدة)
+      if (k + 1 < B.length && B[k + 1] && s === B[k] + B[k + 1]) {
+        found = k;
+        break;
+      }
+      // كلمتان منطوقتان ملتصقتان في الصفحة صندوقًا واحدًا
+      if (si + 1 < S.length && S[si + 1] && B[k] === s + S[si + 1]) {
+        found = k;
+        merged = true;
         break;
       }
     }
@@ -62,7 +120,7 @@ export function alignSpokenToBoxes(spoken: string[], boxes: string[]): number[] 
         if (si + n > S.length) continue;
         for (let k = limit; k + n <= B.length; k++) {
           let ok = true;
-          for (let j = 0; j < n && ok; j++) ok = B[k + j] === S[si + j];
+          for (let j = 0; j < n && ok; j++) ok = B[k + j] === S[si + j] || stem(B[k + j]) === stem(S[si + j]);
           if (ok) {
             found = k;
             break;
@@ -74,8 +132,13 @@ export function alignSpokenToBoxes(spoken: string[], boxes: string[]): number[] 
     if (found >= 0) {
       anchor[si] = found;
       bi = found + 1;
+      if (merged) {
+        anchor[si + 1] = found;
+        si++;
+      }
     }
   }
+  lastAnchors = anchor;
 
   // تمريرة ٢: وزّع ما بين كل مرساتين على الصناديق الواقعة بينهما.
   // بهذا تقع كلمات توسيع الرقم («nineteen forty-five») على صندوق الرقم نفسه
@@ -146,12 +209,11 @@ export function sentenceRects(sentences: string[], boxes: Box[]): SentenceLayout
   if (!spoken.length || !boxes.length) return { rects: sentences.map(() => []), confidence: 0, map: [], starts: [] };
 
   const map = alignSpokenToBoxes(spoken, boxes.map((b) => b.t));
-  // الثقة: كم كلمة منطوقة تطابق نص صندوقها حرفيًا
-  let matched = 0;
-  spoken.forEach((w, i) => {
-    if (norm(w) && norm(w) === norm(boxes[map[i]]?.t ?? "")) matched++;
-  });
-  const confidence = matched / spoken.length;
+  const anchored = lastAnchors.slice();
+  // الثقة: كم كلمة منطوقة وُجد لها مقابل (تطابق مرن) — من الكلمات القابلة للمقارنة
+  const comparable = spoken.filter((w) => norm(w)).length || 1;
+  const matched = anchored.filter((a) => a >= 0).length;
+  const confidence = matched / comparable;
 
   const rects: Rect[][] = [];
   const starts: number[] = [];
@@ -162,10 +224,13 @@ export function sentenceRects(sentences: string[], boxes: Box[]): SentenceLayout
       rects.push([]);
       continue;
     }
+    // جملة بلا أي كلمة مطابقة (مثلًا نص مُضاف/مترجم) → لا نرسمها في مكان تخميني
+    let hits = 0;
+    for (let j = k; j < k + ws.length; j++) if (anchored[j] >= 0) hits++;
     const from = map[k];
     const to = Math.max(from, map[k + ws.length - 1]);
     k += ws.length;
-    rects.push(groupLines(boxes.slice(from, to + 1)));
+    rects.push(hits === 0 && ws.length > 2 ? [] : groupLines(boxes.slice(from, to + 1)));
   }
   return { rects, confidence, map, starts };
 }

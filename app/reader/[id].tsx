@@ -2496,7 +2496,8 @@ export default function ReaderScreen() {
 
   // هايلايتر الجملة كاملة على صفحة الـPDF (أسطرها كلها) + الكلمة المنطوقة داخلها
   const hl = useMemo(() => sentenceRects(sentences, pageWords), [sentences, pageWords]);
-  const hlOk = hl.confidence >= 0.5;
+  // المطابقة مرنة، والجمل التي بلا مقابل لا تُرسم أصلًا (sentenceRects) → حدّ أقل للصفحة
+  const hlOk = hl.confidence >= 0.4;
   const curWordBox = useMemo<WordBox | null>(() => {
     if (!speaking || !hlOk || activeSentence < 0 || activeWord < 0) return null;
     const idx = hl.map[(hl.starts[activeSentence] ?? 0) + activeWord];
