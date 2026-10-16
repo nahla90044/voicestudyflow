@@ -4,6 +4,7 @@
 // بدل القارئ مباشرة، فلا حاجة للتنقّل بين تبويبات متفرّقة لإيجاد أداة.
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { listSaves, type StudySave } from "../../lib/studySaves";
 import React, { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -25,7 +26,7 @@ import { supabase } from "../../lib/supabase";
 import { getSyllabus, type Syllabus } from "../../lib/syllabus";
 
 type Book = { id: string; title: string; pdf_path: string; page_count: number | null };
-type Tab = "units" | "tools";
+type Tab = "units" | "tools" | "saves";
 
 export default function BookHubScreen() {
   const router = useRouter();
@@ -56,6 +57,17 @@ export default function BookHubScreen() {
   const [syl, setSyl] = useState<{ data: Syllabus; done: boolean[] } | null>(null);
   const [cards, setCards] = useState(0);
   const [tab, setTab] = useState<Tab>("units");
+  // «المحفوظات»: العروض وإجابات المساعد المحفوظة من القارئ لهذا الكتاب
+  const [saves, setSaves] = useState<StudySave[] | null>(null);
+  const loadSaves = useCallback(() => {
+    if (!bookId) return;
+    listSaves(bookId).then(setSaves).catch(() => setSaves([]));
+  }, [bookId]);
+  useFocusEffect(
+    useCallback(() => {
+      if (tab === "saves") loadSaves();
+    }, [tab, loadSaves])
+  );
   const [ready, setReady] = useState<BookReadiness | null>(null);
   const [examOpen, setExamOpen] = useState(false);
   const [ranges, setRanges] = useState<UnitRange[] | null>(null);
@@ -229,7 +241,7 @@ export default function BookHubScreen() {
 
           {/* تبويبات الصفحة */}
           <View {...coach.bind("seg")} style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
-            {(["units", "tools"] as Tab[]).map((k) => {
+            {(["units", "tools", "saves"] as Tab[]).map((k) => {
               const on = tab === k;
               return (
                 <PressableScale key={k} onPress={() => setTab(k)} style={[styles.segItem, on && { backgroundColor: pal.accent }]}>
@@ -341,6 +353,36 @@ export default function BookHubScreen() {
                   <Text style={[styles.createTxt, { color: pal.onAccent }]}>{t("book.units.create")}</Text>
                 </PressableScale>
               </SceneCard>
+            ))}
+
+          {tab === "saves" &&
+            (saves === null ? (
+              <ActivityIndicator color={pal.accent} style={{ marginTop: 24 }} />
+            ) : saves.length === 0 ? (
+              <SceneCard style={{ padding: Spacing.lg }}>
+                <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, lineHeight: 22 }]}>{t("saves.empty")}</Text>
+              </SceneCard>
+            ) : (
+              <View style={{ gap: 10 }}>
+                {saves.map((sv) => (
+                  <PressableScale key={sv.id} onPress={() => router.push({ pathname: "/saved/[id]", params: { id: sv.id, book_title: book.title } })}>
+                    <SceneCard style={{ flexDirection: dir.row, alignItems: "center", gap: 12 }}>
+                      <View style={[styles.toolIcon, { backgroundColor: pal.soft }]}>
+                        <Ionicons name={sv.kind === "slides" ? "easel-outline" : "sparkles-outline"} size={19} color={pal.accent} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.toolTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={2}>{sv.title}</Text>
+                        <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, marginTop: 2 }]} numberOfLines={1}>
+                          {t(`saves.kind.${sv.kind}`)}
+                          {sv.kind === "slides" && sv.content.slides ? ` · ${t("saves.slidesCount", { n: sv.content.slides.length })}` : ""}
+                          {` · ${new Date(sv.created_at).toLocaleDateString()}`}
+                        </Text>
+                      </View>
+                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+                    </SceneCard>
+                  </PressableScale>
+                ))}
+              </View>
             ))}
 
           {tab === "tools" && (

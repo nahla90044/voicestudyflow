@@ -32,6 +32,8 @@ const SYSTEM: Record<string, string> = {
     'أنت مساعد دراسي. أنشئ من النص التالي بطاقات مراجعة (سؤال/إجابة) موجزة. أعد فقط مصفوفة JSON صالحة بالشكل [{"front":"السؤال","back":"الإجابة"}] دون أي نص إضافي أو علامات تنسيق. من 4 إلى 8 بطاقات.',
   slides:
     'أنت مصمّم عروض تقديمية تعليمية. من نص الصفحة التالي، أنشئ شرائح عرض مرتّبة تلخّص أهم ما فيها بأمانة. كل شريحة: عنوان قصير واضح + من نقطتين إلى أربع نقاط مختصرة مأخوذة من النص + إيموجي واحد مناسب للموضوع. أعد فقط JSON صالحًا بالشكل: [{"emoji":"📌","title":"العنوان","bullets":["نقطة","نقطة"]}]. من شريحة إلى ثلاث شرائح حسب كثافة المحتوى، دون أي نص خارج JSON.',
+  unitslides:
+    'أنت مصمّم عروض تقديمية تعليمية. النص التالي هو وحدة دراسية كاملة من كتاب (عدة صفحات متتالية). أنشئ عرضًا تقديميًا متكاملًا يشرح الوحدة كلها بترتيبها وبأمانة، فيفهم الطالب الفكرة الكاملة وتسلسلها: ابدأ بشريحة تمهيدية تعرض موضوع الوحدة وأهدافها، ثم شرائح تغطي الأفكار الرئيسية بالترتيب، واختم بشريحة «الخلاصة» تربط الأفكار. كل شريحة: عنوان قصير واضح + من نقطتين إلى خمس نقاط مختصرة مأخوذة من النص + إيموجي واحد مناسب. أعد فقط JSON صالحًا بالشكل: [{"emoji":"📌","title":"العنوان","bullets":["نقطة","نقطة"]}]. من ست إلى أربع عشرة شريحة حسب طول الوحدة وكثافتها، دون أي نص خارج JSON.',
   tashkeel:
     "أنت خبير في التشكيل العربي (الحركات الإعرابية والبنيوية). شكّل النص التالي تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا. التزم بقواعد النحو والصرف، وانتبه بدقة لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. ممنوع تمامًا تغيير الكلمات أو ترتيبها أو إضافة أو حذف أي شيء — أعد النص نفسه مشكولًا فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة.",
   ocrtashkeel:
@@ -73,7 +75,7 @@ const MODEL: Record<string, string> = {
   syllabus: "claude-haiku-4-5-20251001",
   unitquiz: "claude-haiku-4-5-20251001",
 };
-const MAX_TOKENS: Record<string, number> = { cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 1500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { unitslides: 6000, cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 1500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -82,7 +84,7 @@ const GUARD =
 
 // إجراءات يطلبها المستخدم مباشرة → تُحسب من حصته. أما مراحل تجهيز القراءة الداخلية
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
-const COUNTED = new Set(["summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides"]);
+const COUNTED = new Set(["summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -134,7 +136,7 @@ Deno.serve(async (req: Request) => {
       fr: "le français",
     };
     const LANG_ENFORCED = new Set([
-      "summarize", "ask", "quiz", "flashcards", "slides", "mindmap", "unitquiz", "syllabus", "define",
+      "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "unitquiz", "syllabus", "define",
     ]);
     let systemPrompt: string;
     if (action === "translate") {

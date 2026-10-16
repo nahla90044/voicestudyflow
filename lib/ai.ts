@@ -17,6 +17,7 @@ export type AiAction =
   | "tashkeel"
   | "ocrtashkeel"
   | "slides"
+  | "unitslides"
   | "filternoise"
   | "fixspacing"
   | "moderate";
@@ -45,8 +46,16 @@ export async function moderateContent(text: string): Promise<Moderation> {
 }
 
 /** يولّد شرائح عرض تقديمي من نص (عنوان + نقاط + إيموجي) بلغة الواجهة. */
+/** عرض تقديمي لوحدة كاملة (نص عدة صفحات) — شرائح أكثر تغطي الوحدة بترتيبها */
+export async function generateUnitSlides(text: string, lang: "ar" | "en" | "fr" = "ar"): Promise<Slide[]> {
+  return parseSlides(await aiAssist("unitslides", text, undefined, lang));
+}
+
 export async function generateSlides(text: string, lang: "ar" | "en" | "fr" = "ar"): Promise<Slide[]> {
-  const raw = await aiAssist("slides", text, undefined, lang);
+  return parseSlides(await aiAssist("slides", text, undefined, lang));
+}
+
+function parseSlides(raw: string): Slide[] {
   const m = raw.match(/\[[\s\S]*\]/);
   if (!m) return [];
   try {

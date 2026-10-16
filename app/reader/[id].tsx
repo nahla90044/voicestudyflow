@@ -26,7 +26,9 @@ import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../..
 
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import { aiAssist, defineWord, generateFlashcards, generateSlides, type AiAction, type Slide } from "../../lib/ai";
+import { aiAssist, defineWord, generateFlashcards, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
+import { addSave, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
+import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
 import { addCards } from "../../lib/flashcards";
@@ -551,6 +553,10 @@ export default function ReaderScreen() {
   const [pageSlides, setPageSlides] = useState<Slide[]>([]);
   const [slidesLoading, setSlidesLoading] = useState(false);
   const slidesCacheRef = useRef<Map<string, Slide[]>>(new Map()); // المفتاح: «اللغة:الصفحة»
+  // نطاق العرض: هذه الصفحة، أو الوحدة كاملة (لفهم الفكرة بتسلسلها)
+  const [presScope, setPresScope] = useState<"page" | "unit">("page");
+  const [unitScope, setUnitScope] = useState<UnitScope | null>(null);
+  const [saveBusy, setSaveBusy] = useState(false);
   // سرد العرض التقديمي بصوت ElevenLabs (شريحة بشريحة)
   const [presNarrating, setPresNarrating] = useState(false);
   const [presSlide, setPresSlide] = useState(0);
@@ -1006,6 +1012,7 @@ export default function ReaderScreen() {
   // البريزنتيشن: ولّد شرائح الصفحة. بعد أول فتح للعرض نجهّزها مسبقًا في الخلفية
   // لكل صفحة (presUsedRef) فتكون فورية. ونقسّم الشرائح الطويلة على شرائح تالية.
   useEffect(() => {
+    if (presScope === "unit") return; // عرض الوحدة له مساره الخاص (أدناه)
     if ((!presentOpen && !presUsedRef.current) || sentences.length === 0) return;
     const p = page;
     // المفتاح يتضمّن لغة الواجهة → الشرائح تتبع اللغة، وتبديلها يعيد التوليد لا يعرض القديم
@@ -1034,7 +1041,107 @@ export default function ReaderScreen() {
     return () => {
       active = false;
     };
-  }, [presentOpen, page, sentences.length, uiVoiceLang]);
+  }, [presentOpen, page, sentences.length, uiVoiceLang, presScope]);
+
+  // عرض الوحدة كاملة: نحدّد وحدة الصفحة الحالية (من المنهج) ونولّد شرائح تغطيها كلها
+  useEffect(() => {
+    if (!presentOpen || presScope !== "unit" || !pdfPath) return;
+    let active = true;
+    setSlidesLoading(true);
+    setPageSlides([]);
+    (async () => {
+      try {
+        const sc = await unitForPage(pdfPath, page, totalPages);
+        if (!active) return;
+        setUnitScope(sc);
+        const key = `${uiVoiceLang}:unit:${sc.from}-${sc.to}`;
+        let sl = slidesCacheRef.current.get(key);
+        if (!sl) {
+          const txt = await unitText(pdfPath, sc.from, sc.to);
+          if (!active) return;
+          sl = txt.trim() ? splitLongSlides(await generateUnitSlides(txt, uiVoiceLang)) : [];
+          if (sl.length) slidesCacheRef.current.set(key, sl);
+        }
+        if (active) setPageSlides(sl);
+      } catch {
+        if (active) setPageSlides([]);
+      } finally {
+        if (active) setSlidesLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // الوحدة لا تتغيّر بتقليب صفحة داخلها → نعتمد على النطاق لا رقم الصفحة فقط
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentOpen, presScope, pdfPath, uiVoiceLang]);
+
+  const bookTitleStr = typeof title === "string" ? title : "";
+  const presTitle =
+    presScope === "unit" && unitScope
+      ? unitScope.title ?? t("reader.present.pagesRange", { from: unitScope.from, to: unitScope.to })
+      : t("reader.present.pageTitle", { page });
+
+  /** حفظ العرض الحالي في «محفوظات الكتاب» */
+  async function savePresentation() {
+    if (!bookId || !pageSlides.length || saveBusy) return;
+    setSaveBusy(true);
+    try {
+      const unit = presScope === "unit" && unitScope;
+      await addSave({
+        book_id: bookId,
+        kind: "slides",
+        title: presTitle,
+        scope: presScope,
+        page_from: unit ? unitScope!.from : page,
+        page_to: unit ? unitScope!.to : page,
+        content: { slides: pageSlides },
+      });
+      Alert.alert(t("save.savedTitle"), t("save.savedBody"));
+    } catch {
+      Alert.alert(t("save.failedTitle"), t("save.failedBody"));
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+  async function presentationPdf() {
+    if (!pageSlides.length) return;
+    try {
+      await sharePdf(slidesHtml({ bookTitle: bookTitleStr, title: presTitle, slides: pageSlides, rtl: dir.isRTL }), presTitle);
+    } catch {
+      Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));
+    }
+  }
+  /** حفظ إجابة المساعد الحالية */
+  async function saveAssistant() {
+    if (!bookId || !aiResult.trim() || saveBusy) return;
+    setSaveBusy(true);
+    try {
+      await addSave({
+        book_id: bookId,
+        kind: "assistant",
+        title: t("reader.ai.saveTitle", { page }),
+        scope: "page",
+        page_from: page,
+        page_to: page,
+        content: { text: aiResult, question: aiQuestion.trim() || undefined },
+      });
+      Alert.alert(t("save.savedTitle"), t("save.savedBody"));
+    } catch {
+      Alert.alert(t("save.failedTitle"), t("save.failedBody"));
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+  async function assistantPdf() {
+    if (!aiResult.trim()) return;
+    const ttl = t("reader.ai.saveTitle", { page });
+    try {
+      await sharePdf(textHtml({ bookTitle: bookTitleStr, title: ttl, text: aiResult, question: aiQuestion.trim() || undefined, rtl: dir.isRTL }), ttl);
+    } catch {
+      Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));
+    }
+  }
 
   // الشريحة المعروضة = اختيار المستخدم/السرد (تنقّل يدوي حر)
   const slideIdx = pageSlides.length > 0 ? Math.min(Math.max(0, presSlide), pageSlides.length - 1) : 0;
@@ -3527,7 +3634,20 @@ export default function ReaderScreen() {
                   <Text style={styles.aiHint}>{t("reader.ai.thinking")}</Text>
                 </View>
               ) : aiResult ? (
-                <Text style={[styles.aiResultTxt, { textAlign: dir.textAlign }]}>{aiResult}</Text>
+                <>
+                  <Text style={[styles.aiResultTxt, { textAlign: dir.textAlign }]}>{aiResult}</Text>
+                  {/* حفظ الإجابة في «محفوظات الكتاب» أو ملف PDF */}
+                  <View style={[styles.aiSaveRow, { flexDirection: dir.row }]}>
+                    <Pressable style={styles.aiSaveBtn} onPress={saveAssistant} disabled={saveBusy}>
+                      {saveBusy ? <ActivityIndicator size="small" color={Palette.neonCyan} /> : <Ionicons name="bookmark-outline" size={16} color={Palette.neonCyan} />}
+                      <Text style={styles.aiSaveTxt}>{t("save.save")}</Text>
+                    </Pressable>
+                    <Pressable style={styles.aiSaveBtn} onPress={assistantPdf}>
+                      <Ionicons name="document-text-outline" size={16} color={Palette.neonCyan} />
+                      <Text style={styles.aiSaveTxt}>{t("save.pdf")}</Text>
+                    </Pressable>
+                  </View>
+                </>
               ) : (
                 <Text style={styles.aiHint}>
                   {t("reader.ai.placeholder")}
@@ -3831,7 +3951,14 @@ export default function ReaderScreen() {
               <Ionicons name="chevron-down" size={18} color={Palette.text} />
               <Text style={styles.presExitTxt}>{t("reader.present.exit")}</Text>
             </Pressable>
-            <Text style={styles.presPage}>{t("reader.notes.pageChip", { page })}</Text>
+            <Text style={[styles.presPage, { flexShrink: 1 }]} numberOfLines={1}>{presTitle}</Text>
+            {/* حفظ العرض في «محفوظات الكتاب» + ملف PDF */}
+            <Pressable onPress={savePresentation} disabled={!pageSlides.length || saveBusy} style={[styles.presMusicBtn, !pageSlides.length && { opacity: 0.4 }]} hitSlop={8} accessibilityLabel={t("save.save")}>
+              {saveBusy ? <ActivityIndicator size="small" color={Palette.text} /> : <Ionicons name="bookmark-outline" size={18} color={Palette.text} />}
+            </Pressable>
+            <Pressable onPress={presentationPdf} disabled={!pageSlides.length} style={[styles.presMusicBtn, !pageSlides.length && { opacity: 0.4 }]} hitSlop={8} accessibilityLabel={t("save.pdf")}>
+              <Ionicons name="document-text-outline" size={18} color={Palette.text} />
+            </Pressable>
             {/* زر الموسيقى — يفتح اختيارات هادئة (للروايات/القصص) */}
             <Pressable
               onPress={() => setShowMusicPicker((v) => !v)}
@@ -3844,6 +3971,31 @@ export default function ReaderScreen() {
                 color={presMusicKey ? SKY.onAccent : Palette.text}
               />
             </Pressable>
+          </View>
+
+          {/* نطاق العرض: هذه الصفحة أو الوحدة كاملة */}
+          <View style={[styles.presScopeRow, { flexDirection: dir.row }]}>
+            {(["page", "unit"] as const).map((sc) => {
+              const on = presScope === sc;
+              return (
+                <Pressable
+                  key={sc}
+                  onPress={() => {
+                    if (sc === presScope) return;
+                    presNarratingRef.current = false;
+                    setPresNarrating(false);
+                    stopSpeaking();
+                    setPresScope(sc);
+                  }}
+                  style={[styles.presScopeChip, on && styles.presScopeChipOn]}
+                >
+                  <Ionicons name={sc === "page" ? "document-outline" : "albums-outline"} size={15} color={on ? SKY.onAccent : Palette.text} />
+                  <Text style={[styles.presScopeTxt, on && { color: SKY.onAccent }]}>
+                    {t(sc === "page" ? "reader.present.scopePage" : "reader.present.scopeUnit")}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           {/* اختيارات الموسيقى الهادئة — بطاقات مرتّبة أفقيًا (بارتفاع ثابت) */}
@@ -3897,7 +4049,7 @@ export default function ReaderScreen() {
             {slidesLoading ? (
               <View style={styles.presCenter}>
                 <ActivityIndicator color={Palette.neonCyan} />
-                <Text style={styles.presHint}>{t("reader.present.preparingSlides")}</Text>
+                <Text style={styles.presHint}>{t(presScope === "unit" ? "reader.present.preparingUnit" : "reader.present.preparingSlides")}</Text>
               </View>
             ) : pageSlides.length === 0 ? (
               <View style={styles.presCenter}>
@@ -4504,6 +4656,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "rgba(246,213,138,0.18)", // تظليل السطر خفيف
   },
+  presScopeRow: { gap: 8, paddingHorizontal: 16, marginTop: 8, justifyContent: "center" },
+  presScopeChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" },
+  presScopeChipOn: { backgroundColor: SKY.accent, borderColor: SKY.accent },
+  presScopeTxt: { color: Palette.text, fontSize: 13, fontWeight: "800" },
+  aiSaveRow: { gap: 10, marginTop: 14 },
+  aiSaveBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: Palette.neonCyan + "66" },
+  aiSaveTxt: { color: Palette.neonCyan, fontSize: 13, fontWeight: "800" },
   inkMarginBg: { backgroundColor: "rgba(255,255,255,0.05)" },
   inkBarWrap: { position: "absolute", top: 10, left: 0, right: 0, alignItems: "center", zIndex: 20 },
   pdfImgWrap: { flexGrow: 1, alignItems: "center", justifyContent: "flex-start", backgroundColor: "transparent" },
