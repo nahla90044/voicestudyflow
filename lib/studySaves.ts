@@ -84,39 +84,65 @@ const PDF_GRADIENTS: [string, string][] = [
   ["#9D174D", "#6D28D9"],
 ];
 
-/** عرض تقديمي كامل بأسلوب Gamma: غلاف ثم شريحة أفقية لكل صفحة، بنفس تخطيطات التطبيق
- *  (غلاف، بطاقات، خطوات، مقارنة، رقم بارز، اقتباس، قائمة، خلاصة) وألوانه */
+/** يمزج لونًا فوق خلفية بنسبة شفافية → لون مُصمت. طباعة آيفون (PDF) تحوّل الشفافية
+ *  والتدرّجات والظلال أحيانًا إلى سواد، فالملف كله بألوان مُصمتة محسوبة مسبقًا. */
+function mix(hex: string, base: string, a: number): string {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [r1, g1, b1] = p(hex);
+  const [r0, g0, b0] = p(base);
+  const c = (x: number, y: number) => Math.round(y + (x - y) * a).toString(16).padStart(2, "0");
+  return `#${c(r1, r0)}${c(g1, g0)}${c(b1, b0)}`;
+}
+
+/** مقاس صفحة العرض (نقاط): A4 أفقي — يُمرَّر للطابعة أيضًا فلا تتغيّر الصفحة بين الأجهزة */
+export const DECK_PAGE = { width: 842, height: 595 };
+
+/** عرض تقديمي كامل: صفحة أفقية لكل شريحة، وفيها الشريحة بطاقةً كما تظهر في التطبيق تمامًا
+ *  (نفس التخطيطات الثمانية والألوان)، مع غلاف للعرض في البداية. */
 export function slidesHtml(opts: { bookTitle: string; title: string; slides: Slide[]; rtl: boolean }): string {
   const dir = opts.rtl ? "rtl" : "ltr";
   const start = opts.rtl ? "right" : "left";
   const end = opts.rtl ? "left" : "right";
+  const W = "#FFFFFF";
+  const INK = "#0F172A";
+  const MUTED = "#475569";
   const n = opts.slides.length;
   const of = (i: number) => (opts.rtl ? `${i + 1} من ${n}` : `${i + 1} of ${n}`);
+
+  const bar = (fill: string, track: string, i: number) =>
+    `<div class="bar" style="background:${track}"><div style="width:${((i + 1) / Math.max(1, n)) * 100}%;background:${fill}"></div></div>`;
+
   const pages = opts.slides
     .map((s, i) => {
       const [c1, c2] = PDF_GRADIENTS[i % PDF_GRADIENTS.length];
       const L = resolveLayout(s, i, n);
       const bold = L === "cover" || L === "stat" || L === "summary";
-      const grad = `linear-gradient(225deg, ${L === "summary" ? c2 : c1}, ${L === "summary" ? c1 : c2})`;
-      const bar = `<div class="bar" style="background:${bold ? "rgba(255,255,255,.2)" : c1 + "22"}"><div style="width:${((i + 1) / n) * 100}%;background:${bold ? "#fff" : c1}"></div></div>`;
-      const head = `<div class="top"><div class="tile" style="background:${c1}18;border-color:${c1}40">${esc(s.emoji || "📌")}</div><div><div class="kick" style="color:${c1}">${of(i)}</div><h2 class="ink">${esc(s.title)}</h2></div></div><div class="accent" style="background:linear-gradient(90deg, ${c1}, ${c2})"></div>`;
+      const bg = L === "summary" ? c2 : c1;
+      // درجات مُصمتة على خلفية الشريحة الملوّنة
+      const wSoft = mix(W, bg, 0.16); // صف/كبسولة
+      const wLine = mix(W, bg, 0.32); // حدّها
+      const orb = mix(W, bg, 0.12);
+      const wDim = mix(W, bg, 0.85);
+      const head = `<div class="top"><div class="tile" style="background:${mix(c1, W, 0.1)};border-color:${mix(c1, W, 0.25)}">${esc(s.emoji || "📌")}</div><div class="tt"><div class="kick" style="color:${c1}">${of(i)}</div><h2 style="color:${INK}">${esc(s.title)}</h2></div></div><div class="accent" style="background:${c1}"></div>`;
       let inner = "";
       switch (L) {
         case "cover":
-          inner = `<div class="center"><div class="medal">${esc(s.emoji || "📘")}</div><h2 class="big">${esc(s.title)}</h2>${s.highlight ? `<div class="sub">${esc(s.highlight)}</div>` : ""}<div class="tags">${s.bullets.map((b) => `<span>${esc(b)}</span>`).join("")}</div></div>`;
+          inner = `<div class="center"><div class="medal" style="background:${wSoft};border-color:${wLine}">${esc(s.emoji || "📘")}</div><div class="chip" style="background:${wSoft};border-color:${wLine}">${opts.rtl ? "البداية" : "Intro"}</div><h2 class="big">${esc(s.title)}</h2>${s.highlight ? `<div class="sub" style="color:${wDim}">${esc(s.highlight)}</div>` : ""}<div class="tags">${s.bullets.map((b) => `<span style="background:${wSoft};border-color:${wLine}">${esc(b)}</span>`).join("")}</div></div>`;
           break;
         case "stat":
-          inner = `<div class="center"><div class="chip">${esc(s.emoji || "📊")} ${of(i)}</div><div class="stat">${esc(s.highlight ?? "")}</div><h2 class="w">${esc(s.title)}</h2><div class="rule"></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow">● ${esc(b)}</div>`).join("")}</div></div>`;
+          inner = `<div class="center"><div class="chip" style="background:${wSoft};border-color:${wLine}">${esc(s.emoji || "📊")} ${of(i)}</div><div class="stat">${esc(s.highlight ?? "")}</div><h2 class="w">${esc(s.title)}</h2><div class="rule"></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow" style="background:${wSoft};border-color:${wLine}"><span class="wdot">●</span><span>${esc(b)}</span></div>`).join("")}</div></div>`;
           break;
-        case "summary":
-          inner = `<div class="top"><div class="tile w">${esc(s.emoji || "✨")}</div><div>${/^(الخلاصة|خلاصة|Summary)$/i.test(s.title.trim()) ? "" : `<div class="kick w">${opts.rtl ? "الخلاصة" : "Summary"}</div>`}<h2 class="w">${esc(s.title)}</h2></div></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow"><span class="chk" style="color:${c1}">✓</span>${esc(b)}</div>`).join("")}</div>`;
+        case "summary": {
+          const plain = /^(الخلاصة|خلاصة|summary)$/i.test(s.title.trim());
+          inner = `<div class="top"><div class="tile" style="background:${wSoft};border-color:${wLine}">${esc(s.emoji || "✨")}</div><div class="tt">${plain ? "" : `<div class="kick" style="color:${wDim}">${opts.rtl ? "الخلاصة" : "Summary"}</div>`}<h2 class="w">${esc(s.title)}</h2></div></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow" style="background:${wSoft};border-color:${wLine}"><span class="chk" style="color:${c1}">✓</span><span>${esc(b)}</span></div>`).join("")}</div>`;
           break;
+        }
         case "cards":
           inner = `${head}<div class="grid" style="grid-template-columns:repeat(${s.bullets.length === 3 ? 3 : 2}, 1fr)">${s.bullets
             .map((b, j) => {
-              const [g1, g2] = PDF_GRADIENTS[(i + j + 1) % PDF_GRADIENTS.length];
+              const [g1] = PDF_GRADIENTS[(i + j + 1) % PDF_GRADIENTS.length];
               const { head: h, body } = splitHead(b);
-              return `<div class="card" style="border-color:${g1}33;background:${g1}0D"><div class="num" style="background:linear-gradient(135deg, ${g1}, ${g2})">${j + 1}</div>${h ? `<div class="ch" style="color:${g1}">${esc(h)}</div><div class="cb">${esc(body)}</div>` : `<div class="ch ink">${esc(body)}</div>`}</div>`;
+              return `<div class="card" style="border-color:${mix(g1, W, 0.22)};background:${mix(g1, W, 0.06)}"><div class="num" style="background:${g1}">${j + 1}</div>${h ? `<div class="ch" style="color:${g1}">${esc(h)}</div><div class="cb">${esc(body)}</div>` : `<div class="ch" style="color:${INK}">${esc(body)}</div>`}</div>`;
             })
             .join("")}</div>`;
           break;
@@ -125,7 +151,7 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
             .map((b, j) => {
               const { head: h, body } = splitHead(b);
               const last = j === s.bullets.length - 1;
-              return `<div class="step"><div class="rail"><div class="snum" style="background:linear-gradient(135deg, ${c1}, ${c2})">${j + 1}</div>${last ? "" : `<div class="sline" style="background:${c1}40"></div>`}</div><div class="stxt">${h ? `<b>${esc(h)}</b><div>${esc(body)}</div>` : `<b>${esc(body)}</b>`}</div></div>`;
+              return `<div class="step"><div class="rail"><div class="snum" style="background:${c1}">${j + 1}</div>${last ? "" : `<div class="sline" style="background:${mix(c1, W, 0.3)}"></div>`}</div><div class="stxt">${h ? `<b>${esc(h)}</b><div>${esc(body)}</div>` : `<b>${esc(body)}</b>`}</div></div>`;
             })
             .join("")}</div>`;
           break;
@@ -134,12 +160,12 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
             .slice(0, 2)
             .map((c, ci) => {
               const cc = ci === 0 ? c1 : c2;
-              return `<div class="col" style="border-color:${cc}40"><div class="colh" style="background:${cc}">${esc(c.title)}</div><ul>${c.bullets.map((b) => `<li><span style="color:${cc}">•</span>${esc(b)}</li>`).join("")}</ul></div>`;
+              return `<div class="col" style="border-color:${mix(cc, W, 0.3)}"><div class="colh" style="background:${cc}">${esc(c.title)}</div><ul>${c.bullets.map((b) => `<li><span style="color:${cc}">•</span><span>${esc(b)}</span></li>`).join("")}</ul></div>`;
             })
             .join(`<div class="vs" style="color:${c1};border-color:${c1}">⇄</div>`)}</div>`;
           break;
         case "quote":
-          inner = `<div class="qm" style="color:${c1}">“</div><div class="qt">${esc(s.highlight ?? "")}</div><div class="qby" style="color:${c1}"><span style="background:${c1}"></span>${esc(s.emoji || "💬")} ${esc(s.title)}</div><div class="notes">${s.bullets.map((b) => `<div class="note" style="border-color:${c1}33;background:${c1}0D">${esc(b)}</div>`).join("")}</div>`;
+          inner = `<div class="qm" style="color:${mix(c1, W, 0.35)}">“</div><div class="qt">${esc(s.highlight ?? "")}</div><div class="qby" style="color:${c1}"><span style="background:${c1}"></span>${esc(s.emoji || "💬")} ${esc(s.title)}</div><div class="notes">${s.bullets.map((b) => `<div class="note" style="border-color:${mix(c1, W, 0.22)};background:${mix(c1, W, 0.06)}">${esc(b)}</div>`).join("")}</div>`;
           break;
         default:
           inner = `${head}<div class="list">${s.bullets
@@ -150,78 +176,80 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
             .join("")}</div>`;
       }
       const deco = bold
-        ? `<div class="orb o1"></div><div class="orb o2"></div>`
-        : `<div class="glow" style="background:radial-gradient(circle at ${end === "left" ? "0%" : "100%"} 0%, ${c1}30, transparent 55%)"></div><div class="wm" style="color:${c1}12">${i + 1}</div>`;
-      return `<section class="slide ${bold ? "bold" : "light"}" style="${bold ? `background:${grad}` : ""}">${deco}${bar}<div class="in">${inner}</div></section>`;
+        ? `<div class="orb o1" style="background:${orb}"></div><div class="orb o2" style="background:${orb}"></div>${bar(W, wLine, i)}`
+        : `<div class="corner" style="background:${mix(c1, W, 0.08)}"></div><div class="wm" style="color:${mix(c1, W, 0.07)}">${i + 1}</div>${bar(c1, mix(c1, W, 0.15), i)}`;
+      return `<section class="page"><div class="slide" style="background:${bold ? bg : W}">${deco}<div class="in">${inner}</div></div></section>`;
     })
     .join("");
+
+  const cover = PDF_GRADIENTS[0][0];
   return `<!doctype html><html dir="${dir}" lang="${opts.rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>
     ${BASE_CSS}
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    @page { size: landscape; margin: 0; }
-    section { height: 100vh; page-break-after: always; position: relative; overflow: hidden; }
-    .light { background: #fff; color: #0F172A; }
-    .bold { color: #fff; }
-    .cover { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; background: linear-gradient(225deg, #5B4BF5, #2A9DF4); color: #fff; }
-    .cover h1 { font-size: 46px; color: #fff; margin: 10px 40px; line-height: 1.4; }
-    .cover .sub { font-size: 18px; opacity: .85; }
-    .cover .brand { position: absolute; bottom: 26px; font-size: 13px; opacity: .7; letter-spacing: 1px; }
-    .slide { display: flex; flex-direction: column; justify-content: center; padding: 44px 64px; }
+    @page { size: ${DECK_PAGE.width}px ${DECK_PAGE.height}px; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #EEF1F7; }
+    .page { width: ${DECK_PAGE.width}px; height: ${DECK_PAGE.height}px; padding: 18px; background: #EEF1F7; page-break-after: always; overflow: hidden; }
+    .page:last-child { page-break-after: auto; }
+    .slide { position: relative; width: 100%; height: 100%; border-radius: 26px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 30px 44px; color: ${INK}; }
     .in { position: relative; }
-    .orb { position: absolute; border-radius: 50%; background: rgba(255,255,255,.13); }
-    .o1 { width: 360px; height: 360px; top: -120px; ${end}: -100px; }
-    .o2 { width: 260px; height: 260px; bottom: -90px; ${start}: -70px; opacity: .6; }
-    .glow { position: absolute; inset: 0; }
-    .wm { position: absolute; bottom: -70px; ${end}: 30px; font-size: 300px; font-weight: 900; line-height: 1; }
-    .bar { position: absolute; top: 0; left: 0; right: 0; height: 7px; }
-    .bar div { height: 7px; float: ${start}; }
-    .top { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
-    .tile { width: 70px; height: 70px; border-radius: 20px; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 36px; flex: none; }
-    .tile.w { background: rgba(255,255,255,.22); border: none; }
-    .kick { font-size: 13px; font-weight: 900; }
-    .kick.w { color: rgba(255,255,255,.85); }
-    h2 { font-size: 32px; margin: 2px 0 0; line-height: 1.35; }
-    h2.ink { color: #0F172A; } h2.w { color: #fff; }
-    h2.big { color: #fff; font-size: 46px; text-shadow: 0 2px 10px rgba(0,0,0,.25); margin: 6px 0; }
-    .accent { width: 80px; height: 6px; border-radius: 3px; margin: 4px 0 22px; }
+    .orb { position: absolute; border-radius: 50%; }
+    .o1 { width: 280px; height: 280px; top: -100px; ${end}: -80px; }
+    .o2 { width: 200px; height: 200px; bottom: -80px; ${start}: -60px; }
+    .corner { position: absolute; width: 360px; height: 360px; border-radius: 50%; top: -170px; ${end}: -140px; }
+    .wm { position: absolute; bottom: -60px; ${end}: 22px; font-size: 230px; font-weight: 900; line-height: 1; }
+    .bar { position: absolute; top: 0; left: 0; right: 0; height: 6px; }
+    .bar div { height: 6px; float: ${start}; }
+    .top { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+    .tile { width: 58px; height: 58px; border-radius: 17px; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 30px; flex: none; }
+    .tt { flex: 1; }
+    .kick { font-size: 12px; font-weight: 900; }
+    h2 { font-size: 25px; margin: 2px 0 0; line-height: 1.4; color: ${INK}; }
+    h2.w { color: #fff; }
+    h2.big { color: #fff; font-size: 36px; margin: 4px 0; text-align: center; }
+    .accent { width: 70px; height: 5px; border-radius: 3px; margin: 6px 0 16px; }
     .center { text-align: center; display: flex; flex-direction: column; align-items: center; }
-    .medal { width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,.22); box-shadow: 0 0 0 8px rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; font-size: 68px; margin-bottom: 18px; }
-    .sub { font-size: 20px; opacity: .92; max-width: 760px; line-height: 1.6; }
-    .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 20px; }
-    .tags span { padding: 8px 18px; border-radius: 999px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); font-weight: 800; font-size: 17px; }
-    .chip { display: inline-block; font-size: 14px; font-weight: 800; padding: 5px 14px; border-radius: 999px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.35); }
-    .stat { font-size: 110px; font-weight: 900; line-height: 1.2; margin: 10px 0; text-shadow: 0 3px 14px rgba(0,0,0,.25); }
-    .rule { width: 70px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.85); margin: 16px auto; }
-    .wrows { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 900px; text-align: ${start}; }
-    .wrow { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2); border-radius: 18px; padding: 12px 18px; font-size: 20px; font-weight: 700; line-height: 1.6; display: flex; gap: 12px; align-items: center; }
-    .chk { width: 32px; height: 32px; border-radius: 50%; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; flex: none; }
-    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .card { border: 1px solid; border-radius: 22px; padding: 18px 20px; break-inside: avoid; }
-    .num { width: 40px; height: 40px; border-radius: 12px; color: #fff; font-weight: 900; font-size: 18px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
-    .ch { font-size: 21px; font-weight: 900; line-height: 1.45; } .ch.ink { color: #0F172A; }
-    .cb { font-size: 17px; color: #475569; line-height: 1.65; font-weight: 600; margin-top: 4px; }
-    .step { display: flex; gap: 18px; }
-    .rail { display: flex; flex-direction: column; align-items: center; width: 44px; flex: none; }
-    .snum { width: 44px; height: 44px; border-radius: 50%; color: #fff; font-weight: 900; font-size: 19px; display: flex; align-items: center; justify-content: center; }
-    .sline { width: 4px; flex: 1; border-radius: 2px; margin: 4px 0; min-height: 14px; }
-    .stxt { padding: 6px 0 18px; font-size: 18px; color: #475569; line-height: 1.6; font-weight: 600; }
-    .stxt b { color: #0F172A; font-size: 21px; display: block; }
-    .cmp { display: flex; gap: 18px; align-items: stretch; position: relative; }
-    .col { flex: 1; border: 1px solid; border-radius: 22px; overflow: hidden; }
-    .colh { color: #fff; font-weight: 900; font-size: 21px; text-align: center; padding: 12px; }
-    .col ul { list-style: none; margin: 0; padding: 14px 18px; }
-    .col li { font-size: 18px; line-height: 1.65; font-weight: 600; display: flex; gap: 8px; margin-bottom: 6px; }
-    .vs { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 50%; border: 2px solid; background: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
-    .qm { font-size: 160px; line-height: .8; font-weight: 900; opacity: .3; text-align: center; }
-    .qt { font-size: 30px; font-weight: 800; font-style: italic; line-height: 1.6; color: #0F172A; text-align: center; max-width: 900px; margin: 0 auto; }
-    .qby { display: flex; align-items: center; justify-content: center; gap: 12px; font-weight: 900; font-size: 18px; margin: 18px 0; }
-    .qby span { width: 34px; height: 4px; border-radius: 2px; }
-    .notes { display: flex; flex-direction: column; gap: 10px; max-width: 900px; margin: 0 auto; }
-    .note { border: 1px solid; border-radius: 16px; padding: 10px 16px; font-size: 18px; line-height: 1.6; font-weight: 600; }
-    .list { display: flex; flex-direction: column; gap: 12px; }
-    .li { background: #F8FAFC; border-radius: 16px; padding: 12px 18px; font-size: 20px; line-height: 1.65; font-weight: 600; }
-  </style></head><body>
-    <section class="cover"><div class="orb o1"></div><div class="orb o2"></div><div class="sub">${esc(opts.bookTitle)}</div><h1>${esc(opts.title)}</h1><div class="sub">${opts.rtl ? "عدد الشرائح" : "Slides"}: ${n}</div><div class="brand">VoiceStudyFlow</div></section>
+    .medal { width: 104px; height: 104px; border-radius: 50%; border: 2px solid; display: flex; align-items: center; justify-content: center; font-size: 54px; margin-bottom: 12px; }
+    .chip { display: inline-block; font-size: 12.5px; font-weight: 800; padding: 4px 14px; border-radius: 999px; border: 1px solid; color: #fff; margin-bottom: 8px; }
+    .sub { font-size: 17px; max-width: 620px; line-height: 1.6; font-weight: 600; }
+    .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+    .tags span { padding: 7px 16px; border-radius: 999px; border: 1px solid; font-weight: 800; font-size: 14.5px; color: #fff; }
+    .stat { font-size: 84px; font-weight: 900; line-height: 1.15; margin: 4px 0; color: #fff; }
+    .rule { width: 60px; height: 4px; border-radius: 2px; background: #fff; margin: 12px auto; }
+    .wrows { display: flex; flex-direction: column; gap: 9px; width: 100%; text-align: ${start}; }
+    .wrow { border: 1px solid; border-radius: 16px; padding: 10px 14px; font-size: 16.5px; font-weight: 700; line-height: 1.6; display: flex; gap: 10px; align-items: center; color: #fff; }
+    .wdot { font-size: 9px; }
+    .chk { width: 26px; height: 26px; border-radius: 50%; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; flex: none; }
+    .grid { display: grid; gap: 12px; }
+    .card { border: 1px solid; border-radius: 18px; padding: 14px 16px; }
+    .num { width: 32px; height: 32px; border-radius: 10px; color: #fff; font-weight: 900; font-size: 15px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .ch { font-size: 17px; font-weight: 900; line-height: 1.45; }
+    .cb { font-size: 14.5px; color: ${MUTED}; line-height: 1.65; font-weight: 600; margin-top: 3px; }
+    .step { display: flex; gap: 14px; }
+    .rail { display: flex; flex-direction: column; align-items: center; width: 36px; flex: none; }
+    .snum { width: 36px; height: 36px; border-radius: 50%; color: #fff; font-weight: 900; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+    .sline { width: 3px; flex: 1; border-radius: 2px; margin: 4px 0; min-height: 12px; }
+    .stxt { padding: 4px 0 14px; font-size: 15px; color: ${MUTED}; line-height: 1.6; font-weight: 600; }
+    .stxt b { color: ${INK}; font-size: 17px; display: block; }
+    .cmp { display: flex; gap: 14px; align-items: stretch; position: relative; }
+    .col { flex: 1; border: 1px solid; border-radius: 18px; overflow: hidden; background: #fff; }
+    .colh { color: #fff; font-weight: 900; font-size: 17px; text-align: center; padding: 10px; }
+    .col ul { list-style: none; margin: 0; padding: 12px 14px; }
+    .col li { font-size: 15px; line-height: 1.65; font-weight: 600; display: flex; gap: 8px; margin-bottom: 5px; }
+    .vs { position: absolute; left: 50%; top: 6px; margin-left: -17px; width: 34px; height: 34px; border-radius: 50%; border: 2px solid; background: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 17px; }
+    .qm { font-size: 120px; line-height: .8; font-weight: 900; text-align: center; }
+    .qt { font-size: 24px; font-weight: 800; font-style: italic; line-height: 1.6; color: ${INK}; text-align: center; max-width: 680px; margin: 0 auto; }
+    .qby { display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 900; font-size: 15px; margin: 14px 0; }
+    .qby span { width: 28px; height: 3px; border-radius: 2px; }
+    .notes { display: flex; flex-direction: column; gap: 8px; max-width: 680px; margin: 0 auto; }
+    .note { border: 1px solid; border-radius: 14px; padding: 9px 14px; font-size: 15px; line-height: 1.6; font-weight: 600; }
+    .list { display: flex; flex-direction: column; gap: 10px; }
+    .li { background: #F8FAFC; border-radius: 14px; padding: 10px 16px; font-size: 16.5px; line-height: 1.65; font-weight: 600; }
+    .deckcover { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: #fff; }
+    .deckcover h1 { font-size: 38px; color: #fff; margin: 8px 30px; line-height: 1.4; }
+    .deckcover .s { font-size: 16px; color: ${mix(W, cover, 0.85)}; }
+    .deckcover .brand { position: absolute; bottom: 22px; font-size: 12px; color: ${mix(W, cover, 0.7)}; letter-spacing: 1px; }
+  </style></head><body data-deck="1">
+    <section class="page"><div class="slide deckcover" style="background:${cover}"><div class="orb o1" style="background:${mix(W, cover, 0.12)}"></div><div class="orb o2" style="background:${mix(W, cover, 0.12)}"></div><div class="in"><div class="s">${esc(opts.bookTitle)}</div><h1>${esc(opts.title)}</h1><div class="s">${opts.rtl ? "عدد الشرائح" : "Slides"}: ${n}</div></div><div class="brand">VoiceStudyFlow</div></div></section>
     ${pages}
   </body></html>`;
 }
@@ -250,7 +278,9 @@ export function textHtml(opts: { bookTitle: string; title: string; text: string;
 
 /** ينشئ ملف PDF ويفتح نافذة المشاركة (حفظ في «الملفات»، إرسال، طباعة…) */
 export async function sharePdf(html: string, fileTitle: string): Promise<void> {
-  const { uri } = await Print.printToFileAsync({ html });
+  // العرض: مقاس صفحة أفقي ثابت (وإلا تقصّ آيفون الشريحة على ورقة طولية)
+  const deck = html.includes('data-deck="1"');
+  const { uri } = await Print.printToFileAsync(deck ? { html, ...DECK_PAGE } : { html });
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileTitle });
   } else {
