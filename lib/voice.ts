@@ -344,7 +344,7 @@ function disposePlayer() {
 //  - يعمل التشغيل بدون إنترنت بعد أول مرة
 
 const CACHE_DIR_NAME = "tts-cache-v10"; // v10: مع توقيت الحروف للهايلايت كلمة-بكلمة
-const CACHE_MAX_BYTES = 200 * 1024 * 1024; // ~200MB سقف تقريبي
+const CACHE_MAX_BYTES = 900 * 1024 * 1024; // ~900MB: يتسع لصوت كتاب كامل محفوظ (~٦٠٠ صفحة) دون حذفه
 
 function cacheDir(): Directory {
   const dir = new Directory(Paths.cache, CACHE_DIR_NAME);
@@ -445,6 +445,23 @@ function synthToFile(
   return job;
 }
 
+// ثبات صوت القارئة: طبقة (Hz) آخر الجمل المولَّدة لكل صوت — يُرسل وسيطها للسيرفر (refF0)
+// فيعيد توليد الجملة الشاذة (أعمق/أحدّ بوضوح) بدل أن تبدو القارئة «تغيّرت» فجأة.
+const pitchByVoice = new Map<string, number[]>();
+function refPitch(cacheKey: string): number | undefined {
+  const xs = pitchByVoice.get(cacheKey);
+  if (!xs || xs.length < 3) return undefined; // نحتاج عيّنة كافية قبل الحكم
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+function notePitch(cacheKey: string, f0: unknown) {
+  if (typeof f0 !== "number" || !(f0 > 0)) return;
+  const xs = pitchByVoice.get(cacheKey) ?? [];
+  xs.push(f0);
+  if (xs.length > 9) xs.shift();
+  pitchByVoice.set(cacheKey, xs);
+}
+
 async function synthToFileNow(
   text: string,
   gender: VoiceGender,
@@ -472,7 +489,15 @@ async function synthToFileNow(
   // لا يوجد مفتاح صوت داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
   const { data, error } = await within(
     supabase.functions.invoke("tts", {
-      body: { text, gender, voiceId: vid, style, expressive: !!expressive, ...(page ? { book: page.book, page: page.page } : {}) },
+      body: {
+        text,
+        gender,
+        voiceId: vid,
+        style,
+        expressive: !!expressive,
+        refF0: refPitch(cacheKey),
+        ...(page ? { book: page.book, page: page.page } : {}),
+      },
     }),
     TTS_REQUEST_MS,
     "TTS_TIMEOUT"
@@ -488,6 +513,7 @@ async function synthToFileNow(
   if (d?.userQuota) throw new Error("USER_QUOTA");
   if (d?.error) throw new Error(d.quota ? `QUOTA: ${d.error}` : d.error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
+  notePitch(cacheKey, (data as { f0?: number })?.f0);
   const starts = Array.isArray((data as { starts?: number[] })?.starts)
     ? ((data as { starts: number[] }).starts as number[])
     : [];

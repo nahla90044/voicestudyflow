@@ -27,6 +27,7 @@ import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../..
 import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
 import { StatusBar } from "expo-status-bar";
+import { getPlan } from "../../lib/plan";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
 import { addSave, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
 import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
@@ -161,7 +162,10 @@ function textLang(text: string): "ar" | "en" | null {
   const ar = (sample.match(/[\u0600-\u06FF]/g) || []).length;
   const latin = (sample.match(/[A-Za-z]/g) || []).length;
   if (ar + latin < 4) return null;
-  return ar >= latin ? "ar" : "en";
+  // حسم واضح فقط: صفحة عربية فيها مصطلحات/مراجع إنجليزية كثيرة لا تبدّل القارئة
+  if (ar >= latin) return "ar";
+  if (latin > ar * 3) return "en";
+  return null;
 }
 
 function wordIndexAtFraction(sentence: string, frac: number): number {
@@ -1426,14 +1430,20 @@ export default function ReaderScreen() {
    * مطابقة الصوت للغة نص الكتاب (عربي ↔ إنجليزي) قبل نطق أول جملة.
    * تُستدعى عند وصول نص الصفحة؛ تتوقّف متى اختار المستخدم صوتًا بنفسه.
    */
+  // آخر قارئة لكل لغة: صفحة إنجليزية عابرة ثم الرجوع للعربي يعيد **نفس** القارئة العربية
+  // (كان يرجع لأول صوت عربي في القائمة، فتبدو القارئة «تغيّرت» فجأة)
+  const voiceByLangRef = useRef(new Map<string, string>());
   function matchVoiceToText(sample: string) {
     if (voiceChosenRef.current || listenArabicRef.current) return;
     const wanted = textLang(sample);
-    if (!wanted || voiceLangOf(voiceIdRef.current) === wanted) return;
-    const match = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === wanted);
+    const curLang = voiceLangOf(voiceIdRef.current);
+    if (!wanted || curLang === wanted) return;
+    voiceByLangRef.current.set(curLang, voiceIdRef.current);
+    const remembered = voiceByLangRef.current.get(wanted);
+    const match = remembered ?? VOICE_CATALOG.find((v) => (v.lang ?? "ar") === wanted)?.voiceId;
     if (!match) return;
-    voiceIdRef.current = match.voiceId;
-    setVoiceId(match.voiceId);
+    voiceIdRef.current = match;
+    setVoiceId(match);
     setVoiceLang(wanted);
   }
 
@@ -1687,6 +1697,64 @@ export default function ReaderScreen() {
 
   // يجهّز الصفحة التالية كاملة أثناء قراءة الحالية: النص، والتشكيل/الترجمة إن لزم،
   // وصوت أول جملتين — فتبدأ فور انتهاء الحالية بلا فجوة. ويجلب نص الصفحة التي بعدها.
+  /* ---------- صوت الصفحات القادمة محفوظ مسبقًا على الجهاز ----------
+   * تلقائيًا أثناء القراءة: صوت الصفحات القادمة يُولَّد ويُحفظ قبل الوصول لها، فلا انتظار
+   * ولا اعتماد على الإنترنت لحظة القراءة (كان يطول عند ضعف الشبكة/ضغط جوجل).
+   * واختياريًا «حفظ صوت الكتاب كاملًا» مع حفظ الكتاب. كل صفحة تُحسب مرة من حصة الشهر،
+   * لذلك التجربة المجانية تجهّز صفحتين فقط. عامل واحد في كل مرة (رمز للإلغاء). */
+  const aheadRef = useRef<{ token: number; to: number; whole: boolean; running: boolean }>({ token: 0, to: 0, whole: false, running: false });
+  const aheadPagesRef = useRef(2);
+  useEffect(() => {
+    getPlan()
+      .then((pl) => (aheadPagesRef.current = pl === "free" ? 2 : 10))
+      .catch(() => {});
+  }, []);
+
+  async function saveAudioOfPage(p: number, token: number): Promise<void> {
+    const res = pageTextCacheRef.current.get(p) ?? (await extractPdfPageText(pdfPath, p));
+    pageTextCacheRef.current.set(p, res);
+    if (!res.text.trim()) return;
+    const precise = tashkeelRef.current || !!res.ocr;
+    let txt = res.text;
+    if (listenArabicRef.current) txt = await translatePage(res.page, txt);
+    else if (precise) txt = await tashkeelPage(res.page, txt, !!res.ocr);
+    const sents = listenArabicRef.current ? splitSentences(txt) : getReadingSentences(txt, res.page, precise);
+    const pageRef = { book: pdfPath, page: res.page };
+    // جملتان معًا: أسرع من القراءة بكثير، بلا ضغط زائد على السيرفر
+    for (let i = 0; i < sents.length; i += 2) {
+      if (aheadRef.current.token !== token) return;
+      await Promise.all(sents.slice(i, i + 2).map((x) => prefetchText(x, { voiceId: pickVoice(), page: pageRef })));
+    }
+  }
+
+  function saveAudioAhead(from: number, to: number, whole = false, onPage?: (done: number, total: number) => void) {
+    if (!pdfPath || from < 1) return;
+    const cur = aheadRef.current;
+    // عامل يعمل ويغطّي المطلوب (أو حفظ الكتاب كاملًا) → لا نقطعه
+    if (cur.running && (cur.whole || cur.to >= to) && !whole) return;
+    const token = cur.token + 1;
+    aheadRef.current = { token, to, whole, running: true };
+    void (async () => {
+      const total = Math.max(0, to - from + 1);
+      for (let p = from; p <= to; p++) {
+        if (aheadRef.current.token !== token) return;
+        try {
+          await saveAudioOfPage(p, token);
+        } catch {
+          // صفحة تعذّرت (شبكة/حصة) → نكمل التالية؛ ستُولَّد وقت القراءة
+        }
+        onPage?.(p - from + 1, total);
+      }
+      if (aheadRef.current.token === token) aheadRef.current = { ...aheadRef.current, running: false };
+    })();
+  }
+
+  function stopAudioAhead() {
+    aheadRef.current = { token: aheadRef.current.token + 1, to: 0, whole: false, running: false };
+  }
+  // الخروج من الكتاب يوقف التجهيز (ما حُفظ يبقى على الجهاز)
+  useEffect(() => () => stopAudioAhead(), []);
+
   async function prepareNextPage(p: number) {
     if (!pdfPath || p < 1) return;
     try {
@@ -1755,6 +1823,8 @@ export default function ReaderScreen() {
       // المقطع التالي: نحمّل مشغّله مسبقًا (warm) ليبدأ فورًا بلا فجوة بين المقاطع
       if (i + 1 < sents.length) warmNext(sents[i + 1], { voiceId: vId, page: pageRef });
       if (i + 2 < sents.length) prefetchText(sents[i + 2], { voiceId: vId, page: pageRef });
+      // أول الصفحة: صوت الصفحات القادمة يُحفظ على الجهاز مسبقًا (١٠ للمشترك، ٢ للتجربة)
+      if (i === 0 && p < total) saveAudioAhead(p + 1, Math.min(total, p + aheadPagesRef.current));
       // قرب نهاية الصفحة: جهّز نص الصفحة التالية مسبقًا لتنقّل سلس
       if (i === Math.max(0, sents.length - 3) && p < total) {
         void prepareNextPage(p + 1);
@@ -2339,6 +2409,21 @@ export default function ReaderScreen() {
     const bookTitle = typeof title === "string" ? title : "الكتاب";
     await startDownload(pdfPath, bookTitle, total);
     showToast(t("reader.toast.downloadingBackground"));
+    // وصوت الكتاب أيضًا (اختياري): من الصفحة الحالية حتى آخر الكتاب — للاستماع بلا إنترنت
+    const from = Math.max(1, page);
+    Alert.alert(t("reader.audioSave.title"), t("reader.audioSave.body", { n: total - from + 1 }), [
+      { text: t("reader.audioSave.no"), style: "cancel" },
+      {
+        text: t("reader.audioSave.yes"),
+        onPress: () => {
+          showToast(t("reader.audioSave.started"));
+          saveAudioAhead(from, total, true, (done, all) => {
+            if (done === all) showToast(t("reader.audioSave.done"));
+            else if (done % 10 === 0) showToast(t("reader.audioSave.progress", { done, all }));
+          });
+        },
+      },
+    ]);
   }
 
   useEffect(() => {

@@ -79,6 +79,7 @@ async function encoder() {
   const out: Uint8Array[] = [];
   let carry: Uint8Array | null = null; // بايت زايد من مقطع سابق (العيّنة الواحدة بايتين)
   let samples = 0;
+  const pcm: Float32Array[] = []; // نسخة لقياس طبقة الصوت (لا تُرسل)
   return {
     push(bytes: Uint8Array) {
       let b = bytes;
@@ -97,16 +98,53 @@ async function encoder() {
       const f = new Float32Array(b.length / 2);
       for (let i = 0; i < f.length; i++) f[i] = view.getInt16(i * 2, true) / 32768;
       samples += f.length;
+      pcm.push(f);
       out.push(new Uint8Array(enc.encode([f])));
     },
-    finish(): { mp3: Uint8Array; seconds: number } {
+    finish(): { mp3: Uint8Array; seconds: number; f0: number } {
       out.push(new Uint8Array(enc.finalize()));
       const all = new Uint8Array(out.reduce((n, c) => n + c.length, 0));
       let o = 0;
       for (const c of out) (all.set(c, o), (o += c.length));
-      return { mp3: all, seconds: samples / RATE };
+      return { mp3: all, seconds: samples / RATE, f0: pitchHz(pcm) };
     },
   };
+}
+
+/**
+ * طبقة الصوت (Hz) لمقطع: وسيط التردد الأساسي في النوافذ المسموعة (ارتباط ذاتي، ٤٠ms، ١٢٠–٤٠٠Hz).
+ * جيميناي يولّد كل جملة مستقلة، فتخرج ربع الجمل تقريبًا أعمق أو أحدّ بوضوح من صوت القارئة
+ * (قيس ١٧ أكتوبر: انحراف حتى ١٦٪) فتبدو القارئة «تغيّرت». نقيسها لنعيد توليد الشاذة.
+ */
+export function pitchHz(chunks: Float32Array[]): number {
+  const n = chunks.reduce((a, c) => a + c.length, 0);
+  if (n < RATE / 2) return 0;
+  const x = new Float32Array(n);
+  let o = 0;
+  for (const c of chunks) (x.set(c, o), (o += c.length));
+  const w = Math.round(0.04 * RATE);
+  const lo = Math.floor(RATE / 400);
+  const hi = Math.ceil(RATE / 120);
+  const out: number[] = [];
+  for (let i = 0; i + w + hi < n; i += w) {
+    let mean = 0;
+    for (let j = 0; j < w; j++) mean += x[i + j];
+    mean /= w;
+    let e0 = 0;
+    for (let j = 0; j < w; j++) e0 += (x[i + j] - mean) ** 2;
+    if (Math.sqrt(e0 / w) < 0.02) continue; // صمت/همس
+    let best = 0;
+    let bestK = 0;
+    for (let k = lo; k <= hi; k++) {
+      let s = 0;
+      for (let j = 0; j + k < w; j++) s += (x[i + j] - mean) * (x[i + j + k] - mean);
+      if (s > best) (best = s), (bestK = k);
+    }
+    if (bestK && best > 0.3 * e0) out.push(RATE / bestK);
+  }
+  if (!out.length) return 0;
+  out.sort((a, b) => a - b);
+  return Math.round(out[Math.floor(out.length / 2)]);
 }
 
 function b64(s: string): Uint8Array {
@@ -123,11 +161,11 @@ const VERTEX_PROJECT = Deno.env.get("GOOGLE_CLOUD_PROJECT") ?? "gen-lang-client-
 /** صوت النص كاملًا (MP3) ومدته بالثواني. البث من جوجل أسرع بكثير من انتظار الرد كاملًا.
  *  طريقة القراءة (غير «عادية») تمر عبر بوابة AI Studio فقط (حقل speech_metadata غير متاح في Vertex
  *  بمفتاح API)؛ إن تعذّرت (مثل سقف ١٠٠ طلب يوميًا) نكمل بالقراءة العادية على Vertex — الصوت لا يتوقف. */
-export async function geminiMp3(voiceName: string, text: string, style: ReadStyle = "normal"): Promise<{ mp3: Uint8Array; seconds: number }> {
+export async function geminiMp3(voiceName: string, text: string, style: ReadStyle = "normal", seed = 7, budgetMs = BUDGET_MS): Promise<{ mp3: Uint8Array; seconds: number; f0: number }> {
   const vertexKey = Deno.env.get("GOOGLE_TTS_API_KEY");
   const studioKey = Deno.env.get("GEMINI_API_KEY");
   if (!vertexKey && !studioKey) throw new Error("Missing GEMINI_API_KEY");
-  const deadline = Date.now() + BUDGET_MS;
+  const deadline = Date.now() + budgetMs;
   const left = () => deadline - Date.now();
   if (style !== "normal" && studioKey) {
     try {
@@ -149,7 +187,8 @@ export async function geminiMp3(voiceName: string, text: string, style: ReadStyl
   }
   const body = JSON.stringify({
     contents: [{ role: "user", parts: [{ text }] }],
-    generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
+    // بذرة ثابتة: نفس الجملة تخرج بنفس الأداء كلما وُلّدت (قيس: نفس الطبقة والمدة تمامًا)
+    generationConfig: { responseModalities: ["AUDIO"], seed, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
   });
   if (vertexKey) {
     try {
@@ -169,7 +208,7 @@ export async function geminiMp3(voiceName: string, text: string, style: ReadStyl
   return streamTts(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`, studioKey!, body, left());
 }
 
-async function streamTts(url: string, key: string, body: string, timeoutMs: number): Promise<{ mp3: Uint8Array; seconds: number }> {
+async function streamTts(url: string, key: string, body: string, timeoutMs: number): Promise<{ mp3: Uint8Array; seconds: number; f0: number }> {
   // حد أقصى للانتظار: طلب عالق لا يُعلّق القراءة دقائق — نلغيه ويكمل التطبيق بصوت الجهاز
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), Math.max(1000, timeoutMs));

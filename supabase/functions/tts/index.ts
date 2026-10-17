@@ -115,7 +115,8 @@ Deno.serve(async (req: Request) => {
     }
 
     if (Date.now() < coolUntil) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
-    let out: { mp3: Uint8Array; seconds: number };
+    let out: { mp3: Uint8Array; seconds: number; f0: number };
+    const t0 = Date.now();
     try {
       out = await geminiMp3(voiceName, text, style);
     } catch (e) {
@@ -125,6 +126,21 @@ Deno.serve(async (req: Request) => {
       if (/\b429\b|RESOURCE_EXHAUSTED/i.test(msg)) coolUntil = Date.now() + 60_000;
       // نفاد الرصيد المدفوع فقط يُعدّ «quota»؛ الحد المؤقت والبطء يرجعان لصوت الجهاز
       return json({ error: msg, quota: /billing|prepay|credit/i.test(msg) && !/\b429\b/.test(msg) }, 200);
+    }
+
+    // ثبات صوت القارئة: التطبيق يرسل متوسط طبقة الجمل السابقة (refF0). جملة شاذة (>١١٪)
+    // تُولَّد مرة ثانية ببذرة أخرى ونأخذ الأقرب — قيس ١٧ أكتوبر: الشاذة ٢٥٪ → ٠٪، والتفاوت ١٦ → ١٠Hz.
+    // فقط إن بقي وقت (لا نتجاوز مهلة التطبيق).
+    const ref = Number(body.refF0);
+    const off = (f: number) => (f > 0 && ref > 0 ? Math.abs(f - ref) / ref : 0);
+    const used = Date.now() - t0;
+    if (ref > 0 && off(out.f0) > 0.11 && used < 7000) {
+      try {
+        const again = await geminiMp3(voiceName, text, style, 11, Math.min(9000, 20000 - used));
+        if (again.f0 > 0 && off(again.f0) < off(out.f0)) out = again;
+      } catch {
+        // المحاولة الثانية اختيارية — نكمل بالأولى
+      }
     }
 
     // توقيت تقريبي لكل حرف (توزيع خطّي على مدة المقطع) — لتزامن الهايلايت
@@ -146,7 +162,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return json({ audio, starts });
+    return json({ audio, starts, f0: out.f0 });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);
   }
