@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.nahlah.voicestudyflow",
-      "buildNumber": "11",
+      "buildNumber": "12",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
