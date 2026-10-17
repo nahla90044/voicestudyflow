@@ -9,6 +9,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import { signOut } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
+import { requestPaywall } from "../../lib/plan";
+import { purchasesAvailable } from "../../lib/purchases";
 import { openStoreReview } from "../../lib/review";
 import { LanguageSwitcher } from "./language-switcher";
 import { BrandMark } from "./logo";
@@ -86,6 +88,28 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
             <View style={styles.langWrap}>
               <LanguageSwitcher />
             </View>
+
+            {/* الاشتراكات — أول عنصر وبلون ذهبي: مراجع أبل لم يجد المشتريات حين كانت داخل الملف الشخصي فقط */}
+            {purchasesAvailable() ? (
+              <Pressable
+                onPress={() => {
+                  setOpen(false);
+                  requestPaywall("upgrade", true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t("drawer.subscriptions")}
+                style={[styles.item, styles.subItem, { flexDirection: dir.row, marginTop: Spacing.lg }]}
+              >
+                <View style={[styles.itemIcon, { backgroundColor: "#F6C34A", borderColor: "#F6C34A" }]}>
+                  <Ionicons name="diamond" size={20} color="#2A1E00" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.itemTxt, { textAlign: dir.textAlign, flex: 0 }]}>{t("drawer.subscriptions")}</Text>
+                  <Text style={[styles.subHint, { textAlign: dir.textAlign }]}>{t("drawer.subscriptionsHint")}</Text>
+                </View>
+                <Ionicons name="chevron-back" size={18} color="#F6C34A" />
+              </Pressable>
+            ) : null}
 
             <View style={{ gap: 10, marginTop: Spacing.lg }}>
               {ITEMS.map((it) => (
@@ -171,6 +195,8 @@ const styles = StyleSheet.create({
   subLabel: { color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" },
   subPlan: { color: "#fff", fontSize: 16, fontWeight: "900", marginTop: 1 },
   langWrap: { marginTop: Spacing.lg },
+  subItem: { borderWidth: 1.5, borderColor: "#F6C34A", backgroundColor: "#F6C34A1A" },
+  subHint: { color: Palette.textMuted, fontSize: 12, fontWeight: "600", marginTop: 2 },
   item: {
     flexDirection: "row-reverse",
     alignItems: "center",
