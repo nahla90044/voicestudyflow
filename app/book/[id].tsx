@@ -336,6 +336,12 @@ export default function BookHubScreen() {
                         <Ionicons name="headset" size={17} color={pal.accent} accessibilityLabel={t("book.unit.summary")} />
                       </PressableScale>
                       <PressableScale
+                        onPress={() => router.push({ pathname: "/unit-video", params: unitParams(i, u.title) })}
+                        style={[styles.mini, { backgroundColor: pal.soft }]}
+                      >
+                        <Ionicons name="videocam" size={17} color={pal.accent} accessibilityLabel={t("video.open")} />
+                      </PressableScale>
+                      <PressableScale
                         onPress={() => router.push({ pathname: "/unit-quiz", params: unitParams(i, u.title) })}
                         style={[styles.mini, { backgroundColor: pal.soft }]}
                       >

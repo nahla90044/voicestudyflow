@@ -2455,6 +2455,23 @@ export default function ReaderScreen() {
     }
   }
 
+  // 🎬 ملخّص فيديو لوحدة الصفحة الحالية (من المنهج، أو نطاق الصفحات القريبة بلا منهج)
+  async function openUnitVideo() {
+    if (!pdfPath) return;
+    const sc = await unitForPage(pdfPath, page, totalPages).catch(() => null);
+    const bt = typeof title === "string" ? title : "";
+    const params: Record<string, string> = { pdf_path: pdfPath, book_title: bt };
+    if (sc?.unitIndex != null) {
+      params.unit = String(sc.unitIndex);
+      params.title = sc.title ?? bt;
+    } else if (sc) {
+      params.from = String(sc.from);
+      params.to = String(sc.to);
+      params.title = t("reader.mindmap.pages", { from: sc.from, to: sc.to });
+    } else return;
+    router.push({ pathname: "/unit-video", params });
+  }
+
   async function printReaderMindmap() {
     if (!mmMap) return;
     try {
@@ -3515,6 +3532,7 @@ export default function ReaderScreen() {
                 }}
               />
               <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
+              <InTool icon="videocam-outline" label={t("video.open")} onPress={() => void openUnitVideo()} />
               <InTool
                 icon="library-outline"
                 label={t("reader.tools.bookPage")}

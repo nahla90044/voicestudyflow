@@ -76,7 +76,8 @@ async function notifyDone(meta: Meta, ok: boolean) {
 }
 
 /** يبدأ مهمة التلخيص (أو يعيد المهمة الجارية نفسها) */
-export function startSummaryJob(pdfPath: string, src: SummarySource, meta: Meta): string {
+/** notifyWhenDone=false: مهمة يطلبها الفيديو (إشعاره هو الذي يصل لا إشعار الملخّص) */
+export function startSummaryJob(pdfPath: string, src: SummarySource, meta: Meta, notifyWhenDone = true): string {
   const key = summaryJobKey(pdfPath, src);
   const cur = jobs.get(key);
   if (cur?.status === "running") return key;
@@ -98,7 +99,7 @@ export function startSummaryJob(pdfPath: string, src: SummarySource, meta: Meta)
       const complete = !!(await getCachedSummary(pdfPath, src));
       last = { ...last, status: complete ? "done" : "failed", result, soFar: result ?? last.soFar, etaSec: 0 };
       emit(last);
-      if (!viewing.get(key)) void notifyDone(meta, complete);
+      if (notifyWhenDone && !viewing.get(key)) void notifyDone(meta, complete);
     } catch (e) {
       last = { ...last, status: (e as Error).message === "USER_QUOTA" ? "quota" : "failed" };
       emit(last);

@@ -431,6 +431,19 @@ export default function SyllabusScreen() {
                     <Pressable
                       onPress={() =>
                         router.push({
+                          pathname: "/unit-video",
+                          params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
+                        })
+                      }
+                      style={[styles.quizBtn, styles.sumBtn, pillStyle, { flexDirection: dir.row }]}
+                    >
+                      <Ionicons name="videocam" size={15} color={pal.accent} />
+                      <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>{t("video.open")}</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() =>
+                        router.push({
                           pathname: "/unit-quiz",
                           params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
                         })

@@ -5,7 +5,7 @@
 // الخروج مثل باقي بيانات المستخدم، فلا تسريب بين الحسابات.
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type SavedKind = "summary" | "quiz";
+export type SavedKind = "summary" | "quiz" | "video";
 
 export type SavedItem = {
   key: string; // فريد: kind|pdf|page/unit
@@ -15,6 +15,8 @@ export type SavedItem = {
   label: string; // عنوان العنصر (عنوان الوحدة أو «الصفحة N») — قابل لإعادة التسمية
   page?: number; // وضع القارئ (صفحة)
   unit?: number; // وضع المنهج (وحدة)
+  from?: number; // نطاق صفحات (وحدة من القارئ بلا منهج)
+  to?: number;
   savedAt: number;
   studied?: boolean; // أُشِّر كمدروس من القائمة
   archived?: boolean; // منقول إلى الأرشيف

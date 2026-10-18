@@ -83,9 +83,11 @@ export default function FlashcardsScreen() {
   // عناصر المحفوظات (ملخّصات/اختبارات) مجمَّعة حسب الكتاب للتبويب الحالي
   const savedGroups = useMemo(() => {
     const kind: SavedKind = tab === "quiz" ? "quiz" : "summary";
+    // تبويب الملخّصات يضم ملخّصات الفيديو أيضًا (🎬)
+    const sameTab = (k: SavedKind) => k === kind || (kind === "summary" && k === "video");
     // نعرض إمّا الحالية أو المؤرشفة (حسب الزر) — فلا تختلط ولا تختفي
     const items = saved
-      .filter((s) => s.kind === kind && (showArchived ? !!s.archived : !s.archived))
+      .filter((s) => sameTab(s.kind) && (showArchived ? !!s.archived : !s.archived))
       .sort((a, b) => b.savedAt - a.savedAt);
     const map = new Map<string, { title: string; items: SavedItem[] }>();
     for (const it of items) {
@@ -100,7 +102,7 @@ export default function FlashcardsScreen() {
   const archivedCount = useMemo(() => {
     if (tab === "cards") return all.filter((c) => c.archived).length;
     const kind: SavedKind = tab === "quiz" ? "quiz" : "summary";
-    return saved.filter((s) => s.kind === kind && s.archived).length;
+    return saved.filter((s) => (s.kind === kind || (kind === "summary" && s.kind === "video")) && s.archived).length;
   }, [saved, all, tab]);
 
   // نوع التخزين في unitContent حسب المصدر (صفحة قارئ أم وحدة منهج)
@@ -118,7 +120,8 @@ export default function FlashcardsScreen() {
         style: "destructive",
         onPress: async () => {
           await removeSavedItem(it.key);
-          await removeUnitContent(it.pdfPath, it.page ?? it.unit ?? 0, contentKind(it));
+          // الفيديو: يُحذف من الفهرس فقط (سيناريوه يبقى مخزَّنًا فيُفتح فورًا إن طُلب ثانية)
+          if (it.kind !== "video") await removeUnitContent(it.pdfPath, it.page ?? it.unit ?? 0, contentKind(it));
           getSavedItems().then(setSaved);
         },
       },
@@ -179,7 +182,11 @@ export default function FlashcardsScreen() {
     };
     if (it.page != null) params.page = String(it.page);
     if (it.unit != null) params.unit = String(it.unit);
-    router.push({ pathname: it.kind === "quiz" ? "/unit-quiz" : "/unit-summary", params });
+    if (it.from != null && it.to != null) {
+      params.from = String(it.from);
+      params.to = String(it.to);
+    }
+    router.push({ pathname: it.kind === "quiz" ? "/unit-quiz" : it.kind === "video" ? "/unit-video" : "/unit-summary", params });
   }
 
   // البطاقات ضمن العرض الحالي (الحالية أو المؤرشفة حسب المبدّل)
@@ -433,7 +440,7 @@ export default function FlashcardsScreen() {
                       {it.studied ? <Ionicons name="checkmark-circle" size={18} color={pal.accent} /> : null}
                       <View style={styles.bookInfo}>
                         <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={2}>
-                          {it.label}
+                          {it.kind === "video" ? `🎬 ${it.label}` : it.label}
                         </Text>
                       </View>
                       <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={pal.dim} />

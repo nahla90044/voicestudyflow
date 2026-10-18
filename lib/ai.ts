@@ -7,6 +7,7 @@ import { fetch as streamFetch } from "expo/fetch";
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
 
 export type AiAction =
+  | "videoscript"
   | "studysummary"
   | "summarize"
   | "ask"

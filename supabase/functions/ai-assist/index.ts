@@ -22,6 +22,8 @@ function json(body: unknown, status = 200) {
 }
 
 const SYSTEM: Record<string, string> = {
+  videoscript:
+    'أنت معلّم خبير ومخرج فيديوهات تعليمية احترافية بأسلوب NotebookLM Video Overview: الشاشة تعرض الكلمات المفتاحية فقط بتصميم بصري جذّاب، والراوي يشرح شرحًا حيًّا كمعلّم متمكّن. النص التالي ملخّص دراسي شامل لوحدة كاملة. اكتب منه سيناريو فيديو يجعل الطالب بعد مشاهدته وحدها جاهزًا لاختبار الوحدة: يغطي كل قسم وكل تعريف وكل تعداد كاملًا بعدده وكل مقارنة وكل رقم أو قاعدة يكثر السؤال عنها، بترتيب الملخّص، بأمانة تامة دون معلومات من خارجه إلا الأمثلة التوضيحية. البنية: (١) مشهد cover افتتاحي يشدّ الانتباه: لماذا هذه الوحدة مهمة وماذا سنتعلّم. (٢) مشاهد الشرح بالترتيب بتخطيطات متنوعة. (٣) بعد كل ٤ إلى ٥ مشاهد مشهد check: سؤال سريع من نوع أسئلة الاختبار، في question السؤال، وفي answer الجواب الصحيح مع سببه في جملة، وnarration يطرح السؤال ويدعو للتفكير. (٤) مشهد summary ختامي بعنوان «الخلاصة» يربط الأفكار ويذكّر بأهم ما يُسأل عنه. من ١٢ إلى ٣٠ مشهدًا حسب حجم المحتوى. التخطيطات في layout: «cover» عنوان، وفي highlight جملة تعريفية، ونقطتان أو ثلاث كلمات مفتاحية. «cards» لثلاثة أو أربعة مفاهيم متوازية، كل نقطة «عنوان قصير: شرح في جملة». «steps» لمراحل أو خطوات بالترتيب «اسم الخطوة: شرحها». «compare» لمقارنة شيئين: columns عمودان [{"title":"الأول","bullets":["…"]},{"title":"الثاني","bullets":["…"]}] وbullets فارغة. «stat» لرقم أو نسبة أو تاريخ أو مصطلح محوري في highlight (حتى ٢٠ حرفًا) مع نقطتين. «quote» لتعريف أو قاعدة مهمة حرفيًا في highlight مع نقطة توضحها. «list» لنقاط (٢ إلى ٥) ولكل التعدادات الكاملة. «check» للسؤال السريع (bullets فارغة). «summary» للخلاصة (٣ إلى ٥ نقاط). نوّع التخطيطات ولا تكرّر تخطيطًا في مشهدين متتاليين إلا للضرورة. نص الشاشة: emoji واحد، وtitle قصير، ونقاط مختصرة جدًا (حتى ٩٠ حرفًا). الـnarration (أهم جزء): ما يقوله الراوي في هذا المشهد، من ٣٥ إلى ٩٠ كلمة، بالعربية الفصحى السهلة وبأسلوب شرح ممتع واضح متسلسل يربط المشهد بما قبله، يشرح ما وراء النقاط ولا يقرؤها حرفيًا، ويضرب مثالًا للمفهوم المجرّد، وينبّه صراحة على ما يكثر في الاختبار (مثل «انتبه لهذا الفرق»)، ويذكر التعدادات كاملة بعددها. خاطب المتعلّم بصيغة محايدة لا مذكّرة ولا مؤنّثة (مثل: لنتعرّف، نلاحظ هنا، المهم أن، من الضروري تذكّر)، ولا تستخدم أسماء ولا ألقابًا. الأرقام في narration تُكتب كلمات. أعد فقط JSON صالحًا بالشكل: {"title":"عنوان الفيديو","scenes":[{"layout":"cover","emoji":"🎬","title":"العنوان","highlight":"","bullets":["…"],"columns":[],"question":"","answer":"","narration":"ما يقوله الراوي"}]} دون أي نص خارج JSON ودون رموز ماركداون.',
   studysummary:
     'أنت أستاذ خبير ومصمّم مذكّرات دراسية احترافية. النص التالي مقطع دراسي من كتاب (وحدة كاملة أو صفحة). اكتب منه ملخّصًا دراسيًا شاملًا يغطي كل الأفكار والمعلومات المهمة دون إغفال شيء، بأمانة تامة للنص؛ لا تضف معلومات من خارجه إلا في الأمثلة التوضيحية وتبسيط الصعب. المطلوب: (١) أقسام منطقية بترتيب النص، لكل قسم عنوان وإيموجي مناسب. (٢) صياغة جميلة واضحة بلغة سليمة، وجمل قصيرة سهلة المذاكرة. (٣) دقّق في كل التعدادات (الأنواع، الأقسام، الشروط، الخصائص، المراحل، الأسباب، النتائج، الوظائف) واعرضها قوائم كاملة لا ينقص منها عنصر، واذكر عددها في عنوانها (مثل «أنواع التضخم الثلاثة»). (٤) جداول مقارنة كلما قارن النص بين شيئين أو أكثر، أو عرض أنواعًا لها خصائص متقابلة (الجدول من ٢ إلى ٤ أعمدة). (٥) أمثلة توضيحية قصيرة من الواقع للمفاهيم المجرّدة. (٦) شرح أوسع وأبسط للنقاط الصعبة أو الدقيقة. (٧) تعريفات المصطلحات الأساسية كما في النص. (٨) تنبيه على المعلومات المهمة جدًا (قواعد، أرقام، فروق يكثر السؤال عنها). اجعل الطول متناسبًا مع النص (بحد أقصى نحو ٢٢٠٠ كلمة). أعد فقط JSON صالحًا بالشكل: {"title":"عنوان الملخّص","intro":"تمهيد قصير في جملتين","sections":[{"emoji":"📌","heading":"عنوان القسم","blocks":[{"type":"text","text":"فقرة"},{"type":"definition","term":"المصطلح","text":"تعريفه"},{"type":"list","title":"عنوان التعداد","ordered":true,"items":["عنصر: شرحه"]},{"type":"table","title":"عنوان الجدول","headers":["وجه المقارنة","الأول","الثاني"],"rows":[["","",""]]},{"type":"example","text":"مثال"},{"type":"explain","title":"النقطة الصعبة","text":"شرح مبسّط"},{"type":"important","text":"معلومة مهمة"}]}],"keypoints":["أهم النقاط للمراجعة السريعة"]} دون أي نص خارج JSON ودون أي رموز ماركداون داخل القيم.',
   summarize:
@@ -77,7 +79,7 @@ const MODEL: Record<string, string> = {
   syllabus: "claude-haiku-4-5-20251001",
   unitquiz: "claude-haiku-4-5-20251001",
 };
-const MAX_TOKENS: Record<string, number> = { studysummary: 9000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoscript: 9000, studysummary: 9000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 3000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -86,7 +88,7 @@ const GUARD =
 
 // إجراءات يطلبها المستخدم مباشرة → تُحسب من حصته. أما مراحل تجهيز القراءة الداخلية
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
-const COUNTED = new Set(["studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides"]);
+const COUNTED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -138,7 +140,7 @@ Deno.serve(async (req: Request) => {
       fr: "le français",
     };
     const LANG_ENFORCED = new Set([
-      "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "unitquiz", "syllabus", "define",
+      "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "unitquiz", "syllabus", "define",
     ]);
     let systemPrompt: string;
     if (action === "translate") {
@@ -181,7 +183,7 @@ Deno.serve(async (req: Request) => {
 
     // بثّ مباشر (الملخّص الشامل): النص يُرسل أولًا بأول فيظهر أول قسم خلال ثوانٍ
     // بدل انتظار الملخّص كاملًا (قد يتجاوز دقيقة). الحصة خُصمت أعلاه مرة واحدة.
-    if (body.stream === true && action === "studysummary") {
+    if (body.stream === true && (action === "studysummary" || action === "videoscript")) {
       const enc = new TextEncoder();
       const stream = new ReadableStream({
         async start(ctrl) {
