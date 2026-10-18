@@ -9,13 +9,13 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
-import { aiAssist, aiAssistStream } from "../lib/ai";
 import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
-import { parsePartialSummary, parseStudySummary, summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
-import { getOrMakeSummary, summaryCacheKey, summaryParts, type SummarySource } from "../lib/unitSummary";
-import { getUnitContent, setUnitContent } from "../lib/unitContent";
+import { summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
+import { summaryCacheKey, type SummarySource } from "../lib/unitSummary";
+import { startSummaryJob, watchSummaryJob } from "../lib/summaryJobs";
+import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
 import { playSummary, saveSummaryAudio, stopSummary, summaryChunks } from "../lib/summaryAudio";
@@ -56,10 +56,15 @@ export default function UnitSummaryScreen() {
   const text = sum ? summaryToText(sum) : "";
   const [err, setErr] = useState("");
   const [streaming, setStreaming] = useState(false); // الأقسام تظهر أولًا بأول
-  const [partInfo, setPartInfo] = useState<{ done: number; total: number } | null>(null); // وحدة طويلة: الجزء الحالي
+  const [prog, setProg] = useState<{ done: number; total: number; etaSec: number | null; waiting: boolean } | null>(null);
+  const [incomplete, setIncomplete] = useState(false); // ظهر جزء وما اكتمل الباقي (يُكمَل من الأجزاء المحفوظة)
   const [playing, setPlaying] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const fmtEta = (sec: number) => {
+    const m = Math.round(sec / 60);
+    return sec < 60 ? t("summary.etaLess") : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
+  };
   const docTitle = `${t("syllabus.summary.label")}${unitTitle ? ` — ${unitTitle}` : ""}`;
 
   /** حفظ الملخّص في «محفوظات الكتاب» (تبويب المحفوظات في صفحة الكتاب) */
@@ -97,91 +102,47 @@ export default function UnitSummaryScreen() {
     }
   }
 
+  // التلخيص مهمة خلفية (lib/summaryJobs): الخروج من هنا لا يوقفه، والعودة تتصل بنفس المهمة.
+  // كل جزء يُحفظ فور اكتماله، فانقطاع الاتصال (قفل الشاشة) لا يضيّع ما ظهر.
+  const [runId, setRunId] = useState(0);
   useEffect(() => {
     let on = true;
+    let unwatch: (() => void) | undefined;
     (async () => {
-      try {
-        // مخزَّن مسبقًا؟ اعرضه فورًا بلا ذكاء
-        const cached = await getUnitContent<StudySummary>(pdfPath, srcId, kind);
-        if (cached?.sections?.length) {
-          if (on) setSum(cached);
-          return;
-        }
-        // نصّ المصدر الحقيقي: الصفحة الحالية، أو كل صفحات الوحدة (من نطاقها في المنهج)
-        const parts = await summaryParts(pdfPath, src);
-        if (!parts.length) {
-          if (on) setErr(t("syllabus.err.summary"));
-          return;
-        }
-        // وحدة طويلة: أجزاؤها تُلخَّص معًا ببثّ (لا قصّ لآخرها) وتظهر بالترتيب أولًا بأول
-        if (parts.length > 1) {
-          if (on) {
-            setStreaming(true);
-            setPartInfo({ done: 0, total: parts.length });
-          }
-          try {
-            const merged = await getOrMakeSummary(pdfPath, src, (done, total, soFar) => {
-              if (!on) return;
-              setPartInfo({ done, total });
-              if (soFar) {
-                setSum(soFar);
-                setLoading(false);
-              }
-            });
-            if (!merged) {
-              if (on) setErr(t("syllabus.err.summary"));
-              return;
-            }
-            if (on) setSum(merged);
-          } finally {
-            if (on) {
-              setStreaming(false);
-              setPartInfo(null);
-            }
-          }
-          return;
-        }
-        const ctx = parts[0];
-        // بثّ مباشر: يظهر العنوان ثم كل قسم فور اكتماله (خلال ثوانٍ) بينما يُكتب الباقي
-        let raw = "";
-        let lastPaint = 0;
-        if (on) setStreaming(true);
-        try {
-          raw = await aiAssistStream("studysummary", ctx, (soFar) => {
-            const now = Date.now();
-            if (!on || now - lastPaint < 250) return;
-            lastPaint = now;
-            const part = parsePartialSummary(soFar);
-            if (part && (part.sections.length || part.title)) {
-              setSum(part);
-              setLoading(false);
-            }
-          });
-        } catch (e) {
-          if ((e as Error).message === "USER_QUOTA") throw e;
-          // تعذّر البثّ ولم يظهر شيء → طلب عادي كاحتياط
-          if (!raw) raw = await aiAssist("studysummary", ctx, undefined, undefined, undefined, 150000);
-        } finally {
-          if (on) setStreaming(false);
-        }
-        const parsed = parseStudySummary(raw);
-        if (!parsed) {
-          if (on) setErr(t("syllabus.err.summary"));
-          return;
-        }
-        setUnitContent(pdfPath, srcId, kind, parsed);
-        if (on) setSum(parsed);
-      } catch {
-        if (on) setErr(t("syllabus.err.summary"));
-      } finally {
-        if (on) setLoading(false);
+      const cached = await getUnitContent<StudySummary>(pdfPath, srcId, kind);
+      if (!on) return;
+      if (cached?.sections?.length) {
+        setSum(cached);
+        setLoading(false);
+        return;
       }
+      const params: Record<string, string> = { pdf_path: pdfPath };
+      for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
+      const key = startSummaryJob(pdfPath, src, { title: unitTitle || bookTitle, params });
+      setIncomplete(false);
+      setErr("");
+      unwatch = watchSummaryJob(key, (j) => {
+        if (!on) return;
+        if (j.soFar?.sections.length || j.soFar?.title) {
+          setSum(j.soFar);
+          setLoading(false);
+        }
+        setProg(j.status === "running" ? { done: j.done, total: j.total, etaSec: j.etaSec, waiting: j.waiting } : null);
+        setStreaming(j.status === "running");
+        if (j.status === "running") return;
+        setLoading(false);
+        if (j.status === "done" && j.result) setSum(j.result);
+        else if (j.soFar?.sections.length) setIncomplete(true);
+        else setErr(t("syllabus.err.summary"));
+      });
     })();
     return () => {
       on = false;
+      unwatch?.();
       stopSummary();
     };
-  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfPath, srcId, kind, runId]);
 
   // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → ملخّصات) متى توفّر المحتوى
   useEffect(() => {
@@ -236,6 +197,8 @@ export default function UnitSummaryScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={pal.accent} />
           <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.preparing")}</Text>
+          {prog?.etaSec ? <Text style={[styles.eta, { color: pal.ink }]}>{t("summary.eta", { time: fmtEta(prog.etaSec) })}</Text> : null}
+          <Text style={[styles.hint, { color: pal.dim }]}>{t("summary.bgHint")}</Text>
         </View>
       ) : err ? (
         <View style={styles.center}>
@@ -281,11 +244,28 @@ export default function UnitSummaryScreen() {
 
           {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} /> : null}
           {streaming ? (
-            <View style={[styles.writing, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
-              <ActivityIndicator size="small" color={pal.accent} />
-              <Text style={[styles.dim, { color: pal.dim }]}>
-                {partInfo ? t("summary.writingPart", { n: partInfo.done, total: partInfo.total }) : t("summary.writingRest")}
-              </Text>
+            <View style={[styles.writing, { backgroundColor: pal.soft }]}>
+              <View style={{ flexDirection: dir.row, alignItems: "center", gap: 10 }}>
+                <ActivityIndicator size="small" color={pal.accent} />
+                <Text style={[styles.dim, { color: pal.dim }]}>
+                  {prog?.waiting
+                    ? t("summary.waiting")
+                    : prog && prog.total > 1
+                      ? t("summary.writingPart", { n: prog.done, total: prog.total })
+                      : t("summary.writingRest")}
+                </Text>
+              </View>
+              {prog?.etaSec != null && prog.etaSec > 0 && !prog.waiting ? (
+                <Text style={[styles.eta, { color: pal.ink }]}>{t("summary.eta", { time: fmtEta(prog.etaSec) })}</Text>
+              ) : null}
+              <Text style={[styles.hint, { color: pal.dim }]}>{t("summary.bgHint")}</Text>
+            </View>
+          ) : incomplete ? (
+            <View style={[styles.writing, { backgroundColor: pal.soft }]}>
+              <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.incomplete")}</Text>
+              <Pressable onPress={() => setRunId((n) => n + 1)} style={({ pressed }) => [styles.resumeBtn, { backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}>
+                <Text style={[styles.playTxt, { color: pal.onAccent }]}>{t("summary.resume")}</Text>
+              </Pressable>
             </View>
           ) : null}
           <View style={{ height: 24 }} />
@@ -310,7 +290,10 @@ const styles = StyleSheet.create({
   },
   playTxt: { fontSize: 16, fontWeight: "900" },
   card: { padding: Spacing.lg },
-  writing: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, borderRadius: Radius.lg },
+  writing: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: Radius.lg },
+  eta: { fontSize: 15, fontWeight: "900", textAlign: "center" },
+  hint: { fontSize: 13, fontWeight: "600", textAlign: "center", lineHeight: 20 },
+  resumeBtn: { height: 46, paddingHorizontal: 26, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
   saveRow: { gap: 10 },
   saveBtn: { flex: 1, height: 48, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", gap: 8 },
   saveTxt: { fontSize: 15, fontWeight: "800" },
