@@ -676,6 +676,27 @@ function makeSpokenToOrigFrac(orig: string, clean: string): (cleanCharIdx: numbe
 }
 
 /** تشغيل نص بصوت بشري (مع رجوع لصوت الجهاز عند الحاجة). */
+/* سرعة النطق الفعلية المقيسة (حرف/ثانية عند السرعة ١×) — لتقدير مدة الاستماع بدقة (مثل مدة ملخّص الفيديو) */
+const CPS_KEY = "vsf:speech:cps";
+let cps = 13.5;
+AsyncStorage.getItem(CPS_KEY)
+  .then((v) => {
+    const n = Number(v);
+    if (n > 5 && n < 40) cps = n;
+  })
+  .catch(() => {});
+function noteSpeechRate(chars: number, secs: number) {
+  if (secs < 2 || chars < 30) return;
+  const r = chars / secs;
+  if (r < 5 || r > 40) return;
+  cps = cps * 0.85 + r * 0.15;
+  AsyncStorage.setItem(CPS_KEY, String(cps)).catch(() => {});
+}
+/** حروف في الثانية للراوي عند السرعة العادية (مقيسة على هذا الجهاز) */
+export function speechCharsPerSec(): number {
+  return cps;
+}
+
 export async function speakText(text: string, opts: SpeakOptions = {}): Promise<void> {
   // نتخطّى المصادر بين قوسين، ونحوّل الأرقام إلى كلمات (النص المعروض لا يتغيّر).
   // تنظيف واعٍ باللغة: كتب الإنجليزي/الفرنسي لا تُنطق أرقامها بالعربية.
@@ -726,6 +747,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     if (myToken !== playToken) return; // أُوقف/استُبدل أثناء التحضير → لا تشغّل
     opts.onWaiting?.(false);
     const { file, starts } = synth!;
+    if (starts.length > 20) noteSpeechRate(clean.length, starts[starts.length - 1]);
     step = "وضع الصوت";
     await ensureAudioMode();
     if (myToken !== playToken) return;

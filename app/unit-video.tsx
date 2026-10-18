@@ -19,7 +19,7 @@ import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
-import { getCachedVideo, saveVideoAudio, sceneSpeech, type VideoScene, type VideoScript } from "../lib/videoScript";
+import { getCachedVideo, saveVideoAudio, sceneSpeech, videoSeconds, type VideoScene, type VideoScript } from "../lib/videoScript";
 import { startVideoJob, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking } from "../lib/voice";
 
@@ -257,6 +257,12 @@ export default function UnitVideoScreen() {
     return sec < 60 ? t("summary.etaLess") : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
   };
   const preparing = !scenes.length;
+  const totalSecs = videoSeconds(scenes, RATES[rateIdx], 0, THINK_SECONDS);
+  const leftSecs = videoSeconds(scenes, RATES[rateIdx], idx, THINK_SECONDS);
+  const fmtDur = (sec: number) => {
+    const m = Math.round(sec / 60);
+    return sec < 60 ? t("video.durSecs", { n: Math.max(1, Math.round(sec / 10) * 10) }) : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
+  };
   // عدّاد التجهيز: الوقت الماضي كله، والتقدّم داخل المرحلة الحالية (لا يرجع للخلف)
   const prepStart = useRef(Date.now());
   const stageStart = useRef({ stage: "summary" as string, at: Date.now() });
@@ -398,6 +404,17 @@ export default function UnitVideoScreen() {
             ) : null}
           </View>
 
+          {/* ⏱️ مدة الفيديو (كاملة قبل التشغيل، والمتبقي أثناءه) — لضبط وقت المذاكرة */}
+          <View style={[styles.durRow, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
+            <Ionicons name="time-outline" size={18} color={pal.accent} />
+            <Text style={[styles.durTxt, { color: pal.ink }]}>
+              {t(complete ? "video.duration" : "video.durationSoFar", { time: fmtDur(totalSecs) })}
+            </Text>
+            {(playing || idx > 0) && !ended ? (
+              <Text style={[styles.durLeft, { color: pal.dim }]}>{t("video.remaining", { time: fmtDur(leftSecs) })}</Text>
+            ) : null}
+          </View>
+
           {/* الراوي (نص الشرح) */}
           {captions && cur && !ended ? (
             <View style={[styles.caption, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
@@ -477,6 +494,9 @@ export default function UnitVideoScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 14 },
   stepRow: { alignItems: "center", gap: 10 },
+  durRow: { alignItems: "center", gap: 8, borderRadius: Radius.pill, paddingHorizontal: 14, paddingVertical: 9, flexWrap: "wrap" },
+  durTxt: { fontSize: 14.5, fontWeight: "900" },
+  durLeft: { fontSize: 13.5, fontWeight: "700" },
   stepTxt: { flex: 1, fontSize: 15, fontWeight: "800" },
   track: { height: 10, borderRadius: 5, overflow: "hidden" },
   fill: { height: 10, borderRadius: 5 },

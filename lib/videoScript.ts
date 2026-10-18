@@ -11,7 +11,7 @@ import { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene,
 export { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript };
 import { getUnitContent, setUnitContent } from "./unitContent";
 import { summaryCacheKey, type SummarySource } from "./unitSummary";
-import { DEFAULT_VOICE_ID, prefetchText } from "./voice";
+import { DEFAULT_VOICE_ID, prefetchText, speechCharsPerSec } from "./voice";
 
 export type VideoProgress = PartsProgress<VideoScript>;
 
@@ -56,6 +56,17 @@ export async function getOrMakeVideo(
   const complete = !!script && ok.length === n;
   if (script && complete) await setUnitContent(pdfPath, ids.id, "video", script);
   return { script, complete };
+}
+
+/** مدة المشاهدة بالثواني من مشهد from: كلام الراوي بسرعته المقيسة ÷ سرعة التشغيل + وقفات التفكير والانتقال */
+export function videoSeconds(scenes: VideoScene[], rate = 1, from = 0, thinkSecs = 5): number {
+  const cps = speechCharsPerSec() * rate;
+  let sec = 0;
+  for (const s of scenes.slice(from)) {
+    const chars = sceneSpeech(s).reduce((n, l) => n + l.length, 0);
+    sec += chars / cps + 0.65 + (s.kind === "check" ? thinkSecs + 1.2 : 0);
+  }
+  return Math.round(sec);
 }
 
 /** ما يقوله الراوي لكل مشهد (السؤال ثم الجواب منفصلان: بينهما وقفة تفكير) */
