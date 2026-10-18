@@ -257,3 +257,49 @@ export function mindmapSvg(map: MindMap): string {
   );
   return `<svg viewBox="0 0 ${L.w} ${L.h}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'SF Arabic', sans-serif">${parts.join("")}</svg>`;
 }
+
+/** صفحة الطباعة: الخريطة كاملة (أفقية) ثم المخطط كقائمة — مشتركة بين المنهج والقارئ.
+ *  ألوان مُصمتة فقط: الشفافية والتدرّج يصيران سوادًا في PDF آيفون. */
+export function mindmapPrintHtml(
+  mm: MindMap,
+  o: { heading: string; outlineTitle: string; dir: "rtl" | "ltr" }
+): string {
+  const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const mix = (hex: string, a: number) => {
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * a + 255 * (1 - a)));
+    return `rgb(${c.join(",")})`;
+  };
+  const outline = mm.branches
+    .map((b, i) => {
+      const c = MM_COLORS[i % MM_COLORS.length];
+      return `<div class="br" style="border-color:${mix(c, 0.35)}"><div class="bh" style="background:${mix(c, 0.1)};color:${c}"><span class="dot" style="background:${c}"></span>${esc(b.label)}</div><ul>${b.points
+        .map((p) => `<li><span class="pd" style="background:${c}"></span>${esc(p)}</li>`)
+        .join("")}</ul></div>`;
+    })
+    .join("");
+  return `<!doctype html><html dir="${o.dir}" lang="ar"><head><meta charset="utf-8">
+    <style>
+      @page { size: landscape; margin: 14px; }
+      * { font-family: -apple-system, 'SF Arabic', sans-serif; box-sizing: border-box; }
+      body { margin: 0; color: #14233a; background: #fff; }
+      h1 { font-size: 20px; text-align: center; margin: 4px 0 6px; }
+      .map { height: calc(100vh - 50px); display: flex; align-items: center; justify-content: center; page-break-after: always; }
+      .map svg { max-height: 100%; width: auto; max-width: 100%; }
+      h2 { font-size: 18px; margin: 6px 0 12px; }
+      .center { display: inline-block; background: #7C5CFF; color: #fff; font-weight: 800; padding: 8px 18px; border-radius: 999px; margin-bottom: 14px; }
+      .grid { columns: 2; column-gap: 16px; }
+      .br { break-inside: avoid; border: 1.5px solid; border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+      .bh { font-weight: 800; font-size: 15px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
+      .dot { width: 10px; height: 10px; border-radius: 5px; display: inline-block; }
+      ul { list-style: none; margin: 0; padding: 6px 12px 10px; }
+      li { font-size: 13.5px; line-height: 1.8; display: flex; gap: 8px; align-items: baseline; }
+      .pd { width: 6px; height: 6px; border-radius: 3px; flex: none; display: inline-block; transform: translateY(-2px); }
+    </style></head><body>
+    <h1>🗺️ ${esc(o.heading)}</h1>
+    <div class="map">${mindmapSvg(mm)}</div>
+    <h2>${esc(o.outlineTitle)}</h2>
+    <div class="center">${esc(mm.center)}</div>
+    <div class="grid">${outline}</div>
+  </body></html>`;
+}

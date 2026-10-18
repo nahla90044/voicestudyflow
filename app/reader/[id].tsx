@@ -26,6 +26,10 @@ import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../..
 
 import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
+import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
+import * as Print from "expo-print";
+import { getUnitContent, setUnitContent } from "../../lib/unitContent";
+import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
 import { getPlan } from "../../lib/plan";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
@@ -592,6 +596,12 @@ export default function ReaderScreen() {
   const [aiBusy, setAiBusy] = useState(false);
   // البطاقات المولَّدة للتو: تُعرض تحت الرسالة وتُطبع PDF بطاقاتٍ (كان الـPDF يطبع جملة «تم حفظ…» فقط)
   const [aiCards, setAiCards] = useState<{ front: string; back: string }[] | null>(null);
+  // الخريطة الذهنية لوحدة الصفحة الحالية — تُفتح فوق القراءة (الصوت يستمر) للمراجعة أثناء المذاكرة
+  const [mmOpen, setMmOpen] = useState(false);
+  const [mmMap, setMmMap] = useState<MindMap | null>(null);
+  const [mmTitle, setMmTitle] = useState("");
+  const [mmBusy, setMmBusy] = useState(false);
+  const [mmFailed, setMmFailed] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [aiQuestion, setAiQuestion] = useState("");
   // خانة «اسأل عن الصفحة» تُعرض لحساب المالك فقط (تفتح مجالًا لاستخدامات أخرى)
@@ -1962,6 +1972,7 @@ export default function ReaderScreen() {
   // تقليب الصفحات بالسحب: الصفحة تتبع الإصبع، والمجاورة تظهر من الطرف، وعند الإفلات
   // تكتمل الحركة بنابض يحفظ سرعة الإصبع (أو ترجع لمكانها). أثناء القراءة يكمل القارئ من الصفحة الجديدة.
   const { width: screenW } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const pagerCtl = useRef({ arabic: false, playing: false, canPrev: false, canNext: false, commit: (_d: number) => {} });
   const pagerResetRef = useRef(false); // الصفحة الجديدة ستُرسم → نعيد الإزاحة بعد رسمها (بلا وميض)
   const pager = useRef(
@@ -2448,6 +2459,51 @@ export default function ReaderScreen() {
   }
 
   /** زر «حفظ الصوت»: يبدأ الحفظ، أو يوقفه إن كان جاريًا (ما حُفظ يبقى) */
+  // نفس مخزن المنهج: الوحدة التي وُلّدت خريطتها في صفحة المنهج تظهر هنا فورًا وبلا تكلفة.
+  // بلا منهج: تُبنى من نص الصفحات القريبة وتُخزَّن بمفتاح النطاق.
+  async function openMindmap() {
+    setMmOpen(true);
+    if (mmBusy || !pdfPath) return;
+    setMmFailed(false);
+    setMmBusy(true);
+    try {
+      const sc = await unitForPage(pdfPath, page, totalPages);
+      const key = sc.unitIndex ?? 2_000_000 + sc.from * 10000 + sc.to;
+      setMmTitle(sc.title ?? t("reader.mindmap.pages", { from: sc.from, to: sc.to }));
+      let map = await getUnitContent<MindMap>(pdfPath, key, "mindmap");
+      if (!map) {
+        let ctx = "";
+        if (sc.unitIndex !== null) {
+          const u = (await getSyllabus(pdfPath).catch(() => null))?.data.units[sc.unitIndex];
+          if (u?.topics?.length) ctx = `الفكرة المركزية: ${u.title}\nالفروع الرئيسية:\n${u.topics.map((x) => "- " + x).join("\n")}`;
+        }
+        if (!ctx) ctx = (await unitText(pdfPath, sc.from, sc.to)).slice(0, 9000);
+        map = ctx.trim() ? await generateMindmap(ctx) : null;
+        if (map) await setUnitContent(pdfPath, key, "mindmap", map);
+      }
+      setMmMap(map);
+      if (!map) setMmFailed(true);
+    } catch (e) {
+      setMmFailed(true);
+      if ((e as Error).message === "USER_QUOTA") setMmOpen(false); // صفحة الاشتراك تظهر
+    } finally {
+      setMmBusy(false);
+    }
+  }
+
+  async function printReaderMindmap() {
+    if (!mmMap) return;
+    try {
+      await Print.printAsync({
+        html: mindmapPrintHtml(mmMap, {
+          heading: `${t("syllabus.mindmap.title")} — ${mmTitle}`,
+          outlineTitle: t("syllabus.mindmap.outline"),
+          dir: dir.isRTL ? "rtl" : "ltr",
+        }),
+      });
+    } catch {}
+  }
+
   function onAudioSaveTool() {
     if (audioSave) {
       stopAudioAhead();
@@ -3485,6 +3541,7 @@ export default function ReaderScreen() {
                   setPresentOpen(true);
                 }}
               />
+              <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
               <InTool
                 icon="library-outline"
                 label={t("reader.tools.bookPage")}
@@ -4286,6 +4343,57 @@ export default function ReaderScreen() {
         </View>
       </Modal>
 
+      {/* الخريطة الذهنية لوحدة الصفحة: ملء الشاشة مع التكبير بإصبعين، والقراءة الصوتية تستمر خلفها */}
+      <Modal visible={mmOpen} animationType="slide" onRequestClose={() => setMmOpen(false)} supportedOrientations={["portrait", "landscape"]}>
+        <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
+          <View style={[styles.mmHead, { paddingTop: insets.top + 10, flexDirection: dir.row }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.mmHeadTitle, { textAlign: dir.textAlign }]}>🗺️ {t("syllabus.mindmap.title")}</Text>
+              {mmTitle ? (
+                <Text style={[styles.mmHeadSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
+                  {mmTitle}
+                </Text>
+              ) : null}
+            </View>
+            {mmMap ? (
+              <Pressable onPress={printReaderMindmap} hitSlop={8} accessibilityLabel={t("reader.mindmap.print")} style={styles.mmHeadBtn}>
+                <Ionicons name="print-outline" size={21} color="#14233a" />
+              </Pressable>
+            ) : null}
+            <Pressable onPress={() => setMmOpen(false)} hitSlop={8} accessibilityLabel={t("common.close")} style={styles.mmHeadBtn}>
+              <Ionicons name="close" size={22} color="#14233a" />
+            </Pressable>
+          </View>
+          {mmBusy ? (
+            <View style={styles.mmCenterBox}>
+              <ActivityIndicator color="#7C5CFF" />
+              <Text style={styles.mmMsg}>{t("reader.mindmap.loading")}</Text>
+            </View>
+          ) : mmMap ? (
+            <ScrollView
+              maximumZoomScale={3}
+              minimumZoomScale={1}
+              bouncesZoom
+              centerContent
+              contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", paddingBottom: insets.bottom + 12 }}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+            >
+              <BuzanMindMap map={mmMap} size={Math.min(screenW, 1100) - 16} theme={{ dark: false, bg: "#FFFFFF", ink: "#14233a", dim: "#5B6B82" }} />
+              <Text style={styles.mmMsg}>{t("reader.mindmap.hint")}</Text>
+            </ScrollView>
+          ) : mmFailed ? (
+            <View style={styles.mmCenterBox}>
+              <Ionicons name="alert-circle-outline" size={32} color="#D97706" />
+              <Text style={styles.mmMsg}>{t("reader.mindmap.failed")}</Text>
+              <Pressable onPress={() => void openMindmap()} style={styles.mmRetry}>
+                <Text style={styles.mmRetryTxt}>{t("reader.mindmap.retry")}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
       {/* مكافأة إنهاء أول كتاب — تُمنح بلا شرط، وطلب التقييم يأتي بعد إغلاقها */}
       <UnlockModal
         visible={unlockOpen}
@@ -4694,6 +4802,14 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.primary,
   },
 
+  mmHead: { alignItems: "center", gap: 12, paddingHorizontal: 16, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#E3E8F0" },
+  mmHeadTitle: { color: "#14233a", fontSize: 17, fontWeight: "900" },
+  mmHeadSub: { color: "#5B6B82", fontSize: 13.5, fontWeight: "700", marginTop: 2 },
+  mmHeadBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#F1F4F9", alignItems: "center", justifyContent: "center" },
+  mmCenterBox: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
+  mmMsg: { color: "#5B6B82", fontSize: 14, fontWeight: "700", textAlign: "center", lineHeight: 22, marginTop: 8, paddingHorizontal: 16 },
+  mmRetry: { backgroundColor: "#7C5CFF", borderRadius: 999, paddingHorizontal: 22, paddingVertical: 10 },
+  mmRetryTxt: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
   aiMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   aiSheet: {
     backgroundColor: Palette.bgElevated,

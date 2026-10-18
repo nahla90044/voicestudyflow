@@ -8,7 +8,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { BuzanMindMap, MM_COLORS, mindmapSvg } from "../../components/brand/mindmap";
+import { BuzanMindMap, MM_COLORS, mindmapPrintHtml } from "../../components/brand/mindmap";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
@@ -243,40 +243,11 @@ export default function SyllabusScreen() {
   // بلا تداخل)، ثم صفحة «المخطط الكامل» بالنصوص كاملة بلا اختصار.
   async function printMindmap() {
     if (!mm) return;
-    const esc = (s: string) =>
-      String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const outline = mm.branches
-      .map((b, i) => {
-        const c = MM_COLORS[i % MM_COLORS.length];
-        return `<div class="br" style="border-color:${c}55"><div class="bh" style="background:${c}1A;color:${c}"><span class="dot" style="background:${c}"></span>${esc(b.label)}</div><ul>${b.points
-          .map((p) => `<li><span class="pd" style="background:${c}"></span>${esc(p)}</li>`)
-          .join("")}</ul></div>`;
-      })
-      .join("");
-    const html = `<!doctype html><html dir="${dir.writingDirection}" lang="ar"><head><meta charset="utf-8">
-      <style>
-        @page { size: landscape; margin: 14px; }
-        * { font-family: -apple-system, 'SF Arabic', sans-serif; box-sizing: border-box; }
-        body { margin: 0; color: #14233a; }
-        h1 { font-size: 20px; text-align: center; margin: 4px 0 6px; }
-        .map { height: calc(100vh - 50px); display: flex; align-items: center; justify-content: center; page-break-after: always; }
-        .map svg { max-height: 100%; width: auto; max-width: 100%; }
-        h2 { font-size: 18px; margin: 6px 0 12px; }
-        .center { display: inline-block; background: linear-gradient(135deg,#7C5CFF,#00B4D8); color: #fff; font-weight: 800; padding: 8px 18px; border-radius: 999px; margin-bottom: 14px; }
-        .grid { columns: 2; column-gap: 16px; }
-        .br { break-inside: avoid; border: 1.5px solid; border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
-        .bh { font-weight: 800; font-size: 15px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; }
-        .dot { width: 10px; height: 10px; border-radius: 5px; display: inline-block; }
-        ul { list-style: none; margin: 0; padding: 6px 12px 10px; }
-        li { font-size: 13.5px; line-height: 1.8; display: flex; gap: 8px; align-items: baseline; }
-        .pd { width: 6px; height: 6px; border-radius: 3px; flex: none; display: inline-block; transform: translateY(-2px); }
-      </style></head><body>
-      <h1>🗺️ ${esc(t("syllabus.mindmap.title"))} — ${esc(bookTitle)}</h1>
-      <div class="map">${mindmapSvg(mm)}</div>
-      <h2>${esc(t("syllabus.mindmap.outline"))}</h2>
-      <div class="center">${esc(mm.center)}</div>
-      <div class="grid">${outline}</div>
-    </body></html>`;
+    const html = mindmapPrintHtml(mm, {
+      heading: `${t("syllabus.mindmap.title")} — ${bookTitle}`,
+      outlineTitle: t("syllabus.mindmap.outline"),
+      dir: dir.isRTL ? "rtl" : "ltr",
+    });
     try {
       await Print.printAsync({ html });
     } catch {}
