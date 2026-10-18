@@ -44,6 +44,9 @@ export default function PaywallScreen() {
   const [busy, setBusy] = useState(false);
   // التجربة المجانية مشروطة بحساب Apple: نعرض الدعوة لمن هو مجاني بلا Apple
   const [needApple, setNeedApple] = useState(false);
+  // المالكة ترى الخطط كما يراها المستخدم (معاينة) بلا شراء — كانت الصفحة تُغلق نفسها فورًا
+  // فيبدو زر «الاشتراكات» في القائمة كأنه لا يعمل
+  const [owner, setOwner] = useState(false);
   useEffect(() => {
     void (async () => {
       if ((await getPlan()) === "free" && !(await isAppleAccount())) setNeedApple(true);
@@ -76,7 +79,7 @@ export default function PaywallScreen() {
   useEffect(() => {
     (async () => {
       // المالكة لا ترى الاشتراك أبدًا
-      if (!devPreview && (await getPlan()) === "owner") return router.back();
+      if (!devPreview && (await getPlan()) === "owner") setOwner(true);
       const keys: ProductKey[] = ["premium_month", "pro_month", "plus_month"];
       const got = await Promise.all(keys.map((k) => storePrice(k)));
       // معاينة التطوير (لصور المراجعة فقط): الأسعار المسجّلة في المتجر بدل «…»
@@ -247,6 +250,17 @@ export default function PaywallScreen() {
         </View>
 
         <View style={styles.body}>
+          {owner && (
+            <SceneCard style={[styles.appleCard, { flexDirection: dir.row, borderColor: "#E8BE4F", borderWidth: 1.5 }]}>
+              <View style={[styles.appleIcon, { backgroundColor: "#E8BE4F" }]}>
+                <Ionicons name="star" size={20} color="#2A1E00" />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[styles.appleTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("pay.owner.title")}</Text>
+                <Text style={[styles.appleSub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("pay.owner.sub")}</Text>
+              </View>
+            </SceneCard>
+          )}
           {needApple && (
             <Pressable onPress={onAppleTrial} accessibilityRole="button">
               <SceneCard style={[styles.appleCard, { flexDirection: dir.row }]}>
@@ -294,7 +308,7 @@ export default function PaywallScreen() {
           )}
 
           {!!packPrice && (
-            <Pressable onPress={onBuyPages} disabled={busy} accessibilityRole="button">
+            <Pressable onPress={onBuyPages} disabled={busy || owner} accessibilityRole="button">
               <SceneCard style={[styles.pack, { flexDirection: dir.row, borderColor: pal.cardBorder }]}>
                 <View style={[styles.packIcon, { backgroundColor: pal.soft }]}>
                   <Ionicons name="albums-outline" size={18} color={pal.accent} />
@@ -311,13 +325,13 @@ export default function PaywallScreen() {
       </ScrollView>
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + 12, backgroundColor: pal.bg, borderTopColor: pal.cardBorder }]}>
-        <PressableScale onPress={onBuy} disabled={busy || !selected} style={{ alignSelf: "stretch" }}>
-          <View style={[styles.cta, { backgroundColor: pal.accent }, (busy || !selected) && { opacity: 0.55 }]}>
+        <PressableScale onPress={onBuy} disabled={busy || !selected || owner} style={{ alignSelf: "stretch" }}>
+          <View style={[styles.cta, { backgroundColor: pal.accent }, (busy || !selected || owner) && { opacity: 0.55 }]}>
             {busy ? (
               <ActivityIndicator color={pal.onAccent} />
             ) : (
               <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>
-                {unavailable ? t("pay.unavailable") : trialDays > 0 ? t("pay.trial", { n: trialDays }) : t("pay.subscribe")}
+                {owner ? t("pay.owner.cta") : unavailable ? t("pay.unavailable") : trialDays > 0 ? t("pay.trial", { n: trialDays }) : t("pay.subscribe")}
               </Text>
             )}
           </View>
