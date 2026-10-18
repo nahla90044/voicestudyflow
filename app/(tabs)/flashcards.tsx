@@ -469,7 +469,7 @@ export default function FlashcardsScreen() {
             {savedGroups.map((g) => (
               <View key={g.items[0]?.pdfPath ?? g.title} style={{ gap: 8, marginBottom: 6 }}>
                 <Text style={[styles.savedBook, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={1}>
-                  📖 {g.title}
+                  {g.title}
                 </Text>
                 {g.items.map((it) => (
                   <Pressable key={it.key} onPress={() => openSaved(it)} onLongPress={() => savedMenu(it)} delayLongPress={300}>
@@ -477,7 +477,13 @@ export default function FlashcardsScreen() {
                       {it.studied ? <Ionicons name="checkmark-circle" size={18} color={pal.accent} /> : null}
                       <View style={styles.bookInfo}>
                         <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={2}>
-                          {it.kind === "video" ? `🎬 ${it.label}` : it.label}
+                          {it.kind === "video" ? (
+                            <>
+                              <Ionicons name="videocam-outline" size={15} color={pal.accent} /> {it.label}
+                            </>
+                          ) : (
+                            it.label
+                          )}
                         </Text>
                       </View>
                       <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={pal.dim} />
@@ -507,7 +513,7 @@ export default function FlashcardsScreen() {
               <Pressable {...coach.bind("all")} onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
                   <View style={styles.bookInfo}>
-                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>📚 {t("flashcards.allBooks")}</Text>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>{t("flashcards.allBooks")}</Text>
                     <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
                       {t("flashcards.cardsCount", { count: all.length })}
                     </Text>
@@ -524,7 +530,7 @@ export default function FlashcardsScreen() {
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
                   <View style={styles.bookInfo}>
                     <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={1}>
-                      📖 {b.title}
+                      {b.title}
                     </Text>
                     <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
                       {t("flashcards.bookStats", { total: b.total, due: b.due })}

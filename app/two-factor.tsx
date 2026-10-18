@@ -71,7 +71,7 @@ export default function TwoFactorScreen() {
       setEnabled(true);
       setEnroll(null);
       setCode("");
-      Alert.alert("✅", t("twofa.enabledMsg"));
+      Alert.alert(t("common.done"), t("twofa.enabledMsg"));
     } catch {
       Alert.alert(t("addBook.alert.warnTitle"), t("twofa.invalidCode"));
     } finally {

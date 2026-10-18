@@ -200,18 +200,18 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
           .map((r, ri) => `<tr style="background:${ri % 2 ? c[1] : "#fff"}">${r.map((x, ci) => `<td${ci === 0 ? ` class="first" style="color:${c[0]}"` : ""}>${esc(x)}</td>`).join("")}</tr>`)
           .join("")}</tbody></table></div>`;
       case "example":
-        return `<div class="box ex"><span class="tag" style="background:#0E8F7E">💡 ${L.ex}</span>${esc(b.text)}</div>`;
+        return `<div class="box ex"><span class="tag" style="background:#0E8F7E">${L.ex}</span>${esc(b.text)}</div>`;
       case "explain":
-        return `<div class="box hard"><span class="tag" style="background:#2563EB">🔍 ${L.hard}</span>${b.title ? `<b>${esc(b.title)}: </b>` : ""}${esc(b.text)}</div>`;
+        return `<div class="box hard"><span class="tag" style="background:#2563EB">${L.hard}</span>${b.title ? `<b>${esc(b.title)}: </b>` : ""}${esc(b.text)}</div>`;
       case "important":
-        return `<div class="box imp"><span class="tag" style="background:#D97706">⭐ ${L.imp}</span>${esc(b.text)}</div>`;
+        return `<div class="box imp"><span class="tag" style="background:#D97706">${L.imp}</span>${esc(b.text)}</div>`;
     }
   };
 
   const toc = s.sections.filter((x) => x.heading).length > 2
     ? `<div class="toc"><div class="toch">${L.toc}</div><ol>${s.sections
         .filter((x) => x.heading)
-        .map((x) => `<li>${esc(x.emoji)} ${esc(x.heading)}</li>`)
+        .map((x) => `<li>${esc(x.heading)}</li>`)
         .join("")}</ol></div>`
     : "";
 
@@ -220,7 +220,7 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
       const c = SECTION_COLORS[i % SECTION_COLORS.length];
       // العنوان لا يبقى وحيدًا أسفل الصفحة: يُربط بأول محتوى تحته في كتلة لا تنقسم
       const h = sec.heading
-        ? `<h2><span class="num" style="background:${c[0]}">${i + 1}</span><span class="se">${esc(sec.emoji)}</span><span style="color:${c[0]}">${esc(sec.heading)}</span></h2><div class="rule" style="background:${c[2]}"></div>`
+        ? `<h2><span class="num" style="background:${c[0]}">${i + 1}</span><span style="color:${c[0]}">${esc(sec.heading)}</span></h2><div class="rule" style="background:${c[2]}"></div>`
         : "";
       const [first, ...rest] = sec.blocks.map((b) => blockHtml(b, c));
       return `<section><div class="lead">${h}${first ?? ""}</div>${rest.join("")}</section>`;
@@ -228,7 +228,7 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
     .join("");
 
   const key = s.keypoints.length
-    ? `<div class="key"><div class="keyh">✅ ${L.key}</div><ol>${s.keypoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ol></div>`
+    ? `<div class="key"><div class="keyh">${L.key}</div><ol>${s.keypoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ol></div>`
     : "";
 
   return `

@@ -40,7 +40,9 @@ function CheckView({ scene, stage, left }: { scene: VideoScene; stage: "ask" | "
     <View style={styles.check}>
       <LinearGradient colors={["#0F766E", "#1D4ED8"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
       <View style={[styles.checkTag, { alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
-        <Text style={styles.checkTagTxt}>🤔 {t("video.check")}</Text>
+        <Text style={styles.checkTagTxt}>
+          <Ionicons name="help-circle-outline" size={15} color="#FFFFFF" /> {t("video.check")}
+        </Text>
       </View>
       <Text style={[styles.checkQ, { textAlign: dir.textAlign }]}>{scene.question}</Text>
       {stage === "think" ? (
@@ -52,7 +54,9 @@ function CheckView({ scene, stage, left }: { scene: VideoScene; stage: "ask" | "
         </View>
       ) : stage === "reveal" ? (
         <Animated.View style={[styles.answer, { opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-          <Text style={[styles.answerHead, { textAlign: dir.textAlign }]}>✅ {t("video.answer")}</Text>
+          <Text style={[styles.answerHead, { textAlign: dir.textAlign }]}>
+            <Ionicons name="checkmark-circle-outline" size={16} color="#047857" /> {t("video.answer")}
+          </Text>
           <Text style={[styles.answerTxt, { textAlign: dir.textAlign }]}>{scene.answer}</Text>
         </Animated.View>
       ) : null}
@@ -329,7 +333,7 @@ export default function UnitVideoScreen() {
           ) : (
             <>
               <View style={[styles.prepIcon, { backgroundColor: pal.soft }]}>
-                <Text style={{ fontSize: 34 }}>🎬</Text>
+                <Ionicons name="videocam-outline" size={34} color={pal.accent} />
               </View>
               {/* المراحل: ✓ المكتمل، والحالية بمؤشر */}
               <View style={{ alignSelf: "stretch", gap: 8 }}>
@@ -383,7 +387,7 @@ export default function UnitVideoScreen() {
             {ended ? (
               <View style={[styles.endCard, { minHeight: stageH }]}>
                 <LinearGradient colors={["#5B4BF5", "#2A9DF4"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-                <Text style={styles.endEmoji}>🎉</Text>
+                <Ionicons name="trophy-outline" size={52} color="#FFFFFF" />
                 <Text style={styles.endTitle}>{t("video.endTitle")}</Text>
                 <Text style={styles.endSub}>{t("video.endSub")}</Text>
                 <Pressable onPress={() => router.push({ pathname: "/unit-quiz", params: quizParams })} style={styles.endQuiz}>

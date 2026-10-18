@@ -236,7 +236,7 @@ export default function LibraryScreen() {
 
       if (error) throw error;
 
-      Alert.alert("✅", t("library.alert.archived"));
+      Alert.alert(t("common.done"), t("library.alert.archived"));
       load();
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? String(e));
@@ -534,7 +534,7 @@ export default function LibraryScreen() {
             style={[styles.folderChip, chip, !selectedFolder && { backgroundColor: pal.soft, borderColor: pal.accent }]}
           >
             <Text style={[styles.folderChipTxt, { color: !selectedFolder ? pal.accent : pal.dim }]}>
-              📚 {t("library.folder.all")}
+              {t("library.folder.all")}
             </Text>
           </Pressable>
 
@@ -688,7 +688,7 @@ export default function LibraryScreen() {
                         {item.plan.start_date} → {item.plan.end_date}
                       </Text>
                       <Text style={[styles.metaTxt, { color: pal.dim, textAlign: dir.textAlign }]}>
-                        ⏱ {t("library.meta.perDay", { minutes: item.plan.daily_minutes })}
+                        {t("library.meta.perDay", { minutes: item.plan.daily_minutes })}
                       </Text>
                     </>
                   ) : (

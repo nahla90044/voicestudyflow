@@ -8,7 +8,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
-import { MUSIC_EMOJI, MUSIC_OPTIONS, startAmbient, stopAmbient } from "../../lib/sfx";
+import { MUSIC_ICON, MUSIC_OPTIONS, startAmbient, stopAmbient } from "../../lib/sfx";
 
 /** حالة الأجواء للشاشة: تتوقف عند مغادرتها */
 export function useAmbient() {
@@ -40,7 +40,9 @@ export function AmbientSheet({ visible, onClose, amb }: { visible: boolean; onCl
       <Pressable style={styles.mask} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]} onPress={() => {}}>
           <View style={{ flexDirection: dir.row, alignItems: "center", justifyContent: "space-between" }}>
-            <Text style={[styles.title, { color: pal.ink }]}>🎧 {t("summary.ambient.title")}</Text>
+            <Text style={[styles.title, { color: pal.ink }]}>
+              <Ionicons name="headset-outline" size={18} color={pal.accent} /> {t("summary.ambient.title")}
+            </Text>
             <Pressable onPress={onClose} hitSlop={8} accessibilityLabel={t("common.close")}>
               <Ionicons name="close" size={22} color={pal.dim} />
             </Pressable>
@@ -50,14 +52,18 @@ export function AmbientSheet({ visible, onClose, amb }: { visible: boolean; onCl
             {[{ key: null as string | null }, ...MUSIC_OPTIONS].map((m) => {
               const on = amb.key === m.key;
               const label =
-                m.key === null ? t("reader.music.none") : amb.loading === m.key ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`;
+                m.key === null ? t("reader.music.none") : amb.loading === m.key ? t("reader.music.loading") : t(`music.${m.key}`);
               return (
                 <Pressable
                   key={m.key ?? "none"}
                   onPress={() => void amb.pick(m.key)}
                   style={[styles.chip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: pal.cardBorder }]}
                 >
-                  <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]}>{label}</Text>
+                  <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]}>
+                    {m.key ? <Ionicons name={(MUSIC_ICON[m.key] ?? "musical-notes-outline") as keyof typeof Ionicons.glyphMap} size={14} color={on ? pal.onAccent : pal.accent} /> : null}
+                    {m.key ? " " : ""}
+                    {label}
+                  </Text>
                 </Pressable>
               );
             })}

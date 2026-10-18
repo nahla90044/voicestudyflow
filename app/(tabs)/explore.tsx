@@ -82,7 +82,7 @@ export default function ArchiveScreen() {
     if (error) {
       Alert.alert("Error", error.message);
     } else {
-      Alert.alert("✅", t("explore.alert.restored"));
+      Alert.alert(t("common.done"), t("explore.alert.restored"));
       load();
     }
   }
@@ -108,7 +108,7 @@ export default function ArchiveScreen() {
               .eq("id", book.id);
             if (bErr) throw bErr;
 
-            Alert.alert("✅", t("explore.alert.deleted"));
+            Alert.alert(t("common.done"), t("explore.alert.deleted"));
             load();
           } catch (e: any) {
             Alert.alert("Error", e?.message ?? String(e));

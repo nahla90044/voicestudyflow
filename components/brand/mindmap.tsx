@@ -296,7 +296,7 @@ export function mindmapPrintHtml(
       li { font-size: 13.5px; line-height: 1.8; display: flex; gap: 8px; align-items: baseline; }
       .pd { width: 6px; height: 6px; border-radius: 3px; flex: none; display: inline-block; transform: translateY(-2px); }
     </style></head><body>
-    <h1>🗺️ ${esc(o.heading)}</h1>
+    <h1>${esc(o.heading)}</h1>
     <div class="map">${mindmapSvg(mm)}</div>
     <h2>${esc(o.outlineTitle)}</h2>
     <div class="center">${esc(mm.center)}</div>

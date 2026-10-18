@@ -206,9 +206,9 @@ export default function SyllabusScreen() {
         (u, i) => `
         <div class="unit">
           <h3>${i + 1}. ${esc(u.title)}</h3>
-          ${sched[i] ? `<p class="when">📅 ${esc(t("syllabus.studyOn"))}: ${esc(fmtRange(sched[i]))}</p>` : ""}
+          ${sched[i] ? `<p class="when">${esc(t("syllabus.studyOn"))}: ${esc(fmtRange(sched[i]))}</p>` : ""}
           ${u.topics.length ? `<ul>${u.topics.map((topic) => `<li>${esc(topic)}</li>`).join("")}</ul>` : ""}
-          ${u.outcome ? `<p class="out">🎯 ${esc(u.outcome)}</p>` : ""}
+          ${u.outcome ? `<p class="out">${esc(u.outcome)}</p>` : ""}
         </div>`
       )
       .join("");
@@ -409,68 +409,41 @@ export default function SyllabusScreen() {
                     </View>
                   ))}
                   {!!u.outcome && (
-                    <Text style={[styles.outcome, { color: tone.good, textAlign: dir.textAlign }]}>🎯 {u.outcome}</Text>
+                    <Text style={[styles.outcome, { color: tone.good, textAlign: dir.textAlign }]}>
+                      <Ionicons name="flag-outline" size={14} color={tone.good} /> {u.outcome}
+                    </Text>
                   )}
 
-                  <View style={[styles.unitActions, { flexDirection: dir.row }]}>
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: "/unit-summary",
-                          params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
-                        })
-                      }
-                      style={[styles.quizBtn, styles.sumBtn, pillStyle, { flexDirection: dir.row }]}
-                    >
-                      <Ionicons name="headset" size={15} color={pal.accent} />
-                      <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>
-                        {t("syllabus.action.summary")}
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: "/unit-video",
-                          params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
-                        })
-                      }
-                      style={[styles.quizBtn, styles.sumBtn, pillStyle, { flexDirection: dir.row }]}
-                    >
-                      <Ionicons name="videocam" size={15} color={pal.accent} />
-                      <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>{t("video.open")}</Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() =>
-                        router.push({
-                          pathname: "/unit-quiz",
-                          params: { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle },
-                        })
-                      }
-                      style={[styles.quizBtn, pillStyle, { flex: 1, marginTop: 0, flexDirection: dir.row }]}
-                    >
-                      <Ionicons name="help-circle" size={15} color={pal.accent} />
-                      <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>
-                        {t("syllabus.action.quiz")}
-                      </Text>
-                    </Pressable>
-                  </View>
-
-                  <Pressable
-                    onPress={() => startMindmap(i)}
-                    disabled={mmLoading}
-                    style={[styles.quizBtn, styles.mmBtn, pillStyle, { flexDirection: dir.row }]}
-                  >
-                    {mmLoading && mmUnit === i ? (
-                      <ActivityIndicator size="small" color={pal.accent} />
-                    ) : (
-                      <Ionicons name="git-network" size={15} color={pal.accent} />
-                    )}
-                    <Text style={[styles.quizBtnTxt, { color: pal.ink }]}>
-                      {mmLoading && mmUnit === i ? t("syllabus.action.drawing") : t("syllabus.action.mindmap")}
-                    </Text>
-                  </Pressable>
+                  {/* أدوات الوحدة: شبكة ٢×٢ متوازنة (النص والأيقونة في منتصف كل إطار، سطر واحد) */}
+                  {(() => {
+                    const params = { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle };
+                    const drawing = mmLoading && mmUnit === i;
+                    const btn = (key: string, icon: keyof typeof Ionicons.glyphMap, label: string, onPress: () => void, busy = false) => (
+                      <Pressable
+                        key={key}
+                        onPress={onPress}
+                        disabled={key === "mm" && mmLoading}
+                        style={({ pressed }) => [styles.unitBtn, pillStyle, { flexDirection: dir.row, opacity: pressed ? 0.8 : 1 }]}
+                      >
+                        {busy ? <ActivityIndicator size="small" color={pal.accent} /> : <Ionicons name={icon} size={17} color={pal.accent} />}
+                        <Text style={[styles.unitBtnTxt, { color: pal.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                    return (
+                      <View style={styles.unitGrid}>
+                        <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>
+                          {btn("sum", "headset-outline", t("syllabus.action.summary"), () => router.push({ pathname: "/unit-summary", params }))}
+                          {btn("vid", "videocam-outline", t("video.open"), () => router.push({ pathname: "/unit-video", params }))}
+                        </View>
+                        <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>
+                          {btn("quiz", "school-outline", t("syllabus.action.quiz"), () => router.push({ pathname: "/unit-quiz", params }))}
+                          {btn("mm", "git-network-outline", drawing ? t("syllabus.action.drawing") : t("syllabus.action.mindmap"), () => startMindmap(i), drawing)}
+                        </View>
+                      </View>
+                    );
+                  })()}
                 </SceneCard>
               </Pressable>
             );
@@ -527,7 +500,7 @@ export default function SyllabusScreen() {
         <View style={styles.quizMask}>
           <View style={[styles.quizSheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]}>
             <View style={[styles.quizHeader, { flexDirection: dir.row }]}>
-              <Text style={[styles.quizHeaderTxt, { color: pal.ink }]}>🗺️ {t("syllabus.mindmap.title")}</Text>
+              <Text style={[styles.quizHeaderTxt, { color: pal.ink }]}>{t("syllabus.mindmap.title")}</Text>
               <View style={{ flexDirection: dir.row, alignItems: "center", gap: 14 }}>
                 <Pressable onPress={printMindmap} hitSlop={8}>
                   <Ionicons name="print-outline" size={21} color={pal.dim} />
@@ -706,6 +679,10 @@ const styles = StyleSheet.create({
   },
   quizBtnTxt: { fontSize: 13, fontWeight: "800" },
   unitActions: { gap: 8, marginTop: 12 },
+  unitGrid: { gap: 8, marginTop: 14 },
+  unitGridRow: { gap: 8 },
+  unitBtn: { flex: 1, height: 48, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", gap: 7, paddingHorizontal: 12 },
+  unitBtnTxt: { fontSize: 14, fontWeight: "800", flexShrink: 1 },
   sumBtn: { marginTop: 0, flex: 1 },
   mmBtn: { marginTop: 8 },
   mmCanvasWrap: {

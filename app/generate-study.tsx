@@ -181,7 +181,7 @@ export default function GenerateStudyScreen() {
                 padded={false}
                 style={[styles.row, bookId === b.id && { borderColor: pal.accent, borderWidth: 1.5 }]}
               >
-                <Text style={[styles.rowTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>📖 {b.title}</Text>
+                <Text style={[styles.rowTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>{b.title}</Text>
                 {bookId === b.id ? <Ionicons name="checkmark-circle" size={20} color={pal.accent} /> : null}
               </SceneCard>
             </Pressable>

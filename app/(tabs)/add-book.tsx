@@ -254,12 +254,12 @@ export default function AddBookScreen() {
           bufferEvery: 7,
         });
 
-        Alert.alert("✅", t("addBook.alert.planCreated", { pages: pageCount, days: result.days }));
+        Alert.alert(t("common.done"), t("addBook.alert.planCreated", { pages: pageCount, days: result.days }));
 
         // ✅ الانتقال لشاشة الخطة لعرضها
         router.push("/calendar");
       } else {
-        Alert.alert("✅", t("addBook.alert.bookAdded"));
+        Alert.alert(t("common.done"), t("addBook.alert.bookAdded"));
         router.push("/library");
       }
 

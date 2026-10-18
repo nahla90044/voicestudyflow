@@ -68,7 +68,7 @@ import {
   setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
-import { MUSIC_EMOJI, MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
+import { MUSIC_ICON, MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { FREE_BOOKS_UNLOCKED, markBookCompleted } from "../../lib/perks";
 import { askForReviewOnce } from "../../lib/review";
@@ -1795,7 +1795,7 @@ export default function ReaderScreen() {
 
     setActiveSentence(i);
     setActiveWord(-1);
-    setStatus(`🎙️ يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
+    setStatus(`يقرأ الآن — جملة ${i + 1} من ${sents.length}`);
 
     const speakCurrent = () => {
       if (!playingRef.current) return;
@@ -3619,7 +3619,7 @@ export default function ReaderScreen() {
             {MUSIC_OPTIONS.map((m) => (
               <OptChip
                 key={m.key}
-                label={musicLoading === m.key ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`}
+                label={musicLoading === m.key ? t("reader.music.loading") : t(`music.${m.key}`)}
                 on={presMusicKey === m.key}
                 onPress={() => selectMusic(m.key)}
               />
@@ -3712,7 +3712,7 @@ export default function ReaderScreen() {
                     </View>
                   ) : h.note ? (
                     <Pressable onPress={() => setNoteDraft({ id: h.id, text: h.note ?? "" })}>
-                      <Text style={styles.hlNote}>📝 {h.note}</Text>
+                      <Text style={styles.hlNote}>{h.note}</Text>
                     </Pressable>
                   ) : null}
 
@@ -4251,7 +4251,7 @@ export default function ReaderScreen() {
                     {loading ? (
                       <ActivityIndicator size="small" color={on ? SKY.onAccent : Palette.text} />
                     ) : (
-                      <Text style={styles.musicCardEmoji}>{MUSIC_EMOJI[m.key] ?? "🎵"}</Text>
+                      <Ionicons name={(MUSIC_ICON[m.key] ?? "musical-notes-outline") as keyof typeof Ionicons.glyphMap} size={26} color={Palette.text} />
                     )}
                     <Text style={[styles.musicCardTxt, on && styles.musicCardTxtOn]} numberOfLines={1}>
                       {loading ? t("reader.music.loading") : t(`music.${m.key}`)}
@@ -4347,7 +4347,7 @@ export default function ReaderScreen() {
         <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
           <View style={[styles.mmHead, { paddingTop: insets.top + 10, flexDirection: dir.row }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.mmHeadTitle, { textAlign: dir.textAlign }]}>🗺️ {t("syllabus.mindmap.title")}</Text>
+              <Text style={[styles.mmHeadTitle, { textAlign: dir.textAlign }]}>{t("syllabus.mindmap.title")}</Text>
               {mmTitle ? (
                 <Text style={[styles.mmHeadSub, { textAlign: dir.textAlign }]} numberOfLines={1}>
                   {mmTitle}

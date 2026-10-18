@@ -3,11 +3,24 @@
 // يناسب محتواها — غلاف، بطاقات، خطوات، مقارنة، رقم بارز، اقتباس، قائمة، خلاصة.
 // الغلاف/الرقم/الخلاصة على تدرّج لوني جريء، والبقية بطاقات بيضاء أنيقة بلون مميّز لكل شريحة.
 // كل شيء يدخل بحركة: الشريحة تظهر بتكبير خفيف ثم عناصرها واحدًا بعد الآخر.
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo } from "react";
 import { Animated, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { resolveLayout, splitHead, type Slide } from "../../lib/ai";
+import { resolveLayout, splitHead, type Slide, type SlideLayout } from "../../lib/ai";
+
+/** أيقونة خطّية لكل نوع شريحة (بدل الإيموجي) */
+const LAYOUT_ICON: Record<SlideLayout, keyof typeof Ionicons.glyphMap> = {
+  cover: "sparkles-outline",
+  list: "list-outline",
+  cards: "grid-outline",
+  steps: "footsteps-outline",
+  compare: "git-compare-outline",
+  stat: "stats-chart-outline",
+  quote: "chatbox-ellipses-outline",
+  summary: "checkmark-done-outline",
+};
 import { useDir, useI18n } from "../../lib/i18n";
 
 /** أزواج تدرّج (من → إلى) بتباين كافٍ للنص الأبيض */
@@ -71,7 +84,7 @@ export function SlideView({ slide, index, total, maxBulletsHeight = 360 }: Props
   const header = (
     <View style={[styles.head, { flexDirection: dir.row }]}>
       <View style={[styles.emojiTile, { backgroundColor: c1 + "18", borderColor: c1 + "40" }]}>
-        <Text style={styles.emojiSm}>{slide.emoji || "📌"}</Text>
+        <Ionicons name={LAYOUT_ICON[layout]} size={26} color={c1} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={[styles.kicker, { color: c1 }, ta]}>{counter}</Text>
@@ -96,7 +109,7 @@ export function SlideView({ slide, index, total, maxBulletsHeight = 360 }: Props
         <View style={styles.center}>
           <View style={styles.medalBig}>
             <View style={styles.medalRing} />
-            <Text style={{ fontSize: 60 }}>{slide.emoji || "📘"}</Text>
+            <Ionicons name="book-outline" size={56} color="#FFFFFF" />
           </View>
           <Text style={[styles.chipTxtW, styles.chipW]}>{t("reader.present.kindCover")}</Text>
           <Text style={styles.titleCover}>{slide.title}</Text>
@@ -115,7 +128,7 @@ export function SlideView({ slide, index, total, maxBulletsHeight = 360 }: Props
     case "stat":
       content = (
         <View style={styles.center}>
-          <Text style={[styles.chipTxtW, styles.chipW]}>{`${slide.emoji || "📊"}  ${counter}`}</Text>
+          <Text style={[styles.chipTxtW, styles.chipW]}>{counter}</Text>
           <Text style={styles.statBig} adjustsFontSizeToFit numberOfLines={2}>
             {slide.highlight}
           </Text>
@@ -140,7 +153,7 @@ export function SlideView({ slide, index, total, maxBulletsHeight = 360 }: Props
         <>
           <View style={[styles.head, { flexDirection: dir.row }]}>
             <View style={styles.emojiTileW}>
-              <Text style={styles.emojiSm}>{slide.emoji || "✨"}</Text>
+              <Ionicons name={LAYOUT_ICON[layout]} size={26} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               {slide.title.trim() !== t("reader.present.kindSummary") ? <Text style={[styles.kickerW, ta]}>{t("reader.present.kindSummary")}</Text> : null}
@@ -263,7 +276,7 @@ export function SlideView({ slide, index, total, maxBulletsHeight = 360 }: Props
           <Text style={[styles.quoteTxt, ta]}>{slide.highlight}</Text>
           <View style={[styles.quoteBy, { flexDirection: dir.row }]}>
             <View style={[styles.quoteDash, { backgroundColor: c1 }]} />
-            <Text style={[styles.quoteTitle, { color: c1 }]}>{`${slide.emoji || "💬"} ${slide.title}`}</Text>
+            <Text style={[styles.quoteTitle, { color: c1 }]}>{slide.title}</Text>
           </View>
           {body(
             <View style={{ gap: 8, marginTop: 12 }}>

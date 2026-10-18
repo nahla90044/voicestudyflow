@@ -60,8 +60,8 @@ export async function setReminders(hours: number[]): Promise<boolean> {
   for (const hour of uniq) {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: "وقت وردك اليوم 📚",
-        body: "خصّص دقائق لكتابك وحافظ على سلسلتك ✨",
+        title: "وقت وردك اليوم",
+        body: "خصّص دقائق لكتابك وحافظ على سلسلتك",
         sound: "default",
       },
       trigger: {
@@ -90,8 +90,8 @@ export async function sendTestNotification(): Promise<boolean> {
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: "VoiceStudyFlow ✨",
-      body: "هذا إشعار تجريبي — كل شيء يعمل تمامًا! 📚",
+      title: "VoiceStudyFlow",
+      body: "هذا إشعار تجريبي — كل شيء يعمل تمامًا.",
       sound: "default",
     },
     trigger: {

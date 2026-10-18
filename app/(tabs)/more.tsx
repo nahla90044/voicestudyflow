@@ -111,7 +111,7 @@ export default function MoreScreen() {
     }
     await setMinutesPerPage(v);
     Keyboard.dismiss();
-    Alert.alert("✅", t("more.alert.settingSaved"));
+    Alert.alert(t("common.done"), t("more.alert.settingSaved"));
   }
 
   async function replayTutorial() {
@@ -133,7 +133,7 @@ export default function MoreScreen() {
     setTimePickerOpen(false);
     if (reminderHours.includes(h)) return; // موجود مسبقًا
     const ok = await applyReminders([...reminderHours, h]);
-    if (ok) Alert.alert("✅", t("more.reminder.added", { time: fmtHour(h) }));
+    if (ok) Alert.alert(t("common.done"), t("more.reminder.added", { time: fmtHour(h) }));
   }
 
   async function removeReminder(h: number) {
@@ -302,7 +302,7 @@ export default function MoreScreen() {
                       <View style={[styles.themeDot, { backgroundColor: theme.accent }]} />
                     </LinearGradient>
                     <Text style={[styles.themeName, { color: active ? pal.accent : pal.ink }]}>
-                      {theme.emoji} {t(`themes.${theme.id}`)}
+                      {t(`themes.${theme.id}`)}
                     </Text>
                     {active ? <Text style={[styles.themeActive, { color: pal.accent }]}>{t("more.theme.active")}</Text> : null}
                   </Pressable>
@@ -415,7 +415,7 @@ export default function MoreScreen() {
                             added && { borderWidth: 1, borderColor: pal.accent + "66" },
                           ]}
                         >
-                          <Text style={[styles.pickerRowTxt, { color: added ? pal.accent : pal.ink }]}>🕐 {fmtHour(h)}</Text>
+                          <Text style={[styles.pickerRowTxt, { color: added ? pal.accent : pal.ink }]}>{fmtHour(h)}</Text>
                           {added ? <Ionicons name="checkmark" size={18} color={pal.accent} /> : null}
                         </Pressable>
                       );

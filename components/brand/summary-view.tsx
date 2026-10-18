@@ -1,6 +1,7 @@
 // components/brand/summary-view.tsx
 // عرض الملخّص الدراسي الشامل (lib/studySummary) في التطبيق: رأس متدرّج، أقسام مرقّمة بلون لكل قسم،
 // تعريفات، تعدادات كاملة، جداول مقارنة (تمرير أفقي عند الحاجة)، أمثلة، شرح للصعب، تنبيهات، وأهم النقاط.
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -24,10 +25,12 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
     return k > 0 && k <= 50 ? { h: x.slice(0, k).trim(), b: x.slice(k + 1).trim() } : { h: "", b: x };
   };
 
-  const callout = (emoji: string, label: string, color: string, text: string, title?: string) => (
+  const callout = (icon: keyof typeof Ionicons.glyphMap, label: string, color: string, text: string, title?: string) => (
     <View style={[styles.callout, { backgroundColor: color + (pal.dark ? "22" : "12"), borderColor: color + "55" }]}>
       <View style={[styles.calloutTag, { backgroundColor: color, alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
-        <Text style={styles.calloutTagTxt}>{`${emoji} ${label}`}</Text>
+        <Text style={styles.calloutTagTxt}>
+          <Ionicons name={icon} size={13} color="#FFFFFF" /> {label}
+        </Text>
       </View>
       <Text style={[styles.body, { color: ink }, ta]}>
         {title ? <Text style={{ fontWeight: "900" }}>{title}: </Text> : null}
@@ -94,11 +97,11 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
         );
       }
       case "example":
-        return <React.Fragment key={key}>{callout("💡", t("summary.example"), "#0E8F7E", b.text)}</React.Fragment>;
+        return <React.Fragment key={key}>{callout("bulb-outline", t("summary.example"), "#0E8F7E", b.text)}</React.Fragment>;
       case "explain":
-        return <React.Fragment key={key}>{callout("🔍", t("summary.explain"), "#2563EB", b.text, b.title)}</React.Fragment>;
+        return <React.Fragment key={key}>{callout("search-outline", t("summary.explain"), "#2563EB", b.text, b.title)}</React.Fragment>;
       case "important":
-        return <React.Fragment key={key}>{callout("⭐", t("summary.important"), "#D97706", b.text)}</React.Fragment>;
+        return <React.Fragment key={key}>{callout("alert-circle-outline", t("summary.important"), "#D97706", b.text)}</React.Fragment>;
     }
   };
 
@@ -121,7 +124,7 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
                   <View style={[styles.secNum, { backgroundColor: c }]}>
                     <Text style={styles.secNumTxt}>{si + 1}</Text>
                   </View>
-                  <Text style={[styles.secTitle, { color: c }, ta]}>{`${sec.emoji} ${sec.heading}`}</Text>
+                  <Text style={[styles.secTitle, { color: c }, ta]}>{sec.heading}</Text>
                 </View>
                 <View style={[styles.secRule, { backgroundColor: c + "40" }]} />
               </>
@@ -133,7 +136,7 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
 
       {summary.keypoints.length ? (
         <View style={[styles.key, { backgroundColor: pal.dark ? "#15803D22" : "#F0FDF4", borderColor: "#86EFAC" }]}>
-          <Text style={[styles.keyTitle, ta]}>{`✅ ${t("summary.keypoints")}`}</Text>
+          <Text style={[styles.keyTitle, ta]}><Ionicons name="checkmark-done-circle-outline" size={18} color="#15803D" /> {t("summary.keypoints")}</Text>
           {summary.keypoints.map((k, i) => (
             <View key={i} style={[styles.li, { flexDirection: dir.row }]}>
               <View style={[styles.bul, { backgroundColor: "#15803D" }]}>

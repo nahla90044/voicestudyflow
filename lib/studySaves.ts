@@ -124,18 +124,18 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
       const wLine = mix(W, bg, 0.32); // حدّها
       const orb = mix(W, bg, 0.12);
       const wDim = mix(W, bg, 0.85);
-      const head = `<div class="top"><div class="tile" style="background:${mix(c1, W, 0.1)};border-color:${mix(c1, W, 0.25)}">${esc(s.emoji || "📌")}</div><div class="tt"><div class="kick" style="color:${c1}">${of(i)}</div><h2 style="color:${INK}">${esc(s.title)}</h2></div></div><div class="accent" style="background:${c1}"></div>`;
+      const head = `<div class="top"><div class="tile" style="background:${mix(c1, W, 0.1)};border-color:${mix(c1, W, 0.25)}">${i + 1}</div><div class="tt"><div class="kick" style="color:${c1}">${of(i)}</div><h2 style="color:${INK}">${esc(s.title)}</h2></div></div><div class="accent" style="background:${c1}"></div>`;
       let inner = "";
       switch (L) {
         case "cover":
-          inner = `<div class="center"><div class="medal" style="background:${wSoft};border-color:${wLine}">${esc(s.emoji || "📘")}</div><div class="chip" style="background:${wSoft};border-color:${wLine}">${opts.rtl ? "البداية" : "Intro"}</div><h2 class="big">${esc(s.title)}</h2>${s.highlight ? `<div class="sub" style="color:${wDim}">${esc(s.highlight)}</div>` : ""}<div class="tags">${s.bullets.map((b) => `<span style="background:${wSoft};border-color:${wLine}">${esc(b)}</span>`).join("")}</div></div>`;
+          inner = `<div class="center"><div class="chip" style="background:${wSoft};border-color:${wLine}">${opts.rtl ? "البداية" : "Intro"}</div><h2 class="big">${esc(s.title)}</h2>${s.highlight ? `<div class="sub" style="color:${wDim}">${esc(s.highlight)}</div>` : ""}<div class="tags">${s.bullets.map((b) => `<span style="background:${wSoft};border-color:${wLine}">${esc(b)}</span>`).join("")}</div></div>`;
           break;
         case "stat":
-          inner = `<div class="center"><div class="chip" style="background:${wSoft};border-color:${wLine}">${esc(s.emoji || "📊")} ${of(i)}</div><div class="stat">${esc(s.highlight ?? "")}</div><h2 class="w">${esc(s.title)}</h2><div class="rule"></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow" style="background:${wSoft};border-color:${wLine}"><span class="wdot">●</span><span>${esc(b)}</span></div>`).join("")}</div></div>`;
+          inner = `<div class="center"><div class="chip" style="background:${wSoft};border-color:${wLine}">${of(i)}</div><div class="stat">${esc(s.highlight ?? "")}</div><h2 class="w">${esc(s.title)}</h2><div class="rule"></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow" style="background:${wSoft};border-color:${wLine}"><span class="wdot">●</span><span>${esc(b)}</span></div>`).join("")}</div></div>`;
           break;
         case "summary": {
           const plain = /^(الخلاصة|خلاصة|summary)$/i.test(s.title.trim());
-          inner = `<div class="top"><div class="tile" style="background:${wSoft};border-color:${wLine}">${esc(s.emoji || "✨")}</div><div class="tt">${plain ? "" : `<div class="kick" style="color:${wDim}">${opts.rtl ? "الخلاصة" : "Summary"}</div>`}<h2 class="w">${esc(s.title)}</h2></div></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow" style="background:${wSoft};border-color:${wLine}"><span class="chk" style="color:${c1}">✓</span><span>${esc(b)}</span></div>`).join("")}</div>`;
+          inner = `<div class="top"><div class="tile" style="background:${wSoft};border-color:${wLine}">✓</div><div class="tt">${plain ? "" : `<div class="kick" style="color:${wDim}">${opts.rtl ? "الخلاصة" : "Summary"}</div>`}<h2 class="w">${esc(s.title)}</h2></div></div><div class="wrows">${s.bullets.map((b) => `<div class="wrow" style="background:${wSoft};border-color:${wLine}"><span class="chk" style="color:${c1}">✓</span><span>${esc(b)}</span></div>`).join("")}</div>`;
           break;
         }
         case "cards":
@@ -166,7 +166,7 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
             .join(`<div class="vs" style="color:${c1};border-color:${c1}">⇄</div>`)}</div>`;
           break;
         case "quote":
-          inner = `<div class="qm" style="color:${mix(c1, W, 0.35)}">“</div><div class="qt">${esc(s.highlight ?? "")}</div><div class="qby" style="color:${c1}"><span style="background:${c1}"></span>${esc(s.emoji || "💬")} ${esc(s.title)}</div><div class="notes">${s.bullets.map((b) => `<div class="note" style="border-color:${mix(c1, W, 0.22)};background:${mix(c1, W, 0.06)}">${esc(b)}</div>`).join("")}</div>`;
+          inner = `<div class="qm" style="color:${mix(c1, W, 0.35)}">“</div><div class="qt">${esc(s.highlight ?? "")}</div><div class="qby" style="color:${c1}"><span style="background:${c1}"></span>${esc(s.title)}</div><div class="notes">${s.bullets.map((b) => `<div class="note" style="border-color:${mix(c1, W, 0.22)};background:${mix(c1, W, 0.06)}">${esc(b)}</div>`).join("")}</div>`;
           break;
         default:
           inner = `${head}<div class="list">${s.bullets
@@ -201,7 +201,7 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
     .bar { position: absolute; top: 0; left: 0; right: 0; height: 6px; }
     .bar div { height: 6px; float: ${start}; }
     .top { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
-    .tile { width: 58px; height: 58px; border-radius: 17px; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 30px; flex: none; }
+    .tile { width: 58px; height: 58px; border-radius: 17px; border: 1px solid; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; flex: none; }
     .tt { flex: 1; }
     .kick { font-size: 12px; font-weight: 900; }
     h2 { font-size: 25px; margin: 2px 0 0; line-height: 1.4; color: ${INK}; }
@@ -330,5 +330,5 @@ export async function sharePdf(html: string, fileTitle: string): Promise<void> {
 
 /** نص قابل للحفظ من الشرائح (للمشاركة النصية أو البحث لاحقًا) */
 export function slidesToText(slides: Slide[]): string {
-  return slides.map((s) => `${s.emoji} ${s.title}\n${s.bullets.map((b) => `• ${b}`).join("\n")}`).join("\n\n");
+  return slides.map((s) => `${s.title}\n${s.bullets.map((b) => `• ${b}`).join("\n")}`).join("\n\n");
 }

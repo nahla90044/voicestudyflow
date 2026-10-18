@@ -73,7 +73,7 @@ export default function ProfileScreen() {
       await setUserName(n);
       await updateName(n); // يبقى مع الحساب على أي جهاز
       setDisplayName(await getDisplayName().catch(() => ""));
-      Alert.alert("✅", t("common.done"));
+      Alert.alert(t("common.done"), t("common.done"));
     } finally {
       setSavingName(false);
     }
