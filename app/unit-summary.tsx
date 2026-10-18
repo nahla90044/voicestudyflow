@@ -187,9 +187,19 @@ export default function UnitSummaryScreen() {
           </Pressable>
         }
         right={
-          <SceneIconButton>
-            <Ionicons name="headset" size={20} color={pal.accent} />
-          </SceneIconButton>
+          // زر السماعة يشغّل الملخّص صوتيًا (كان أيقونة للزينة لا تستجيب فيوحي بزر معطّل)
+          <Pressable
+            onPress={togglePlay}
+            disabled={!sum || streaming}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}
+            style={{ opacity: !sum || streaming ? 0.45 : 1 }}
+          >
+            <SceneIconButton>
+              <Ionicons name={playing ? "pause" : "headset"} size={20} color={pal.accent} />
+            </SceneIconButton>
+          </Pressable>
         }
       />
 
