@@ -2,7 +2,7 @@
 // قائمة جانبية (☰): الملف الشخصي، الخطة، مؤقت التركيز، الإعدادات، الأرشيف، المساعدة.
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -33,6 +33,19 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
   const dir = useDir();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  // فتح شاشة منبثقة (الاشتراك) أثناء إغلاق القائمة يتجاهله iOS بصمت، فيبدو الزر لا يعمل.
+  // نؤجّل الفتح حتى تُغلق القائمة تمامًا (onDismiss)، ومؤقّت احتياطي إن لم يُستدعَ.
+  const afterClose = useRef<(() => void) | null>(null);
+  function closeThen(fn: () => void) {
+    afterClose.current = fn;
+    setOpen(false);
+    setTimeout(runAfterClose, 650);
+  }
+  function runAfterClose() {
+    const fn = afterClose.current;
+    afterClose.current = null;
+    fn?.();
+  }
 
   function go(route: Route) {
     setOpen(false);
@@ -60,7 +73,7 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
         <Ionicons name="menu" size={22} color={tint} />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)} onDismiss={runAfterClose}>
         <View style={{ flex: 1 }}>
           {/* خلفية معتمة — اضغط للإغلاق */}
           <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={() => setOpen(false)} />
@@ -92,10 +105,7 @@ export function AppDrawer({ tint = Palette.text, light = false }: { tint?: strin
             {/* الاشتراكات — أول عنصر وبلون ذهبي: مراجع أبل لم يجد المشتريات حين كانت داخل الملف الشخصي فقط */}
             {purchasesAvailable() ? (
               <Pressable
-                onPress={() => {
-                  setOpen(false);
-                  requestPaywall("upgrade", true);
-                }}
+                onPress={() => closeThen(() => requestPaywall("upgrade", true))}
                 accessibilityRole="button"
                 accessibilityLabel={t("drawer.subscriptions")}
                 style={[styles.item, styles.subItem, { flexDirection: dir.row, marginTop: Spacing.lg }]}
