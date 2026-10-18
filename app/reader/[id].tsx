@@ -32,7 +32,7 @@ import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
 import { getPlan } from "../../lib/plan";
-import { aiAssist, defineWord, generateFlashcards, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
+import { aiAssist, CARD_TYPES, defineWord, generateFlashcards, type CardType, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
 import { addSave, cardsHtml, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
 import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
 import { cachedPageCount } from "../../lib/ingest";
@@ -2152,7 +2152,16 @@ export default function ReaderScreen() {
     ]);
   }
 
-  async function makeFlashcards() {
+  // اختيار نوع البطاقات قبل التوليد (الصور التوضيحية تُضاف لمعاني الكلمات فقط)
+  function pickCardType() {
+    Alert.alert(t("cards.type.title"), undefined, [
+      ...CARD_TYPES.map((ct) => ({ text: t(`cards.type.${ct}`), onPress: () => void makeFlashcards(ct) })),
+      { text: t("common.cancel"), style: "cancel" as const },
+    ]);
+  }
+
+  async function makeFlashcards(cardType: CardType = "qa") {
+    setAiOpen(true);
     setAiBusy(true);
     setAiResult("");
     setAiCards(null);
@@ -2162,13 +2171,13 @@ export default function ReaderScreen() {
         setAiResult(t("reader.ai.noPageText"));
         return;
       }
-      const cards = await generateFlashcards(text);
+      const cards = await generateFlashcards(text, undefined, cardType);
       if (cards.length === 0) {
         setAiResult(t("reader.ai.cardsFailed"));
         return;
       }
       const bookTitle = typeof title === "string" ? title : undefined;
-      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle })));
+      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle, kind: cardType })));
       setAiCards(cards);
       setAiResult(t("reader.ai.cardsSaved", { count: n }));
     } catch {
@@ -3526,9 +3535,8 @@ export default function ReaderScreen() {
                 icon="albums-outline"
                 label={t("reader.ai.cards")}
                 onPress={() => {
-                  // بطاقات مراجعة للصفحة مباشرة: تُحفظ في «البطاقات» وتظهر مع زر الحفظ والطباعة
-                  setAiOpen(true);
-                  if (!aiBusy) void makeFlashcards();
+                  // بطاقات مراجعة للصفحة: يُختار نوعها أولًا، ثم تُحفظ في «البطاقات» مع الحفظ والطباعة
+                  if (!aiBusy) pickCardType();
                 }}
               />
               <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
@@ -3803,7 +3811,7 @@ export default function ReaderScreen() {
                 <Ionicons name="help-circle" size={18} color={Palette.neonViolet} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.quiz")}</Text>
               </Pressable>
-              <Pressable style={styles.aiAction} onPress={makeFlashcards} disabled={aiBusy}>
+              <Pressable style={styles.aiAction} onPress={pickCardType} disabled={aiBusy}>
                 <Ionicons name="albums" size={18} color={Palette.neonPink} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.cards")}</Text>
               </Pressable>

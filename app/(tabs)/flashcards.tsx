@@ -311,7 +311,11 @@ export default function FlashcardsScreen() {
   const card = queue[idx];
   const [img, setImg] = useState<{ url: string | null; loading: boolean; secs: number }>({ url: null, loading: false, secs: 0 });
   useEffect(() => {
-    if (!card) return;
+    // الصور التوضيحية لبطاقات «معاني الكلمات» فقط (قرار نهلة)
+    if (!card || card.kind !== "words") {
+      setImg({ url: null, loading: false, secs: 0 });
+      return;
+    }
     let on = true;
     let tick: ReturnType<typeof setInterval> | undefined;
     (async () => {
@@ -326,7 +330,7 @@ export default function FlashcardsScreen() {
     })();
     // البطاقة التالية تُجهَّز صورتها في الخلفية → تظهر فورًا عند الوصول إليها
     const nx = queue[idx + 1];
-    if (nx && !cardImagesBlocked()) void getCardImage(nx.front, nx.back);
+    if (nx?.kind === "words" && !cardImagesBlocked()) void getCardImage(nx.front, nx.back);
     return () => {
       on = false;
       if (tick) clearInterval(tick);

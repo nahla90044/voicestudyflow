@@ -8,7 +8,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
-import { aiAssist, generateFlashcards } from "../lib/ai";
+import { aiAssist, generateFlashcards, CARD_TYPES, type CardType } from "../lib/ai";
 import { getUserId } from "../lib/auth";
 import { addCards } from "../lib/flashcards";
 import { useDir, useI18n } from "../lib/i18n";
@@ -55,6 +55,7 @@ export default function GenerateStudyScreen() {
   const [from, setFrom] = useState("1");
   const [to, setTo] = useState("");
   const [type, setType] = useState<GenType>("cards");
+  const [cardType, setCardType] = useState<CardType>("qa");
   const [count, setCount] = useState(10);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -111,9 +112,9 @@ export default function GenerateStudyScreen() {
       const label = whole ? t("generate.label.whole") : t("generate.label.range", { from: f, to: tt });
 
       if (type === "cards") {
-        const cards = await generateFlashcards(text, count);
+        const cards = await generateFlashcards(text, count, cardType);
         if (cards.length === 0) throw new Error("empty");
-        const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title })));
+        const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title, kind: cardType })));
         done(t("generate.done.cards", { count: n }));
       } else if (type === "quiz") {
         const qs = await generateUnitQuiz(text, count);
@@ -244,6 +245,27 @@ export default function GenerateStudyScreen() {
               );
             })}
           </View>
+
+          {/* نوع البطاقات: معاني كلمات، تعاريف، أسئلة وأجوبة، مقارنات */}
+          {type === "cards" ? (
+            <>
+              <Text style={[styles.section, { color: pal.ink, textAlign: dir.textAlign }]}>{t("cards.type.title")}</Text>
+              <View style={[styles.chips, { flexDirection: dir.row }]}>
+                {CARD_TYPES.map((ct) => {
+                  const on = cardType === ct;
+                  return (
+                    <Pressable
+                      key={ct}
+                      onPress={() => setCardType(ct)}
+                      style={[styles.chip, { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder }]}
+                    >
+                      <Text style={[styles.chipTxt, { color: on ? pal.onAccent : pal.ink }]}>{t(`cards.type.${ct}`)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
 
           {/* العدد (لا يظهر للملخّص) */}
           {type !== "summary" ? (

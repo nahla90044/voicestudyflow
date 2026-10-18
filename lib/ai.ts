@@ -329,7 +329,8 @@ export async function aiAssist(
   question?: string,
   targetLang?: string, // رمز اللغة الهدف (للترجمة يختاره المستخدم؛ وإلا لغة الواجهة)
   count?: number, // عدد مطلوب من البطاقات/الأسئلة (للتوليد المخصّص)
-  timeoutMs = 60000 // الملخّص الشامل لوحدة كاملة يحتاج أطول
+  timeoutMs = 60000, // الملخّص الشامل لوحدة كاملة يحتاج أطول
+  cardType?: string // نوع البطاقات (flashcards فقط)
 ): Promise<string> {
   if (!text.trim()) return "";
 
@@ -339,7 +340,7 @@ export async function aiAssist(
   // مهلة قصوى 60ث: إن لم يردّ السيرفر نرمي خطأً بدل ترك الواجهة معلّقة للأبد.
   const { data, error } = await withTimeout(
     supabase.functions.invoke("ai-assist", {
-      body: { action, text, question, targetLang: lang, count },
+      body: { action, text, question, targetLang: lang, count, cardType },
     }),
     timeoutMs,
     action
@@ -357,11 +358,16 @@ export async function aiAssist(
 }
 
 /** يولّد بطاقات مراجعة (سؤال/إجابة) من نص عبر الذكاء (بعدد اختياري). */
+/** نوع البطاقات المولّدة (يختاره الطالب). الصور التوضيحية لمعاني الكلمات فقط */
+export type CardType = "words" | "definitions" | "qa" | "compare";
+export const CARD_TYPES: CardType[] = ["words", "definitions", "qa", "compare"];
+
 export async function generateFlashcards(
   text: string,
-  count?: number
+  count?: number,
+  cardType?: CardType
 ): Promise<{ front: string; back: string }[]> {
-  const raw = await aiAssist("flashcards", text, undefined, undefined, count);
+  const raw = await aiAssist("flashcards", text, undefined, undefined, count, undefined, cardType);
   // استخرج مصفوفة JSON حتى لو لفّها الموديل بنص أو ```json
   const match = raw.match(/\[[\s\S]*\]/);
   if (!match) return [];
