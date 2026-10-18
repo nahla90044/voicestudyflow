@@ -113,7 +113,7 @@ export default function UnitSummaryScreen() {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
-        // وحدة طويلة: تُلخَّص كلها جزءًا جزءًا (لا قصّ لآخرها) ويظهر كل جزء فور اكتماله
+        // وحدة طويلة: أجزاؤها تُلخَّص معًا ببثّ (لا قصّ لآخرها) وتظهر بالترتيب أولًا بأول
         if (parts.length > 1) {
           if (on) {
             setStreaming(true);
@@ -284,7 +284,7 @@ export default function UnitSummaryScreen() {
             <View style={[styles.writing, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
               <ActivityIndicator size="small" color={pal.accent} />
               <Text style={[styles.dim, { color: pal.dim }]}>
-                {partInfo ? t("summary.writingPart", { n: Math.min(partInfo.done + 1, partInfo.total), total: partInfo.total }) : t("summary.writingRest")}
+                {partInfo ? t("summary.writingPart", { n: partInfo.done, total: partInfo.total }) : t("summary.writingRest")}
               </Text>
             </View>
           ) : null}

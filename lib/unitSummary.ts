@@ -1,10 +1,10 @@
 // lib/unitSummary.ts
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
-import { aiAssist } from "./ai";
+import { aiAssist, aiAssistStream } from "./ai";
 import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
 import { extractPdfPageText } from "./pdfText";
-import { parseStudySummary, type StudySummary, type SummarySection } from "./studySummary";
+import { parsePartialSummary, parseStudySummary, type StudySummary, type SummarySection } from "./studySummary";
 import { getSyllabus } from "./syllabus";
 import { getUnitContent, setUnitContent } from "./unitContent";
 import { unitTextParts } from "./unitScope";
@@ -88,7 +88,32 @@ export function mergeSummaries(list: StudySummary[]): StudySummary | null {
   return { title: ok[0].title, intro: ok[0].intro, sections, keypoints };
 }
 
-/** ملخّص كامل: من المخزن، أو يُولَّد جزءًا جزءًا (بلا بثّ) ويُدمج ويُخزَّن. onPart: تقدّم الأجزاء */
+/** أجزاء تُولَّد في الوقت نفسه: كان كل جزء ينتظر سابقه (~دقيقتان للجزء) فتطول الوحدة دقائق بلا شيء يظهر */
+const PARALLEL = 3;
+
+/** جزء واحد ببثّ مباشر (يظهر أولًا بأول ولا ينقطع الطلب الطويل)، وطلب عادي احتياطًا إن تعذّر البثّ */
+async function summarizePart(ctx: string, onPartial: (s: StudySummary) => void): Promise<StudySummary | null> {
+  let raw = "";
+  try {
+    raw = await aiAssistStream("studysummary", ctx, (soFar) => {
+      raw = soFar;
+      const part = parsePartialSummary(soFar);
+      if (part && (part.sections.length || part.title)) onPartial(part);
+    });
+  } catch (e) {
+    if ((e as Error).message === "USER_QUOTA") throw e;
+    const ok = parseStudySummary(raw);
+    if (ok?.sections.length) return ok;
+    raw = await aiAssist("studysummary", ctx, undefined, undefined, undefined, 150000);
+  }
+  return parseStudySummary(raw);
+}
+
+/**
+ * ملخّص كامل: من المخزن، أو يُولَّد (الأجزاء معًا، كل جزء ببثّ) ويُدمج بالترتيب ويُخزَّن.
+ * onPart(المكتمل، الكل، المعروض حتى الآن): المعروض = الأجزاء بالترتيب حتى أول جزء لم يبدأ بعد،
+ * فيقرأ الطالب بداية الوحدة خلال ثوانٍ بينما يُكتب الباقي.
+ */
 export async function getOrMakeSummary(
   pdfPath: string,
   src: SummarySource,
@@ -98,13 +123,46 @@ export async function getOrMakeSummary(
   if (cached) return cached;
   const parts = await summaryParts(pdfPath, src);
   if (!parts.length) return null;
-  const out: StudySummary[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    const s = parseStudySummary(await aiAssist("studysummary", parts[i], undefined, undefined, undefined, 150000));
-    if (s?.sections.length) out.push(s);
-    onPart?.(i + 1, parts.length, mergeSummaries(out));
-  }
-  const merged = mergeSummaries(out);
+  const final: (StudySummary | null | undefined)[] = parts.map(() => undefined);
+  const partial: (StudySummary | null)[] = parts.map(() => null);
+  let done = 0;
+  let lastPaint = 0;
+  const report = (force = false) => {
+    const now = Date.now();
+    if (!onPart || (!force && now - lastPaint < 300)) return;
+    lastPaint = now;
+    const shown: StudySummary[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const s = final[i] !== undefined ? final[i] : partial[i];
+      if (!s) {
+        if (final[i] === undefined) break; // جزء لم يظهر منه شيء بعد → نحافظ على الترتيب
+        continue; // جزء فشل → نتخطاه
+      }
+      shown.push(s);
+    }
+    onPart(done, parts.length, mergeSummaries(shown));
+  };
+  let next = 0;
+  let quota: Error | null = null;
+  const worker = async () => {
+    while (next < parts.length && !quota) {
+      const i = next++;
+      try {
+        final[i] = await summarizePart(parts[i], (p) => {
+          partial[i] = p;
+          report();
+        });
+      } catch (e) {
+        if ((e as Error).message === "USER_QUOTA") quota = e as Error;
+        final[i] = null;
+      }
+      done++;
+      report(true);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, parts.length) }, worker));
+  if (quota) throw quota;
+  const merged = mergeSummaries(final.filter((x): x is StudySummary => !!x));
   if (merged) cacheSummary(pdfPath, src, merged);
   return merged;
 }
