@@ -257,6 +257,29 @@ export default function UnitVideoScreen() {
     return sec < 60 ? t("summary.etaLess") : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
   };
   const preparing = !scenes.length;
+  // عدّاد التجهيز: الوقت الماضي كله، والتقدّم داخل المرحلة الحالية (لا يرجع للخلف)
+  const prepStart = useRef(Date.now());
+  const stageStart = useRef({ stage: "summary" as string, at: Date.now() });
+  const maxPct = useRef(0);
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!preparing) return;
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - prepStart.current) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [preparing]);
+  const stageNow = job?.stage ?? "summary";
+  if (stageStart.current.stage !== stageNow) {
+    stageStart.current = { stage: stageNow, at: Date.now() };
+    maxPct.current = 0;
+  }
+  const stageSecs = (Date.now() - stageStart.current.at) / 1000;
+  const byTime = job?.etaSec ? stageSecs / (stageSecs + job.etaSec) : 1 - Math.exp(-stageSecs / 70);
+  const byParts = job && job.total ? job.done / job.total : 0;
+  // مرحلتان: الملخّص ٠–٥٠٪ ثم المشاهد ٥٠–١٠٠٪ (إن كان الملخّص جاهزًا مسبقًا تبدأ المشاهد من ٥٠٪)
+  const inStage = Math.min(0.97, Math.max(byTime, byParts));
+  maxPct.current = Math.max(maxPct.current, inStage);
+  const prepPct = (stageNow === "script" ? 0.5 : 0) + maxPct.current * 0.5;
+  const fmtClock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
   const failed = job && job.status !== "running" && !complete;
   const quizParams: Record<string, string> = { pdf_path: pdfPath, title: unitTitle, book_title: bookTitle };
   if (pageMode) quizParams.page = String(pageNum);
@@ -302,12 +325,46 @@ export default function UnitVideoScreen() {
               <View style={[styles.prepIcon, { backgroundColor: pal.soft }]}>
                 <Text style={{ fontSize: 34 }}>🎬</Text>
               </View>
-              <Text style={[styles.prepTitle, { color: pal.ink }]}>{job?.stage === "script" ? t("video.prepScript") : t("video.prepSummary")}</Text>
-              <ActivityIndicator color={pal.accent} />
+              {/* المراحل: ✓ المكتمل، والحالية بمؤشر */}
+              <View style={{ alignSelf: "stretch", gap: 8 }}>
+                {(["summary", "script"] as const).map((st, k) => {
+                  const doneStage = job?.stage === "script" && st === "summary";
+                  const cur = (job?.stage ?? "summary") === st;
+                  return (
+                    <View key={st} style={[styles.stepRow, { flexDirection: dir.row, opacity: cur || doneStage ? 1 : 0.45 }]}>
+                      {doneStage ? (
+                        <Ionicons name="checkmark-circle" size={22} color="#15803D" />
+                      ) : cur ? (
+                        <ActivityIndicator size="small" color={pal.accent} />
+                      ) : (
+                        <Ionicons name="ellipse-outline" size={22} color={pal.dim} />
+                      )}
+                      <Text style={[styles.stepTxt, { color: pal.ink, textAlign: dir.textAlign }]}>
+                        {k + 1}. {st === "summary" ? t("video.stepSummary") : t("video.stepScript")}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+              {/* شريط التقدّم + النسبة + الوقت الماضي والمتبقي */}
+              <View style={{ alignSelf: "stretch", gap: 8 }}>
+                <View style={[styles.track, { backgroundColor: pal.track }]}>
+                  <View style={[styles.fill, { backgroundColor: pal.accent, width: `${Math.round(prepPct * 100)}%`, alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]} />
+                </View>
+                <View style={{ flexDirection: dir.row, justifyContent: "space-between" }}>
+                  <Text style={[styles.pct, { color: pal.accent }]}>{Math.round(prepPct * 100)}%</Text>
+                  <Text style={[styles.clock, { color: pal.dim }]}>{t("video.elapsed", { t: fmtClock(elapsed) })}</Text>
+                </View>
+              </View>
               {job?.waiting ? (
                 <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.waiting")}</Text>
-              ) : job?.etaSec ? (
-                <Text style={[styles.eta, { color: pal.ink }]}>{t("summary.eta", { time: fmtEta(job.etaSec) })}</Text>
+              ) : (
+                <Text style={[styles.eta, { color: pal.ink }]}>
+                  {job?.etaSec ? t("summary.eta", { time: fmtEta(job.etaSec) }) : t("video.estimating")}
+                </Text>
+              )}
+              {job && job.total > 1 ? (
+                <Text style={[styles.dim, { color: pal.dim }]}>{t("video.parts", { n: job.done, total: job.total })}</Text>
               ) : null}
               <Text style={[styles.dim, { color: pal.dim }]}>{t("video.bgHint")}</Text>
             </>
@@ -419,6 +476,12 @@ export default function UnitVideoScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 14 },
+  stepRow: { alignItems: "center", gap: 10 },
+  stepTxt: { flex: 1, fontSize: 15, fontWeight: "800" },
+  track: { height: 10, borderRadius: 5, overflow: "hidden" },
+  fill: { height: 10, borderRadius: 5 },
+  pct: { fontSize: 15, fontWeight: "900" },
+  clock: { fontSize: 13.5, fontWeight: "700" },
   prepIcon: { width: 76, height: 76, borderRadius: 38, alignItems: "center", justifyContent: "center" },
   prepTitle: { fontSize: 17, fontWeight: "900", textAlign: "center" },
   dim: { fontSize: 14, fontWeight: "600", textAlign: "center", lineHeight: 22 },
