@@ -3505,6 +3505,15 @@ export default function ReaderScreen() {
                   setPresentOpen(true);
                 }}
               />
+              <InTool
+                icon="albums-outline"
+                label={t("reader.ai.cards")}
+                onPress={() => {
+                  // بطاقات مراجعة للصفحة مباشرة: تُحفظ في «البطاقات» وتظهر مع زر الحفظ والطباعة
+                  setAiOpen(true);
+                  if (!aiBusy) void makeFlashcards();
+                }}
+              />
               <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
               <InTool
                 icon="library-outline"
@@ -3812,16 +3821,6 @@ export default function ReaderScreen() {
               ) : aiResult ? (
                 <>
                   <Text style={[styles.aiResultTxt, { textAlign: dir.textAlign }]}>{aiResult}</Text>
-                  {aiCards ? (
-                    <View style={{ gap: 8, marginTop: 10 }}>
-                      {aiCards.map((c, i) => (
-                        <View key={i} style={styles.aiCardRow}>
-                          <Text style={[styles.aiCardQ, { textAlign: dir.textAlign }]}>{`${i + 1}. ${c.front}`}</Text>
-                          <Text style={[styles.aiCardA, { textAlign: dir.textAlign }]}>{c.back}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
                   {/* حفظ الإجابة في «محفوظات الكتاب» أو ملف PDF */}
                   <View style={[styles.aiSaveRow, { flexDirection: dir.row }]}>
                     <Pressable style={styles.aiSaveBtn} onPress={saveAssistant} disabled={saveBusy}>
@@ -3833,6 +3832,16 @@ export default function ReaderScreen() {
                       <Text style={styles.aiSaveTxt}>{t("save.pdf")}</Text>
                     </Pressable>
                   </View>
+                  {aiCards ? (
+                    <View style={{ gap: 8, marginTop: 10 }}>
+                      {aiCards.map((c, i) => (
+                        <View key={i} style={styles.aiCardRow}>
+                          <Text style={[styles.aiCardQ, { textAlign: dir.textAlign }]}>{`${i + 1}. ${c.front}`}</Text>
+                          <Text style={[styles.aiCardA, { textAlign: dir.textAlign }]}>{c.back}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                 </>
               ) : (
                 <Text style={styles.aiHint}>
