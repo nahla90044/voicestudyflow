@@ -169,9 +169,9 @@ const SECTION_COLORS: [string, string, string][] = [
   ["#15803D", "#EAF5EE", "#C2E2CD"],
 ];
 
-export function summaryHtml(opts: { bookTitle: string; title: string; summary: StudySummary; rtl: boolean }): string {
+/** محتوى ملخّص واحد (رأس، فهرس، أقسام، أهم النقاط) — يُستعمل وحده أو داخل ملف المذاكرة المجمّع */
+function summaryBody(opts: { bookTitle: string; title: string; summary: StudySummary; rtl: boolean }): string {
   const { summary: s, rtl } = opts;
-  const dir = rtl ? "rtl" : "ltr";
   const start = rtl ? "right" : "left";
   const L = rtl
     ? { toc: "محتويات الملخّص", key: "أهم النقاط للمراجعة", ex: "مثال", hard: "توضيح", imp: "مهم", def: "تعريف" }
@@ -231,7 +231,17 @@ export function summaryHtml(opts: { bookTitle: string; title: string; summary: S
     ? `<div class="key"><div class="keyh">✅ ${L.key}</div><ol>${s.keypoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ol></div>`
     : "";
 
-  return `<!doctype html><html dir="${dir}" lang="${rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>
+  return `
+    <div class="hero"><div class="book">${esc(opts.bookTitle)}</div><h1>${esc(s.title || opts.title)}</h1>${s.intro ? `<p>${esc(s.intro)}</p>` : ""}</div>
+    ${toc}
+    ${sections}
+    ${key}`;
+}
+
+/** أنماط صفحة الملخّص (ألوان مُصمتة: طباعة آيفون تحوّل الشفافية إلى سواد) */
+function summaryCss(rtl: boolean): string {
+  const start = rtl ? "right" : "left";
+  return `
     * { font-family: -apple-system, 'SF Arabic', 'Geeza Pro', sans-serif; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @page { margin: 34px 36px; }
     html, body { margin: 0; background: #fff; color: #1F2937; }
@@ -271,11 +281,53 @@ export function summaryHtml(opts: { bookTitle: string; title: string; summary: S
     .key ol { margin: 0; padding-${start}: 22px; }
     .key li { font-size: 14.5px; line-height: 1.95; }
     .foot { margin-top: 20px; color: #9CA3AF; font-size: 11px; text-align: center; }
+`;
+}
+
+export function summaryHtml(opts: { bookTitle: string; title: string; summary: StudySummary; rtl: boolean }): string {
+  const dir = opts.rtl ? "rtl" : "ltr";
+  return `<!doctype html><html dir="${dir}" lang="${opts.rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>${summaryCss(opts.rtl)}</style></head><body>
+    ${summaryBody(opts)}
+    <div class="foot">VoiceStudyFlow</div>
+  </body></html>`;
+}
+
+/**
+ * ملف المذاكرة: ملخّصات وحدات الكتاب كلها بالترتيب في ملف واحد — غلاف، فهرس الوحدات،
+ * ثم كل وحدة تبدأ في صفحة جديدة بشريط «الوحدة n». بدل طلب الملخّص صفحة صفحة وجمعه يدويًا.
+ */
+export function studyFileHtml(opts: { bookTitle: string; units: { title: string; summary: StudySummary }[]; rtl: boolean }): string {
+  const { rtl } = opts;
+  const dir = rtl ? "rtl" : "ltr";
+  const start = rtl ? "right" : "left";
+  const L = rtl
+    ? { file: "ملف المذاكرة", sub: "ملخّص شامل لكل وحدات الكتاب بالترتيب", toc: "الوحدات", unit: "الوحدة", n: "عدد الوحدات" }
+    : { file: "Study file", sub: "A complete summary of every unit, in order", toc: "Units", unit: "Unit", n: "Units" };
+  const toc = opts.units.map((u, i) => `<li><span class="un">${i + 1}</span>${esc(u.title)}</li>`).join("");
+  const units = opts.units
+    .map(
+      (u, i) => `<div class="unit"><div class="ubar"><span class="unum">${L.unit} ${i + 1}</span><span class="ut">${esc(u.title)}</span></div>${summaryBody({ bookTitle: opts.bookTitle, title: u.title, summary: u.summary, rtl })}</div>`
+    )
+    .join("");
+  return `<!doctype html><html dir="${dir}" lang="${rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>${summaryCss(rtl)}
+    .cover { background: #312E81; color: #fff; border-radius: 24px; padding: 60px 40px; text-align: center; margin-top: 120px; }
+    .cover .k { font-size: 15px; color: #C7D2FE; font-weight: 800; letter-spacing: .5px; }
+    .cover h1 { font-size: 34px; margin: 12px 0; color: #fff; line-height: 1.4; }
+    .cover .s { font-size: 15px; color: #E0E7FF; }
+    .utoc { border: 1.5px solid #E5E7EB; border-radius: 18px; padding: 18px 22px; margin-top: 28px; background: #F9FAFB; page-break-after: always; }
+    .utoc .h { font-weight: 900; font-size: 17px; color: #312E81; margin-bottom: 10px; }
+    .utoc ol { list-style: none; margin: 0; padding: 0; }
+    .utoc li { display: flex; gap: 12px; align-items: center; font-size: 14.5px; line-height: 1.8; padding: 7px 0; border-bottom: 1px solid #E5E7EB; }
+    .un { width: 26px; height: 26px; border-radius: 8px; background: #4338CA; color: #fff; font-weight: 900; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+    .unit { page-break-before: always; }
+    .unit:first-of-type { page-break-before: auto; }
+    .ubar { display: flex; align-items: center; gap: 12px; border-${start}: 6px solid #4338CA; background: #EEF2FF; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
+    .unum { background: #4338CA; color: #fff; font-weight: 900; font-size: 13px; padding: 3px 12px; border-radius: 999px; }
+    .ut { font-weight: 900; font-size: 16px; color: #312E81; }
   </style></head><body>
-    <div class="hero"><div class="book">${esc(opts.bookTitle)}</div><h1>${esc(s.title || opts.title)}</h1>${s.intro ? `<p>${esc(s.intro)}</p>` : ""}</div>
-    ${toc}
-    ${sections}
-    ${key}
+    <div class="cover"><div class="k">${L.file}</div><h1>${esc(opts.bookTitle)}</h1><div class="s">${L.sub} · ${L.n}: ${opts.units.length}</div></div>
+    <div class="utoc"><div class="h">${L.toc}</div><ol>${toc}</ol></div>
+    ${units}
     <div class="foot">VoiceStudyFlow</div>
   </body></html>`;
 }

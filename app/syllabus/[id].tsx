@@ -382,6 +382,18 @@ export default function SyllabusScreen() {
             <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{t("syllabus.readNow")}</Text>
           </Pressable>
 
+          {/* ملف المذاكرة: ملخّصات الوحدات كلها بالترتيب في PDF واحد */}
+          <Pressable
+            onPress={() => router.push({ pathname: "/study-file", params: { pdf_path: pdfPath, book_title: bookTitle } })}
+            style={({ pressed }) => [
+              styles.cta,
+              { backgroundColor: pal.soft, borderWidth: 1, borderColor: pal.cardBorder, flexDirection: dir.row, opacity: pressed ? 0.9 : 1 },
+            ]}
+          >
+            <Ionicons name="documents-outline" size={18} color={pal.accent} />
+            <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("studyFile.open")}</Text>
+          </Pressable>
+
           {/* الوحدات (تشيك ليست) */}
           {syl.units.map((u, i) => {
             const isDone = done[i];

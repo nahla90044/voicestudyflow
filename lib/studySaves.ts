@@ -19,7 +19,7 @@ export type StudySave = {
   scope: "page" | "unit" | null;
   page_from: number | null;
   page_to: number | null;
-  content: { slides?: Slide[]; text?: string; question?: string; summary?: StudySummary };
+  content: { slides?: Slide[]; text?: string; question?: string; summary?: StudySummary; cards?: { front: string; back: string }[] };
   created_at: string;
 };
 
@@ -252,6 +252,45 @@ export function slidesHtml(opts: { bookTitle: string; title: string; slides: Sli
   </style></head><body data-deck="1">
     <section class="page"><div class="slide deckcover" style="background:${cover}"><div class="orb o1" style="background:${mix(W, cover, 0.12)}"></div><div class="orb o2" style="background:${mix(W, cover, 0.12)}"></div><div class="in"><div class="s">${esc(opts.bookTitle)}</div><h1>${esc(opts.title)}</h1><div class="s">${opts.rtl ? "عدد الشرائح" : "Slides"}: ${n}</div></div><div class="brand">VoiceStudyFlow</div></div></section>
     ${pages}
+  </body></html>`;
+}
+
+/** بطاقات مراجعة للطباعة: كل بطاقة صف فيه السؤال والجواب متقابلان، وخط متقطع للقص،
+ *  مع ترقيم. ألوان مُصمتة فقط (طباعة آيفون تحوّل الشفافية إلى سواد). */
+export function cardsHtml(opts: { bookTitle: string; title: string; cards: { front: string; back: string }[]; rtl: boolean }): string {
+  const dir = opts.rtl ? "rtl" : "ltr";
+  const L = opts.rtl ? { q: "السؤال", a: "الجواب", n: "عدد البطاقات" } : { q: "Question", a: "Answer", n: "Cards" };
+  const rows = opts.cards
+    .map(
+      (c, i) => `
+    <div class="card">
+      <div class="side q"><span class="tag">${L.q} ${i + 1}</span><div class="txt">${esc(c.front)}</div></div>
+      <div class="side a"><span class="tag">${L.a}</span><div class="txt">${esc(c.back)}</div></div>
+    </div>`
+    )
+    .join("");
+  return `<!doctype html><html dir="${dir}" lang="${opts.rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>
+    ${BASE_CSS}
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { margin: 30px 32px; }
+    html, body { background: #fff; }
+    .hero { background: #4338CA; color: #fff; border-radius: 16px; padding: 18px 22px; margin-bottom: 18px; }
+    .hero .b { font-size: 12px; color: #C7D2FE; font-weight: 700; }
+    .hero h1 { color: #fff; font-size: 22px; margin: 4px 0; }
+    .hero .n { font-size: 12.5px; color: #E0E7FF; }
+    .card { display: flex; gap: 0; border: 2px dashed #CBD5E1; border-radius: 16px; margin-bottom: 12px; overflow: hidden; break-inside: avoid; page-break-inside: avoid; min-height: 92px; }
+    .side { flex: 1; padding: 12px 14px; }
+    .q { background: #F0EEFE; border-${opts.rtl ? "left" : "right"}: 2px dashed #CBD5E1; }
+    .a { background: #ECFDF5; }
+    .tag { display: inline-block; color: #fff; font-size: 11px; font-weight: 900; padding: 2px 9px; border-radius: 999px; margin-bottom: 6px; }
+    .q .tag { background: #5B4BF5; } .a .tag { background: #0E8F7E; }
+    .txt { font-size: 15px; line-height: 1.8; color: #1F2937; font-weight: 600; }
+    .q .txt { font-weight: 800; }
+    .foot { margin-top: 16px; color: #9CA3AF; font-size: 11px; text-align: center; }
+  </style></head><body>
+    <div class="hero"><div class="b">${esc(opts.bookTitle)}</div><h1>${esc(opts.title)}</h1><div class="n">${L.n}: ${opts.cards.length}</div></div>
+    ${rows}
+    <div class="foot">VoiceStudyFlow</div>
   </body></html>`;
 }
 

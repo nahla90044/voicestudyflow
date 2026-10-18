@@ -10,10 +10,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SlideView } from "../../components/brand/slide-view";
 import { SummaryView } from "../../components/brand/summary-view";
 import { summaryHtml } from "../../lib/studySummary";
+import { playSummary, stopSummary, summaryChunks } from "../../lib/summaryAudio";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
-import { getSave, removeSave, sharePdf, slidesHtml, textHtml, type StudySave } from "../../lib/studySaves";
+import { cardsHtml, getSave, removeSave, sharePdf, slidesHtml, textHtml, type StudySave } from "../../lib/studySaves";
 
 export default function SavedItemScreen() {
   const router = useRouter();
@@ -25,6 +26,20 @@ export default function SavedItemScreen() {
   const [item, setItem] = useState<StudySave | null | undefined>(undefined);
   const [slide, setSlide] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => () => stopSummary(), []);
+  function toggleListen() {
+    const sm = item?.content.summary;
+    if (!sm) return;
+    if (playing) {
+      stopSummary();
+      setPlaying(false);
+      return;
+    }
+    setPlaying(true);
+    // الصوت محفوظ على الجهاز منذ «حفظ» الملخّص → يبدأ فورًا بلا إنترنت
+    playSummary(summaryChunks(sm), 0, { onDone: () => setPlaying(false) });
+  }
   const bookTitle = typeof book_title === "string" ? book_title : "";
 
   useEffect(() => {
@@ -43,6 +58,8 @@ export default function SavedItemScreen() {
       const html =
         item.kind === "slides"
           ? slidesHtml({ bookTitle, title: item.title, slides, rtl: dir.isRTL })
+          : item.content.cards?.length
+          ? cardsHtml({ bookTitle, title: item.title, cards: item.content.cards, rtl: dir.isRTL })
           : item.content.summary
           ? summaryHtml({ bookTitle, title: item.title, summary: item.content.summary, rtl: dir.isRTL })
           : textHtml({ bookTitle, title: item.title, text: item.content.text ?? "", question: item.content.question, rtl: dir.isRTL });
@@ -136,7 +153,16 @@ export default function SavedItemScreen() {
             </SceneCard>
           ) : null}
           {item.content.summary ? (
-            <SummaryView summary={item.content.summary} bookTitle={bookTitle} />
+            <>
+              <Pressable
+                onPress={toggleListen}
+                style={({ pressed }) => [styles.listen, { backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
+              >
+                <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
+                <Text style={[styles.listenTxt, { color: pal.onAccent }]}>{playing ? t("summary.stop") : t("summary.listen")}</Text>
+              </Pressable>
+              <SummaryView summary={item.content.summary} bookTitle={bookTitle} />
+            </>
           ) : (
             <SceneCard>
               <Text selectable style={[styles.text, { color: pal.ink, textAlign: dir.textAlign }]}>
@@ -154,6 +180,8 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, gap: 12, flexGrow: 1 },
   empty: { textAlign: "center", marginTop: 40, paddingHorizontal: 24 },
   stage: { flex: 1, justifyContent: "center" },
+  listen: { height: 52, borderRadius: 999, alignItems: "center", justifyContent: "center", gap: 8 },
+  listenTxt: { fontSize: 16, fontWeight: "900" },
   nav: { justifyContent: "space-between", gap: 12 },
   navBtn: { flex: 1, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   q: { fontSize: 15, fontWeight: "800", lineHeight: 24 },

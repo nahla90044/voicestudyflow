@@ -29,7 +29,7 @@ import { SlideView } from "../../components/brand/slide-view";
 import { StatusBar } from "expo-status-bar";
 import { getPlan } from "../../lib/plan";
 import { aiAssist, defineWord, generateFlashcards, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
-import { addSave, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
+import { addSave, cardsHtml, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
 import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
@@ -590,6 +590,8 @@ export default function ReaderScreen() {
   // مساعد الذكاء الاصطناعي
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  // البطاقات المولَّدة للتو: تُعرض تحت الرسالة وتُطبع PDF بطاقاتٍ (كان الـPDF يطبع جملة «تم حفظ…» فقط)
+  const [aiCards, setAiCards] = useState<{ front: string; back: string }[] | null>(null);
   const [aiResult, setAiResult] = useState("");
   const [aiQuestion, setAiQuestion] = useState("");
   // خانة «اسأل عن الصفحة» تُعرض لحساب المالك فقط (تفتح مجالًا لاستخدامات أخرى)
@@ -1126,14 +1128,15 @@ export default function ReaderScreen() {
     if (!bookId || !aiResult.trim() || saveBusy) return;
     setSaveBusy(true);
     try {
+      const cardsText = aiCards ? aiCards.map((c, i) => `${i + 1}. ${c.front}\n${c.back}`).join("\n\n") : "";
       await addSave({
         book_id: bookId,
         kind: "assistant",
-        title: t("reader.ai.saveTitle", { page }),
+        title: aiCards ? t("reader.ai.cardsTitle", { page }) : t("reader.ai.saveTitle", { page }),
         scope: "page",
         page_from: page,
         page_to: page,
-        content: { text: aiResult, question: aiQuestion.trim() || undefined },
+        content: aiCards ? { text: cardsText, cards: aiCards } : { text: aiResult, question: aiQuestion.trim() || undefined },
       });
       Alert.alert(t("save.savedTitle"), t("save.savedBody"));
     } catch {
@@ -1144,8 +1147,12 @@ export default function ReaderScreen() {
   }
   async function assistantPdf() {
     if (!aiResult.trim()) return;
-    const ttl = t("reader.ai.saveTitle", { page });
+    const ttl = aiCards ? t("reader.ai.cardsTitle", { page }) : t("reader.ai.saveTitle", { page });
     try {
+      if (aiCards) {
+        await sharePdf(cardsHtml({ bookTitle: bookTitleStr, title: ttl, cards: aiCards, rtl: dir.isRTL }), ttl);
+        return;
+      }
       await sharePdf(textHtml({ bookTitle: bookTitleStr, title: ttl, text: aiResult, question: aiQuestion.trim() || undefined, rtl: dir.isRTL }), ttl);
     } catch {
       Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));
@@ -2125,6 +2132,7 @@ export default function ReaderScreen() {
   async function runAi(action: AiAction) {
     setAiBusy(true);
     setAiResult("");
+    setAiCards(null);
     try {
       const text = await ensurePageText();
       if (!text.trim()) {
@@ -2144,6 +2152,7 @@ export default function ReaderScreen() {
   async function runTranslate(lang: string) {
     setAiBusy(true);
     setAiResult("");
+    setAiCards(null);
     try {
       const text = await ensurePageText();
       if (!text.trim()) {
@@ -2169,6 +2178,7 @@ export default function ReaderScreen() {
   async function makeFlashcards() {
     setAiBusy(true);
     setAiResult("");
+    setAiCards(null);
     try {
       const text = await ensurePageText();
       if (!text.trim()) {
@@ -2182,6 +2192,7 @@ export default function ReaderScreen() {
       }
       const bookTitle = typeof title === "string" ? title : undefined;
       const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle })));
+      setAiCards(cards);
       setAiResult(t("reader.ai.cardsSaved", { count: n }));
     } catch {
       setAiResult(t("reader.ai.requestFailed"));
@@ -3660,16 +3671,40 @@ export default function ReaderScreen() {
               <Pressable
                 style={styles.aiAction}
                 onPress={() => {
-                  setAiOpen(false);
-                  router.push({
-                    pathname: "/unit-summary",
-                    params: {
-                      pdf_path: pdfPath,
-                      page: String(page),
-                      title: t("reader.ai.pageTitle", { page }),
-                      book_title: typeof title === "string" ? title : "",
+                  // نطاق الملخّص: الصفحة، أو الوحدة كاملة (حدودها من المنهج)، أو ملف المذاكرة للكتاب كله
+                  const bt = typeof title === "string" ? title : "";
+                  Alert.alert(t("reader.ai.sumScopeTitle"), undefined, [
+                    {
+                      text: t("reader.ai.sumScopePage"),
+                      onPress: () => {
+                        setAiOpen(false);
+                        router.push({ pathname: "/unit-summary", params: { pdf_path: pdfPath, page: String(page), title: t("reader.ai.pageTitle", { page }), book_title: bt } });
+                      },
                     },
-                  });
+                    {
+                      text: t("reader.ai.sumScopeUnit"),
+                      onPress: async () => {
+                        setAiOpen(false);
+                        const sc = await unitForPage(pdfPath, page, totalPages).catch(() => null);
+                        if (!sc) return;
+                        router.push({
+                          pathname: "/unit-summary",
+                          params:
+                            sc.unitIndex !== null
+                              ? { pdf_path: pdfPath, unit: String(sc.unitIndex), title: sc.title ?? "", book_title: bt }
+                              : { pdf_path: pdfPath, from: String(sc.from), to: String(sc.to), title: t("reader.present.pagesRange", { from: sc.from, to: sc.to }), book_title: bt },
+                        });
+                      },
+                    },
+                    {
+                      text: t("reader.ai.sumScopeBook"),
+                      onPress: () => {
+                        setAiOpen(false);
+                        router.push({ pathname: "/study-file", params: { pdf_path: pdfPath, book_title: bt } });
+                      },
+                    },
+                    { text: t("common.cancel"), style: "cancel" },
+                  ]);
                 }}
               >
                 <Ionicons name="list" size={18} color={Palette.neonCyan} />
@@ -3729,6 +3764,16 @@ export default function ReaderScreen() {
               ) : aiResult ? (
                 <>
                   <Text style={[styles.aiResultTxt, { textAlign: dir.textAlign }]}>{aiResult}</Text>
+                  {aiCards ? (
+                    <View style={{ gap: 8, marginTop: 10 }}>
+                      {aiCards.map((c, i) => (
+                        <View key={i} style={styles.aiCardRow}>
+                          <Text style={[styles.aiCardQ, { textAlign: dir.textAlign }]}>{`${i + 1}. ${c.front}`}</Text>
+                          <Text style={[styles.aiCardA, { textAlign: dir.textAlign }]}>{c.back}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
                   {/* حفظ الإجابة في «محفوظات الكتاب» أو ملف PDF */}
                   <View style={[styles.aiSaveRow, { flexDirection: dir.row }]}>
                     <Pressable style={styles.aiSaveBtn} onPress={saveAssistant} disabled={saveBusy}>
@@ -4676,6 +4721,9 @@ const styles = StyleSheet.create({
     borderColor: Palette.border,
     minHeight: 120,
   },
+  aiCardRow: { borderRadius: 12, borderWidth: 1, borderColor: Palette.glassBorder, backgroundColor: Palette.surface, padding: 10, gap: 4 },
+  aiCardQ: { color: Palette.text, fontSize: 14.5, lineHeight: 23, fontWeight: "800" },
+  aiCardA: { color: Palette.textMuted, fontSize: 14, lineHeight: 22 },
   aiResultTxt: { color: Palette.textMuted, fontSize: 15, lineHeight: 26, textAlign: "right" },
   aiHint: { color: Palette.textDim, fontSize: 13, textAlign: "center", marginTop: 8 },
 

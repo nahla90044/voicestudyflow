@@ -10,18 +10,15 @@ import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/s
 import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
 import { aiAssist, aiAssistStream } from "../lib/ai";
-import { bookPages, getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
-import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { parsePartialSummary, parseStudySummary, summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
-import { unitText } from "../lib/unitScope";
-import { getSyllabus } from "../lib/syllabus";
+import { getOrMakeSummary, summaryCacheKey, summaryParts, type SummarySource } from "../lib/unitSummary";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
-import { DEFAULT_VOICE_ID, speakText, stopSpeaking } from "../lib/voice";
+import { playSummary, saveSummaryAudio, stopSummary, summaryChunks } from "../lib/summaryAudio";
 
 // يزيل رموز الماركداون إن ظهرت (عنوان #، عريض **، خطوط ---، شفرة `) → نص نظيف
 function stripMarkdown(s: string): string {
@@ -40,13 +37,17 @@ export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
-  const { pdf_path, unit, page, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; title?: string; book_title?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
   const pageMode = Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة) بدل وحدة منهج
-  const srcId = pageMode ? pageNum : unitIdx;
-  const kind = pageMode ? "pagestudysummary" : "studysummary"; // v2: ملخّص شامل منظّم (JSON)
+  // نطاق صفحات (وحدة من القارئ بلا منهج): from/to
+  const fromN = Number(from);
+  const toN = Number(to);
+  const rangeMode = !pageMode && fromN > 0 && toN >= fromN;
+  const src: SummarySource = pageMode ? { kind: "page", page: pageNum } : rangeMode ? { kind: "range", from: fromN, to: toN } : { kind: "unit", unit: unitIdx };
+  const { id: srcId, kind } = summaryCacheKey(src);
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
 
@@ -55,6 +56,7 @@ export default function UnitSummaryScreen() {
   const text = sum ? summaryToText(sum) : "";
   const [err, setErr] = useState("");
   const [streaming, setStreaming] = useState(false); // الأقسام تظهر أولًا بأول
+  const [partInfo, setPartInfo] = useState<{ done: number; total: number } | null>(null); // وحدة طويلة: الجزء الحالي
   const [playing, setPlaying] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -77,7 +79,9 @@ export default function UnitSummaryScreen() {
         content: { text, summary: sum ?? undefined },
       });
       setSaved(true);
-      Alert.alert(t("save.savedTitle"), t("save.savedBody"));
+      // صوت الملخّص يُحفظ على الجهاز معه (في الخلفية) — للاستماع لاحقًا من «المحفوظات» بلا انتظار ولا إنترنت
+      if (sum) void saveSummaryAudio(sum).catch(() => {});
+      Alert.alert(t("save.savedTitle"), t("summary.savedWithAudio"));
     } catch {
       Alert.alert(t("save.failedTitle"), t("save.failedBody"));
     } finally {
@@ -104,32 +108,40 @@ export default function UnitSummaryScreen() {
           return;
         }
         // نصّ المصدر الحقيقي: الصفحة الحالية، أو كل صفحات الوحدة (من نطاقها في المنهج)
-        let ctx = "";
-        if (pageMode) {
-          ctx = await unitText(pdfPath, pageNum, pageNum);
-          if (!ctx.trim()) ctx = ((await extractPdfPageText(pdfPath, pageNum)).text || "").slice(0, 6000);
-        } else {
-          const r = await getSyllabus(pdfPath);
-          const units = r?.data.units ?? [];
-          const u = units[unitIdx];
-          if (u) {
-            const pages = await bookPages(pdfPath).catch(() => []);
-            const last = pages.reduce((m, p) => Math.max(m, p.page), 0);
-            const ranges = (await getCachedUnitRanges(pdfPath)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
-            const rg = ranges[unitIdx];
-            if (rg) ctx = await unitText(pdfPath, rg.from, rg.to);
-            // بلا نص للصفحات بعد → من نقاط المنهج (أفضل من لا شيء)
-            if (!ctx.trim()) {
-              ctx = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${u.outcome ? ` الهدف: ${u.outcome}.` : ""}`;
-            } else {
-              ctx = `عنوان الوحدة: ${u.title}\n\n${ctx}`;
-            }
-          }
-        }
-        if (!ctx.trim()) {
+        const parts = await summaryParts(pdfPath, src);
+        if (!parts.length) {
           if (on) setErr(t("syllabus.err.summary"));
           return;
         }
+        // وحدة طويلة: تُلخَّص كلها جزءًا جزءًا (لا قصّ لآخرها) ويظهر كل جزء فور اكتماله
+        if (parts.length > 1) {
+          if (on) {
+            setStreaming(true);
+            setPartInfo({ done: 0, total: parts.length });
+          }
+          try {
+            const merged = await getOrMakeSummary(pdfPath, src, (done, total, soFar) => {
+              if (!on) return;
+              setPartInfo({ done, total });
+              if (soFar) {
+                setSum(soFar);
+                setLoading(false);
+              }
+            });
+            if (!merged) {
+              if (on) setErr(t("syllabus.err.summary"));
+              return;
+            }
+            if (on) setSum(merged);
+          } finally {
+            if (on) {
+              setStreaming(false);
+              setPartInfo(null);
+            }
+          }
+          return;
+        }
+        const ctx = parts[0];
         // بثّ مباشر: يظهر العنوان ثم كل قسم فور اكتماله (خلال ثوانٍ) بينما يُكتب الباقي
         let raw = "";
         let lastPaint = 0;
@@ -167,7 +179,7 @@ export default function UnitSummaryScreen() {
     })();
     return () => {
       on = false;
-      stopSpeaking();
+      stopSummary();
     };
   }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, t]);
 
@@ -189,18 +201,16 @@ export default function UnitSummaryScreen() {
 
   function togglePlay() {
     if (playing) {
-      stopSpeaking();
+      stopSummary();
       setPlaying(false);
-    } else if (text) {
+    } else if (sum) {
       setPlaying(true);
       void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
-      speakText(sum ? summaryToSpeech(sum) : text, {
-        voiceId: DEFAULT_VOICE_ID,
-        onDone: () => setPlaying(false),
-        onError: () => setPlaying(false),
-      });
+      // مقطعًا مقطعًا بالترتيب: الملخّص الطويل يُسمع كاملًا (كان يُرسل دفعة واحدة فيُقص بعد ٥٠٠٠ حرف)
+      playSummary(summaryChunks(sum), 0, { onDone: () => setPlaying(false) });
     }
   }
+
 
   return (
     <SceneScreen>
@@ -273,7 +283,9 @@ export default function UnitSummaryScreen() {
           {streaming ? (
             <View style={[styles.writing, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
               <ActivityIndicator size="small" color={pal.accent} />
-              <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.writingRest")}</Text>
+              <Text style={[styles.dim, { color: pal.dim }]}>
+                {partInfo ? t("summary.writingPart", { n: Math.min(partInfo.done + 1, partInfo.total), total: partInfo.total }) : t("summary.writingRest")}
+              </Text>
             </View>
           ) : null}
           <View style={{ height: 24 }} />
