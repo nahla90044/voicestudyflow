@@ -91,6 +91,8 @@ export async function runParts<P, R>(o: {
   run: (ctx: string, i: number, onPartial: (p: P, chars: number) => void) => Promise<P>;
   merge: (list: P[]) => R | null;
   onProgress?: (p: PartsProgress<R>) => void;
+  /** عدد الأجزاء معًا (مهام السيرفر: كلها معًا فتبدأ قبل أي قفل للشاشة) */
+  parallel?: number;
 }): Promise<(P | null)[]> {
   const n = o.parts.length;
   const speed = () => speeds.get(o.speedKey) ?? o.defaultSpeed;
@@ -108,7 +110,7 @@ export async function runParts<P, R>(o: {
     const sp = speed();
     let work = 0;
     for (const i of left) work += Math.max(sp.chars - chars[i], sp.chars * 0.08) + (started[i] ? 0 : sp.rate * 6); // ~٦ ث لبدء الطلب
-    return Math.round(work / (sp.rate * Math.min(PARALLEL, left.length)));
+    return Math.round(work / (sp.rate * Math.min(o.parallel ?? PARALLEL, left.length)));
   };
   const report = (force = false) => {
     const now = Date.now();
@@ -132,7 +134,7 @@ export async function runParts<P, R>(o: {
     while (queue.length && !quota) {
       const i = queue.shift()!;
       for (let tries = 0; final[i] === undefined && !quota; ) {
-        if (AppState.currentState !== "active") {
+        if (AppState.currentState !== "active" && !o.parallel) {
           waiting = true;
           report(true);
           await whenActive();
@@ -152,6 +154,7 @@ export async function runParts<P, R>(o: {
           const m = (e as Error).message;
           if (m === "USER_QUOTA") quota = e as Error;
           else if (m !== "WENT_AWAY" && ++tries >= MAX_TRIES) final[i] = null; // فشل حقيقي متكرر
+          else if (m !== "WENT_AWAY") await new Promise((r) => setTimeout(r, 1500 * tries)); // مهلة قبل إعادة المحاولة
           chars[i] = 0;
         }
       }
@@ -159,7 +162,7 @@ export async function runParts<P, R>(o: {
       report(true);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(o.parallel ?? PARALLEL, queue.length) }, worker));
   if (quota) throw quota;
   return final.map((x) => x ?? null);
 }

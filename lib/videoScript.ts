@@ -4,7 +4,8 @@
 // يُبنى من الملخّص الشامل (يغطي الوحدة كلها) عبر محرك الأجزاء المشترك (partsRunner):
 // أجزاء معًا ببثّ، حفظ كل جزء فورًا، إكمال بعد القفل، وقت متبقٍّ. السيناريو يُخزَّن مرة واحدة،
 // وصوت الراوي يُحفظ على الجهاز، فالعودة للفيديو فورية وبلا إنترنت.
-import { runParts, streamPart, type PartsProgress } from "./partsRunner";
+import { jobPart } from "./aiJobs";
+import { runParts, type PartsProgress } from "./partsRunner";
 import type { StudySummary } from "./studySummary";
 import { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript } from "./videoScriptCore";
 export { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript };
@@ -45,9 +46,10 @@ export async function getOrMakeVideo(
     defaultSpeed: { chars: 7000, rate: 45 },
     load: (i) => getUnitContent<VideoScript>(pdfPath, ids.partId(n, i), "videopart").then((x) => (x?.scenes?.length ? x : undefined)),
     save: (i, p) => setUnitContent(pdfPath, ids.partId(n, i), "videopart", p),
-    run: (ctx, _i, onPartial) => streamPart("videoscript", ctx, parsePartialVideo, parseVideo, onPartial),
+    run: (ctx, i, onPartial) => jobPart("videoscript", ctx, `vid:${pdfPath}:${ids.partId(n, i)}`, parsePartialVideo, parseVideo, onPartial),
     merge: mergeVideo,
     onProgress,
+    parallel: Math.min(6, n),
   });
   const ok = results.filter((x): x is VideoScript => !!x);
   const script = mergeVideo(ok);

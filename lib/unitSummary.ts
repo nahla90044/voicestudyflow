@@ -1,7 +1,8 @@
 // lib/unitSummary.ts
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
-import { runParts, streamPart, type PartsProgress } from "./partsRunner";
+import { jobPart } from "./aiJobs";
+import { runParts, type PartsProgress } from "./partsRunner";
 import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
 import { extractPdfPageText } from "./pdfText";
 import { parsePartialSummary, parseStudySummary, type StudySummary, type SummarySection } from "./studySummary";
@@ -121,9 +122,11 @@ export async function getOrMakeSummary(
     defaultSpeed: { chars: 5000, rate: 40 },
     load: (i) => getUnitContent<StudySummary>(pdfPath, partId(i), "studysummarypart").then((x) => (x?.sections?.length ? x : undefined)),
     save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p),
-    run: (ctx, _i, onPartial) => streamPart("studysummary", ctx, parsePartialPart, parseFullPart, onPartial),
+    // مهمة سيرفر لكل جزء: تكمل وتُحفظ حتى لو قُفلت الشاشة أو أُغلق التطبيق
+    run: (ctx, i, onPartial) => jobPart("studysummary", ctx, `sum:${pdfPath}:${partId(i)}`, parsePartialPart, parseFullPart, onPartial),
     merge: mergeSummaries,
     onProgress,
+    parallel: Math.min(6, n),
   });
   const ok = results.filter((x): x is StudySummary => !!x);
   const merged = mergeSummaries(ok);

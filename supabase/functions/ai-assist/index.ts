@@ -113,8 +113,9 @@ Deno.serve(async (req: Request) => {
     if (!SYSTEM[action]) return json({ error: "Unknown action" }, 400);
     if (!text.trim()) return json({ error: "Empty text" }, 400);
 
+    let caller: Awaited<ReturnType<typeof getCaller>> = null;
+    if (COUNTED.has(action) || body.job === true) caller = await getCaller(req);
     if (COUNTED.has(action)) {
-      const caller = await getCaller(req);
       if (!(await consume(caller, "ai", 1))) {
         return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
       }
@@ -180,6 +181,39 @@ Deno.serve(async (req: Request) => {
       system: GUARD + systemPrompt,
       messages: [{ role: "user", content: userContent }],
     };
+
+    // مهمة على السيرفر (الملخّص الشامل، الفيديو): نردّ فورًا برقم المهمة، والكتابة تكمل هنا في الخلفية
+    // وتُحفظ أولًا بأول في ai_jobs — فلا يوقفها قفل شاشة الجوال ولا إغلاق التطبيق.
+    if (body.job === true && (action === "studysummary" || action === "videoscript")) {
+      if (!caller) return json({ error: "AUTH" }, 401);
+      const admin = caller.admin;
+      const { data: row, error: insErr } = await admin.from("ai_jobs").insert({ user_id: caller.id, action }).select("id").single();
+      if (insErr || !row) return json({ error: insErr?.message ?? "JOB_CREATE" }, 500);
+      const jobId = row.id as string;
+      const work = (async () => {
+        let all = "";
+        let lastSave = Date.now();
+        try {
+          const st = client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
+          for await (const ev of st) {
+            if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
+              all += ev.delta.text;
+              if (Date.now() - lastSave > 2500) {
+                lastSave = Date.now();
+                await admin.from("ai_jobs").update({ partial: all, updated_at: new Date().toISOString() }).eq("id", jobId);
+              }
+            }
+          }
+          await admin.from("ai_jobs").update({ status: "done", partial: all, result: all, updated_at: new Date().toISOString() }).eq("id", jobId);
+        } catch (e) {
+          console.error("ai job", action, (e as Error).message);
+          await admin.from("ai_jobs").update({ status: "failed", partial: all, error: (e as Error).message.slice(0, 300), updated_at: new Date().toISOString() }).eq("id", jobId);
+        }
+      })();
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime?.waitUntil?.(work);
+      return json({ jobId });
+    }
 
     // بثّ مباشر (الملخّص الشامل): النص يُرسل أولًا بأول فيظهر أول قسم خلال ثوانٍ
     // بدل انتظار الملخّص كاملًا (قد يتجاوز دقيقة). الحصة خُصمت أعلاه مرة واحدة.
