@@ -26,6 +26,13 @@ type BookGroup = { key: string; title: string; total: number; due: number };
 
 type StudyTab = "cards" | "summary" | "quiz";
 
+/** حجم خط البطاقة حسب طول نصها: كان ثابتًا كبيرًا (٢٦) فيضيق عليه وجه البطاقة في الإجابات الطويلة */
+function faceSize(text?: string) {
+  const n = (text ?? "").length;
+  const fontSize = n <= 40 ? 23 : n <= 90 ? 20 : n <= 160 ? 17.5 : n <= 260 ? 16 : 15;
+  return { fontSize, lineHeight: Math.round(fontSize * 1.65) };
+}
+
 export default function FlashcardsScreen() {
   const { t } = useI18n();
   const dir = useDir();
@@ -585,7 +592,9 @@ export default function FlashcardsScreen() {
                   </View>
                   <View style={styles.faceMid}>
                     <Text style={[styles.faceLabel, { color: pal.dim }]}>{t("flashcards.question")}</Text>
-                    <Text style={[styles.faceText, { color: pal.ink }]}>{card?.front}</Text>
+                    <ScrollView style={styles.faceScroll} contentContainerStyle={styles.faceScrollIn} showsVerticalScrollIndicator={false}>
+                      <Text style={[styles.faceText, faceSize(card?.front), { color: pal.ink }]}>{card?.front}</Text>
+                    </ScrollView>
                   </View>
                   <View style={[styles.tapHintRow, { flexDirection: dir.row }]}>
                     <Ionicons name="sync" size={13} color={pal.accent} />
@@ -604,7 +613,9 @@ export default function FlashcardsScreen() {
                   </View>
                   <View style={styles.faceMid}>
                     <Ionicons name="bulb-outline" size={22} color={pal.accent} />
-                    <Text style={[styles.faceText, { color: pal.ink }]}>{card?.back}</Text>
+                    <ScrollView style={styles.faceScroll} contentContainerStyle={styles.faceScrollIn} showsVerticalScrollIndicator={false}>
+                      <Text style={[styles.faceText, faceSize(card?.back), { color: pal.ink }]}>{card?.back}</Text>
+                    </ScrollView>
                   </View>
                   <View style={{ height: 18 }} />
                 </View>
@@ -748,12 +759,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 5,
   },
-  faceInner: { flex: 1, borderRadius: 28, overflow: "hidden", alignItems: "center", padding: Spacing.xl, paddingTop: 18 },
-  faceMid: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 6 },
+  faceInner: { flex: 1, borderRadius: 28, overflow: "hidden", alignItems: "center", padding: Spacing.lg, paddingTop: 16 },
+  faceMid: { flex: 1, alignSelf: "stretch", alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 2 },
   chip: { maxWidth: "70%", paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.pill },
   chipTxt: { fontSize: 12, fontWeight: "800" },
   faceLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
-  faceText: { fontSize: 26, fontWeight: "900", textAlign: "center", lineHeight: 40 },
+  faceText: { fontWeight: "800", textAlign: "center" },
+  faceScroll: { flexGrow: 0, alignSelf: "stretch" },
+  faceScrollIn: { flexGrow: 1, justifyContent: "center" },
   tapHintRow: { alignItems: "center", gap: 6 },
   tapHint: { fontSize: 13, fontWeight: "800" },
   listenBtn: { position: "absolute", top: 14, width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
