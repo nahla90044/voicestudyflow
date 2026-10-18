@@ -128,6 +128,28 @@ export async function getPageWords(pdfPath: string, page: number): Promise<WordB
   return [];
 }
 
+const AR_DIACRITICS = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g;
+
+/** النص عربي في معظمه؟ (حروف عربية أكثر من اللاتينية بوضوح) */
+export function isMostlyArabic(text: string): boolean {
+  const ar = (text.match(/[\u0600-\u06FF]/g) ?? []).length;
+  const la = (text.match(/[A-Za-z\u00C0-\u024F]/g) ?? []).length;
+  return ar >= 20 && ar >= la * 2;
+}
+
+/** هل ناتج التشكيل/التصحيح هو النص نفسه؟ (بعد حذف الحركات: طول متقارب، ولا عبارات ردّ) */
+export function isFaithful(raw: string, out: string): boolean {
+  const base = (t: string) => t.replace(AR_DIACRITICS, "").replace(/\s+/g, "");
+  const a = base(raw).length;
+  const b = base(out).length;
+  if (!a || !b) return false;
+  const ratio = b / a;
+  if (ratio < 0.8 || ratio > 1.2) return false;
+  // عبارات اعتذار/تعليق من الذكاء لا ترد في نص الكتاب الأصلي
+  const reply = /(مهمتي|يرجى تزويدي|لا يمكنني|أعتذر|عذرًا|عذراً|النص المرفق|as an ai|i cannot|please provide|i appreciate)/i;
+  return !(reply.test(out) && !reply.test(raw));
+}
+
 // أقل من هذا الطول يعني أن الصفحة بلا نص حقيقي (غالبًا صورة ممسوحة أو علامة مائية)
 const MIN_REAL_TEXT = 40;
 
@@ -145,6 +167,9 @@ export async function getPreciseText(
   ocr: boolean
 ): Promise<string> {
   if (!pdfPath || !rawText.trim()) return rawText;
+  // التشكيل وتصحيح المسح للنص العربي فقط: صفحة إنجليزية/فرنسية كانت تُرسل فيردّ الذكاء
+  // باعتذار («هذا نص إنجليزي ومهمتي تصحيح النصوص العربية…») فتقرؤه القارئة بدل الكتاب.
+  if (!isMostlyArabic(rawText)) return rawText;
   const ver = (ocr ? "ocr-" : "plain-") + PRECISE_VER;
 
   // 1) مخزّن مسبقًا بنفس الإصدار؟ أرجعه فورًا (بلا تكلفة)
@@ -155,7 +180,7 @@ export async function getPreciseText(
       .eq("pdf_path", pdfPath)
       .eq("page", page)
       .maybeSingle();
-    if (data?.tashkeel?.trim() && data.tashkeel_ver === ver) return data.tashkeel;
+    if (data?.tashkeel?.trim() && data.tashkeel_ver === ver && isFaithful(rawText, data.tashkeel)) return data.tashkeel;
   } catch {
     // تعذّر القراءة من المخزّن — نكمل بالمعالجة
   }
@@ -164,6 +189,8 @@ export async function getPreciseText(
   let out = rawText;
   try {
     out = (await aiAssist(ocr ? "ocrtashkeel" : "tashkeel", rawText)).trim() || rawText;
+    // حارس الأمانة: الناتج يجب أن يكون النص نفسه مشكولًا — لا ردًّا أو تعليقًا أو نصًّا مختلف الطول
+    if (!isFaithful(rawText, out)) out = rawText;
   } catch {
     return rawText; // فشل الذكاء غير حرج — نقرأ النص الأصلي
   }
