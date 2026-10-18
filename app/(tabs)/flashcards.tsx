@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
+import { cachedCardImage, cardImageAvgSecs, cardImagesBlocked, getCardImage } from "../../lib/cardImage";
 
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
@@ -307,6 +309,30 @@ export default function FlashcardsScreen() {
   }
 
   const card = queue[idx];
+  const [img, setImg] = useState<{ url: string | null; loading: boolean; secs: number }>({ url: null, loading: false, secs: 0 });
+  useEffect(() => {
+    if (!card) return;
+    let on = true;
+    let tick: ReturnType<typeof setInterval> | undefined;
+    (async () => {
+      const c = await cachedCardImage(card.front, card.back);
+      if (!on) return;
+      if (c !== undefined || cardImagesBlocked()) return setImg({ url: c ?? null, loading: false, secs: 0 });
+      const t0 = Date.now();
+      setImg({ url: null, loading: true, secs: 0 });
+      tick = setInterval(() => on && setImg((x) => (x.loading ? { ...x, secs: Math.round((Date.now() - t0) / 1000) } : x)), 1000);
+      const url = await getCardImage(card.front, card.back);
+      if (on) setImg({ url, loading: false, secs: 0 });
+    })();
+    // البطاقة التالية تُجهَّز صورتها في الخلفية → تظهر فورًا عند الوصول إليها
+    const nx = queue[idx + 1];
+    if (nx && !cardImagesBlocked()) void getCardImage(nx.front, nx.back);
+    return () => {
+      on = false;
+      if (tick) clearInterval(tick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card?.id]);
   const reviewDone = mode === "review" && idx >= queue.length;
 
   const frontStyle = {
@@ -590,6 +616,18 @@ export default function FlashcardsScreen() {
                       {card?.bookTitle || bookName || t("flashcards.question")}
                     </Text>
                   </View>
+                  {/* صورة توضيحية للبطاقة (تسهيل الحفظ) — أول مرة تُجهَّز مع عدّاد ووقت متوقَّع */}
+                  {img.url ? (
+                    <Image source={{ uri: img.url }} style={styles.cardImg} contentFit="contain" transition={250} />
+                  ) : img.loading ? (
+                    <View style={[styles.cardImg, styles.cardImgWait, { backgroundColor: pal.soft }]}>
+                      <ActivityIndicator color={pal.accent} />
+                      <Text style={[styles.cardImgTxt, { color: pal.dim }]}>
+                        {t("flashcards.img.loading", { s: img.secs })}
+                      </Text>
+                      <Text style={[styles.cardImgSub, { color: pal.dim }]}>{t("flashcards.img.usual", { n: cardImageAvgSecs() })}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.faceMid}>
                     <Text style={[styles.faceLabel, { color: pal.dim }]}>{t("flashcards.question")}</Text>
                     <ScrollView style={styles.faceScroll} contentContainerStyle={styles.faceScrollIn} showsVerticalScrollIndicator={false}>
@@ -766,6 +804,10 @@ const styles = StyleSheet.create({
   faceLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
   faceText: { fontWeight: "800", textAlign: "center" },
   faceScroll: { flexGrow: 0, alignSelf: "stretch" },
+  cardImg: { alignSelf: "stretch", height: "34%", marginTop: 10, borderRadius: 18 },
+  cardImgWait: { alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 12 },
+  cardImgTxt: { fontSize: 13, fontWeight: "800", textAlign: "center" },
+  cardImgSub: { fontSize: 12, fontWeight: "600", textAlign: "center" },
   faceScrollIn: { flexGrow: 1, justifyContent: "center" },
   tapHintRow: { alignItems: "center", gap: 6 },
   tapHint: { fontSize: 13, fontWeight: "800" },
