@@ -68,7 +68,7 @@ import {
   setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
-import { MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
+import { MUSIC_EMOJI, MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { FREE_BOOKS_UNLOCKED, markBookCompleted } from "../../lib/perks";
 import { askForReviewOnce } from "../../lib/review";
@@ -199,43 +199,7 @@ const TRANSLATE_LANGS: { code: string; label: string }[] = [
 ];
 
 // رمز تعبيري لكل نوع موسيقى (لبطاقات اختيار الموسيقى في العرض التقديمي)
-const MUSIC_EMOJI: Record<string, string> = {
-  piano: "🎹",
-  nature: "🌿",
-  strings: "🎻",
-  lofi: "🎧",
-  meditation: "🧘",
-  rain: "🌧️",
-  ocean: "🌊",
-  stream: "🏞️",
-  birds: "🐦",
-  wind: "🍃",
-  fire: "🔥",
-  thunder: "⛈️",
-  night: "🌙",
-  epic: "🐉",
-  heroic: "⚔️",
-  emotional: "❤️",
-  dark: "🌑",
-  historical: "🏛️",
-  classical: "🎼",
-  study: "📚",
-  piano_dream: "🎹",
-  piano_emotive: "🎹",
-  piano_bright: "🎹",
-  violin_calm: "🎻",
-  violin_emotive: "🎻",
-  violin_classical: "🎻",
-  drum_calm: "🥁",
-  drum_meditative: "🥁",
-  drum_warm: "🥁",
-  sax_calm: "🎷",
-  sax_romantic: "🎷",
-  sax_night: "🎷",
-  saveroom: "🕯️",
-  melancholy: "🌫️",
-  optimistic: "☀️",
-};
+
 
 function splitLongSlides(slides: Slide[]): Slide[] {
   const out: Slide[] = [];

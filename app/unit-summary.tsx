@@ -3,8 +3,8 @@
 // نص الملخّص في بطاقة، وزر استماع. يُولَّد مرة واحدة ويُخزَّن (بلا استهلاك ذكاء متكرر).
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
@@ -19,6 +19,7 @@ import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
 import { playSummary, saveSummaryAudio, stopSummary, summaryChunks } from "../lib/summaryAudio";
+import { MUSIC_EMOJI, MUSIC_OPTIONS, startAmbient, stopAmbient } from "../lib/sfx";
 
 // يزيل رموز الماركداون إن ظهرت (عنوان #، عريض **، خطوط ---، شفرة `) → نص نظيف
 function stripMarkdown(s: string): string {
@@ -160,18 +161,56 @@ export default function UnitSummaryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
+  // الاستماع متاح أثناء كتابة الملخّص: يقرأ الأقسام المكتملة بالترتيب وينتظر الجديد حتى الاكتمال
+  const liveRef = useRef<{ sum: StudySummary | null; streaming: boolean }>({ sum: null, streaming: false });
+  liveRef.current = { sum, streaming };
+  const [listenWait, setListenWait] = useState(false);
+  function liveChunks() {
+    const { sum: s0, streaming: st } = liveRef.current;
+    if (!s0) return { chunks: [], final: !st };
+    if (!st) return { chunks: summaryChunks(s0), final: true };
+    // آخر قسم ما زال يُكتب → لا يُقرأ بعد، وآخر مقطع قد يكبر → ننتظره أيضًا
+    const ready = summaryChunks({ ...s0, sections: s0.sections.slice(0, -1), keypoints: [] });
+    return { chunks: ready.slice(0, -1), final: false };
+  }
+
   function togglePlay() {
     if (playing) {
       stopSummary();
       setPlaying(false);
+      setListenWait(false);
     } else if (sum) {
       setPlaying(true);
       void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
       // مقطعًا مقطعًا بالترتيب: الملخّص الطويل يُسمع كاملًا (كان يُرسل دفعة واحدة فيُقص بعد ٥٠٠٠ حرف)
-      playSummary(summaryChunks(sum), 0, { onDone: () => setPlaying(false) });
+      playSummary(liveChunks, 0, {
+        onWaiting: setListenWait,
+        onDone: () => {
+          setPlaying(false);
+          setListenWait(false);
+        },
+      });
     }
   }
 
+  // 🎧 أصوات الأجواء أثناء المذاكرة (مطر، بحر، موسيقى…) — نفس مكتبة القارئ، تُمزج مع صوت الملخّص
+  const [ambOpen, setAmbOpen] = useState(false);
+  const [ambKey, setAmbKey] = useState<string | null>(null);
+  const [ambLoading, setAmbLoading] = useState<string | null>(null);
+  async function pickAmbient(key: string | null) {
+    setAmbKey(key);
+    if (!key) {
+      stopAmbient();
+      return;
+    }
+    setAmbLoading(key);
+    try {
+      await startAmbient(key);
+    } finally {
+      setAmbLoading((k) => (k === key ? null : k));
+    }
+  }
+  useEffect(() => () => stopAmbient(), []);
 
   return (
     <SceneScreen>
@@ -187,17 +226,10 @@ export default function UnitSummaryScreen() {
           </Pressable>
         }
         right={
-          // زر السماعة يشغّل الملخّص صوتيًا (كان أيقونة للزينة لا تستجيب فيوحي بزر معطّل)
-          <Pressable
-            onPress={togglePlay}
-            disabled={!sum || streaming}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}
-            style={{ opacity: !sum || streaming ? 0.45 : 1 }}
-          >
+          // السماعة: أصوات الأجواء أثناء المذاكرة (كما في النسخة السابقة)
+          <Pressable onPress={() => setAmbOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t("summary.ambient.title")}>
             <SceneIconButton>
-              <Ionicons name={playing ? "pause" : "headset"} size={20} color={pal.accent} />
+              <Ionicons name={ambKey ? "musical-notes" : "headset"} size={20} color={pal.accent} />
             </SceneIconButton>
           </Pressable>
         }
@@ -221,11 +253,12 @@ export default function UnitSummaryScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Pressable
             onPress={togglePlay}
-            disabled={streaming}
-            style={({ pressed }) => [styles.playBtn, streaming && { opacity: 0.5 }, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
+            style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
           >
             <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
-            <Text style={[styles.playTxt, { color: pal.onAccent }]}>{playing ? t("syllabus.summary.pause") : t("syllabus.summary.listen")}</Text>
+            <Text style={[styles.playTxt, { color: pal.onAccent }]}>
+              {playing ? (listenWait ? t("summary.listenWait") : t("syllabus.summary.pause")) : t("syllabus.summary.listen")}
+            </Text>
           </Pressable>
 
           {/* حفظ في «محفوظات الكتاب» + ملف PDF */}
@@ -281,6 +314,34 @@ export default function UnitSummaryScreen() {
           <View style={{ height: 24 }} />
         </ScrollView>
       )}
+      <Modal visible={ambOpen} transparent animationType="slide" onRequestClose={() => setAmbOpen(false)}>
+        <Pressable style={styles.ambMask} onPress={() => setAmbOpen(false)}>
+          <Pressable style={[styles.ambSheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]} onPress={() => {}}>
+            <View style={{ flexDirection: dir.row, alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={[styles.ambTitle, { color: pal.ink }]}>🎧 {t("summary.ambient.title")}</Text>
+              <Pressable onPress={() => setAmbOpen(false)} hitSlop={8} accessibilityLabel={t("common.close")}>
+                <Ionicons name="close" size={22} color={pal.dim} />
+              </Pressable>
+            </View>
+            <Text style={[styles.hint, { color: pal.dim, textAlign: dir.textAlign }]}>{t("summary.ambient.hint")}</Text>
+            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={[styles.ambGrid, { flexDirection: dir.row }]}>
+              {[{ key: null as string | null }, ...MUSIC_OPTIONS].map((m) => {
+                const on = ambKey === m.key;
+                const label = m.key === null ? t("reader.music.none") : ambLoading === m.key ? t("reader.music.loading") : `${MUSIC_EMOJI[m.key] ?? "🎵"} ${t(`music.${m.key}`)}`;
+                return (
+                  <Pressable
+                    key={m.key ?? "none"}
+                    onPress={() => void pickAmbient(m.key)}
+                    style={[styles.ambChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: pal.cardBorder }]}
+                  >
+                    <Text style={[styles.ambChipTxt, { color: on ? pal.onAccent : pal.ink }]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SceneScreen>
   );
 }
@@ -303,6 +364,12 @@ const styles = StyleSheet.create({
   writing: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: Radius.lg },
   eta: { fontSize: 15, fontWeight: "900", textAlign: "center" },
   hint: { fontSize: 13, fontWeight: "600", textAlign: "center", lineHeight: 20 },
+  ambMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  ambSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.lg, paddingBottom: 34, gap: 10 },
+  ambTitle: { fontSize: 17, fontWeight: "900" },
+  ambGrid: { flexWrap: "wrap", gap: 8, paddingTop: 4 },
+  ambChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
+  ambChipTxt: { fontSize: 14, fontWeight: "800" },
   resumeBtn: { height: 46, paddingHorizontal: 26, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
   saveRow: { gap: 10 },
   saveBtn: { flex: 1, height: 48, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", gap: 8 },

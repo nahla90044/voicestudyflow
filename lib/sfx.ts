@@ -120,6 +120,45 @@ export const MUSIC_OPTIONS: MusicOption[] = [
   { key: "optimistic", name: "تفاؤل", kind: "music", lengthMs: 120000, prompt: "warm emotional uplifting instrumental, tender expressive lead acoustic guitar with warm reverb over a soft mellow piano and dreamy ambient pad, hopeful heartwarming and gently optimistic, slow dreamy trip-hop groove with a gentle laid-back beat, beautiful cinematic and introspective, sunny tender and quietly joyful, soothing and study-friendly, not a party or dance track, instrumental" },
 ];
 
+/** رمز كل مقطوعة في قوائم الاختيار (القارئ والملخّص) */
+export const MUSIC_EMOJI: Record<string, string> = {
+  piano: "🎹",
+  nature: "🌿",
+  strings: "🎻",
+  lofi: "🎧",
+  meditation: "🧘",
+  rain: "🌧️",
+  ocean: "🌊",
+  stream: "🏞️",
+  birds: "🐦",
+  wind: "🍃",
+  fire: "🔥",
+  thunder: "⛈️",
+  night: "🌙",
+  epic: "🐉",
+  heroic: "⚔️",
+  emotional: "❤️",
+  dark: "🌑",
+  historical: "🏛️",
+  classical: "🎼",
+  study: "📚",
+  piano_dream: "🎹",
+  piano_emotive: "🎹",
+  piano_bright: "🎹",
+  violin_calm: "🎻",
+  violin_emotive: "🎻",
+  violin_classical: "🎻",
+  drum_calm: "🥁",
+  drum_meditative: "🥁",
+  drum_warm: "🥁",
+  sax_calm: "🎷",
+  sax_romantic: "🎷",
+  sax_night: "🎷",
+  saveroom: "🕯️",
+  melancholy: "🌫️",
+  optimistic: "☀️",
+};
+
 const MUSIC_SECONDS = 12; // طول مؤثّر رفع ٣
 
 async function fileFor(opt: MusicOption): Promise<File | null> {

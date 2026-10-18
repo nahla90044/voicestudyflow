@@ -30,25 +30,41 @@ export function summaryChunks(s: StudySummary): string[] {
 
 let token = 0;
 
+/** مصدر المقاطع: قائمة ثابتة، أو دالة لملخّص ما زال يُكتب (final=false → ينتظر المقاطع الجديدة) */
+export type ChunkSource = string[] | (() => { chunks: string[]; final: boolean });
+
 /** يشغّل المقاطع من index بالترتيب. onIndex: المقطع الحالي، onDone: انتهى أو توقف */
 export function playSummary(
-  chunks: string[],
+  source: ChunkSource,
   index: number,
-  opts: { voiceId?: string; onIndex?: (i: number) => void; onDone?: () => void } = {}
+  opts: { voiceId?: string; onIndex?: (i: number) => void; onDone?: () => void; onWaiting?: (w: boolean) => void } = {}
 ): void {
   const my = ++token;
   const voiceId = opts.voiceId ?? DEFAULT_VOICE_ID;
+  const read = () => (Array.isArray(source) ? { chunks: source, final: true } : source());
   const step = (i: number) => {
     if (my !== token) return;
-    if (i >= chunks.length) return opts.onDone?.();
+    const { chunks, final } = read();
+    if (i >= chunks.length) {
+      if (final) return opts.onDone?.();
+      // الملخّص ما زال يُكتب → ننتظر المقطع التالي ثم نكمل بلا توقف
+      opts.onWaiting?.(true);
+      setTimeout(() => step(i), 1500);
+      return;
+    }
+    opts.onWaiting?.(false);
     opts.onIndex?.(i);
     // المقطعان التاليان يُجهَّزان أثناء قراءة الحالي
     for (const j of [i + 1, i + 2]) if (j < chunks.length) void prefetchText(chunks[j], { voiceId });
-    speakText(chunks[i], {
-      voiceId,
-      onDone: () => step(i + 1),
-      onError: () => step(i + 1), // مقطع تعذّر → نكمل لا نتوقف
-    });
+    let moved = false;
+    const next = () => {
+      if (moved) return;
+      moved = true;
+      step(i + 1);
+    };
+    // مقطع بلا حروف تُنطق (رموز فقط) → speakText يرجع دون onDone فيعلق التسلسل؛ نتخطاه
+    if (!/[\p{L}\p{N}]/u.test(chunks[i])) return next();
+    speakText(chunks[i], { voiceId, onDone: next, onError: next });
   };
   step(index);
 }
