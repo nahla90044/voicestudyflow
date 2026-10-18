@@ -1711,6 +1711,8 @@ export default function ReaderScreen() {
    * لذلك التجربة المجانية تجهّز صفحتين فقط. عامل واحد في كل مرة (رمز للإلغاء). */
   const aheadRef = useRef<{ token: number; to: number; whole: boolean; running: boolean }>({ token: 0, to: 0, whole: false, running: false });
   const aheadPagesRef = useRef(2);
+  // حفظ صوت الكتاب كاملًا (زر مستقل): التقدّم يظهر على الزر، والضغط أثناءه يوقفه
+  const [audioSave, setAudioSave] = useState<{ done: number; total: number } | null>(null);
   useEffect(() => {
     getPlan()
       .then((pl) => (aheadPagesRef.current = pl === "free" ? 2 : 10))
@@ -2421,6 +2423,13 @@ export default function ReaderScreen() {
     await startDownload(pdfPath, bookTitle, total);
     showToast(t("reader.toast.downloadingBackground"));
     // وصوت الكتاب أيضًا (اختياري): من الصفحة الحالية حتى آخر الكتاب — للاستماع بلا إنترنت
+    askSaveBookAudio(total);
+  }
+
+  /** يسأل ثم يحفظ صوت الكتاب من الصفحة الحالية حتى آخره (زر «حفظ الصوت» أو مع «حفظ الكتاب») */
+  function askSaveBookAudio(totalArg?: number) {
+    const total = totalArg || totalPages;
+    if (!total) return;
     const from = Math.max(1, page);
     Alert.alert(t("reader.audioSave.title"), t("reader.audioSave.body", { n: total - from + 1 }), [
       { text: t("reader.audioSave.no"), style: "cancel" },
@@ -2428,13 +2437,25 @@ export default function ReaderScreen() {
         text: t("reader.audioSave.yes"),
         onPress: () => {
           showToast(t("reader.audioSave.started"));
+          setAudioSave({ done: 0, total: total - from + 1 });
           saveAudioAhead(from, total, true, (done, all) => {
+            setAudioSave(done === all ? null : { done, total: all });
             if (done === all) showToast(t("reader.audioSave.done"));
-            else if (done % 10 === 0) showToast(t("reader.audioSave.progress", { done, all }));
           });
         },
       },
     ]);
+  }
+
+  /** زر «حفظ الصوت»: يبدأ الحفظ، أو يوقفه إن كان جاريًا (ما حُفظ يبقى) */
+  function onAudioSaveTool() {
+    if (audioSave) {
+      stopAudioAhead();
+      setAudioSave(null);
+      showToast(t("reader.audioSave.stopped"));
+      return;
+    }
+    askSaveBookAudio();
   }
 
   useEffect(() => {
@@ -3488,6 +3509,12 @@ export default function ReaderScreen() {
                 on={fullyLoaded && !ingesting}
                 disabled={fullyLoaded && !ingesting}
                 onPress={startIngest}
+              />
+              <InTool
+                icon={audioSave ? "stop-circle-outline" : "headset-outline"}
+                label={audioSave ? t("reader.audioSave.progressShort", { done: audioSave.done, all: audioSave.total }) : t("reader.audioSave.tool")}
+                on={!!audioSave}
+                onPress={onAudioSaveTool}
               />
             </>
           )}
