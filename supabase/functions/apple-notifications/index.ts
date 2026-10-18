@@ -71,6 +71,11 @@ Deno.serve(async (req) => {
     }
 
     if (!userId) return "ok (unlinked)";
+    // معاملة مستبعدة (مثل اشتراك تجريبي اشتُري بالخطأ على حساب المراجعة) → لا تمنح شيئًا
+    if (t.originalTransactionId) {
+      const { data: ignored } = await admin.from("apple_tx_ignore").select("original_transaction_id").eq("original_transaction_id", t.originalTransactionId).maybeSingle();
+      if (ignored) return "ok (ignored)";
+    }
 
     if (t.originalTransactionId) {
       const { error } = await admin.from("apple_transactions").upsert({

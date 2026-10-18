@@ -76,6 +76,15 @@ Deno.serve(async (req) => {
     }
     const plan = PRODUCT_PLAN[String(t.productId)];
     if (!plan || !t.originalTransactionId) continue;
+    // معاملة مستبعدة (اشتراك تجريبي اشتُري بالخطأ على حساب المراجعة) → لا تُمنح بالاستعادة
+    {
+      const { data: ignored } = await admin.from("apple_tx_ignore").select("original_transaction_id").eq("original_transaction_id", t.originalTransactionId).maybeSingle();
+      if (ignored) {
+        handled++;
+        await log("ignored_tx", String(t.productId));
+        continue;
+      }
+    }
     // اشتراك Apple واحد = حساب واحد في تطبيقنا. نرفض منحه لهذا الحساب إن كان لحساب آخر موجود:
     //  - اشتُري بحساب آخر (appAccountToken مختلف) وذلك الحساب ما زال موجودًا
     //  - أو مربوط سابقًا بحساب آخر موجود (معاملة بلا appAccountToken كانت تُنسب لأي حساب يرسلها)
