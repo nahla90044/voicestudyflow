@@ -84,7 +84,13 @@ export default function AskScreen() {
       const a = await askBooks(targets, q);
       setTurns((ts) => ts.map((x) => (x.id === tid ? { ...x, a } : x)));
     } catch (e) {
-      const noText = (e as Error)?.message === "NO_TEXT";
+      const msg = (e as Error)?.message;
+      // سؤال مخالف: لا يبقى في المحادثة (يظهر التحذير من الشاشة العامة)
+      if (msg === "UNSAFE_CONTENT" || msg === "ACCOUNT_LOCKED") {
+        setTurns((ts) => ts.filter((x) => x.id !== tid));
+        return;
+      }
+      const noText = msg === "NO_TEXT";
       setTurns((ts) =>
         ts.map((x) => (x.id === tid ? { ...x, error: true, a: noText ? { text: t("ask.noText"), cites: [] } : undefined } : x))
       );

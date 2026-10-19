@@ -606,6 +606,8 @@ const ar: Record<string, string> = {
   "summary.analysis": "الشرح المبسّط",
   "security.unsafeTitle": "استخدام غير آمن",
   "security.unsafeBody": "يحتوي هذا المحتوى على تعليمات غير مسموح بها، فلم يُنفَّذ الطلب ولم يُخصم من الطلبات. سُجّلت الحادثة، وتكرارها يؤدي إلى إيقاف الحساب وفق شروط الاستخدام.",
+  "security.askWarnTitle": "تحذير",
+  "security.askWarnBody": "هذا السؤال يخالف شروط الاستخدام (ألفاظ مسيئة، أو إساءة، أو محتوى غير لائق، أو أوامر غير مسموحة)، فلم يُنفَّذ ولم يُخصم من الطلبات. هذا التحذير {n} من ٣، وعند الثالث يُوقف الحساب.",
   "security.lockedTitle": "تم إيقاف الحساب",
   "security.lockedBody": "أُوقف هذا الحساب لرصد استخدام غير آمن يخالف شروط الاستخدام، وسُجّلت الحادثة. لطلب مراجعة الإيقاف، يُرجى التواصل معنا.",
   "security.contact": "طلب المراجعة",
@@ -899,24 +901,16 @@ const ar: Record<string, string> = {
   "addBook.limit.fileTooLarge": "الملف كبير جدًا — الحد الأقصى {mb} ميجابايت.",
   "addBook.limit.tooManyBooks": "تم الوصول إلى الحد الأقصى لعدد الكتب ({max}). حذف كتاب يتيح إضافة كتاب جديد.",
   // عند بلوغ الحد الأساسي: نعرض الطريق للمكافأة بدل طريق مسدود
-  "addBook.limit.lockedTitle": "إنهاء كتاب واحد يفتح المزيد",
-  "addBook.limit.lockedBody":
-    "المكتبة ممتلئة ({max} كتب). إنهاء قراءة أي كتاب يرفع الحد فورًا إلى {next} كتب — هدية مجانية، بلا اشتراك.",
-  "addBook.limit.lockedCta": "إكمال كتاب",
   "addBook.slots.left": "متبقٍّ {n} من {max}",
-  "addBook.slots.unlockHint": "إنهاء كتاب واحد يرفع الحد إلى {next} كتب",
 
   // زر التشغيل الرئيسي
   "reader.play.listen": "استماع",
   "reader.play.pause": "إيقاف",
 
   // نافذة مكافأة إنهاء أول كتاب
-  "unlock.title": "اكتمل الكتاب الأول!",
-  "unlock.prize.label": "كتب صارت متاحة",
-  "unlock.prize.sub": "بدل ٣ — مجانًا وللأبد",
-  "unlock.body":
-    "إنجاز يستحق الاحتفال. إكمال ما يبدأ يستحق المكافأة، لذلك رفعنا الحد— مكتبة أوسع بالانتظار",
-  "unlock.cta": "يعطيك العافية!",
+  "finish.title": "اكتمل الكتاب! 🎉",
+  "finish.body": "إنجاز يستحق الاحتفال: من الصفحة الأولى حتى الأخيرة. مبارك هذا الإنجاز، وإلى الكتاب التالي ✨",
+  "finish.cta": "شكرًا",
   "addBook.limit.bookTooLarge": "حجم الكتاب كبير. يُفضّل تجربة كتاب أصغر.",
   "addBook.moderation.checking": "جارٍ فحص الكتاب قبل حفظه (الأمان وسياسة المحتوى)…",
   "addBook.check.failedTitle": "تعذّر فحص الكتاب",
@@ -2195,6 +2189,8 @@ const en: Record<string, string> = {
   "summary.analysis": "Simple explanation",
   "security.unsafeTitle": "Unsafe use",
   "security.unsafeBody": "This content contains instructions that aren't allowed, so the request wasn't carried out and no request was used. The incident was recorded; repeating it leads to account suspension under the Terms of Use.",
+  "security.askWarnTitle": "Warning",
+  "security.askWarnBody": "This question violates the Terms of Use (offensive language, abuse, inappropriate content, or disallowed commands), so it wasn't carried out and no request was used. This is warning {n} of 3; the third suspends the account.",
   "security.lockedTitle": "Account suspended",
   "security.lockedBody": "This account was suspended after unsafe use that violates the Terms of Use was detected, and the incident was recorded. To request a review, please contact us.",
   "security.contact": "Request a review",
@@ -2484,22 +2480,14 @@ const en: Record<string, string> = {
   "addBook.alert.pickFirst": "Choose a PDF file first",
   "addBook.limit.fileTooLarge": "File is too large — maximum {mb} MB.",
   "addBook.limit.tooManyBooks": "You've reached the maximum number of books ({max}). Delete a book to add a new one.",
-  "addBook.limit.lockedTitle": "Finish one book",
-  "addBook.limit.lockedBody":
-    "Your library is full ({max} books). Finish reading any book you have and your limit jumps to {next} — free, no subscription.",
-  "addBook.limit.lockedCta": "Finish a book",
   "addBook.slots.left": "{n} of {max} left",
-  "addBook.slots.unlockHint": "Finish one book and your limit becomes {next}",
 
   "reader.play.listen": "Listen",
   "reader.play.pause": "Pause",
 
-  "unlock.title": "You finished your first book!",
-  "unlock.prize.label": "books now available to you",
-  "unlock.prize.sub": "up from 3 — free, forever",
-  "unlock.body":
-    "That deserves a celebration. We raised your limit because you proved you finish what you start— enjoy the bigger library",
-  "unlock.cta": "Awesome!",
+  "finish.title": "Book finished! 🎉",
+  "finish.body": "An achievement worth celebrating: from the first page to the last. Congratulations, and on to the next book ✨",
+  "finish.cta": "Thanks",
   "addBook.limit.bookTooLarge": "This book is too large. Please try a smaller one.",
   "addBook.moderation.checking": "Checking the book before saving (safety and content policy)…",
   "addBook.check.failedTitle": "Couldn't check the book",

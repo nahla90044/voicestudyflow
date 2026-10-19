@@ -3,7 +3,7 @@
 // الشاشة العامة (app/_layout) تستمع وتعرض التنبيه أو شاشة الإيقاف.
 import { supabase } from "./supabase";
 
-type Ev = { kind: "unsafe" | "locked" };
+type Ev = { kind: "unsafe" | "locked"; strikes?: number };
 const listeners = new Set<(e: Ev) => void>();
 
 export function onSecurity(fn: (e: Ev) => void): () => void {
@@ -13,10 +13,11 @@ export function onSecurity(fn: (e: Ev) => void): () => void {
 
 /** يفحص ردّ السيرفر: إن كان «غير آمن» أو «موقوف» يُبلغ الواجهة ويرمي خطأً (لا يُنفَّذ شيء بعده) */
 export function checkSecurity(d: unknown): void {
-  const x = d as { unsafe?: boolean; locked?: boolean } | null;
+  const x = d as { unsafe?: boolean; locked?: boolean; askWarning?: boolean; strikes?: number } | null;
   if (!x || (!x.unsafe && !x.locked)) return;
   const kind = x.locked ? "locked" : "unsafe";
-  listeners.forEach((f) => f({ kind }));
+  // مخالفة في سؤال «كتابك يجيب»: تحذير مرقّم (الثالث يوقف الحساب)
+  listeners.forEach((f) => f({ kind, strikes: x.askWarning ? Number(x.strikes) || 1 : undefined }));
   throw new Error(kind === "locked" ? "ACCOUNT_LOCKED" : "UNSAFE_CONTENT");
 }
 

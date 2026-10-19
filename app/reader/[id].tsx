@@ -73,9 +73,9 @@ import {
 } from "../../lib/readerPrefs";
 import { MUSIC_ICON, MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
-import { FREE_BOOKS_UNLOCKED, markBookCompleted } from "../../lib/perks";
+import { markBookCompleted } from "../../lib/perks";
+import { celebrate } from "../../components/brand/feedback-host";
 import { askForReviewOnce } from "../../lib/review";
-import { UnlockModal } from "../../components/brand/unlock-modal";
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { PageScrubber } from "../../components/brand/page-scrubber";
 import { alignSpokenToBoxes, boxIndexAtProgress, sentenceRects } from "../../lib/alignWords";
@@ -390,7 +390,6 @@ export default function ReaderScreen() {
   const [voiceWarn, setVoiceWarn] = useState(""); // سبب فشل الصوت البشري (يبقى ظاهرًا)
 
   // مكافأة إنهاء أول كتاب (ترفع الحد المجاني إلى ١٠ كتب)
-  const [unlockOpen, setUnlockOpen] = useState(false);
   const finishedRef = useRef(false); // لا نسجّل الإنهاء مرتين في نفس الجلسة
 
   // هل شُغّل الصوت مرة في هذه الجلسة؟ (تنبض أيقونة التشغيل قبلها فقط)
@@ -787,11 +786,36 @@ export default function ReaderScreen() {
     if (prefsLoadedRef.current && bookId && page >= 1) setLastPage(bookId, page);
   }, [bookId, page]);
 
+  // الصفحات التي زارها القارئ فعلًا (محفوظة لكل كتاب عبر الجلسات)
+  const visitedRef = useRef<Set<number> | null>(null);
+  useEffect(() => {
+    if (!bookId) return;
+    let on = true;
+    AsyncStorage.getItem(`vsf:visited:v1:${bookId}`)
+      .then((raw) => {
+        if (!on) return;
+        const prev = raw ? (JSON.parse(raw) as number[]) : [];
+        visitedRef.current = new Set([...prev, ...(visitedRef.current ?? [])]);
+      })
+      .catch(() => {
+        if (on) visitedRef.current = visitedRef.current ?? new Set();
+      });
+    return () => {
+      on = false;
+    };
+  }, [bookId]);
+
   // بلوغ الصفحة الأخيرة = إنهاء الكتاب أيضًا — حتى يستحق المكافأةَ من يقرأ
   // بعينه لا بالاستماع فقط (المسار الآخر داخل playSentence عند نهاية النص).
+  // بشرط زيارة ٧٠٪ من الصفحات على الأقل: القفز المباشر للصفحة الأخيرة ليس إنهاءً للكتاب.
   useEffect(() => {
-    if (!prefsLoadedRef.current || !bookId) return;
-    if (totalPages > 0 && page >= totalPages) void onBookFinished();
+    if (!prefsLoadedRef.current || !bookId || page < 1) return;
+    const seen = (visitedRef.current ??= new Set());
+    if (!seen.has(page)) {
+      seen.add(page);
+      AsyncStorage.setItem(`vsf:visited:v1:${bookId}`, JSON.stringify([...seen])).catch(() => {});
+    }
+    if (totalPages > 0 && page >= totalPages && seen.size >= Math.ceil(totalPages * 0.7)) void onBookFinished();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, page, totalPages]);
 
@@ -1776,7 +1800,7 @@ export default function ReaderScreen() {
 
   /**
    * أنهى المستخدم الكتاب. يسجّل الإنجاز على السيرفر، وإن كان أول كتاب يُنهيه
-   * يعرض نافذة المكافأة. المكافأة تُمنح داخل markBookCompleted بلا أي شرط —
+   * يعرض بطاقة تهنئة (بلا مكافأة) —
    * طلب التقييم يأتي لاحقًا ومنفصلًا عند إغلاق النافذة.
    */
   async function onBookFinished() {
@@ -1784,8 +1808,16 @@ export default function ReaderScreen() {
     finishedRef.current = true;
 
     recordBookCompleted(); // الإحصائية المحلية (السلسلة والعدّاد)
-    const { justUnlocked } = await markBookCompleted(bookId);
-    if (justUnlocked) setUnlockOpen(true);
+    const { firstTime } = await markBookCompleted(bookId);
+    if (!firstTime) return;
+    // تهنئة فقط (لا مكافآت)، ثم طلب التقييم بعد إغلاقها
+    celebrate({
+      emoji: "🏆",
+      title: t("finish.title"),
+      subtitle: typeof title === "string" && title.trim() ? `«${title}»` : undefined,
+      body: t("finish.body"),
+      primary: { text: `${t("finish.cta")} 🌟`, onPress: () => setTimeout(() => void askForReviewOnce(), 700) },
+    });
   }
 
   // يقرأ جملة واحدة ثم ينتقل للتالية (أو للصفحة التالية)
@@ -4479,17 +4511,6 @@ export default function ReaderScreen() {
         onClose={() => setTocOpen(false)}
       />
 
-      {/* مكافأة إنهاء أول كتاب — تُمنح بلا شرط، وطلب التقييم يأتي بعد إغلاقها */}
-      <UnlockModal
-        visible={unlockOpen}
-        bookTitle={typeof title === "string" ? title : undefined}
-        newLimit={FREE_BOOKS_UNLOCKED}
-        onClose={() => {
-          setUnlockOpen(false);
-          // مهلة قصيرة حتى تُغلق النافذة فعليًا قبل ظهور نافذة آبل
-          setTimeout(() => void askForReviewOnce(), 700);
-        }}
-      />
       {coach.overlay}
     </SafeAreaView>
   );

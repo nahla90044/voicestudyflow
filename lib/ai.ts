@@ -330,7 +330,8 @@ export async function aiAssist(
   targetLang?: string, // رمز اللغة الهدف (للترجمة يختاره المستخدم؛ وإلا لغة الواجهة)
   count?: number, // عدد مطلوب من البطاقات/الأسئلة (للتوليد المخصّص)
   timeoutMs = 60000, // الملخّص الشامل لوحدة كاملة يحتاج أطول
-  cardType?: string // نوع البطاقات (flashcards فقط)
+  cardType?: string, // نوع البطاقات (flashcards فقط)
+  userQuestion?: string // سؤال المستخدم كما كتبه (لوكيل حماية «كتابك يجيب»)
 ): Promise<string> {
   if (!text.trim()) return "";
 
@@ -340,7 +341,7 @@ export async function aiAssist(
   // مهلة قصوى 60ث: إن لم يردّ السيرفر نرمي خطأً بدل ترك الواجهة معلّقة للأبد.
   const { data, error } = await withTimeout(
     supabase.functions.invoke("ai-assist", {
-      body: { action, text, question, targetLang: lang, count, cardType },
+      body: { action, text, question, targetLang: lang, count, cardType, userQuestion },
     }),
     timeoutMs,
     action

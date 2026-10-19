@@ -55,7 +55,7 @@ export async function askBooks(books: QABook[], question: string): Promise<QAAns
   if (all.length === 0) throw new Error("NO_TEXT");
 
   const chosen = selectPages(question, all);
-  const raw = await aiAssist("ask", buildContext(chosen), question.trim() + citationInstruction());
+  const raw = await aiAssist("ask", buildContext(chosen), question.trim() + citationInstruction(), undefined, undefined, undefined, undefined, question.trim());
   const { text, cites } = parseCitations(raw);
 
   // نُبقي فقط الاستشهادات بصفحات أُرسلت فعلًا (لا نعرض رقم صفحة اخترعه الذكاء)

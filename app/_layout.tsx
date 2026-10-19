@@ -52,6 +52,7 @@ export default function RootLayout() {
     () =>
       onSecurity((e) => {
         if (e.kind === "locked") setLocked(true);
+        else if (e.strikes) Alert.alert(tr("security.askWarnTitle"), tr("security.askWarnBody").replace("{n}", String(Math.min(e.strikes, 3))));
         else Alert.alert(tr("security.unsafeTitle"), tr("security.unsafeBody"));
       }),
     []

@@ -227,7 +227,7 @@ export default function HomeScreen() {
   const dayIndex = Math.floor(Date.now() / 86_400_000) % 10;
   const dailyCheer = dropEmptyVocative(t(`home.cheer.${dayIndex}`, { name }));
   const dayLabels = t("home.days").split(",");
-  const contFraction = cont && cont.pageCount > 0 ? Math.min(1, cont.page / cont.pageCount) : 0;
+  const contFraction = cont && cont.pageCount > 0 && cont.page > 1 ? Math.min(1, cont.page / cont.pageCount) : 0; // الصفحة الأولى = لم تبدأ
 
   // المشهد الحيّ: يتبدّل مع وقت اليوم ويكبر مع التقدّم الحقيقي
   const todayISO = week.at(-1)?.iso ?? "";
