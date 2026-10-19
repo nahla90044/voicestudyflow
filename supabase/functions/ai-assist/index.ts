@@ -203,7 +203,12 @@ Deno.serve(async (req: Request) => {
     }
     // فحص المحتوى قبل إرساله للذكاء (في الطلبات التي يطلبها المستخدم؛ القراءة الصوتية محمية بحارس الأمانة)
     if (SCANNED.has(action)) {
-      const g = scanText(`${text}\n${question}`);
+      // «كتابك يجيب»: نص الكتاب فُحص كاملًا عند رفعه، والسؤال يفحصه وكيل الحماية بعد قليل —
+      // فحص صفحات الكتاب هنا كان يعدّ جملًا قانونية عادية أوامر (مثل «والتصرف كصاحب الحق») فيحذّر بلا ذنب
+      // نص الكتاب: النص الخفي فقط. وما يكتبه المستخدم بنفسه (السؤال) يُفحص كاملًا
+      const bookScan = scanText(text, { hiddenOnly: true });
+      const userText = action === "ask" ? String(body.userQuestion ?? "") : question ?? "";
+      const g = bookScan.ok ? scanText(userText) : bookScan;
       if (!g.ok) {
         const locked = await recordIncident(req, g, { fn: "ai-assist", action, email: emailFrom(req), owner: caller?.plan === "owner" });
         return json(UNSAFE_BODY(locked), 200);
