@@ -1,16 +1,18 @@
 // app/ask/[id].tsx
 // «كتابك يجيب»: محادثة مع الكتاب. الإجابة من صفحاته فقط، وتحتها أرقام الصفحات التي
 // استندت إليها (ضغطة تفتح الصفحة في القارئ)، مع «استماع» و«حفظ كبطاقة».
-// النطاق: هذا الكتاب أو كل الكتب. البحث يشمل الصفحات الجاهزة؛ وإن لم يكن الكتاب
+// كل كتاب يجيب من نفسه فقط (لا خلط بين الكتب)، والمحادثات محفوظة لكل كتاب: تبدأ محادثة جديدة بعد يوم
+// بلا أسئلة وتبقى القديمة في «المحادثات السابقة»، مع طباعة وحذف الإجابة أو المحادثة. البحث يشمل الصفحات الجاهزة؛ وإن لم يكن الكتاب
 // كله جاهزًا نعرض ذلك بوضوح مع زر «تجهيز الكتاب كاملًا».
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { PressableScale } from "../../components/brand/motion";
 import { SceneBanner, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius } from "../../constants/design";
+import { currentSession, deleteSession, exportAskPdf, loadSessions, newSession, saveSession, type AskSession, type AskTurn } from "../../lib/askHistory";
 import { askBooks, coverage, myBooks, type QAAnswer, type QABook } from "../../lib/bookQA";
 import { getDownloadState, startDownload, subscribeDownload, type DownloadState } from "../../lib/downloadManager";
 import { addCards } from "../../lib/flashcards";
@@ -21,8 +23,7 @@ import { useScene } from "../../lib/scene";
 import { useDictation } from "../../lib/stt";
 import { speakText, stopSpeaking } from "../../lib/voice";
 
-type Turn = { id: number; q: string; a?: QAAnswer; error?: boolean; saved?: boolean };
-type Scope = "book" | "all";
+type Turn = AskTurn;
 
 export default function AskScreen() {
   const router = useRouter();
@@ -35,8 +36,10 @@ export default function AskScreen() {
   const { id, q } = useLocalSearchParams<{ id?: string; q?: string }>();
 
   const [books, setBooks] = useState<QABook[]>([]);
-  const [scope, setScope] = useState<Scope>("book");
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [session, setSession] = useState<AskSession | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<AskSession[]>([]);
   // سؤال جاهز قادم من شاشة أخرى (مثل «سؤال عنها» في الاختبار) — يُكتب في الخانة ولا يُرسل تلقائيًا
   const [input, setInput] = useState(typeof q === "string" ? q : "");
   const [busy, setBusy] = useState(false);
@@ -58,6 +61,76 @@ export default function AskScreen() {
     };
   }, []);
 
+  // المحادثة الحالية لهذا الكتاب (أو جديدة بعد يوم بلا أسئلة)
+  useEffect(() => {
+    if (!id) return;
+    currentSession(id).then((s) => {
+      setSession(s);
+      setTurns(s.turns);
+      nextId.current = s.turns.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+    });
+  }, [id]);
+
+  // حفظ تلقائي بعد كل إجابة أو حذف
+  useEffect(() => {
+    if (!id || !session) return;
+    void saveSession(id, { ...session, turns });
+  }, [id, session, turns]);
+
+  function openSession(s: AskSession) {
+    stopSpeaking().catch(() => {});
+    setSession(s);
+    setTurns(s.turns);
+    nextId.current = s.turns.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+  }
+
+  async function openHistory() {
+    if (!id) return;
+    setHistory((await loadSessions(id)).sort((a, b) => b.updatedAt - a.updatedAt));
+    setHistoryOpen(true);
+  }
+
+  function startNew() {
+    if (!turns.length) return;
+    openSession(newSession());
+  }
+
+  function confirmDeleteSession(s: AskSession, isCurrent: boolean) {
+    Alert.alert(t("ask.deleteChat.title"), t("ask.deleteChat.body"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: async () => {
+          if (!id) return;
+          await deleteSession(id, s.id);
+          if (isCurrent) openSession(newSession());
+          setHistory((h) => h.filter((x) => x.id !== s.id));
+        },
+      },
+    ]);
+  }
+
+  function deleteTurn(turn: Turn) {
+    Alert.alert(t("ask.deleteAnswer.title"), t("ask.deleteAnswer.body"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("common.delete"), style: "destructive", onPress: () => setTurns((ts) => ts.filter((x) => x.id !== turn.id)) },
+    ]);
+  }
+
+  function printTurns(list: Turn[], when: number) {
+    if (!list.some((x) => x.a)) return;
+    void exportAskPdf(list, {
+      title: t("ask.title"),
+      bookTitle: book?.title ?? "",
+      dateLabel: new Date(when).toLocaleDateString(lang === "ar" ? "ar-SA-u-ca-gregory" : lang),
+      question: t("ask.pdf.q"),
+      answer: t("ask.pdf.a"),
+      pages: t("ask.pdf.pages"),
+      rtl: lang === "ar",
+    }).catch(() => {});
+  }
+
   // نسبة الجاهزية تُحدَّث مع تقدّم التجهيز في الخلفية
   useEffect(() => {
     if (book) coverage(book.pdf_path).then(setReady).catch(() => setReady(null));
@@ -74,14 +147,14 @@ export default function AskScreen() {
   async function ask(question: string) {
     const q = question.trim();
     if (!q || busy) return;
-    const targets = scope === "all" ? books : book ? [book] : [];
+    const targets = book ? [book] : []; // كل كتاب يجيب من نفسه فقط
     if (targets.length === 0) return;
     const tid = nextId.current++;
     setTurns((ts) => [...ts, { id: tid, q }]);
     setInput("");
     setBusy(true);
     try {
-      const a = await askBooks(targets, q);
+      const a = await askBooks(targets, q, turns.map((x) => x.q).slice(-9));
       setTurns((ts) => ts.map((x) => (x.id === tid ? { ...x, a } : x)));
     } catch (e) {
       const msg = (e as Error)?.message;
@@ -125,7 +198,7 @@ export default function AskScreen() {
   }
 
   const preparing = !!(dl?.running && book && dl.pdfPath === book.pdf_path);
-  const showCoverage = scope === "book" && book && total > 0 && ready !== null && ready < total;
+  const showCoverage = book && total > 0 && ready !== null && ready < total;
 
   return (
     <SceneScreen>
@@ -133,8 +206,38 @@ export default function AskScreen() {
         {/* الرأس */}
         <SceneBanner
           title={t("ask.title")}
-          subtitle={scope === "book" && book ? book.title : t("ask.sub")}
+          subtitle={book ? book.title : t("ask.sub")}
           height={140}
+          right={
+            <View style={{ flexDirection: dir.row, gap: 8 }}>
+              {turns.some((x) => x.a) && (
+                <PressableScale onPress={() => printTurns(turns, session?.startedAt ?? Date.now())}>
+                  <SceneIconButton>
+                    <Ionicons name="print-outline" size={20} color={pal.ink} accessibilityLabel={t("ask.printChat")} />
+                  </SceneIconButton>
+                </PressableScale>
+              )}
+              {turns.length > 0 && session && (
+                <PressableScale onPress={() => confirmDeleteSession(session, true)}>
+                  <SceneIconButton>
+                    <Ionicons name="trash-outline" size={20} color={pal.ink} accessibilityLabel={t("ask.deleteChat.title")} />
+                  </SceneIconButton>
+                </PressableScale>
+              )}
+              <PressableScale onPress={openHistory}>
+                <SceneIconButton>
+                  <Ionicons name="time-outline" size={20} color={pal.ink} accessibilityLabel={t("ask.history")} />
+                </SceneIconButton>
+              </PressableScale>
+              {turns.length > 0 && (
+                <PressableScale onPress={startNew}>
+                  <SceneIconButton accent>
+                    <Ionicons name="add" size={22} color={pal.onAccent} accessibilityLabel={t("ask.newChat")} />
+                  </SceneIconButton>
+                </PressableScale>
+              )}
+            </View>
+          }
           left={
             <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}>
               <SceneIconButton>
@@ -144,13 +247,12 @@ export default function AskScreen() {
           }
         />
 
-        {/* النطاق */}
+        {/* نطاق ثابت: هذا الكتاب فقط */}
         <View style={[styles.scopes, { flexDirection: dir.row }]}>
-          {(["book", "all"] as Scope[]).map((s) => (
-            <PressableScale key={s} onPress={() => setScope(s)} style={[styles.scope, { backgroundColor: scope === s ? pal.accent : pal.track }]}>
-              <Text style={[styles.scopeTxt, scope === s && styles.scopeTxtOn, { color: scope === s ? pal.onAccent : pal.dim }]}>{t(`ask.scope.${s}`)}</Text>
-            </PressableScale>
-          ))}
+          <View style={[styles.scope, { flexDirection: dir.row, alignItems: "center", gap: 6, backgroundColor: pal.soft }]}>
+            <Ionicons name="book-outline" size={14} color={pal.accent} />
+            <Text style={[styles.scopeTxt, { color: pal.dim }]}>{t("ask.onlyThisBook")}</Text>
+          </View>
         </View>
 
         <ScrollView ref={scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -189,7 +291,7 @@ export default function AskScreen() {
                           <PressableScale key={`${c.bookId}:${c.page}`} onPress={() => openPage(c)} style={[styles.cite, { backgroundColor: pal.soft, borderColor: pal.accent + "40" }]}>
                             <Ionicons name="document-text" size={13} color={pal.accent} />
                             <Text style={[styles.citeTxt, { color: pal.accent }]}>
-                              {scope === "all" ? t("ask.pageOf", { book: c.bookTitle, page: c.page }) : t("ask.page", { page: c.page })}
+                              {t("ask.page", { page: c.page })}
                             </Text>
                           </PressableScale>
                         ))}
@@ -206,6 +308,14 @@ export default function AskScreen() {
                           <Text style={[styles.actionTxt, { color: tn.saved ? SUCCESS : pal.accent }]}>
                             {tn.saved ? t("ask.saved") : t("ask.saveCard")}
                           </Text>
+                        </PressableScale>
+                        <PressableScale onPress={() => printTurns([tn], Date.now())} style={[styles.action, { flexDirection: dir.row }]}>
+                          <Ionicons name="print-outline" size={17} color={pal.accent} />
+                          <Text style={[styles.actionTxt, { color: pal.accent }]}>{t("ask.print")}</Text>
+                        </PressableScale>
+                        <PressableScale onPress={() => deleteTurn(tn)} style={[styles.action, { flexDirection: dir.row }]}>
+                          <Ionicons name="trash-outline" size={17} color={pal.dim} />
+                          <Text style={[styles.actionTxt, { color: pal.dim }]}>{t("common.delete")}</Text>
                         </PressableScale>
                       </View>
                     )}
@@ -265,6 +375,53 @@ export default function AskScreen() {
           </PressableScale>
         </View>
       </KeyboardAvoidingView>
+
+      {/* المحادثات السابقة لهذا الكتاب */}
+      <Modal visible={historyOpen} transparent animationType="slide" onRequestClose={() => setHistoryOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setHistoryOpen(false)} />
+        <View style={[styles.sheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]}>
+          <View style={[styles.sheetHead, { flexDirection: dir.row }]}>
+            <Text style={[styles.sheetTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("ask.history")}</Text>
+            <Pressable onPress={() => setHistoryOpen(false)} hitSlop={10} accessibilityLabel={t("common.close")}>
+              <Ionicons name="close" size={24} color={pal.dim} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 30 }}>
+            {history.length === 0 ? (
+              <Text style={[styles.dim, { color: pal.dim, textAlign: "center", marginTop: 20 }]}>{t("ask.historyEmpty")}</Text>
+            ) : (
+              history.map((h) => {
+                const isCurrent = h.id === session?.id;
+                return (
+                  <View key={h.id} style={[styles.histRow, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: isCurrent ? pal.accent : pal.cardBorder }]}>
+                    <Pressable
+                      style={{ flex: 1 }}
+                      onPress={() => {
+                        openSession(h);
+                        setHistoryOpen(false);
+                      }}
+                    >
+                      <Text style={[styles.histQ, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={2}>
+                        {h.turns[0]?.q ?? ""}
+                      </Text>
+                      <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign }]}>
+                        {new Date(h.updatedAt).toLocaleDateString(lang === "ar" ? "ar-SA-u-ca-gregory" : lang)} · {t("ask.historyCount", { n: h.turns.length })}
+                        {isCurrent ? ` · ${t("ask.historyCurrent")}` : ""}
+                      </Text>
+                    </Pressable>
+                    <Pressable onPress={() => printTurns(h.turns, h.startedAt)} hitSlop={8} accessibilityLabel={t("ask.printChat")}>
+                      <Ionicons name="print-outline" size={20} color={pal.accent} />
+                    </Pressable>
+                    <Pressable onPress={() => confirmDeleteSession(h, isCurrent)} hitSlop={8} accessibilityLabel={t("ask.deleteChat.title")}>
+                      <Ionicons name="trash-outline" size={20} color={pal.dim} />
+                    </Pressable>
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </SceneScreen>
   );
 }
@@ -273,7 +430,12 @@ const styles = StyleSheet.create({
   scopes: { gap: 6, paddingHorizontal: 16, paddingTop: 4 },
   scope: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill },
   scopeTxt: { fontSize: 13, fontWeight: "600" },
-  scopeTxtOn: { fontWeight: "800" },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)" },
+  sheet: { maxHeight: "75%", borderTopLeftRadius: 26, borderTopRightRadius: 26, borderWidth: StyleSheet.hairlineWidth, padding: 18 },
+  sheetHead: { alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  sheetTitle: { fontSize: 19, fontWeight: "800" },
+  histRow: { alignItems: "center", gap: 14, padding: 14, borderRadius: 16, borderWidth: 1 },
+  histQ: { fontSize: 14.5, fontWeight: "700", marginBottom: 4 },
   body: { padding: 16, gap: 16, paddingBottom: 30 },
   cover: {
     alignItems: "center",

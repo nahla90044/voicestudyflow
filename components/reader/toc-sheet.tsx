@@ -43,11 +43,13 @@ export function TocSheet({
   useEffect(() => {
     if (!visible || !pdfPath) return;
     let on = true;
-    getBookToc(pdfPath, total).then((x) => {
-      if (!on) return;
-      setToc(x);
-      if (!x.book.length && x.units.length) setTab("units");
-    });
+    getBookToc(pdfPath, total)
+      .then((x) => {
+        if (!on) return;
+        setToc(x);
+        if (!x.book.length && x.units.length) setTab("units");
+      })
+      .catch(() => on && setToc({ book: [], units: [] }));
     return () => {
       on = false;
     };
@@ -67,9 +69,10 @@ export function TocSheet({
     return () => clearTimeout(id);
   }, [visible, curIdx, tab, toc]);
 
+  // ننتظر انتهاء إغلاق النافذة قبل الانتقال (تغيير الصفحة أثناء إغلاق النافذة كان يسبب اضطرابًا)
   const go = (p: number) => {
     onClose();
-    onGo(p);
+    setTimeout(() => onGo(p), 350);
   };
 
   return (

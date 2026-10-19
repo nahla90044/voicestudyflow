@@ -23,11 +23,12 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { ScrollView as GHScrollView } from "react-native-gesture-handler";
 import { InkLayer, InkToolbar, INK_COLORS } from "../../components/reader/ink-layer";
 import { TocSheet } from "../../components/reader/toc-sheet";
+import { ErrorBoundary } from "../../components/brand/error-boundary";
 import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../../lib/ink";
 
 import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
-import { UsageBar, UsageChip } from "../../components/brand/usage-chip";
+import { UsageBar } from "../../components/brand/usage-chip";
 import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
 import * as Print from "expo-print";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
@@ -3556,7 +3557,6 @@ export default function ReaderScreen() {
           ))}
         </View>
         {/* عدّاد الاستهلاك: الصفحات لتبويب الاستماع، والطلبات لتبويب الدراسة */}
-        {toolTab === "listen" ? <UsageChip kind="pages" /> : toolTab === "study" ? <UsageChip kind="ai" /> : null}
         <View style={[styles.inGrid, { flexDirection: dir.row }]}>
           {toolTab === "listen" ? (
             <>
@@ -3840,7 +3840,6 @@ export default function ReaderScreen() {
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
-            <UsageChip kind="ai" />
 
             <View style={styles.aiActions}>
               <Pressable
@@ -4501,6 +4500,7 @@ export default function ReaderScreen() {
         </View>
       </Modal>
 
+      <ErrorBoundary where="toc" compact>
       <TocSheet
         visible={tocOpen}
         pdfPath={pdfPath}
@@ -4510,6 +4510,7 @@ export default function ReaderScreen() {
         onGo={(p) => gotoPage(p)}
         onClose={() => setTocOpen(false)}
       />
+      </ErrorBoundary>
 
       {coach.overlay}
     </SafeAreaView>
@@ -5596,3 +5597,6 @@ const styles = StyleSheet.create({
   statusTxt: { color: Palette.neonCyan, textAlign: "center", fontWeight: "700", fontSize: 12, marginTop: 2 },
   warnTxt: { color: Palette.warn, textAlign: "center", fontWeight: "700", fontSize: 12, marginTop: 4 },
 });
+
+// خطأ عرض في هذه الشاشة → رسالة هادئة بدل إغلاق التطبيق
+export { RouteErrorBoundary as ErrorBoundary } from "../../components/brand/error-boundary";

@@ -16,7 +16,6 @@ import { celebrate } from "../components/brand/feedback-host";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { VideoStage } from "../components/brand/video-stage";
-import { UsageChip } from "../components/brand/usage-chip";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
@@ -437,7 +436,6 @@ export default function UnitVideoScreen() {
               {job && job.total > 1 ? (
                 <Text style={[styles.dim, { color: pal.dim }]}>{t("video.parts", { n: job.done, total: job.total })}</Text>
               ) : null}
-              <UsageChip kind="ai" />
               <Text style={[styles.dim, { color: pal.dim }]}>{t("video.bgHint")}</Text>
             </>
           )}
@@ -553,7 +551,6 @@ export default function UnitVideoScreen() {
               <Text style={[styles.primaryTxt, { color: pal.ink }]}>{t("video.options")}</Text>
             </Pressable>
           ) : null}
-          <UsageChip kind="ai" />
           {complete ? (
             <Pressable onPress={() => router.push({ pathname: "/unit-quiz", params: quizParams })} style={[styles.primary, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
               <Ionicons name="school-outline" size={18} color={pal.onAccent} />

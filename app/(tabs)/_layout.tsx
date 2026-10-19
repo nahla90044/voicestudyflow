@@ -29,3 +29,6 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
+// خطأ عرض في هذه الشاشة → رسالة هادئة بدل إغلاق التطبيق
+export { RouteErrorBoundary as ErrorBoundary } from "../../components/brand/error-boundary";

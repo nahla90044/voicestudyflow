@@ -49,13 +49,17 @@ export async function myBooks(): Promise<QABook[]> {
 /**
  * يسأل كتابًا واحدًا أو عدة كتب. يرمي خطأ «NO_TEXT» إن لم تكن أي صفحة جاهزة بعد.
  */
-export async function askBooks(books: QABook[], question: string): Promise<QAAnswer> {
+export async function askBooks(books: QABook[], question: string, recent: string[] = []): Promise<QAAnswer> {
   const perBook = books.length > 1 ? 400 : 1200;
   const all = (await Promise.all(books.map((b, i) => cachedPages(b.pdf_path, i + 1, perBook)))).flat();
   if (all.length === 0) throw new Error("NO_TEXT");
 
   const chosen = selectPages(question, all);
-  const raw = await aiAssist("ask", buildContext(chosen), question.trim() + citationInstruction(), undefined, undefined, undefined, undefined, question.trim());
+  const raw = await aiAssist("ask", buildContext(chosen), question.trim() + citationInstruction(), undefined, undefined, undefined, undefined, question.trim(), {
+    bookId: books[0]?.id,
+    bookTitle: books[0]?.title,
+    recent,
+  });
   const { text, cites } = parseCitations(raw);
 
   // نُبقي فقط الاستشهادات بصفحات أُرسلت فعلًا (لا نعرض رقم صفحة اخترعه الذكاء)

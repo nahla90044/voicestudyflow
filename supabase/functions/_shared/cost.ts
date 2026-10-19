@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export type CostRow = {
-  fn: "ai-assist" | "tts" | "card-image";
+  fn: "ai-assist" | "tts" | "card-image" | "book-toc";
   action?: string;
   model?: string;
   input_tokens?: number;

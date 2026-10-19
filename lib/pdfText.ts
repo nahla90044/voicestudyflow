@@ -70,7 +70,20 @@ function hasBrokenTextLayer(raw: string): boolean {
   const moji = (raw.match(/[\u0080-\u00FF\u0152-\u0192\u02C6-\u02DC]/g) || []).length;
   const letters = (raw.match(/\p{L}/gu) || []).length;
   if (letters > 40 && moji / letters > 0.12) return true;
+  // نوع ٣: روابط عربية مقلوبة — الخط يحفظ «لا/لأ/لم» بترتيب بصري فتُستخرج «ال/أل/مل»
+  //         («الكالم» بدل «الكلام»، «األدبيات» بدل «الأدبيات»)، مع كلمات ساقطة أو مبعثرة.
+  if (hasReversedLigatures(raw)) return true;
   return false;
+}
+
+/** علامات شبه قاطعة لروابط مقلوبة: تسلسلات لا ترد في عربية صحيحة («األ»، «اإل»، «اآل»)، وكلمات تبدأ بـ«امل» بدل «الم». */
+export function hasReversedLigatures(raw: string): boolean {
+  const words = (raw.match(/[\u0600-\u06FF]+/g) || []).length;
+  if (words < 15) return false;
+  const hamzaAlef = (raw.match(/ا[أإآ]ل/g) || []).length; // األ / اإل / اآل
+  const meem = (raw.match(/(^|[\s«(])[وفبك]?امل[\u0621-\u064A]/g) || []).length; // املتكرر / وامللخص
+  const hits = hamzaAlef * 2 + meem;
+  return hits >= 3 && hits / words >= 0.015;
 }
 
 // يوحّد أحرف العرض العربية المعزولة (ﻣ ﻘ) إلى صورتها القياسية (م ق) ليعيد المحرّك ربطها
@@ -227,7 +240,9 @@ export async function extractPdfPageText(
       .eq("pdf_path", pdfPath)
       .eq("page", page)
       .maybeSingle();
-    if (data && typeof data.source === "string" && data.source.endsWith(EXTRACT_VER)) {
+    // نص مخزّن من الطبقة النصية وفيه روابط مقلوبة (خُزّن قبل هذا الكشف) → نعيد الاستخراج بالتعرّف الضوئي
+    const staleLigatures = !!data && String(data.source ?? "").startsWith("text") && hasReversedLigatures(String(data.text ?? ""));
+    if (data && !staleLigatures && typeof data.source === "string" && data.source.endsWith(EXTRACT_VER)) {
       const cachedText = String(data.text ?? "");
       const real = cachedText.trim().length >= MIN_REAL_TEXT && !data.source.startsWith("empty");
       return {

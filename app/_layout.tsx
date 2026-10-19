@@ -23,6 +23,7 @@ import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
 import { getCurrentLang, LanguageProvider } from "../lib/i18n";
 import { dangerAlert, FeedbackHost, isDangerAlert } from "../components/brand/feedback-host";
+import { installGlobalErrorLogging } from "../lib/errorLog";
 import { dict } from "../lib/i18n/strings";
 import { closeReadingCard } from "../lib/readingCard";
 import { ThemeProvider } from "../lib/themeContext";
@@ -40,6 +41,10 @@ Alert.alert = (title, message, buttons, options) =>
     : nativeAlert(title, message, buttons && buttons.length ? buttons : [{ text: tr("common.ok") }], options);
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+installGlobalErrorLogging(); // أي خطأ قاتل يُسجَّل على السيرفر قبل الإغلاق
+
+// خطأ عرض في أي شاشة → رسالة هادئة بدل إغلاق التطبيق
+export { RouteErrorBoundary as ErrorBoundary } from "../components/brand/error-boundary";
 
 export default function RootLayout() {
   const router = useRouter();
