@@ -3,7 +3,7 @@
 // والاستخدام، والمرادفات، والأضداد، وجملًا مثالية. مع استماع وتحويل لبطاقة مراجعة.
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { Radius } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
@@ -41,6 +41,7 @@ function VerbForm({ label, value, pal }: { label: string; value: string; pal: Sc
 
 export function WordSheet({ word, onClose, onRemoved }: Props) {
   const { t } = useI18n();
+  const { height: winH } = useWindowDimensions();
   const dir = useDir();
   const { pal } = useScene();
   const tint = tints(pal);
@@ -94,8 +95,10 @@ export function WordSheet({ word, onClose, onRemoved }: Props) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={[styles.mask, { backgroundColor: pal.dark ? "rgba(0,0,0,0.6)" : "rgba(31,53,39,0.35)" }]} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: pal.card, borderColor: pal.cardBorder }]} onPress={() => {}}>
+      {/* الخلفية للإغلاق منفصلة عن النافذة: كانت النافذة داخل عنصر يلتقط اللمس فيمنع تمرير المعنى */}
+      <View style={[styles.mask, { backgroundColor: pal.dark ? "rgba(0,0,0,0.6)" : "rgba(31,53,39,0.35)" }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={t("common.close")} />
+        <View style={[styles.sheet, { backgroundColor: pal.card, borderColor: pal.cardBorder, maxHeight: winH * 0.88 }]}>
           <View style={[styles.grip, { backgroundColor: pal.track }]} />
           <View style={[styles.head, { flexDirection: dir.row }]}>
             <View style={{ flex: 1 }}>
@@ -131,7 +134,7 @@ export function WordSheet({ word, onClose, onRemoved }: Props) {
             </Pressable>
           </View>
 
-          <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: 14, paddingBottom: 6 }}>
+          <ScrollView style={{ flexGrow: 0, maxHeight: winH * 0.62 }} contentContainerStyle={{ gap: 14, paddingBottom: 6 }} showsVerticalScrollIndicator>
             {!!word.context && (
               <Text style={[styles.context, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={3}>
                 «{word.context}»
@@ -231,8 +234,8 @@ export function WordSheet({ word, onClose, onRemoved }: Props) {
               <Text style={[styles.btnTxt, { color: tint.danger.fg }]}>{t("words.remove")}</Text>
             </PressableScale>
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

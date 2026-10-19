@@ -6,64 +6,28 @@
 // - السيناريو يُخزَّن، وصوت الراوي يُحفظ على الجهاز أثناء المشاهدة، فالعودة فورية وبلا إنترنت.
 import { Ionicons } from "@expo/vector-icons";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
-import { SlideView } from "../components/brand/slide-view";
+import { VideoStage } from "../components/brand/video-stage";
 import { UsageChip } from "../components/brand/usage-chip";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
-import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoSeconds, type VideoScene, type VideoScript } from "../lib/videoScript";
+import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoSeconds, type VideoScript } from "../lib/videoScript";
 import { startVideoJob, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking } from "../lib/voice";
 
 const THINK_SECONDS = 5;
 const RATES = [1, 1.15, 1.3];
 const KEEP_TAG = "vsf-video-play";
-
-/** مشهد «سؤال سريع»: السؤال، ثم عدّ تنازلي للتفكير، ثم الجواب */
-function CheckView({ scene, stage, left }: { scene: VideoScene; stage: "ask" | "think" | "reveal"; left: number }) {
-  const { t } = useI18n();
-  const dir = useDir();
-  const reveal = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    reveal.setValue(0);
-    if (stage === "reveal") Animated.timing(reveal, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [stage, reveal, scene]);
-  return (
-    <View style={styles.check}>
-      <LinearGradient colors={["#0F766E", "#1D4ED8"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
-      <View style={[styles.checkTag, { alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
-        <Text style={styles.checkTagTxt}>
-          <Ionicons name="help-circle-outline" size={15} color="#FFFFFF" /> {t("video.check")}
-        </Text>
-      </View>
-      <Text style={[styles.checkQ, { textAlign: dir.textAlign }]}>{scene.question}</Text>
-      {stage === "think" ? (
-        <View style={styles.thinkWrap}>
-          <View style={styles.thinkCircle}>
-            <Text style={styles.thinkNum}>{left}</Text>
-          </View>
-          <Text style={styles.thinkTxt}>{t("video.think")}</Text>
-        </View>
-      ) : stage === "reveal" ? (
-        <Animated.View style={[styles.answer, { opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-          <Text style={[styles.answerHead, { textAlign: dir.textAlign }]}>
-            <Ionicons name="checkmark-circle-outline" size={16} color="#047857" /> {t("video.answer")}
-          </Text>
-          <Text style={[styles.answerTxt, { textAlign: dir.textAlign }]}>{scene.answer}</Text>
-        </Animated.View>
-      ) : null}
-    </View>
-  );
-}
 
 export default function UnitVideoScreen() {
   const { t } = useI18n();
@@ -147,6 +111,23 @@ export default function UnitVideoScreen() {
   const [captions, setCaptions] = useState(true);
   const [ambOpen, setAmbOpen] = useState(false);
   const amb = useAmbient();
+  const [prog, setProg] = useState(0); // تقدّم نطق الراوي في المشهد الحالي (٠..١)
+  const [full, setFull] = useState(false); // ملء الشاشة (مع دوران الجهاز)
+  const [ctrls, setCtrls] = useState(true); // أزرار ملء الشاشة تختفي وحدها وتظهر بلمسة
+  useEffect(() => {
+    if (!full) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+      return;
+    }
+    ScreenOrientation.unlockAsync().catch(() => {});
+    setCtrls(true);
+  }, [full]);
+  useEffect(() => {
+    if (!full || !ctrls || !playing) return;
+    const id = setTimeout(() => setCtrls(false), 3500);
+    return () => clearTimeout(id);
+  }, [full, ctrls, playing]);
+  useEffect(() => () => void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {}), []);
   const [audioSave, setAudioSave] = useState<{ done: number; total: number } | "saved" | null>(null);
   const tokenRef = useRef(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -168,9 +149,12 @@ export default function UnitVideoScreen() {
   useEffect(() => () => halt(), [halt]);
 
   function say(text: string, my: number, then: () => void) {
+    setProg(0);
     speakText(text, {
       voiceId: DEFAULT_VOICE_ID,
       rate: rateRef.current,
+      // تقدّم النطق الفعلي → تظهر النقاط والترجمة لحظة قولها
+      onProgress: (f) => my === tokenRef.current && setProg(f),
       onDone: () => my === tokenRef.current && then(),
       onError: () => my === tokenRef.current && then(), // مقطع تعذّر → نكمل لا نتوقف
     });
@@ -295,8 +279,23 @@ export default function UnitVideoScreen() {
 
   const scenes = script?.scenes ?? [];
   const cur = scenes[idx];
-  const total = Math.max(scenes.length, 1);
-  const stageH = Math.min(winH * 0.56, winW * 0.78, 560);
+  // إطار الفيديو ١٦:٩: يملأ عرض الشاشة (حتى ١١٠٠) — كل شيء ظاهر بلا تمرير
+  const stageW = Math.min(winW - Spacing.lg * 2, 1100);
+  const fullW = Math.min(winW, winH * (16 / 9));
+  // الترجمة: الجملة التي ينطقها الراوي الآن (من تقدّم الصوت)
+  const capText = (() => {
+    if (!cur || !captions) return null;
+    const txt = cur.kind === "check" && stage === "reveal" && cur.answer ? cur.answer : cur.narration;
+    const sents = txt.match(/[^.!؟?،]+[.!؟?]*/g)?.map((x) => x.trim()).filter(Boolean) ?? [txt];
+    const total = sents.reduce((n, x) => n + x.length, 0) || 1;
+    let acc = 0;
+    for (const x of sents) {
+      acc += x.length;
+      if (acc / total >= prog) return x;
+    }
+    return sents[sents.length - 1];
+  })();
+
   const fmtEta = (sec: number) => {
     const m = Math.round(sec / 60);
     return sec < 60 ? t("summary.etaLess") : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
@@ -304,6 +303,8 @@ export default function UnitVideoScreen() {
   const preparing = !scenes.length;
   const totalSecs = videoSeconds(scenes, RATES[rateIdx], 0, THINK_SECONDS);
   const leftSecs = videoSeconds(scenes, RATES[rateIdx], idx, THINK_SECONDS);
+  const curSecs = cur ? videoSeconds([cur], RATES[rateIdx], 0, THINK_SECONDS) : 0;
+  const elapsedSecs = Math.max(0, totalSecs - leftSecs + (cur?.kind === "check" ? 0 : prog * curSecs));
   const fmtDur = (sec: number) => {
     const m = Math.round(sec / 60);
     return sec < 60 ? t("video.durSecs", { n: Math.max(1, Math.round(sec / 10) * 10) }) : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
@@ -330,7 +331,10 @@ export default function UnitVideoScreen() {
   const inStage = Math.min(0.97, Math.max(byTime, byParts));
   maxPct.current = Math.max(maxPct.current, inStage);
   const prepPct = (stageNow === "script" ? 0.5 : 0) + maxPct.current * 0.5;
-  const fmtClock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+  const fmtClock = (sec: number) => {
+    const n = Math.max(0, Math.round(sec));
+    return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  };
   const failed = job && job.status !== "running" && !complete;
   const quizParams: Record<string, string> = { pdf_path: pdfPath, title: unitTitle, book_title: bookTitle };
   if (pageMode) quizParams.page = String(pageNum);
@@ -425,9 +429,9 @@ export default function UnitVideoScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* الشاشة */}
-          <View style={{ minHeight: stageH, justifyContent: "center" }}>
+          <View style={{ justifyContent: "center" }}>
             {ended ? (
-              <View style={[styles.endCard, { minHeight: stageH }]}>
+              <View style={[styles.endCard, { minHeight: Math.max(stageW * (9 / 16), 300) }]}>
                 <LinearGradient colors={["#5B4BF5", "#2A9DF4"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
                 <Ionicons name="trophy-outline" size={52} color="#FFFFFF" />
                 <Text style={styles.endTitle}>{t("video.endTitle")}</Text>
@@ -441,12 +445,22 @@ export default function UnitVideoScreen() {
                   <Text style={styles.endAgain}>{t("video.again")}</Text>
                 </Pressable>
               </View>
-            ) : cur?.kind === "check" ? (
-              <View style={{ minHeight: stageH }}>
-                <CheckView scene={cur} stage={stage} left={thinkLeft} />
-              </View>
             ) : cur ? (
-              <SlideView slide={cur} index={idx} total={complete ? scenes.length : Math.max(scenes.length, idx + 2)} maxBulletsHeight={stageH - 120} />
+              <Pressable onPress={() => setFull(true)} accessibilityLabel={t("video.fullscreen")} style={{ alignSelf: "center" }}>
+                <VideoStage
+                  scene={cur}
+                  index={idx}
+                  total={complete ? scenes.length : Math.max(scenes.length, idx + 2)}
+                  progress={playing ? prog : 1}
+                  stage={stage}
+                  thinkLeft={thinkLeft}
+                  caption={playing ? capText : null}
+                  width={stageW}
+                />
+                <View style={styles.fsBtn}>
+                  <Ionicons name="expand" size={18} color="#FFFFFF" />
+                </View>
+              </Pressable>
             ) : null}
           </View>
 
@@ -457,18 +471,12 @@ export default function UnitVideoScreen() {
               {t(complete ? "video.duration" : "video.durationSoFar", { time: fmtDur(totalSecs) })}
             </Text>
             {(playing || idx > 0) && !ended ? (
-              <Text style={[styles.durLeft, { color: pal.dim }]}>{t("video.remaining", { time: fmtDur(leftSecs) })}</Text>
+              <Text style={[styles.durLeft, { color: pal.dim }]}>
+                {fmtClock(elapsedSecs)} / {fmtClock(totalSecs)}
+              </Text>
             ) : null}
           </View>
 
-          {/* الراوي (نص الشرح) */}
-          {captions && cur && !ended ? (
-            <View style={[styles.caption, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
-              <Text style={[styles.captionTxt, { color: pal.ink, textAlign: dir.textAlign }]}>
-                {cur.kind === "check" && stage === "reveal" && cur.answer ? cur.answer : cur.narration}
-              </Text>
-            </View>
-          ) : null}
           {waitingMore ? <Text style={[styles.dim, { color: pal.dim }]}>{t("video.waitingMore")}</Text> : null}
 
           {/* شريط المشاهد: كل جزء مشهد، والضغط ينتقل إليه */}
@@ -539,6 +547,46 @@ export default function UnitVideoScreen() {
           <View style={{ height: 24 }} />
         </ScrollView>
       )}
+      {/* ملء الشاشة: الإطار بأكبر مقاس يناسب الشاشة (يدعم الدوران)، والأزرار تظهر بلمسة وتختفي وحدها */}
+      <Modal visible={full} animationType="fade" supportedOrientations={["portrait", "landscape", "landscape-left", "landscape-right"]} onRequestClose={() => setFull(false)}>
+        <Pressable style={styles.fsWrap} onPress={() => setCtrls((v) => !v)}>
+          {cur && !ended ? (
+            <VideoStage
+              scene={cur}
+              index={idx}
+              total={complete ? scenes.length : Math.max(scenes.length, idx + 2)}
+              progress={playing ? prog : 1}
+              stage={stage}
+              thinkLeft={thinkLeft}
+              caption={playing ? capText : null}
+              width={fullW}
+            />
+          ) : (
+            <Text style={styles.fsEnd}>{t("video.endTitle")}</Text>
+          )}
+          {ctrls ? (
+            <View style={styles.fsCtrls} pointerEvents="box-none">
+              <Pressable onPress={() => setFull(false)} hitSlop={10} style={[styles.fsClose, { [dir.isRTL ? "left" : "right"]: 20 }]}>
+                <Ionicons name="contract" size={22} color="#FFFFFF" />
+              </Pressable>
+              <View style={[styles.fsBar, { flexDirection: dir.row }]}>
+                <Pressable onPress={() => jump(idx - 1)} hitSlop={10}>
+                  <Ionicons name={dir.isRTL ? "play-skip-forward" : "play-skip-back"} size={26} color="#FFFFFF" />
+                </Pressable>
+                <Pressable onPress={togglePlay} hitSlop={10} style={styles.fsPlay}>
+                  <Ionicons name={playing ? "pause" : "play"} size={32} color="#0F172A" />
+                </Pressable>
+                <Pressable onPress={() => jump(idx + 1)} hitSlop={10}>
+                  <Ionicons name={dir.isRTL ? "play-skip-back" : "play-skip-forward"} size={26} color="#FFFFFF" />
+                </Pressable>
+                <Text style={styles.fsTime}>
+                  {fmtClock(elapsedSecs)} / {fmtClock(totalSecs)}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </Pressable>
+      </Modal>
       <AmbientSheet visible={ambOpen} onClose={() => setAmbOpen(false)} amb={amb} />
     </SceneScreen>
   );
@@ -563,6 +611,14 @@ const styles = StyleSheet.create({
   caption: { borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth, padding: 14 },
   captionTxt: { fontSize: 15, lineHeight: 26, fontWeight: "600" },
   segs: { gap: 3, alignItems: "center" },
+  fsBtn: { position: "absolute", top: 10, left: 10, width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center" },
+  fsWrap: { flex: 1, backgroundColor: "#000000", alignItems: "center", justifyContent: "center" },
+  fsEnd: { color: "#FFFFFF", fontSize: 22, fontWeight: "900" },
+  fsCtrls: { ...StyleSheet.absoluteFillObject },
+  fsClose: { position: "absolute", top: 40, width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
+  fsBar: { position: "absolute", bottom: 36, alignSelf: "center", alignItems: "center", gap: 26, backgroundColor: "rgba(0,0,0,0.55)", paddingHorizontal: 26, paddingVertical: 12, borderRadius: 999 },
+  fsPlay: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  fsTime: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
   seg: { height: 6, borderRadius: 3 },
   segCheck: { height: 10, borderRadius: 5 },
   controls: { alignItems: "center", justifyContent: "center", gap: 14 },

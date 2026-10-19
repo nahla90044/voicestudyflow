@@ -37,8 +37,9 @@ export function AmbientSheet({ visible, onClose, amb }: { visible: boolean; onCl
   const { pal } = useScene();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} supportedOrientations={["portrait", "landscape"]}>
-      <Pressable style={styles.mask} onPress={onClose}>
-        <Pressable style={[styles.sheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]} onPress={() => {}}>
+      <View style={styles.mask}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.sheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]}>
           <View style={{ flexDirection: dir.row, alignItems: "center", justifyContent: "space-between" }}>
             <Text style={[styles.title, { color: pal.ink }]}>
               <Ionicons name="headset-outline" size={18} color={pal.accent} /> {t("summary.ambient.title")}
@@ -68,8 +69,8 @@ export function AmbientSheet({ visible, onClose, amb }: { visible: boolean; onCl
               );
             })}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

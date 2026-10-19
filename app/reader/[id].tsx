@@ -1947,7 +1947,7 @@ export default function ReaderScreen() {
 
   // تقليب الصفحات بالسحب: الصفحة تتبع الإصبع، والمجاورة تظهر من الطرف، وعند الإفلات
   // تكتمل الحركة بنابض يحفظ سرعة الإصبع (أو ترجع لمكانها). أثناء القراءة يكمل القارئ من الصفحة الجديدة.
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const pagerCtl = useRef({ arabic: false, playing: false, canPrev: false, canNext: false, commit: (_d: number) => {} });
   const pagerResetRef = useRef(false); // الصفحة الجديدة ستُرسم → نعيد الإزاحة بعد رسمها (بلا وميض)
@@ -4047,8 +4047,10 @@ export default function ReaderScreen() {
 
       {/* قاموس: معنى الكلمة الملموسة */}
       <Modal visible={dictOpen} transparent animationType="fade" onRequestClose={() => setDictOpen(false)}>
-        <Pressable style={styles.dictMask} onPress={() => setDictOpen(false)}>
-          <Pressable style={styles.dictCard} onPress={() => {}}>
+        {/* خلفية الإغلاق منفصلة: كانت البطاقة داخل عنصر يلتقط اللمس فيمنع تمرير المعنى الطويل */}
+        <View style={styles.dictMask}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setDictOpen(false)} />
+          <View style={styles.dictCard}>
             <View style={styles.dictHead}>
               <Text style={styles.dictWord}>{dictWord}</Text>
               <Pressable onPress={() => setDictOpen(false)} hitSlop={8}>
@@ -4062,15 +4064,17 @@ export default function ReaderScreen() {
               </View>
             ) : (
               <>
-                <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
+                <ScrollView style={{ flexGrow: 0, maxHeight: screenH * 0.5 }} showsVerticalScrollIndicator>
+                  <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
+                </ScrollView>
                 <Pressable onPress={() => void saveToMyWords(dictWord, dictContextRef.current)} style={[styles.dictSave, { flexDirection: dir.row }]}>
                   <Ionicons name="bookmark" size={15} color={SKY.onAccent} />
                   <Text style={styles.dictSaveTxt}>{t("words.saveMore")}</Text>
                 </Pressable>
               </>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       <WordSheet word={wordSheet} onClose={() => setWordSheet(null)} />
