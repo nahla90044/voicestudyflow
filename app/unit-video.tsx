@@ -9,7 +9,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
@@ -17,10 +17,10 @@ import { SlideView } from "../components/brand/slide-view";
 import { UsageChip } from "../components/brand/usage-chip";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
-import { addSavedItem } from "../lib/savedStudy";
+import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
-import { getCachedVideo, saveVideoAudio, sceneSpeech, videoSeconds, type VideoScene, type VideoScript } from "../lib/videoScript";
+import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoSeconds, type VideoScene, type VideoScript } from "../lib/videoScript";
 import { startVideoJob, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking } from "../lib/voice";
 
@@ -253,6 +253,46 @@ export default function UnitVideoScreen() {
     }
   }
 
+  // إعادة توليد الفيديو من جديد، أو حذفه — كلاهما بطلب الطالب (ويُحسب من طلباته عند التوليد)
+  function onVideoOptions() {
+    Alert.alert(t("video.options"), t("video.optionsBody"), [
+      {
+        text: t("video.regen"),
+        onPress: async () => {
+          halt();
+          setPlaying(false);
+          setEnded(false);
+          setIdx(0);
+          await clearVideo(pdfPath, src);
+          setScript(null);
+          setComplete(false);
+          setJob(null);
+          setAudioSave(null);
+          setRunId((n) => n + 1);
+        },
+      },
+      {
+        text: t("video.delete"),
+        style: "destructive",
+        onPress: () =>
+          Alert.alert(t("video.delete"), t("video.deleteBody"), [
+            { text: t("common.cancel"), style: "cancel" },
+            {
+              text: t("common.delete"),
+              style: "destructive",
+              onPress: async () => {
+                halt();
+                await clearVideo(pdfPath, src);
+                await removeSavedItem(`video|${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`);
+                router.back();
+              },
+            },
+          ]),
+      },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  }
+
   const scenes = script?.scenes ?? [];
   const cur = scenes[idx];
   const total = Math.max(scenes.length, 1);
@@ -483,6 +523,12 @@ export default function UnitVideoScreen() {
             ) : null}
           </SceneCard>
 
+          {complete ? (
+            <Pressable onPress={onVideoOptions} style={[styles.primary, { backgroundColor: pal.soft, flexDirection: dir.row }]}>
+              <Ionicons name="options-outline" size={18} color={pal.ink} />
+              <Text style={[styles.primaryTxt, { color: pal.ink }]}>{t("video.options")}</Text>
+            </Pressable>
+          ) : null}
           <UsageChip kind="ai" />
           {complete ? (
             <Pressable onPress={() => router.push({ pathname: "/unit-quiz", params: quizParams })} style={[styles.primary, { backgroundColor: pal.accent, flexDirection: dir.row }]}>

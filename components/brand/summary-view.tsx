@@ -102,6 +102,64 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
         return <React.Fragment key={key}>{callout("search-outline", t("summary.explain"), "#2563EB", b.text, b.title)}</React.Fragment>;
       case "important":
         return <React.Fragment key={key}>{callout("alert-circle-outline", t("summary.important"), "#D97706", b.text)}</React.Fragment>;
+      case "exercise":
+        return (
+          <View key={key} style={{ gap: 6 }}>
+            <View style={[styles.exQ, { backgroundColor: pal.dark ? "#1E293B" : "#F1F5F9", borderColor: pal.dark ? "#334155" : "#CBD5E1" }]}>
+              <Text style={[styles.exTag, ta]}>
+                <Ionicons name="create-outline" size={13} color={pal.dark ? "#CBD5E1" : "#334155"} /> {t("summary.exercise")}
+              </Text>
+              <Text style={[styles.body, { color: ink, fontWeight: "800" }, ta]}>{b.q}</Text>
+            </View>
+            {/* الحل بلون مختلف دائمًا */}
+            <View style={[styles.sol, { backgroundColor: pal.dark ? "#064E3B" : "#ECFDF5", borderColor: "#34D399" }]}>
+              {b.steps.length ? (
+                <>
+                  <Text style={[styles.solHead, ta]}>{t("summary.steps")}</Text>
+                  {b.steps.map((x, i) => (
+                    <Text key={i} style={[styles.body, { color: pal.dark ? "#D1FAE5" : "#065F46" }, ta]}>
+                      {i + 1}. {x}
+                    </Text>
+                  ))}
+                </>
+              ) : null}
+              {b.answer ? (
+                <>
+                  <Text style={[styles.solHead, ta]}>
+                    <Ionicons name="checkmark-circle" size={14} color="#10B981" /> {t("summary.solution")}
+                  </Text>
+                  <Text style={[styles.body, { color: pal.dark ? "#D1FAE5" : "#065F46", fontWeight: "800" }, ta]}>{b.answer}</Text>
+                </>
+              ) : null}
+            </View>
+          </View>
+        );
+      case "case":
+        return (
+          <View key={key} style={{ gap: 6 }}>
+            <View style={[styles.exQ, { backgroundColor: pal.dark ? "#2E1065" : "#F5F3FF", borderColor: pal.dark ? "#5B21B6" : "#DDD6FE" }]}>
+              <Text style={[styles.exTag, { color: pal.dark ? "#DDD6FE" : "#6D28D9" }, ta]}>
+                <Ionicons name="briefcase-outline" size={13} color={pal.dark ? "#DDD6FE" : "#6D28D9"} /> {t("summary.case")}
+                {b.title ? ` — ${b.title}` : ""}
+              </Text>
+              <Text style={[styles.body, { color: ink }, ta]}>{b.text}</Text>
+            </View>
+            {b.analysis ? (
+              <View style={[styles.sol, { backgroundColor: pal.dark ? "#451A03" : "#FFFBEB", borderColor: "#FCD34D" }]}>
+                <Text style={[styles.solHead, { color: "#D97706" }, ta]}>{t("summary.analysis")}</Text>
+                <Text style={[styles.body, { color: ink }, ta]}>{b.analysis}</Text>
+              </View>
+            ) : null}
+            {b.qa.map((x, i) => (
+              <View key={i} style={{ gap: 4 }}>
+                <Text style={[styles.body, { color: ink, fontWeight: "800" }, ta]}>{x.q}</Text>
+                <View style={[styles.sol, { backgroundColor: pal.dark ? "#064E3B" : "#ECFDF5", borderColor: "#34D399" }]}>
+                  <Text style={[styles.body, { color: pal.dark ? "#D1FAE5" : "#065F46", fontWeight: "700" }, ta]}>{x.a}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        );
     }
   };
 
@@ -152,6 +210,10 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
 }
 
 const styles = StyleSheet.create({
+  exQ: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 6 },
+  exTag: { fontSize: 12.5, fontWeight: "900", color: "#334155" },
+  sol: { borderWidth: 1.5, borderRadius: 14, padding: 12, gap: 4 },
+  solHead: { fontSize: 13.5, fontWeight: "900", color: "#059669" },
   hero: { borderRadius: 22, padding: 20, overflow: "hidden", gap: 6 },
   orb: { position: "absolute", top: -60, width: 170, height: 170, borderRadius: 85, backgroundColor: "rgba(255,255,255,0.12)" },
   heroBook: { color: "rgba(255,255,255,0.8)", fontSize: 12.5, fontWeight: "800" },

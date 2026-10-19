@@ -9,7 +9,9 @@ import { runParts, type PartsProgress } from "./partsRunner";
 import type { StudySummary } from "./studySummary";
 import { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript } from "./videoScriptCore";
 export { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript };
-import { getUnitContent, setUnitContent } from "./unitContent";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { getUnitContent, removeUnitContent, removeUnitContentWhere, setUnitContent } from "./unitContent";
 import { summaryCacheKey, type SummarySource } from "./unitSummary";
 import { DEFAULT_VOICE_ID, prefetchText, speechCharsPerSec } from "./voice";
 
@@ -24,6 +26,20 @@ function cacheIds(src: SummarySource) {
 export async function getCachedVideo(pdfPath: string, src: SummarySource): Promise<VideoScript | null> {
   const v = await getUnitContent<VideoScript>(pdfPath, cacheIds(src).id, "video").catch(() => null);
   return v?.scenes?.length ? v : null;
+}
+
+/** يحذف الفيديو المخزَّن وكل أجزائه ومهامه (إعادة التوليد أو الحذف) */
+export async function clearVideo(pdfPath: string, src: SummarySource): Promise<void> {
+  const ids = cacheIds(src);
+  await removeUnitContent(pdfPath, ids.id, "video");
+  await removeUnitContentWhere(pdfPath, "videopart", (u) => u >= ids.id * 1e4 && u < (ids.id + 1) * 1e4);
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((x) => {
+      const m = x.match(/^vsf:aijob:vid:(.*):(\d+)$/);
+      return !!m && m[1] === pdfPath && Math.floor(Number(m[2]) / 1e4) === ids.id;
+    });
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {}
 }
 
 /** السيناريو كاملًا: من المخزن، أو يُولَّد من الملخّص (الأجزاء معًا ببثّ) ويُخزَّن عند اكتمال كل الأجزاء */

@@ -11,7 +11,7 @@ import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
 import { UsageChip } from "../components/brand/usage-chip";
 import { useDir, useI18n } from "../lib/i18n";
-import { addSavedItem } from "../lib/savedStudy";
+import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
 import { clearSummary, summaryCacheKey, summaryRange, type SummarySource } from "../lib/unitSummary";
@@ -129,6 +129,24 @@ export default function UnitSummaryScreen() {
     };
     Alert.alert(t("summary.redo.title"), t("summary.redo.body"), [
       { text: t("summary.redo.same"), onPress: () => void restart() },
+      {
+        text: t("summary.delete"),
+        style: "destructive",
+        onPress: () =>
+          Alert.alert(t("summary.delete"), t("summary.deleteBody"), [
+            { text: t("common.cancel"), style: "cancel" },
+            {
+              text: t("common.delete"),
+              style: "destructive",
+              onPress: async () => {
+                stopSummary();
+                await clearSummary(pdfPath, src);
+                await removeSavedItem(`summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`);
+                router.back();
+              },
+            },
+          ]),
+      },
       {
         text: t("summary.redo.pages"),
         onPress: () =>

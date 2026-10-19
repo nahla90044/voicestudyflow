@@ -11,7 +11,10 @@ export type SummaryBlock =
   | { type: "table"; title?: string; headers: string[]; rows: string[][] }
   | { type: "example"; text: string }
   | { type: "explain"; title?: string; text: string }
-  | { type: "important"; text: string };
+  | { type: "important"; text: string }
+  // تمارين نهاية الوحدة محلولة (الحل بلون مختلف)، ودراسة الحالة بشرح مبسّط موسّع وأسئلتها محلولة
+  | { type: "exercise"; q: string; steps: string[]; answer: string }
+  | { type: "case"; title?: string; text: string; analysis: string; qa: { q: string; a: string }[] };
 
 export type SummarySection = { emoji: string; heading: string; blocks: SummaryBlock[] };
 export type StudySummary = { title: string; intro: string; sections: SummarySection[]; keypoints: string[] };
@@ -46,6 +49,19 @@ function block(b: any): SummaryBlock | null {
       return str(b.text) ? { type: "explain", title: str(b.title) || undefined, text: str(b.text) } : null;
     case "important":
       return str(b.text) ? { type: "important", text: str(b.text) } : null;
+    case "exercise": {
+      const q = str(b.q ?? b.question);
+      const answer = str(b.answer ?? b.solution);
+      return q && (answer || strs(b.steps).length) ? { type: "exercise", q, steps: strs(b.steps), answer } : null;
+    }
+    case "case": {
+      const text = str(b.text);
+      const analysis = str(b.analysis);
+      const qa = (Array.isArray(b.qa) ? b.qa : [])
+        .map((x: any) => ({ q: str(x?.q), a: str(x?.a) }))
+        .filter((x: { q: string; a: string }) => x.q && x.a);
+      return text || analysis ? { type: "case", title: str(b.title) || undefined, text, analysis, qa } : null;
+    }
     default:
       return str(b?.text) ? { type: "text", text: str(b.text) } : null;
   }
@@ -140,6 +156,8 @@ export function summaryToSpeech(s: StudySummary): string {
       if (b.type === "text" || b.type === "example" || b.type === "important") out.push(b.text);
       else if (b.type === "definition") out.push(`${b.term}: ${b.text}`);
       else if (b.type === "explain") out.push([b.title, b.text].filter(Boolean).join(". "));
+      else if (b.type === "exercise") out.push([b.q, ...b.steps, b.answer].filter(Boolean).join(". "));
+      else if (b.type === "case") out.push([b.title, b.text, b.analysis, ...b.qa.map((x) => `${x.q} ${x.a}`)].filter(Boolean).join(". "));
       else if (b.type === "list") out.push([b.title, ...b.items.map((x) => x.replace(/[:：]/, "، "))].filter(Boolean).join(". "));
       else if (b.type === "table") {
         if (b.title) out.push(b.title);
@@ -174,11 +192,20 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
   const { summary: s, rtl } = opts;
   const start = rtl ? "right" : "left";
   const L = rtl
-    ? { toc: "محتويات الملخّص", key: "أهم النقاط للمراجعة", ex: "مثال", hard: "توضيح", imp: "مهم", def: "تعريف" }
-    : { toc: "Contents", key: "Key points to review", ex: "Example", hard: "Explained", imp: "Important", def: "Definition" };
+    ? { toc: "محتويات الملخّص", key: "أهم النقاط للمراجعة", ex: "مثال", hard: "توضيح", imp: "مهم", def: "تعريف", exQ: "تمرين", sol: "الحل", steps: "خطوات الحل", cs: "دراسة حالة", an: "الشرح المبسّط", csq: "أسئلة الحالة" }
+    : { toc: "Contents", key: "Key points to review", ex: "Example", hard: "Explained", imp: "Important", def: "Definition", exQ: "Exercise", sol: "Solution", steps: "Steps", cs: "Case study", an: "Simple explanation", csq: "Case questions" };
 
   const blockHtml = (b: SummaryBlock, c: [string, string, string]): string => {
     switch (b.type) {
+      case "exercise":
+        // الحل بلون مختلف دائمًا (أخضر) عن نص السؤال
+        return `<div class="exq"><span class="tag" style="background:#334155">${L.exQ}</span><b>${esc(b.q)}</b></div><div class="sol">${
+          b.steps.length ? `<div class="solh">${L.steps}</div><ol>${b.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""
+        }${b.answer ? `<div class="solh">${L.sol}</div><div>${esc(b.answer)}</div>` : ""}</div>`;
+      case "case":
+        return `<div class="case"><span class="tag" style="background:#7C3AED">${L.cs}</span>${b.title ? `<b>${esc(b.title)}</b>` : ""}<p>${esc(b.text)}</p></div>${
+          b.analysis ? `<div class="an"><div class="anh">${L.an}</div><p>${esc(b.analysis)}</p></div>` : ""
+        }${b.qa.length ? `<div class="lt">${L.csq}</div>${b.qa.map((x) => `<div class="exq"><b>${esc(x.q)}</b></div><div class="sol">${esc(x.a)}</div>`).join("")}` : ""}`;
       case "text":
         return `<p>${esc(b.text)}</p>`;
       case "definition":
@@ -270,6 +297,12 @@ function summaryCss(rtl: boolean): string {
     th { color: #fff; font-weight: 900; padding: 9px 10px; text-align: ${start}; }
     td { padding: 9px 10px; line-height: 1.75; border-top: 1px solid #E5E7EB; vertical-align: top; }
     td.first { font-weight: 800; }
+    .exq { background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 12px; padding: 10px 14px; margin: 10px 0 0; font-size: 14.5px; line-height: 1.9; break-inside: avoid; }
+    .sol { background: #ECFDF5; border: 1.5px solid #34D399; border-radius: 12px; padding: 10px 14px; margin: 6px 0 12px; font-size: 14.5px; line-height: 1.9; color: #065F46; break-inside: avoid; }
+    .sol ol { margin: 4px 0; padding-${start}: 20px; } .solh { font-weight: 900; color: #047857; margin-top: 4px; }
+    .case { background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 12px; padding: 10px 14px; margin: 10px 0 6px; font-size: 14.5px; line-height: 1.9; }
+    .an { background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 12px; padding: 10px 14px; margin: 6px 0 12px; font-size: 14.5px; line-height: 1.95; }
+    .anh { font-weight: 900; color: #B45309; }
     .def { background: #F9FAFB; border: 1px solid #E5E7EB; border-${start}: 5px solid; border-radius: 12px; padding: 10px 14px; margin: 8px 0 12px; font-size: 14.5px; line-height: 1.9; break-inside: avoid; }
     .box { border-radius: 14px; padding: 11px 14px; margin: 8px 0 12px; font-size: 14.5px; line-height: 1.95; break-inside: avoid; border: 1.5px solid; }
     .ex { background: #ECFDF5; border-color: #A7F3D0; }

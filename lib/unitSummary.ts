@@ -118,6 +118,9 @@ export function mergeSummaries(list: StudySummary[]): StudySummary | null {
   return { title: ok[0].title, intro: ok[0].intro, sections, keypoints };
 }
 
+/** علامات التمارين والأسئلة ودراسة الحالة في نص الوحدة */
+const EXERCISE_RE = /(تمارين|تمرين|التدريبات|تدريب|أسئلة|اسئلة|أنشطة|نشاط|مسائل|مسألة|دراسة حالة|حالة دراسية|ناقش|أجب عن|اختر الإجابة|exercises?|review questions|case study|problems?)/i;
+
 export type SummaryProgress = PartsProgress<StudySummary>;
 
 const parsePartialPart = (raw: string) => {
@@ -152,7 +155,8 @@ export async function getOrMakeSummary(
     load: (i) => getUnitContent<StudySummary>(pdfPath, partId(i), "studysummarypart").then((x) => (x?.sections?.length ? x : undefined)),
     save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p),
     // مهمة سيرفر لكل جزء: تكمل وتُحفظ حتى لو قُفلت الشاشة أو أُغلق التطبيق
-    run: (ctx, i, onPartial) => jobPart("studysummary", ctx, `sum:${pdfPath}:${partId(i)}`, parsePartialPart, parseFullPart, onPartial),
+    // جزء فيه تمارين/مسائل/دراسة حالة → تفكير موسّع على السيرفر (يحلّ ويتحقق قبل الكتابة)
+    run: (ctx, i, onPartial) => jobPart("studysummary", ctx, `sum:${pdfPath}:${partId(i)}`, parsePartialPart, parseFullPart, onPartial, EXERCISE_RE.test(ctx)),
     merge: mergeSummaries,
     onProgress,
     parallel: Math.min(6, n),
