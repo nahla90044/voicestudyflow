@@ -3276,6 +3276,9 @@ export default function ReaderScreen() {
                 // لا مفتاح لكل صفحة: إعادة بناء العرض عند كل تقليب كانت تسبب الانهيار
                 // («Unable to find node on an unmounted component») وتقطّع التقليب؛ التكبير يُعاد بالأثر أدناه
                 ref={pdfScrollRef}
+                // وضع القلم: الصفحة ثابتة (لا تمرير ولا تكبير) فلا تنافس القلم على حركته
+                scrollEnabled={!penOn}
+                pinchGestureEnabled={!penOn}
                 style={{ flex: 1 }}
                 contentContainerStyle={[styles.pdfImgWrap, fullText && styles.pdfImgWrapFull]}
                 maximumZoomScale={6}
@@ -3360,7 +3363,6 @@ export default function ReaderScreen() {
                     offsetX={marginPx}
                     width={pdfImgW2 + marginPx * 2}
                     height={pdfImgW2 / (pageImgAspect || 0.7)}
-                    scrollRef={pdfScrollRef}
                   />
                 ) : null}
                 </View>

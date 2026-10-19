@@ -88,51 +88,62 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
     });
   }
 
+  // الكتابة تُرسم مباشرة من أحداث اللمس (نزول/حركة/رفع القلم) — لا تعتمد على «بدء» الإيماءة،
+  // ولا ربط بتمرير الصفحة إطلاقًا (التمرير يُطفأ في وضع القلم من القارئ): فلا يأخذ التمرير حركة القلم،
+  // ولا يوجد مصدر لانهيار «Unable to find node on an unmounted component».
   const pan = useMemo(() => {
-    let g = Gesture.Pan()
+    const finish = () => {
+      const p = live.current;
+      live.current = null;
+      setLiveD("");
+      const c = cfg.current;
+      if (!p || c.tool === "eraser") return;
+      recordPerf("ink.stroke", 0, p.length > 2, p.length / 2);
+      const s: Stroke = c.tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true, p } : { c: c.color, w: PEN_W, p };
+      c.onChange([...current.current, s]);
+    };
+    const point = (x: number, y: number) => {
+      const c = cfg.current;
+      if (c.tool === "eraser") return eraseAt(x, y);
+      if (!live.current) return;
+      const [nx, ny] = norm(x, y);
+      const n = live.current.length;
+      // نتجاهل الحركة الضئيلة جدًا (تقلّل حجم الحفظ دون أن يتغيّر الشكل)
+      if (Math.hypot(nx - live.current[n - 2], ny - live.current[n - 1]) < 0.0012) return;
+      live.current.push(nx, ny);
+      redrawLive();
+    };
+    return Gesture.Manual()
       .runOnJS(true)
-      .manualActivation(true)
-      .minDistance(0)
       .onTouchesDown((e, manager) => {
         // القلم فقط وفي وضع الكتابة؛ أي لمسة أخرى تُرفض فورًا فتصل للصفحة كالعادة
         const c = cfg.current;
-        const ok = c.active && c.imgW > 0 && e.pointerType === PointerType.STYLUS;
-        // تشخيص القلم (نوع اللمسة وهل قُبلت) — size = نوع المؤشر
+        const t = e.changedTouches[0] ?? e.allTouches[0];
+        const ok = c.active && c.imgW > 0 && e.pointerType === PointerType.STYLUS && !!t;
         if (c.active) recordPerf("ink.down", 0, ok, Number(e.pointerType));
-        if (ok) manager.activate();
-        else manager.fail();
-      })
-      .onStart((e) => {
-        if (cfg.current.tool === "eraser") return eraseAt(e.x, e.y);
-        live.current = norm(e.x, e.y);
+        if (!ok) return manager.fail();
+        manager.activate();
+        if (c.tool === "eraser") return eraseAt(t.x, t.y);
+        live.current = norm(t.x, t.y);
         redrawLive();
       })
-      .onUpdate((e) => {
-        if (cfg.current.tool === "eraser") return eraseAt(e.x, e.y);
-        if (!live.current) return;
-        const [nx, ny] = norm(e.x, e.y);
-        const n = live.current.length;
-        // نتجاهل الحركة الضئيلة جدًا (تقلّل حجم الحفظ دون أن يتغيّر الشكل)
-        if (Math.hypot(nx - live.current[n - 2], ny - live.current[n - 1]) < 0.0012) return;
-        live.current.push(nx, ny);
-        redrawLive();
+      .onTouchesMove((e) => {
+        const t = e.changedTouches[0] ?? e.allTouches[0];
+        if (t) point(t.x, t.y);
       })
-      .onFinalize((_e, success) => {
-        const p = live.current;
-        recordPerf("ink.stroke", 0, !!success && !!p && p.length > 2, p ? p.length / 2 : 0);
-        live.current = null;
-        setLiveD("");
-        const c = cfg.current;
-        if (!p || c.tool === "eraser") return;
-        const s: Stroke = c.tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true, p } : { c: c.color, w: PEN_W, p };
-        c.onChange([...current.current, s]);
-      });
-    // الربط بتمرير الصفحة فقط والقلم مفعّل: الربط والقلم مطفأ (عرض الكتابة أثناء تقليب الصفحات)
-    // كان يبحث عن عرض الصفحة لحظة إزالته فيُسقط التطبيق («Unable to find node on an unmounted component»)
-    if (scrollRef && active) g = g.blocksExternalGesture(scrollRef);
-    return g.enabled(active);
+      .onTouchesUp((e, manager) => {
+        const t = e.changedTouches[0];
+        if (t) point(t.x, t.y);
+        finish();
+        manager.end();
+      })
+      .onTouchesCancelled((_e, manager) => {
+        finish(); // ما كُتب قبل الإلغاء يُحفظ ولا يضيع
+        manager.end();
+      })
+      .enabled(active);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollRef, active]);
+  }, [active]);
 
   const liveStyle = tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true } : { c: color, w: PEN_W, m: false };
 
