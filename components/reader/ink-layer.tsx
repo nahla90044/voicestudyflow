@@ -12,8 +12,11 @@ import Svg, { Path } from "react-native-svg";
 
 import type { InkTool, Stroke } from "../../lib/ink";
 
-export const INK_COLORS = ["#1F2937", "#E11D48", "#2563EB"] as const;
-const MARKER_COLOR = "#FACC15";
+// ألوان القلم والتظليل (التظليل شفاف فوق النص)
+export const INK_COLORS = ["#1F2937", "#E11D48", "#2563EB", "#16A34A", "#7C3AED", "#EA580C", "#0D9488", "#92400E"] as const;
+export const MARKER_COLORS = ["#FACC15", "#4ADE80", "#F472B6", "#60A5FA", "#FB923C", "#C084FC"] as const;
+const MARKER_COLOR = MARKER_COLORS[0];
+const isMarkerColor = (c: string) => (MARKER_COLORS as readonly string[]).includes(c);
 const PEN_W = 0.0045; // نسبةً لعرض الصفحة
 const MARKER_W = 0.024;
 const ERASE_R = 0.025;
@@ -101,7 +104,7 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
       const c = cfg.current;
       if (!p || c.tool === "eraser") return;
       recordPerf("ink.stroke", 0, p.length > 2, p.length / 2);
-      const s: Stroke = c.tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true, p } : { c: c.color, w: PEN_W, p };
+      const s: Stroke = c.tool === "marker" ? { c: isMarkerColor(c.color) ? c.color : MARKER_COLOR, w: MARKER_W, m: true, p } : { c: c.color, w: PEN_W, p };
       c.onChange([...current.current, s]);
     };
     const point = (x: number, y: number) => {
@@ -109,6 +112,12 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
       if (c.tool === "eraser") return eraseAt(x, y);
       if (!live.current) return;
       const [nx, ny] = norm(x, y);
+      // المسطرة: خط مستقيم من نقطة البداية إلى موضع القلم الآن
+      if (c.tool === "line") {
+        live.current = [live.current[0], live.current[1], nx, ny];
+        redrawLive();
+        return;
+      }
       const n = live.current.length;
       // نتجاهل الحركة الضئيلة جدًا (تقلّل حجم الحفظ دون أن يتغيّر الشكل)
       if (Math.hypot(nx - live.current[n - 2], ny - live.current[n - 1]) < 0.0012) return;
@@ -147,7 +156,7 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  const liveStyle = tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true } : { c: color, w: PEN_W, m: false };
+  const liveStyle = tool === "marker" ? { c: isMarkerColor(color) ? color : MARKER_COLOR, w: MARKER_W, m: true } : { c: color, w: PEN_W, m: false };
 
   return (
     // يُبنى كاشف الإيماءة من جديد عند تفعيل/إطفاء القلم: ربطه بتمرير الصفحة لا يتحدّث على iOS لكاشف قائم
@@ -209,26 +218,43 @@ export function InkToolbar({
   onUndo: () => void;
   onClear: () => void;
   onDone: () => void;
-  labels: { marker: string; eraser: string; undo: string; clear: string; clearConfirm: string; cancel: string; done: string };
+  labels: { pen?: string; ruler?: string; marker: string; eraser: string; undo: string; clear: string; clearConfirm: string; cancel: string; done: string };
 }) {
+  // ألوان الأداة الحالية: ألوان القلم، أو ألوان التظليل
+  const palette: readonly string[] = tool === "marker" ? MARKER_COLORS : INK_COLORS;
   return (
+    <View style={styles.wrapBar}>
     <View style={styles.bar}>
-      {INK_COLORS.map((c) => (
-        <Pressable
-          key={c}
-          onPress={() => {
-            onColor(c);
-            onTool("pen");
-          }}
-          hitSlop={4}
-          style={[styles.dotWrap, tool === "pen" && color === c && styles.on]}
-        >
-          <View style={[styles.dot, { backgroundColor: c }]} />
-        </Pressable>
-      ))}
+      <Pressable
+        accessibilityLabel={labels.pen ?? "pen"}
+        onPress={() => {
+          onTool("pen");
+          if (isMarkerColor(color)) onColor(INK_COLORS[0]);
+        }}
+        style={[styles.btn, tool === "pen" && styles.on]}
+      >
+        <Ionicons name="pencil" size={19} color={isMarkerColor(color) ? INK_COLORS[0] : color} />
+      </Pressable>
       <View style={styles.sep} />
-      <Pressable accessibilityLabel={labels.marker} onPress={() => onTool("marker")} style={[styles.btn, tool === "marker" && styles.on]}>
-        <Ionicons name="color-wand-outline" size={20} color={MARKER_COLOR} />
+      <Pressable
+        accessibilityLabel={labels.marker}
+        onPress={() => {
+          onTool("marker");
+          if (!isMarkerColor(color)) onColor(MARKER_COLOR);
+        }}
+        style={[styles.btn, tool === "marker" && styles.on]}
+      >
+        <Ionicons name="color-wand-outline" size={20} color={isMarkerColor(color) ? color : MARKER_COLOR} />
+      </Pressable>
+      <Pressable
+        accessibilityLabel={labels.ruler ?? "ruler"}
+        onPress={() => {
+          onTool("line");
+          if (isMarkerColor(color)) onColor(INK_COLORS[0]);
+        }}
+        style={[styles.btn, tool === "line" && styles.on]}
+      >
+        <Ionicons name="remove-outline" size={24} color="#F3F4F8" style={{ transform: [{ rotate: "-35deg" }] }} />
       </Pressable>
       <Pressable accessibilityLabel={labels.eraser} onPress={() => onTool("eraser")} style={[styles.btn, tool === "eraser" && styles.on]}>
         <Ionicons name="bandage-outline" size={20} color="#F3F4F8" />
@@ -253,10 +279,22 @@ export function InkToolbar({
         <Ionicons name="checkmark" size={22} color="#07080D" />
       </Pressable>
     </View>
+    {tool !== "eraser" ? (
+      <View style={[styles.bar, styles.colors]}>
+        {palette.map((c) => (
+          <Pressable key={c} onPress={() => onColor(c)} hitSlop={4} style={[styles.dotWrap, color === c && styles.on]} accessibilityLabel={c}>
+            <View style={[styles.dot, { backgroundColor: c }, tool === "marker" && { opacity: 0.75 }]} />
+          </Pressable>
+        ))}
+      </View>
+    ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapBar: { alignSelf: "center", alignItems: "center", gap: 6 },
+  colors: { paddingVertical: 6 },
   bar: {
     flexDirection: "row",
     direction: "ltr",

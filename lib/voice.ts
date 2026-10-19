@@ -349,8 +349,17 @@ function disposePlayer() {
 const CACHE_DIR_NAME = "tts-cache-v10"; // v10: مع توقيت الحروف للهايلايت كلمة-بكلمة
 const CACHE_MAX_BYTES = 900 * 1024 * 1024; // ~900MB: يتسع لصوت كتاب كامل محفوظ (~٦٠٠ صفحة) دون حذفه
 
+// مكان دائم (مستندات التطبيق): مجلد «cache» قد يمسحه iOS عند امتلاء التخزين فيضيع صوت الكتاب المحفوظ
+let movedAudio = false;
 function cacheDir(): Directory {
-  const dir = new Directory(Paths.cache, CACHE_DIR_NAME);
+  const dir = new Directory(Paths.document, CACHE_DIR_NAME);
+  if (!movedAudio) {
+    movedAudio = true;
+    try {
+      const old = new Directory(Paths.cache, CACHE_DIR_NAME);
+      if (old.exists && !dir.exists) old.move(new Directory(Paths.document));
+    } catch {}
+  }
   if (!dir.exists) dir.create({ intermediates: true });
   return dir;
 }
@@ -465,6 +474,21 @@ function notePitch(cacheKey: string, f0: unknown) {
   pitchByVoice.set(cacheKey, xs);
 }
 
+/** الطريقة السابقة: الصوت base64 داخل الرد (احتياط فقط إن تعذّر التنزيل المباشر) */
+async function fetchAudioInline(text: string, gender: VoiceGender, vid: string, style: string, expressive: boolean, cacheKey: string, page?: PageRef): Promise<string> {
+  const { data, error } = await within(
+    supabase.functions.invoke("tts", {
+      body: { text, gender, voiceId: vid, style, expressive, refF0: refPitch(cacheKey), ...(page ? { book: page.book, page: page.page } : {}) },
+    }),
+    TTS_REQUEST_MS,
+    "TTS_TIMEOUT"
+  );
+  if (error) throw error;
+  const audio = (data as { audio?: string })?.audio;
+  if (!audio) throw new Error("لا يوجد صوت في رد الدالة");
+  return audio;
+}
+
 async function synthToFileNow(
   text: string,
   gender: VoiceGender,
@@ -500,6 +524,7 @@ async function synthToFileNow(
         style,
         expressive: !!expressive,
         refF0: refPitch(cacheKey),
+        asUrl: true,
         ...(page ? { book: page.book, page: page.page } : {}),
       },
     }),
@@ -518,12 +543,28 @@ async function synthToFileNow(
   checkSecurity(d);
   if (d?.userQuota) throw new Error("USER_QUOTA");
   if (d?.error) throw new Error(d.quota ? `QUOTA: ${d.error}` : d.error);
-  if (!b64) throw new Error("لا يوجد صوت في رد الدالة");
+  const url = (data as { url?: string })?.url;
+  if (!b64 && !url) throw new Error("لا يوجد صوت في رد الدالة");
   notePitch(cacheKey, (data as { f0?: number })?.f0);
   const starts = Array.isArray((data as { starts?: number[] })?.starts)
     ? ((data as { starts: number[] }).starts as number[])
     : [];
-  file.write(base64ToBytes(b64));
+  let wrote = false;
+  if (url) {
+    // تنزيل أصلي خارج واجهة التطبيق (لا base64 في JavaScript) → الأزرار والصفحة تبقى سريعة أثناء الحفظ
+    try {
+      if (file.exists) file.delete();
+      const got = await within(File.downloadFileAsync(url, file), TTS_REQUEST_MS, "TTS_TIMEOUT");
+      wrote = got.exists && (got.size ?? 0) > 0;
+    } catch {
+      wrote = false;
+    }
+  }
+  if (!wrote) {
+    // احتياط مضمون: الطريقة السابقة (الصوت داخل الرد) — الصوت لا يتعطل أبدًا
+    const audio = b64 ?? (await fetchAudioInline(text, gender, vid, style, !!expressive, cacheKey, page));
+    file.write(base64ToBytes(audio));
+  }
   try {
     if (starts.length) timingFile.write(JSON.stringify(starts));
   } catch {}

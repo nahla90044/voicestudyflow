@@ -17,8 +17,17 @@ function hashKey(s: string): string {
   return (h >>> 0).toString(16);
 }
 
+// مكان دائم: صور صفحات الكتاب تبقى للقراءة بلا إنترنت (مجلد «cache» قد يمسحه iOS)
+let moved = false;
 function cacheDir(): Directory {
-  const d = new Directory(Paths.cache, DIR);
+  const d = new Directory(Paths.document, DIR);
+  if (!moved) {
+    moved = true;
+    try {
+      const old = new Directory(Paths.cache, DIR);
+      if (old.exists && !d.exists) old.move(new Directory(Paths.document));
+    } catch {}
+  }
   if (!d.exists) d.create({ intermediates: true });
   return d;
 }

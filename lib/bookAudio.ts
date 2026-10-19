@@ -13,7 +13,8 @@ import { getCurrentLang } from "./i18n";
 import { dict } from "./i18n/strings";
 import "./notify";
 import { whenActive } from "./partsRunner";
-import { extractPdfPageText, getPreciseText } from "./pdfText";
+import { extractPdfPageText, getPageWords, getPageWordsFromText, getPreciseText } from "./pdfText";
+import { getPageImage } from "./pageImage";
 import { refreshUsage } from "./plan";
 import { splitForReading } from "./textUtils";
 import { cacheText } from "./voice";
@@ -157,6 +158,10 @@ async function run(pdfPath: string): Promise<void> {
     const cur = states.get(pdfPath)!;
     const precise = cur.precise || !!res.ocr;
     const txt = precise ? await getPreciseText(pdfPath, res.page, res.text, !!res.ocr) : res.text;
+    // الكتاب يعمل بلا إنترنت كاملًا: صورة الصفحة ومواضع كلماتها (للتظليل) تُحفظ مع صوتها
+    // (النص والنص الدقيق يُحفظان على الجهاز تلقائيًا عند جلبهما)
+    void getPageImage(pdfPath, res.page).catch(() => null);
+    void (res.ocr ? getPageWords(pdfPath, res.page) : getPageWordsFromText(pdfPath, res.page)).catch(() => null);
     const { chunks, headerLines } = splitForReading(txt, { seenHeaders: seen, page: res.page });
     headerLines.forEach((h) => seen.add(h));
     const pageRef = { book: pdfPath, page: res.page };

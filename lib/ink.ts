@@ -6,7 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { supabase } from "./supabase";
 
-export type InkTool = "pen" | "marker" | "eraser";
+export type InkTool = "pen" | "marker" | "eraser" | "line"; // line = المسطرة (خط مستقيم)
 
 export type Stroke = {
   /** اللون */

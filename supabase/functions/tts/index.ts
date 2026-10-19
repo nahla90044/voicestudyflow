@@ -90,6 +90,13 @@ Deno.serve(async (req: Request) => {
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const store = SUPABASE_URL && SERVICE_ROLE ? createClient(SUPABASE_URL, SERVICE_ROLE) : null;
     const key = await contentKey(voiceId, style, text);
+    // asUrl: التطبيق ينزّل الملف بنفسه خارج واجهته (بلا base64 ثقيل يجمّد الأزرار)
+    const asUrl = body.asUrl === true;
+    const signed = async (): Promise<string | null> => {
+      if (!store) return null;
+      const { data } = await store.storage.from(SHARED_BUCKET).createSignedUrl(`${key}.mp3`, 900);
+      return data?.signedUrl ?? null;
+    };
     const cachedP = store
       ? Promise.all([
           store.storage.from(SHARED_BUCKET).download(`${key}.mp3`).then((r) => r.data).catch(() => null),
@@ -107,6 +114,17 @@ Deno.serve(async (req: Request) => {
     if (store) {
       try {
         const [mp3, tj] = await cachedP;
+        if (mp3 && asUrl) {
+          let starts: number[] = [];
+          try {
+            if (tj) starts = JSON.parse(await tj.text());
+          } catch {}
+          const url = await signed();
+          if (url) {
+            void logCost(req, { fn: "tts", action: hasPage ? "page" : "voice", model: GEMINI_MODEL, chars: text.length, cached: true, page_key: pageKey });
+            return json({ url, starts, shared: true });
+          }
+        }
         if (mp3) {
           const audio = bytesToBase64(new Uint8Array(await mp3.arrayBuffer()));
           let starts: number[] = [];
@@ -191,7 +209,12 @@ Deno.serve(async (req: Request) => {
         }),
       ]).catch(() => {}); // فشل الرفع غير حرج
       const rt = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
-      if (rt) rt.waitUntil(save);
+      // رابط مطلوب → ننتظر الرفع ثم نرسل الرابط
+      if (asUrl) {
+        await save;
+        const url = await signed();
+        if (url) return json({ url, starts, f0: out.f0 });
+      } else if (rt) rt.waitUntil(save);
       else await save;
     }
 

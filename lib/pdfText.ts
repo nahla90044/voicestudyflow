@@ -6,6 +6,7 @@
 import { aiAssist, fixArabicSpacing } from "./ai";
 import { supabase } from "./supabase";
 import { recordPerf } from "./perf";
+import { getOfflinePage, getOfflinePrecise, getOfflineWords, setOfflinePage, setOfflinePrecise, setOfflineWords } from "./offlineStore";
 
 // تنقية ضجيج فورية (بلا إنترنت/ذكاء) — أسرع بكثير. تحذف الأسطر غير المحتوى فقط
 // (أرقام صفحات، سلاسل نقاط، علامات مائية، مراجع الصور) دون تغيير أي كلمة.
@@ -112,6 +113,8 @@ export type WordBox = { t: string; x: number; y: number; w: number; h: number };
  *  لكنها غنية بالعدد، فلا نقدر نميّزها بالعدد — لذلك Vision أولًا. */
 export async function getPageWords(pdfPath: string, page: number): Promise<WordBox[]> {
   if (!pdfPath) return [];
+  const local = getOfflineWords<WordBox>(pdfPath, page, "vision");
+  if (local && local.length >= 8) return local;
 
   // 1) Google Vision أولًا — مواقع دقيقة بترتيب القراءة الصحيح
   try {
@@ -120,7 +123,10 @@ export async function getPageWords(pdfPath: string, page: number): Promise<WordB
     });
     if (!error) {
       const vw = (data as { words?: WordBox[] })?.words;
-      if (Array.isArray(vw) && vw.length >= 8) return vw;
+      if (Array.isArray(vw) && vw.length >= 8) {
+        setOfflineWords(pdfPath, page, "vision", vw);
+        return vw;
+      }
     }
   } catch {
     // نرجع لطبقة الـPDF
@@ -186,6 +192,10 @@ export async function getPreciseText(
   if (!isMostlyArabic(rawText)) return rawText;
   const ver = (ocr ? "ocr-" : "plain-") + PRECISE_VER;
 
+  // 0) على الجهاز (يعمل بلا إنترنت)
+  const local = getOfflinePrecise(pdfPath, page, ver);
+  if (local && isFaithful(rawText, local)) return local;
+
   // 1) مخزّن مسبقًا بنفس الإصدار؟ أرجعه فورًا (بلا تكلفة)
   try {
     const { data } = await supabase
@@ -194,7 +204,10 @@ export async function getPreciseText(
       .eq("pdf_path", pdfPath)
       .eq("page", page)
       .maybeSingle();
-    if (data?.tashkeel?.trim() && data.tashkeel_ver === ver && isFaithful(rawText, data.tashkeel)) return data.tashkeel;
+    if (data?.tashkeel?.trim() && data.tashkeel_ver === ver && isFaithful(rawText, data.tashkeel)) {
+      setOfflinePrecise(pdfPath, page, ver, data.tashkeel);
+      return data.tashkeel;
+    }
   } catch {
     // تعذّر القراءة من المخزّن — نكمل بالمعالجة
   }
@@ -209,8 +222,9 @@ export async function getPreciseText(
     return rawText; // فشل الذكاء غير حرج — نقرأ النص الأصلي
   }
 
-  // 3) خزّن الناتج (صف الصفحة موجود مسبقًا من الاستخراج)
+  // 3) خزّن الناتج (صف الصفحة موجود مسبقًا من الاستخراج) — وعلى الجهاز أيضًا
   if (out !== rawText) {
+    setOfflinePrecise(pdfPath, page, ver, out);
     try {
       await supabase
         .from("page_cache")
@@ -231,6 +245,10 @@ export async function extractPdfPageText(
 ): Promise<PageText> {
   if (!pdfPath) return { page: 1, totalPages: 0, text: "" };
 
+  // 0) على الجهاز: فوري ويعمل بلا إنترنت (نص الصفحة يُحفظ مع صوت الكتاب)
+  const off = getOfflinePage(pdfPath, page, EXTRACT_VER);
+  if (off) return { page: off.page, totalPages: off.totalPages, text: off.text, ocr: off.ocr };
+
   // 1) مخزّن مسبقًا (بالإصدار الحالي فقط)؟ أرجعه فورًا
   //    الإصدارات القديمة (التي مرّت على «تنظيف» بالذكاء) نتجاهلها ونعيد الاستخراج
   //    حرفيًا حفاظًا على أمانة النص.
@@ -246,12 +264,14 @@ export async function extractPdfPageText(
     if (data && !staleLigatures && typeof data.source === "string" && data.source.endsWith(EXTRACT_VER)) {
       const cachedText = String(data.text ?? "");
       const real = cachedText.trim().length >= MIN_REAL_TEXT && !data.source.startsWith("empty");
-      return {
+      const r = {
         page,
         totalPages: Number(data.total_pages ?? 0),
         text: real ? cachedText : "",
         ocr: data.source.startsWith("ocr"),
       };
+      setOfflinePage(pdfPath, { ...r, ver: EXTRACT_VER });
+      return r;
     }
   } catch {
     // لا يوجد تخزين أو خطأ شبكة → نُكمل بالاستخراج
@@ -344,6 +364,7 @@ export async function extractPdfPageText(
     // التخزين اختياري — لا نفشل القراءة بسببه
   }
 
+  setOfflinePage(pdfPath, { page: resolvedPage, totalPages, text, ocr: usedOcr, ver: EXTRACT_VER });
   return { page: resolvedPage, totalPages, text, ocr: usedOcr };
 }
 
@@ -353,10 +374,13 @@ export async function extractPdfPageText(
  */
 export async function getPageWordsFromText(pdfPath: string, page: number): Promise<WordBox[]> {
   if (!pdfPath) return [];
+  const local = getOfflineWords<WordBox>(pdfPath, page, "text");
+  if (local) return local;
   try {
     const { data, error } = await supabase.functions.invoke("pdf-extract-text", { body: { pdfPath, page } });
     if (error || data?.error) return [];
     const ws = (data as { words?: WordBox[] })?.words;
+    if (Array.isArray(ws) && ws.length) setOfflineWords(pdfPath, page, "text", ws);
     return Array.isArray(ws) ? ws : [];
   } catch {
     return [];
