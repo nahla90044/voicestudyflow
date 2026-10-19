@@ -22,6 +22,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollView as GHScrollView } from "react-native-gesture-handler";
 import { InkLayer, InkToolbar, INK_COLORS } from "../../components/reader/ink-layer";
+import { TocSheet } from "../../components/reader/toc-sheet";
 import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../../lib/ink";
 
 import { LinearGradient } from "expo-linear-gradient";
@@ -457,6 +458,7 @@ export default function ReaderScreen() {
   const [fullText, setFullText] = useState(false); // تفتح بواجهة القراءة الكاملة (النص + الأزرار)؛ زر التكبير للملء
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
+  const [tocOpen, setTocOpen] = useState(false); // فهرس الكتاب (فصول/وحدات) للانتقال السريع
   const gotoInputRef = useRef<TextInput>(null);
   const [gotoValue, setGotoValue] = useState("");
   // ترقيم الكتاب المطبوع: الفرق بين رقم الصفحة في الملف ورقمها المطبوع (يُستنتج تلقائيًا)
@@ -3538,6 +3540,7 @@ export default function ReaderScreen() {
             </>
           ) : toolTab === "study" ? (
             <>
+              <InTool icon="list-circle-outline" label={t("toc.title")} onPress={() => setTocOpen(true)} />
               <InTool icon="sparkles-outline" label={t("reader.tools.ai")} onPress={() => setAiOpen(true)} />
               <InTool
                 icon="chatbubble-ellipses-outline"
@@ -4448,6 +4451,16 @@ export default function ReaderScreen() {
           ) : null}
         </View>
       </Modal>
+
+      <TocSheet
+        visible={tocOpen}
+        pdfPath={pdfPath}
+        page={page}
+        total={totalPages}
+        pageLabel={(p) => String(printedOf(p) ?? p)}
+        onGo={(p) => gotoPage(p)}
+        onClose={() => setTocOpen(false)}
+      />
 
       {/* مكافأة إنهاء أول كتاب — تُمنح بلا شرط، وطلب التقييم يأتي بعد إغلاقها */}
       <UnlockModal
