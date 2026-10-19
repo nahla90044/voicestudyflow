@@ -13,6 +13,16 @@ import { useScene } from "../lib/scene";
 
 type Topic = { icon: keyof typeof Ionicons.glyphMap; titleKey: string; bodyKey: string };
 
+// الجديد في التحديث (أعلى الصفحة، بارز)
+const NEW_ITEMS: { icon: keyof typeof Ionicons.glyphMap; key: string }[] = [
+  { icon: "document-text", key: "help.new.summary" },
+  { icon: "videocam", key: "help.new.video" },
+  { icon: "albums", key: "help.new.cards" },
+  { icon: "list-circle", key: "help.new.toc" },
+  { icon: "download", key: "help.new.audio" },
+  { icon: "pulse", key: "help.new.counters" },
+];
+
 const TOPICS: Topic[] = [
   { icon: "library", titleKey: "help.topic.library.title", bodyKey: "help.topic.library.body" },
   { icon: "hand-left", titleKey: "help.topic.longPress.title", bodyKey: "help.topic.longPress.body" },
@@ -52,6 +62,30 @@ export default function HelpScreen() {
           <Ionicons name="play-circle" size={22} color={pal.onAccent} />
           <Text style={[styles.tourTxt, { color: pal.onAccent }]}>{t("help.replayTour")}</Text>
         </Pressable>
+
+        {/* الجديد */}
+        <SceneCard style={{ gap: 12, borderWidth: 1.5, borderColor: pal.accent }}>
+          <Text style={[styles.cardTitle, { color: pal.accent, textAlign: dir.textAlign, fontSize: 17 }]}>{t("help.new.title")}</Text>
+          {NEW_ITEMS.map((n) => (
+            <View key={n.key} style={{ flexDirection: dir.row, gap: 10, alignItems: "flex-start" }}>
+              <Ionicons name={n.icon} size={18} color={pal.accent} style={{ marginTop: 3 }} />
+              <Text style={[styles.cardBody, { color: pal.ink, flex: 1, textAlign: dir.textAlign }]}>{t(n.key)}</Text>
+            </View>
+          ))}
+        </SceneCard>
+
+        {/* الطلبات الذكية والصفحات: ما هي وكيف تُحسب */}
+        <SceneCard style={{ gap: 10 }}>
+          <View style={{ flexDirection: dir.row, gap: 10, alignItems: "center" }}>
+            <Ionicons name="sparkles" size={20} color={pal.accent} />
+            <Text style={[styles.cardTitle, { color: pal.ink, textAlign: dir.textAlign, flex: 1 }]}>{t("help.usage.title")}</Text>
+          </View>
+          {["help.usage.ai", "help.usage.aiCount", "help.usage.free", "help.usage.pages", "help.usage.where"].map((k) => (
+            <Text key={k} style={[styles.cardBody, { color: pal.dim, textAlign: dir.textAlign }]}>
+              {t(k)}
+            </Text>
+          ))}
+        </SceneCard>
 
         {TOPICS.map((topic, i) => (
           <SceneCard key={i} padded={false} style={[styles.card, { flexDirection: dir.row }]}>
