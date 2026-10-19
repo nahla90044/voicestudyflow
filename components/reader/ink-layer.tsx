@@ -117,8 +117,9 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
         live.current.push(nx, ny);
         redrawLive();
       })
-      .onFinalize(() => {
+      .onFinalize((_e, success) => {
         const p = live.current;
+        recordPerf("ink.stroke", 0, !!success && !!p && p.length > 2, p ? p.length / 2 : 0);
         live.current = null;
         setLiveD("");
         const c = cfg.current;
@@ -136,7 +137,9 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
   const liveStyle = tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true } : { c: color, w: PEN_W, m: false };
 
   return (
-    <GestureDetector gesture={pan}>
+    // يُبنى كاشف الإيماءة من جديد عند تفعيل/إطفاء القلم: ربطه بتمرير الصفحة لا يتحدّث على iOS لكاشف قائم
+    // (فكان التمرير يأخذ حركة القلم ولا يُرسم شيء). عرض الصفحة نفسه ثابت دائمًا، فالبناء آمن بلا انهيار.
+    <GestureDetector key={active ? "pen-on" : "pen-off"} gesture={pan}>
       {/* القلم مطفأ: عرض فقط ولا تلتقط أي لمسة (نقرة الكلمة وغيرها تصل للصفحة) */}
       <View style={[StyleSheet.absoluteFill, { width, height }]} collapsable={false} pointerEvents={active ? "auto" : "none"}>
         <Svg width={width} height={height} pointerEvents="none">
