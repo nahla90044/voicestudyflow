@@ -18,6 +18,7 @@ export type Card = {
   createdAt: string;
   archived?: boolean; // مؤرشفة → تُستثنى من المراجعة وتظهر في «المؤرشفة»
   kind?: "words" | "definitions" | "qa" | "compare"; // نوع البطاقة (الصورة لمعاني الكلمات فقط)
+  fav?: boolean; // في «المفضلة» (مجموعة خاصة للمراجعة وحدها)
 };
 
 export type Rating = "again" | "good" | "easy";
@@ -126,6 +127,12 @@ export async function archiveCardsForBook(bookId: string | undefined, archived: 
 export async function archiveCard(id: string, archived: boolean): Promise<void> {
   const cards = await getCards();
   await save(cards.map((c) => (c.id === id ? { ...c, archived } : c)));
+}
+
+/** يضيف بطاقة إلى «المفضلة» أو يزيلها منها. */
+export async function setCardFav(id: string, fav: boolean): Promise<void> {
+  const cards = await getCards();
+  await save(cards.map((c) => (c.id === id ? { ...c, fav } : c)));
 }
 
 /** يحذف كل بطاقات كتاب معيّن (أو البطاقات العامة إن كان bookId فارغًا). */

@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -8,15 +9,16 @@ import { cachedCardImage, cardImageAvgSecs, cardImagesBlocked, getCardImage } fr
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
-import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCardsForBook, reviewCard, type Card, type Rating } from "../../lib/flashcards";
+import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCardsForBook, reviewCard, setCardFav, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getSavedItems, removeSavedItem, updateSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 import { useScene } from "../../lib/scene";
 import { removeUnitContent, type UnitContentKind } from "../../lib/unitContent";
-import { speakText, stopSpeaking } from "../../lib/voice";
+import { prefetchText, speakText, stopSpeaking } from "../../lib/voice";
 
 const ALL = "__all__";
 const NONE = "__none__";
+const FAV = "__fav__"; // المفضلة: مجموعة خاصة
 
 function todayISO() {
   const d = new Date();
@@ -29,11 +31,15 @@ type BookGroup = { key: string; title: string; total: number; due: number };
 type StudyTab = "cards" | "summary" | "quiz";
 
 /** حجم خط البطاقة حسب طول نصها: كان ثابتًا كبيرًا (٢٦) فيضيق عليه وجه البطاقة في الإجابات الطويلة */
-function faceSize(text?: string) {
+function faceSize(text?: string, scale = 1) {
   const n = (text ?? "").length;
-  const fontSize = n <= 40 ? 23 : n <= 90 ? 20 : n <= 160 ? 17.5 : n <= 260 ? 16 : 15;
+  const fontSize = (n <= 40 ? 23 : n <= 90 ? 20 : n <= 160 ? 17.5 : n <= 260 ? 16 : 15) * scale;
   return { fontSize, lineHeight: Math.round(fontSize * 1.65) };
 }
+
+// حجم خط البطاقات يختاره المستخدم (A− / A+) ويُحفظ
+const FONT_KEY = "vsf:cards:fontScale:v1";
+const FONT_STEPS = [0.85, 1, 1.15, 1.3, 1.5, 1.75];
 
 export default function FlashcardsScreen() {
   const { t } = useI18n();
@@ -47,6 +53,22 @@ export default function FlashcardsScreen() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"picker" | "review">("picker");
   const [queue, setQueue] = useState<Card[]>([]);
+  const [fontStep, setFontStep] = useState(1);
+  useEffect(() => {
+    AsyncStorage.getItem(FONT_KEY)
+      .then((v) => {
+        const n = Number(v);
+        if (Number.isInteger(n) && n >= 0 && n < FONT_STEPS.length) setFontStep(n);
+      })
+      .catch(() => {});
+  }, []);
+  const changeFont = (d: number) =>
+    setFontStep((f) => {
+      const n = Math.min(FONT_STEPS.length - 1, Math.max(0, f + d));
+      AsyncStorage.setItem(FONT_KEY, String(n)).catch(() => {});
+      return n;
+    });
+  const fontScale = FONT_STEPS[fontStep];
   const [bookName, setBookName] = useState("");
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -215,6 +237,8 @@ export default function FlashcardsScreen() {
     return [...map.values()].sort((a, b) => b.due - a.due);
   }, [all, t, inView]);
 
+  const favCount = useMemo(() => all.filter((c) => c.fav && inView(c)).length, [all, inView]);
+
   const totalDue = useMemo(() => {
     const today = todayISO();
     return all.filter((c) => !c.archived && c.due <= today).length;
@@ -222,7 +246,7 @@ export default function FlashcardsScreen() {
 
   function startBook(key: string, title: string) {
     const today = todayISO();
-    const inBook = (c: Card) => (key === ALL || (c.bookId ?? NONE) === key) && inView(c);
+    const inBook = (c: Card) => (key === ALL || (key === FAV ? !!c.fav : (c.bookId ?? NONE) === key)) && inView(c);
     let q = all.filter((c) => inBook(c) && c.due <= today);
     if (q.length === 0) q = all.filter(inBook); // لا مستحقّ؟ راجعي كل بطاقات الكتاب
     setQueue(q);
@@ -251,6 +275,16 @@ export default function FlashcardsScreen() {
     flip.setValue(0);
     setFlipped(false);
     setIdx((i) => Math.min(Math.max(0, i + delta), Math.max(0, queue.length - 1)));
+  }
+
+  // المفضلة: تُحفظ فورًا وتنعكس على البطاقة المعروضة
+  async function toggleFav() {
+    const c = queue[idx];
+    if (!c) return;
+    const fav = !c.fav;
+    setQueue((q) => q.map((x) => (x.id === c.id ? { ...x, fav } : x)));
+    setAll((a) => a.map((x) => (x.id === c.id ? { ...x, fav } : x)));
+    await setCardFav(c.id, fav);
   }
 
   // حذف البطاقة الحالية (بعد تأكيد) ثم المتابعة للتالية
@@ -364,12 +398,25 @@ export default function FlashcardsScreen() {
     }
     speakingRef.current = true;
     setSpeaking(true);
+    listenModeRef.current = true; // من الآن: صوت وجهي كل بطاقة يُجهَّز مسبقًا فيبدأ فورًا
+    void prefetchText(flipped ? c.front : c.back).catch(() => {});
     const done = () => {
       speakingRef.current = false;
       setSpeaking(false);
     };
     speakText(flipped ? c.back : c.front, { onDone: done, onError: done }).catch(done);
   }
+
+  // وضع الاستماع (بعد أول استماع في الجلسة): صوت البطاقة الحالية والتالية جاهز مسبقًا → الاستماع فوري
+  const listenModeRef = useRef(false);
+  useEffect(() => {
+    if (!listenModeRef.current || mode !== "review") return;
+    for (const c of [queue[idx], queue[idx + 1]]) {
+      if (!c) continue;
+      void prefetchText(c.front).catch(() => {});
+      void prefetchText(c.back).catch(() => {});
+    }
+  }, [idx, queue, mode]);
 
   // تغيّرت البطاقة/وجهها أو خرجنا من المراجعة → أوقف الصوت إن كان يعمل
   useEffect(() => {
@@ -509,6 +556,17 @@ export default function FlashcardsScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
+            {favCount > 0 ? (
+              <Pressable onPress={() => startBook(FAV, t("flashcards.favorites"))}>
+                <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: "#F6C44522", borderColor: "#F6C44577" }]}>
+                  <Ionicons name="star" size={20} color="#E0A800" />
+                  <View style={styles.bookInfo}>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>{t("flashcards.favorites")}</Text>
+                    <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>{t("flashcards.cardsCount", { count: favCount })}</Text>
+                  </View>
+                </SceneCard>
+              </Pressable>
+            ) : null}
             {books.length > 1 ? (
               <Pressable {...coach.bind("all")} onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
@@ -571,30 +629,16 @@ export default function FlashcardsScreen() {
               <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={16} color={pal.ink} />
               <Text style={[styles.backChipTxt, { color: pal.ink }]}>{t("flashcards.books")}</Text>
             </Pressable>
-            <View style={[styles.reviewTopRight, { flexDirection: dir.row }]}>
-              <Pressable
-                onPress={() => goCard(-1)}
-                disabled={idx <= 0}
-                hitSlop={8}
-                style={[styles.navChip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
-              >
-                <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={18} color={idx <= 0 ? pal.track : pal.ink} />
+            <View style={[styles.fontRow, { flexDirection: dir.row }]}>
+              <Pressable onPress={() => changeFont(-1)} disabled={fontStep <= 0} hitSlop={6} style={[styles.fontBtn, { backgroundColor: pal.card, borderColor: pal.cardBorder }, fontStep <= 0 && { opacity: 0.4 }]} accessibilityLabel={t("flashcards.fontSmaller")}>
+                <Text style={[styles.fontTxt, { color: pal.ink, fontSize: 14 }]}>A−</Text>
+              </Pressable>
+              <Pressable onPress={() => changeFont(1)} disabled={fontStep >= FONT_STEPS.length - 1} hitSlop={6} style={[styles.fontBtn, { backgroundColor: pal.card, borderColor: pal.cardBorder }, fontStep >= FONT_STEPS.length - 1 && { opacity: 0.4 }]} accessibilityLabel={t("flashcards.fontBigger")}>
+                <Text style={[styles.fontTxt, { color: pal.ink, fontSize: 18 }]}>A+</Text>
               </Pressable>
               <Text style={[styles.counter, { color: pal.dim }]}>
                 {idx + 1} / {queue.length}
               </Text>
-              <Pressable
-                onPress={() => goCard(1)}
-                disabled={idx >= queue.length - 1}
-                hitSlop={8}
-                style={[styles.navChip, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}
-              >
-                <Ionicons
-                  name={dir.isRTL ? "chevron-back" : "chevron-forward"}
-                  size={18}
-                  color={idx >= queue.length - 1 ? pal.track : pal.ink}
-                />
-              </Pressable>
             </View>
           </View>
 
@@ -641,7 +685,7 @@ export default function FlashcardsScreen() {
                   <View style={styles.faceMid}>
                     <Text style={[styles.faceLabel, { color: pal.dim }]}>{t("flashcards.question")}</Text>
                     <ScrollView style={styles.faceScroll} contentContainerStyle={styles.faceScrollIn} showsVerticalScrollIndicator={false}>
-                      <Text style={[styles.faceText, faceSize(card?.front), { color: pal.ink }]}>{card?.front}</Text>
+                      <Text style={[styles.faceText, faceSize(card?.front, fontScale), { color: pal.ink }]}>{card?.front}</Text>
                     </ScrollView>
                   </View>
                   <View style={[styles.tapHintRow, { flexDirection: dir.row }]}>
@@ -662,7 +706,7 @@ export default function FlashcardsScreen() {
                   <View style={styles.faceMid}>
                     <Ionicons name="bulb-outline" size={22} color={pal.accent} />
                     <ScrollView style={styles.faceScroll} contentContainerStyle={styles.faceScrollIn} showsVerticalScrollIndicator={false}>
-                      <Text style={[styles.faceText, faceSize(card?.back), { color: pal.ink }]}>{card?.back}</Text>
+                      <Text style={[styles.faceText, faceSize(card?.back, fontScale), { color: pal.ink }]}>{card?.back}</Text>
                     </ScrollView>
                   </View>
                   <View style={{ height: 18 }} />
@@ -670,6 +714,17 @@ export default function FlashcardsScreen() {
               </Animated.View>
             </Pressable>
 
+            {/* المفضلة: نجمة في الزاوية المقابلة */}
+            {card ? (
+              <Pressable
+                onPress={() => void toggleFav()}
+                hitSlop={8}
+                accessibilityLabel={card.fav ? t("flashcards.unfav") : t("flashcards.fav")}
+                style={[styles.listenBtn, dir.isRTL ? { right: 14 } : { left: 14 }, { backgroundColor: card.fav ? "#F6C445" : pal.soft }]}
+              >
+                <Ionicons name={card.fav ? "star" : "star-outline"} size={17} color={card.fav ? "#3A2A00" : pal.accent} />
+              </Pressable>
+            ) : null}
             {/* زر استماع صغير في الزاوية (للوجه الظاهر) */}
             <Pressable
               {...studyCoach.bind("listen")}
@@ -683,6 +738,28 @@ export default function FlashcardsScreen() {
               ]}
             >
               <Ionicons name={speaking ? "stop" : "volume-high"} size={17} color={speaking ? pal.onAccent : pal.accent} />
+            </Pressable>
+          </View>
+
+          {/* التنقل بين البطاقات: تحت البطاقة وبحجم واضح */}
+          <View style={[styles.navRow, { flexDirection: dir.row }]}>
+            <Pressable
+              onPress={() => goCard(-1)}
+              disabled={idx <= 0}
+              style={[styles.navBig, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }, idx <= 0 && { opacity: 0.4 }]}
+              accessibilityLabel={t("flashcards.prev")}
+            >
+              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={pal.ink} />
+              <Text style={[styles.navBigTxt, { color: pal.ink }]}>{t("flashcards.prev")}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => goCard(1)}
+              disabled={idx >= queue.length - 1}
+              style={[styles.navBig, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }, idx >= queue.length - 1 && { opacity: 0.4 }]}
+              accessibilityLabel={t("flashcards.next")}
+            >
+              <Text style={[styles.navBigTxt, { color: pal.ink }]}>{t("flashcards.next")}</Text>
+              <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={22} color={pal.ink} />
             </Pressable>
           </View>
 
@@ -758,6 +835,12 @@ const styles = StyleSheet.create({
   counter: { fontSize: 13, fontWeight: "800" },
   reviewTopRight: { alignItems: "center", gap: 10 },
   navChip: { padding: 6, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  navRow: { gap: 12, marginTop: 14 },
+  fontRow: { alignItems: "center", gap: 8 },
+  fontBtn: { minWidth: 44, height: 36, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  fontTxt: { fontWeight: "900" },
+  navBig: { flex: 1, height: 52, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center", gap: 6 },
+  navBigTxt: { fontSize: 16, fontWeight: "800" },
   longPressHint: { fontSize: 12, fontWeight: "700", paddingHorizontal: Spacing.xl, paddingTop: 6 },
   archToggleRow: { gap: 8, paddingHorizontal: Spacing.xl, paddingTop: 10, paddingBottom: 10 },
   archToggle: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: Radius.pill, borderWidth: 1 },
