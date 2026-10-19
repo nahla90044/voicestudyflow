@@ -1973,7 +1973,9 @@ export default function ReaderScreen() {
     return n > 0 ? n : null;
   }
 
+  const gotoFreshRef = useRef(true); // أول رقم يُكتب يستبدل الرقم المعروض
   function openGoto() {
+    gotoFreshRef.current = true;
     setGotoMode(pageOffset != null ? "book" : "file");
     setGotoValue(String(printedOf(page) ?? page));
     setGotoOpen(true);
@@ -4135,19 +4137,37 @@ export default function ReaderScreen() {
               ) : (
                 <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.goto.hint", { total: totalPages || "؟" })}</Text>
               )}
-              <TextInput
-                value={gotoValue}
-                onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
-                ref={gotoInputRef}
-                autoFocus
-                keyboardType="number-pad"
-                placeholder={`${page}`}
-                placeholderTextColor={Palette.placeholder}
-                style={styles.gotoInput}
-                textAlign="center"
-                selectTextOnFocus
-                onSubmitEditing={submitGoto}
-              />
+              {/* لوحة أرقام داخل التطبيق: تظهر فورًا دائمًا (لوحة النظام كانت لا تظهر إلا بعد عدة محاولات) */}
+              <View style={styles.gotoInput}>
+                <Text style={styles.gotoInputTxt}>{gotoValue || String(page)}</Text>
+              </View>
+              <View style={styles.gotoPad}>
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "clr"].map((k) => (
+                  <Pressable
+                    key={k}
+                    onPress={() =>
+                      setGotoValue((v) => {
+                        // أول رقم يُكتب يبدأ رقمًا جديدًا (لا يُلحق بالرقم الحالي المعروض)
+                        const fresh = gotoFreshRef.current;
+                        gotoFreshRef.current = false;
+                        if (k === "del") return fresh ? "" : v.slice(0, -1);
+                        if (k === "clr") return "";
+                        return ((fresh ? "" : v) + k).replace(/^0+/, "").slice(0, 5);
+                      })
+                    }
+                    style={({ pressed }) => [styles.gotoKey, pressed && styles.gotoKeyOn]}
+                    accessibilityLabel={k === "del" ? t("common.delete") : k === "clr" ? t("reader.goto.clear") : k}
+                  >
+                    {k === "del" ? (
+                      <Ionicons name="backspace-outline" size={24} color={Palette.text} />
+                    ) : k === "clr" ? (
+                      <Text style={styles.gotoKeySmall}>{t("reader.goto.clear")}</Text>
+                    ) : (
+                      <Text style={styles.gotoKeyTxt}>{k}</Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
               <Pressable onPress={submitGoto} style={styles.gotoBtn}
               >
                 <Ionicons name="arrow-back" size={18} color={SKY.onAccent} />
@@ -5167,7 +5187,7 @@ const styles = StyleSheet.create({
   dictSave: { alignSelf: "flex-start", alignItems: "center", gap: 6, marginTop: 12, paddingHorizontal: 14, height: 38, borderRadius: 12, backgroundColor: SKY.accent },
   dictSaveTxt: { color: SKY.onAccent, fontSize: 13.5, fontWeight: "800" },
 
-  gotoMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 220 },
+  gotoMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", paddingHorizontal: 28 },
   gotoCard: {
     backgroundColor: Palette.bgElevated,
     borderRadius: Radius.xl,
@@ -5176,6 +5196,12 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     gap: 14,
   },
+  gotoInputTxt: { color: Palette.text, fontSize: 30, fontWeight: "800", textAlign: "center", fontVariant: ["tabular-nums"] },
+  gotoPad: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8, marginTop: 10, direction: "ltr" },
+  gotoKey: { width: "31.5%", height: 54, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.08)", alignItems: "center", justifyContent: "center" },
+  gotoKeyOn: { backgroundColor: "rgba(255,255,255,0.2)" },
+  gotoKeyTxt: { color: Palette.text, fontSize: 24, fontWeight: "700" },
+  gotoKeySmall: { color: Palette.textMuted, fontSize: 15, fontWeight: "700" },
   gotoInput: {
     height: 56,
     borderRadius: Radius.md,
@@ -5185,6 +5211,7 @@ const styles = StyleSheet.create({
     color: Palette.text,
     fontSize: 22,
     fontWeight: "900",
+    justifyContent: "center",
   },
   gotoBtn: {
     flexDirection: "row-reverse",
