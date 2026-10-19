@@ -586,6 +586,23 @@ export default function ReaderScreen() {
   const [prefsLoaded, setPrefsLoaded] = useState(false); // اكتمل استرجاع الصفحة المحفوظة
   const scrollRef = useRef<ScrollView>(null);
   const pdfScrollRef = useRef<ScrollView>(null);
+  // صفحة جديدة → بلا تكبير متبقٍّ من سابقتها، ومن أعلاها (بدل إعادة بناء العرض)
+  useEffect(() => {
+    try {
+      const sv = pdfScrollRef.current as unknown as {
+        getScrollResponder?: () => { scrollResponderZoomTo?: (r: { x: number; y: number; width: number; height: number; animated: boolean }) => void } | null;
+        scrollTo?: (o: { x: number; y: number; animated: boolean }) => void;
+      } | null;
+      if (!sv) return;
+      if (pdfZoomRef.current > 1.01) {
+        sv.getScrollResponder?.()?.scrollResponderZoomTo?.({ x: 0, y: 0, width: 4000, height: 4000, animated: false });
+        pdfZoomRef.current = 1;
+      }
+      sv.scrollTo?.({ x: 0, y: 0, animated: false });
+    } catch {
+      // إعادة التكبير اختيارية
+    }
+  }, [page]);
   // كتابة قلم الآيباد على الصفحة والهامش (الآيباد فقط)
   const isPad = Platform.OS === "ios" && Platform.isPad;
   const [penOn, setPenOn] = useState(false);
@@ -970,13 +987,7 @@ export default function ReaderScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefsLoaded]);
 
-  // جهّز أول جملة مسبقًا عند تحميل نص الصفحة (وهي متوقفة) → زر التشغيل يبدأ فورًا بلا انتظار
-  useEffect(() => {
-    if (sentences.length === 0 || speaking) return;
-    const idx = Math.max(0, Math.min(resumeIdxRef.current || 0, sentences.length - 1));
-    prefetchText(sentences[idx], { voiceId: pickVoice(), page: pdfPath ? { book: pdfPath, page } : undefined });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sentences]);
+  // لا تجهيز صوت قبل الضغط على التشغيل: تجهيز الصفحة كان يُحسب من صفحات الاستماع بمجرد تقليبها (قرار نهلة ١٩ أكتوبر)
 
   function cycleSpeed() {
     const idx = SPEEDS.indexOf(rate as (typeof SPEEDS)[number]);
@@ -1720,13 +1731,14 @@ export default function ReaderScreen() {
    * واختياريًا «حفظ صوت الكتاب كاملًا» مع حفظ الكتاب. كل صفحة تُحسب مرة من حصة الشهر،
    * لذلك التجربة المجانية تجهّز صفحتين فقط. عامل واحد في كل مرة (رمز للإلغاء). */
   const aheadRef = useRef<{ token: number; to: number; whole: boolean; running: boolean }>({ token: 0, to: 0, whole: false, running: false });
-  const aheadPagesRef = useRef(2);
+  const aheadPagesRef = useRef(1);
   // حفظ صوت الكتاب كاملًا (زر مستقل): التقدّم يظهر على الزر، والضغط أثناءه يوقفه
   const [bookAud, setBookAud] = useState<BookAudio | null>(null);
   useEffect(() => (pdfPath ? watchBookAudio(pdfPath, setBookAud) : undefined), [pdfPath]);
   useEffect(() => {
     getPlan()
-      .then((pl) => (aheadPagesRef.current = pl === "free" ? 2 : 10))
+      // صفحة واحدة قادمة فقط (للاستمرار بلا انقطاع): ما يُجهَّز يُحسب، فلا نحسب صفحات لم يستمع لها المستخدم
+      .then(() => (aheadPagesRef.current = 1))
       .catch(() => {});
   }, []);
 
@@ -3227,8 +3239,8 @@ export default function ReaderScreen() {
             ) : null}
             {pageImg ? (
               <GHScrollView
-                // مفتاح الصفحة: كل صفحة تُعرض بلا تكبير متبقٍّ من سابقتها
-                key={`pdf-${page}`}
+                // لا مفتاح لكل صفحة: إعادة بناء العرض عند كل تقليب كانت تسبب الانهيار
+                // («Unable to find node on an unmounted component») وتقطّع التقليب؛ التكبير يُعاد بالأثر أدناه
                 ref={pdfScrollRef}
                 style={{ flex: 1 }}
                 contentContainerStyle={[styles.pdfImgWrap, fullText && styles.pdfImgWrapFull]}
