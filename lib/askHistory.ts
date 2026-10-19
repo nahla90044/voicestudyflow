@@ -9,7 +9,7 @@ import * as Sharing from "expo-sharing";
 
 import type { QAAnswer } from "./bookQA";
 
-export type AskTurn = { id: number; q: string; a?: QAAnswer; error?: boolean; saved?: boolean };
+export type AskTurn = { id: number; q: string; a?: QAAnswer; error?: boolean; saved?: boolean; waiting?: boolean };
 export type AskSession = { id: string; startedAt: number; updatedAt: number; turns: AskTurn[] };
 
 /** مدة الخمول التي تبدأ بعدها محادثة جديدة */

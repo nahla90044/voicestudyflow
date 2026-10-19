@@ -224,9 +224,7 @@ Deno.serve(async (req: Request) => {
     if (action === "ask") {
       const userQ = String(body.userQuestion ?? question).slice(0, 500);
       const v = await askGuard(req, userQ);
-      if (v.verdict === "offtopic") {
-        return json({ result: targetLang === "en" ? ASK_OFFTOPIC.en : ASK_OFFTOPIC.ar, offtopic: true });
-      }
+      // «خارج الكتاب» لا يُقرَّر هنا (الوكيل لا يرى الكتاب): يقرّره نموذج الإجابة بعد البحث في صفحات الكتاب نفسها
       if (v.verdict === "violation") {
         // قرار نهلة: لا تحذير ولا إيقاف في «كتابك يجيب» — ردّ هادئ بأنه خارج نطاق الكتاب، وتوثيق صامت للمراجعة فقط
         await askStrike(req, caller, v.kind, String(body.userQuestion ?? question), body.askContext, false);

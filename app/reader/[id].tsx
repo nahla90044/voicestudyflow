@@ -4085,8 +4085,13 @@ export default function ReaderScreen() {
         animationType="fade"
         onRequestClose={() => setGotoOpen(false)}
         onShow={() => {
-          gotoInputRef.current?.focus();
-          setTimeout(() => gotoInputRef.current?.focus(), 250);
+          // iOS يتجاهل أحيانًا التركيز أثناء حركة ظهور النافذة → محاولات متتالية حتى تظهر لوحة الأرقام
+          for (const ms of [0, 120, 300, 600]) {
+            setTimeout(() => {
+              const i = gotoInputRef.current;
+              if (i && !i.isFocused()) i.focus();
+            }, ms);
+          }
         }}
       >
         <Pressable style={styles.gotoMask} onPress={() => setGotoOpen(false)}>
@@ -4124,6 +4129,7 @@ export default function ReaderScreen() {
               value={gotoValue}
               onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
               ref={gotoInputRef}
+              autoFocus
               keyboardType="number-pad"
               placeholder={`${page}`}
               placeholderTextColor={Palette.placeholder}

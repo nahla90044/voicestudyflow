@@ -49,6 +49,11 @@ export async function myBooks(): Promise<QABook[]> {
 /**
  * يسأل كتابًا واحدًا أو عدة كتب. يرمي خطأ «NO_TEXT» إن لم تكن أي صفحة جاهزة بعد.
  */
+/** ردّ «خارج محتوى الكتاب» (من السيرفر أو النموذج) */
+export function isOutOfBook(text: string): boolean {
+  return /خارج محتوى الكتاب|outside the book's content/i.test(text);
+}
+
 export async function askBooks(books: QABook[], question: string, recent: string[] = []): Promise<QAAnswer> {
   const perBook = books.length > 1 ? 400 : 1200;
   const all = (await Promise.all(books.map((b, i) => cachedPages(b.pdf_path, i + 1, perBook)))).flat();

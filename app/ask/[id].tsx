@@ -13,7 +13,7 @@ import { PressableScale } from "../../components/brand/motion";
 import { SceneBanner, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius } from "../../constants/design";
 import { currentSession, deleteSession, exportAskPdf, loadSessions, newSession, saveSession, type AskSession, type AskTurn } from "../../lib/askHistory";
-import { askBooks, coverage, myBooks, type QAAnswer, type QABook } from "../../lib/bookQA";
+import { askBooks, coverage, isOutOfBook, myBooks, type QAAnswer, type QABook } from "../../lib/bookQA";
 import { getDownloadState, startDownload, subscribeDownload, type DownloadState } from "../../lib/downloadManager";
 import { addCards } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
@@ -131,6 +131,29 @@ export default function AskScreen() {
     }).catch(() => {});
   }
 
+  // اكتمل تجهيز الكتاب → الأسئلة المعلّقة («يُبحث في بقية الكتاب») تُعاد تلقائيًا على الكتاب كاملًا
+  const retrying = useRef(false);
+  useEffect(() => {
+    if (!book || retrying.current) return;
+    const pending = turns.filter((x) => x.waiting);
+    if (!pending.length) return;
+    const finished = !dl || dl.pdfPath !== book.pdf_path || !dl.running;
+    if (!finished) return;
+    retrying.current = true;
+    (async () => {
+      for (const p of pending) {
+        try {
+          const a = await askBooks([book], p.q, turns.map((x) => x.q).slice(-9));
+          setTurns((ts) => ts.map((x) => (x.id === p.id ? { ...x, a, waiting: false } : x)));
+        } catch {
+          setTurns((ts) => ts.map((x) => (x.id === p.id ? { ...x, waiting: false, error: true } : x)));
+        }
+      }
+      retrying.current = false;
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dl?.running, dl?.done, book, turns.length]);
+
   // نسبة الجاهزية تُحدَّث مع تقدّم التجهيز في الخلفية
   useEffect(() => {
     if (book) coverage(book.pdf_path).then(setReady).catch(() => setReady(null));
@@ -155,6 +178,17 @@ export default function AskScreen() {
     setBusy(true);
     try {
       const a = await askBooks(targets, q, turns.map((x) => x.q).slice(-9));
+      // «خارج الكتاب» والكتاب لم يُجهَّز كاملًا → قد يكون الجواب في صفحة لم تُجهَّز بعد:
+      // لا نحكم الآن؛ نجهّز بقية الكتاب ونعيد السؤال تلقائيًا عند اكتماله
+      if (book && total > 0 && isOutOfBook(a.text)) {
+        const have = await coverage(book.pdf_path).catch(() => total);
+        if (have < total) {
+          setTurns((ts) => ts.map((x) => (x.id === tid ? { ...x, waiting: true } : x)));
+          const cur = getDownloadState();
+          if (!(cur?.running && cur.pdfPath === book.pdf_path)) void startDownload(book.pdf_path, book.title, total);
+          return;
+        }
+      }
       setTurns((ts) => ts.map((x) => (x.id === tid ? { ...x, a } : x)));
     } catch (e) {
       const msg = (e as Error)?.message;
@@ -277,7 +311,16 @@ export default function AskScreen() {
                 <Text style={[styles.qTxt, { color: pal.onAccent }]}>{tn.q}</Text>
               </View>
               <View style={[styles.aBubble, { backgroundColor: pal.card, borderColor: pal.cardBorder, alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]}>
-                {!tn.a && !tn.error ? (
+                {tn.waiting ? (
+                  <View style={[styles.thinking, { flexDirection: dir.row }]}>
+                    <ActivityIndicator color={pal.accent} />
+                    <Text style={[styles.dim, { color: pal.dim, flex: 1, textAlign: dir.textAlign }]}>
+                      {dl?.running && book && dl.pdfPath === book.pdf_path
+                        ? t("ask.searchingRest", { done: dl.done, total: dl.total })
+                        : t("ask.thinking")}
+                    </Text>
+                  </View>
+                ) : !tn.a && !tn.error ? (
                   <View style={[styles.thinking, { flexDirection: dir.row }]}>
                     <ActivityIndicator color={pal.accent} />
                     <Text style={[styles.dim, { color: pal.dim }]}>{t("ask.thinking")}</Text>
