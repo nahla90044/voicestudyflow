@@ -31,6 +31,11 @@ export function summaryJobKey(pdfPath: string, src: SummarySource): string {
   return `${pdfPath}|${k.kind}|${k.id}`;
 }
 
+/** مهمة جارية (أو مكتملة في هذه الجلسة) لهذا المصدر — فلا يُسأل عن الأسلوب وهي تعمل */
+export function hasSummaryJob(pdfPath: string, src: SummarySource): boolean {
+  return jobs.get(summaryJobKey(pdfPath, src))?.status === "running";
+}
+
 export function getSummaryJob(key: string): SummaryJob | undefined {
   return jobs.get(key);
 }

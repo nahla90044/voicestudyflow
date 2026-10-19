@@ -2,6 +2,7 @@
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
 import { jobPart } from "./aiJobs";
+import { getSummaryMode } from "./summaryPrefs";
 import { runParts, type PartsProgress } from "./partsRunner";
 import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
 import { extractPdfPageText } from "./pdfText";
@@ -147,6 +148,7 @@ export async function getOrMakeSummary(
   if (!parts.length) return null;
   const n = parts.length;
   const base = summaryCacheKey(src);
+  const mode = (await getSummaryMode(pdfPath)) ?? "strict";
   const partId = (i: number) => (base.kind === "pagestudysummary" ? 1 : 2) * 1e12 + base.id * 1e4 + n * 100 + i;
   const results = await runParts<StudySummary, StudySummary>({
     parts,
@@ -156,7 +158,7 @@ export async function getOrMakeSummary(
     save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p),
     // مهمة سيرفر لكل جزء: تكمل وتُحفظ حتى لو قُفلت الشاشة أو أُغلق التطبيق
     // جزء فيه تمارين/مسائل/دراسة حالة → تفكير موسّع على السيرفر (يحلّ ويتحقق قبل الكتابة)
-    run: (ctx, i, onPartial) => jobPart("studysummary", ctx, `sum:${pdfPath}:${partId(i)}`, parsePartialPart, parseFullPart, onPartial, EXERCISE_RE.test(ctx)),
+    run: (ctx, i, onPartial) => jobPart("studysummary", ctx, `sum:${pdfPath}:${partId(i)}`, parsePartialPart, parseFullPart, onPartial, { deep: EXERCISE_RE.test(ctx), mode }),
     merge: mergeSummaries,
     onProgress,
     parallel: Math.min(6, n),

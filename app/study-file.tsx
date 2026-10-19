@@ -15,6 +15,7 @@ import { sharePdf } from "../lib/studySaves";
 import { studyFileHtml, type StudySummary } from "../lib/studySummary";
 import { getSyllabus } from "../lib/syllabus";
 import { getCachedSummary, getOrMakeSummary } from "../lib/unitSummary";
+import { getSummaryMode, setSummaryMode } from "../lib/summaryPrefs";
 
 type UnitRow = { title: string; summary: StudySummary | null; state: "ready" | "missing" | "working" | "failed" };
 
@@ -77,11 +78,19 @@ export default function StudyFileScreen() {
     setRunning(false);
   }
 
-  function onCreate() {
+  async function onCreate() {
     if (!missing) return;
-    Alert.alert(t("studyFile.confirmTitle"), t("studyFile.confirmBody", { n: missing }), [
+    const go = () =>
+      Alert.alert(t("studyFile.confirmTitle"), t("studyFile.confirmBody", { n: missing }), [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("studyFile.confirmGo"), onPress: () => void generateMissing() },
+      ]);
+    // أسلوب الملخّص لهذا الكتاب (مرة واحدة): الالتزام بالكتاب أو التوسّع
+    if (await getSummaryMode(pdfPath)) return go();
+    Alert.alert(t("summary.mode.title"), t("summary.mode.body"), [
+      { text: t("summary.mode.strict"), onPress: () => void setSummaryMode(pdfPath, "strict").then(go) },
+      { text: t("summary.mode.expand"), onPress: () => void setSummaryMode(pdfPath, "expand").then(go) },
       { text: t("common.cancel"), style: "cancel" },
-      { text: t("studyFile.confirmGo"), onPress: () => void generateMissing() },
     ]);
   }
 

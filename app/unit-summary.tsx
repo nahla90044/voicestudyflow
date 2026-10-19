@@ -15,7 +15,8 @@ import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
 import { clearSummary, summaryCacheKey, summaryRange, type SummarySource } from "../lib/unitSummary";
-import { startSummaryJob, watchSummaryJob } from "../lib/summaryJobs";
+import { hasSummaryJob, startSummaryJob, watchSummaryJob } from "../lib/summaryJobs";
+import { getSummaryMode, setSummaryMode, type SummaryMode } from "../lib/summaryPrefs";
 import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
@@ -107,6 +108,13 @@ export default function UnitSummaryScreen() {
   // التلخيص مهمة خلفية (lib/summaryJobs): الخروج من هنا لا يوقفه، والعودة تتصل بنفس المهمة.
   // كل جزء يُحفظ فور اكتماله، فانقطاع الاتصال (قفل الشاشة) لا يضيّع ما ظهر.
   const [runId, setRunId] = useState(0);
+  const [needMode, setNeedMode] = useState(false); // اختيار أسلوب الملخّص قبل أول ملخّص للكتاب
+  async function pickMode(m: SummaryMode) {
+    await setSummaryMode(pdfPath, m);
+    setNeedMode(false);
+    setLoading(true);
+    setRunId((n) => n + 1);
+  }
   // صفحات الكتاب التي يغطيها الملخّص — ليعرف الطالب هل غطّى الدرس كله
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
   useEffect(() => {
@@ -129,6 +137,13 @@ export default function UnitSummaryScreen() {
     };
     Alert.alert(t("summary.redo.title"), t("summary.redo.body"), [
       { text: t("summary.redo.same"), onPress: () => void restart() },
+      {
+        text: t("summary.mode.change"),
+        onPress: async () => {
+          await setSummaryMode(pdfPath, null);
+          await restart();
+        },
+      },
       {
         text: t("summary.delete"),
         style: "destructive",
@@ -180,6 +195,14 @@ export default function UnitSummaryScreen() {
       if (cached?.sections?.length) {
         setSum(cached);
         setLoading(false);
+        return;
+      }
+      // أول ملخّص لهذا الكتاب: يُسأل الطالب عن الأسلوب (الالتزام بالكتاب أو التوسّع)
+      if (!(await getSummaryMode(pdfPath)) && !(await hasSummaryJob(pdfPath, src))) {
+        if (on) {
+          setNeedMode(true);
+          setLoading(false);
+        }
         return;
       }
       const params: Record<string, string> = { pdf_path: pdfPath };
@@ -285,7 +308,27 @@ export default function UnitSummaryScreen() {
         }
       />
 
-      {loading && !sum ? (
+      {needMode ? (
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <Text style={[styles.modeTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("summary.mode.title")}</Text>
+          <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("summary.mode.body")}</Text>
+          {(["strict", "expand"] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => void pickMode(m)}
+              style={({ pressed }) => [styles.modeCard, { backgroundColor: pal.card, borderColor: pal.cardBorder, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
+            >
+              <View style={[styles.modeIcon, { backgroundColor: pal.soft }]}>
+                <Ionicons name={m === "strict" ? "book-outline" : "layers-outline"} size={22} color={pal.accent} />
+              </View>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={[styles.modeName, { color: pal.ink, textAlign: dir.textAlign }]}>{t(`summary.mode.${m}`)}</Text>
+                <Text style={[styles.modeDesc, { color: pal.dim, textAlign: dir.textAlign }]}>{t(`summary.mode.${m}Desc`)}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : loading && !sum ? (
         <View style={styles.center}>
           <ActivityIndicator color={pal.accent} />
           <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.preparing")}</Text>
@@ -413,6 +456,11 @@ const styles = StyleSheet.create({
   writing: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 14, paddingHorizontal: 14, borderRadius: Radius.lg },
   eta: { fontSize: 15, fontWeight: "900", textAlign: "center" },
   hint: { fontSize: 13, fontWeight: "600", textAlign: "center", lineHeight: 20 },
+  modeTitle: { fontSize: 18, fontWeight: "900" },
+  modeCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.lg, padding: 16, gap: 14, alignItems: "center" },
+  modeIcon: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
+  modeName: { fontSize: 16, fontWeight: "900" },
+  modeDesc: { fontSize: 13.5, lineHeight: 21, fontWeight: "600" },
   resumeBtn: { height: 46, paddingHorizontal: 26, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
   saveRow: { gap: 10 },
   saveBtn: { flex: 1, height: 48, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center", gap: 8 },

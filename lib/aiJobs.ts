@@ -17,7 +17,7 @@ const MAX_AGE_MS = 9 * 60 * 1000; // مهمة «قيد التشغيل» أقدم
 const jobKey = (k: string) => `vsf:aijob:${k}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function startJob(action: AiAction, text: string, deep = false): Promise<string> {
+async function startJob(action: AiAction, text: string, extra: { deep?: boolean; mode?: string } = {}): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? SUPABASE_PUBLIC_KEY;
   const ctrl = new AbortController();
@@ -27,7 +27,7 @@ async function startJob(action: AiAction, text: string, deep = false): Promise<s
       method: "POST",
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, apikey: SUPABASE_PUBLIC_KEY, "x-vsf-version": APP_VERSION },
-      body: JSON.stringify({ action, text, targetLang: getCurrentLang(), job: true, deep }),
+      body: JSON.stringify({ action, text, targetLang: getCurrentLang(), job: true, ...extra }),
     });
     const j = (await res.json().catch(() => ({}))) as { jobId?: string; userQuota?: boolean; error?: string };
     if (j.userQuota) {
@@ -61,10 +61,10 @@ export async function jobPart<P>(
   parsePartial: (raw: string) => P | null,
   parseFull: (raw: string) => P | null,
   onPartial: (p: P, chars: number) => void,
-  deep = false
+  extra: { deep?: boolean; mode?: string } = {}
 ): Promise<P> {
   try {
-    return await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, deep);
+    return await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra);
   } catch (e) {
     const m = (e as Error).message;
     if (m === "USER_QUOTA") throw e;
@@ -81,11 +81,11 @@ async function jobPartInner<P>(
   parsePartial: (raw: string) => P | null,
   parseFull: (raw: string) => P | null,
   onPartial: (p: P, chars: number) => void,
-  deep = false
+  extra: { deep?: boolean; mode?: string } = {}
 ): Promise<P> {
   let id = await AsyncStorage.getItem(jobKey(key)).catch(() => null);
   if (!id) {
-    id = await startJob(action, ctx, deep).catch((e) => {
+    id = await startJob(action, ctx, extra).catch((e) => {
       throw new Error((e as Error).message === "USER_QUOTA" ? "USER_QUOTA" : "JOB_START");
     });
     await AsyncStorage.setItem(jobKey(key), id).catch(() => {});
