@@ -6,6 +6,7 @@
 // إن لم يوجد مفتاح Vision: نرجّع معلومات التحويل فقط (للاختبار).
 import { canAccessPdf } from "../_shared/paths.ts";
 import { pdfCleared } from "../_shared/bookCheck.ts";
+import { openCached } from "../_shared/pdfCache.ts";
 import * as mupdf from "npm:mupdf@1.3.5";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUpdatedApp } from "../_shared/client.ts";
@@ -98,13 +99,8 @@ Deno.serve(async (req: Request) => {
     const { count: ocrToday } = await sb.from("cost_log").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("fn", "ocr").gte("created_at", since);
     if ((ocrToday ?? 0) >= OCR_DAILY_CAP) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
     await sb.from("cost_log").insert({ user_id: user.id, fn: "ocr", action: "vision", images: 1 });
-    const { data: file, error: dErr } = await sb.storage.from("pdfs").download(pdfPath);
-    if (dErr || !file) throw dErr ?? new Error("Failed to download PDF");
-
-    const buf = new Uint8Array(await file.arrayBuffer());
-
-    // تحويل الصفحة إلى صورة بدقة محددة
-    const doc = mupdf.Document.openDocument(buf, "application/pdf");
+    // تحويل الصفحة إلى صورة بدقة محددة (الملف مفتوح في الذاكرة لدقائق)
+    const doc = await openCached(sb, pdfPath, "mupdf", (b) => mupdf.Document.openDocument(b, "application/pdf"));
     const totalPages = doc.countPages();
     const p = Math.min(page, totalPages);
     const pg = doc.loadPage(p - 1);

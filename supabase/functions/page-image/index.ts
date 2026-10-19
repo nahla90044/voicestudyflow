@@ -3,6 +3,7 @@
 // الطلب: { pdfPath, page }   الرد: { image: base64Png, page, totalPages }
 import { canAccessPdf } from "../_shared/paths.ts";
 import { pdfCleared } from "../_shared/bookCheck.ts";
+import { openCached } from "../_shared/pdfCache.ts";
 import * as mupdf from "npm:mupdf@1.3.5";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -71,11 +72,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { data: file, error: dErr } = await sb.storage.from("pdfs").download(pdfPath);
-    if (dErr || !file) throw dErr ?? new Error("Failed to download PDF");
-
-    const buf = new Uint8Array(await file.arrayBuffer());
-    const doc = mupdf.Document.openDocument(buf, "application/pdf");
+    const doc = await openCached(sb, pdfPath, "mupdf", (b) => mupdf.Document.openDocument(b, "application/pdf"));
     const totalPages = doc.countPages();
     const p = Math.min(page, totalPages);
     const pg = doc.loadPage(p - 1);

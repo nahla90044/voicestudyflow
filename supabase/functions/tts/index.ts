@@ -84,6 +84,19 @@ Deno.serve(async (req: Request) => {
     const hasPage = !!book && !!uidReq && canAccessPdf(book, uidReq) && Number.isFinite(pageNo) && pageNo > 0 && pageNo < 100000;
     let caller: Awaited<ReturnType<typeof getCaller>> | undefined;
     const pageKey = hasPage ? `${(await sha(book)).slice(0, 20)}:${pageNo}` : undefined;
+
+    // البحث في الكاش المشترك يبدأ الآن بالتوازي مع حساب الحصة (لا ينتظر أحدهما الآخر)
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const store = SUPABASE_URL && SERVICE_ROLE ? createClient(SUPABASE_URL, SERVICE_ROLE) : null;
+    const key = await contentKey(voiceId, style, text);
+    const cachedP = store
+      ? Promise.all([
+          store.storage.from(SHARED_BUCKET).download(`${key}.mp3`).then((r) => r.data).catch(() => null),
+          store.storage.from(SHARED_BUCKET).download(`${key}.json`).then((r) => r.data).catch(() => null),
+        ])
+      : Promise.resolve([null, null] as const);
+
     if (hasPage && pageKey) {
       caller = await getCaller(req);
       const r = await consumePage(caller, pageKey, "std");
@@ -91,19 +104,13 @@ Deno.serve(async (req: Request) => {
     }
 
     // كاش مشترك: هل وُلّد هذا المحتوى من قبل (لأي مستخدم)؟ → أرجعه بلا تكلفة
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const store = SUPABASE_URL && SERVICE_ROLE ? createClient(SUPABASE_URL, SERVICE_ROLE) : null;
-    const key = await contentKey(voiceId, style, text);
-
     if (store) {
       try {
-        const { data: mp3 } = await store.storage.from(SHARED_BUCKET).download(`${key}.mp3`);
+        const [mp3, tj] = await cachedP;
         if (mp3) {
           const audio = bytesToBase64(new Uint8Array(await mp3.arrayBuffer()));
           let starts: number[] = [];
           try {
-            const { data: tj } = await store.storage.from(SHARED_BUCKET).download(`${key}.json`);
             if (tj) starts = JSON.parse(await tj.text());
           } catch {}
           void logCost(req, { fn: "tts", action: hasPage ? "page" : "voice", model: GEMINI_MODEL, chars: text.length, cached: true, page_key: pageKey });
@@ -173,17 +180,19 @@ Deno.serve(async (req: Request) => {
     const starts = Array.from({ length: n }, (_, i) => Math.round((i / n) * dur * 1000) / 1000);
     const audio = bytesToBase64(out.mp3);
 
-    // ارفعه للكاش المشترك (مرة واحدة) ليستفيد منه الجميع لاحقًا
+    // ارفعه للكاش المشترك (مرة واحدة) ليستفيد منه الجميع لاحقًا — في الخلفية بعد الرد، فلا ينتظره المستخدم
     if (store) {
-      try {
-        await store.storage.from(SHARED_BUCKET).upload(`${key}.mp3`, out.mp3, { contentType: "audio/mpeg", upsert: true });
-        await store.storage.from(SHARED_BUCKET).upload(`${key}.json`, new TextEncoder().encode(JSON.stringify(starts)), {
+      const mp3 = out.mp3;
+      const save = Promise.all([
+        store.storage.from(SHARED_BUCKET).upload(`${key}.mp3`, mp3, { contentType: "audio/mpeg", upsert: true }),
+        store.storage.from(SHARED_BUCKET).upload(`${key}.json`, new TextEncoder().encode(JSON.stringify(starts)), {
           contentType: "application/json",
           upsert: true,
-        });
-      } catch {
-        // فشل الرفع غير حرج — الصوت يرجع للمستخدم على أي حال
-      }
+        }),
+      ]).catch(() => {}); // فشل الرفع غير حرج
+      const rt = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
+      if (rt) rt.waitUntil(save);
+      else await save;
     }
 
     return json({ audio, starts, f0: out.f0 });

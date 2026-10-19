@@ -12,6 +12,7 @@ import { streamPart, whenActive } from "./partsRunner";
 import { refreshUsage, requestPaywall } from "./plan";
 import { checkSecurity } from "./security";
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
+import { recordPerf } from "./perf";
 
 const POLL_MS = 2000;
 const MAX_AGE_MS = 9 * 60 * 1000; // مهمة «قيد التشغيل» أقدم من هذا = متوقفة على السيرفر → تُعاد
@@ -65,8 +66,11 @@ export async function jobPart<P>(
   onPartial: (p: P, chars: number) => void,
   extra: { deep?: boolean; mode?: string } = {}
 ): Promise<P> {
+  const t0 = Date.now();
   try {
-    return await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra);
+    const r = await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra);
+    recordPerf(`job.${action}`, Date.now() - t0, true, ctx.length);
+    return r;
   } catch (e) {
     const m = (e as Error).message;
     if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;

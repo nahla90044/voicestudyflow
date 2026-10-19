@@ -11,6 +11,7 @@ import "./notify"; // يضبط عرض الإشعار والتطبيق مفتوح
 import { dict } from "./i18n/strings";
 import type { StudySummary } from "./studySummary";
 import { getCachedSummary, getOrMakeSummary, summaryCacheKey, type SummaryProgress, type SummarySource } from "./unitSummary";
+import { recordPerf } from "./perf";
 
 export type SummaryJob = SummaryProgress & {
   key: string;
@@ -95,6 +96,7 @@ export function startSummaryJob(pdfPath: string, src: SummarySource, meta: Meta,
     .catch(() => {});
   (async () => {
     let last = job;
+    const t0 = Date.now();
     try {
       const result = await getOrMakeSummary(pdfPath, src, (p) => {
         last = { ...last, ...p };
@@ -103,6 +105,7 @@ export function startSummaryJob(pdfPath: string, src: SummarySource, meta: Meta,
       // مكتمل = خُزّن الملخّص كاملًا (كل الأجزاء نجحت)؛ وإلا يبقى ما اكتمل معروضًا ومحفوظًا
       const complete = !!(await getCachedSummary(pdfPath, src));
       last = { ...last, status: complete ? "done" : "failed", result, soFar: result ?? last.soFar, etaSec: 0 };
+      recordPerf("summary.total", Date.now() - t0, complete, last.total);
       emit(last);
       if (notifyWhenDone && !viewing.get(key)) void notifyDone(meta, complete);
     } catch (e) {

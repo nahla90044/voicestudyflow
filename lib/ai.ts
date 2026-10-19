@@ -6,6 +6,7 @@ import { fetch as streamFetch } from "expo/fetch";
 
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
 import { checkSecurity } from "./security";
+import { recordPerf } from "./perf";
 
 export type AiAction =
   | "videoscript"
@@ -340,6 +341,7 @@ export async function aiAssist(
   const lang = targetLang ?? getCurrentLang();
 
   // مهلة قصوى 60ث: إن لم يردّ السيرفر نرمي خطأً بدل ترك الواجهة معلّقة للأبد.
+  const aiT0 = Date.now();
   const { data, error } = await withTimeout(
     supabase.functions.invoke("ai-assist", {
       body: { action, text, question, targetLang: lang, count, cardType, userQuestion, askContext },
@@ -348,6 +350,7 @@ export async function aiAssist(
     action
   );
 
+  recordPerf(`ai.${action}`, Date.now() - aiT0, !error && !data?.error, text.length);
   if (error) throw error;
   checkSecurity(data);
   if (data?.userQuota) {

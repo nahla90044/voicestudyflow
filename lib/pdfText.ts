@@ -5,6 +5,7 @@
 //     بلا نص حقيقي (كتاب مصوّر) → OCR عبر ocr-page، ثم نخزّن النتيجة.
 import { aiAssist, fixArabicSpacing } from "./ai";
 import { supabase } from "./supabase";
+import { recordPerf } from "./perf";
 
 // تنقية ضجيج فورية (بلا إنترنت/ذكاء) — أسرع بكثير. تحذف الأسطر غير المحتوى فقط
 // (أرقام صفحات، سلاسل نقاط، علامات مائية، مراجع الصور) دون تغيير أي كلمة.
@@ -262,9 +263,11 @@ export async function extractPdfPageText(
   let text = "";
   let usedOcr = false;
 
+  const exT0 = Date.now();
   const { data, error } = await supabase.functions.invoke("pdf-extract-text", {
     body: { pdfPath, page },
   });
+  recordPerf("page.extract", Date.now() - exT0, !error && !data?.error);
   if (!error && !data?.error) {
     resolvedPage = Number(data?.page ?? page);
     totalPages = Number(data?.totalPages ?? 0);
@@ -280,9 +283,11 @@ export async function extractPdfPageText(
     // OCR على صورة الصفحة — مع إعادة محاولة (الخدمة قد تفشل لحظيًا تحت الضغط)
     for (let attempt = 0; attempt < 3 && !usedOcr; attempt++) {
       try {
+        const ocrT0 = Date.now();
         const ocr = await supabase.functions.invoke("ocr-page", {
           body: { pdfPath, page: resolvedPage },
         });
+        recordPerf("page.ocr", Date.now() - ocrT0, !ocr.error);
         const ocrText = String(ocr.data?.text ?? "").trim();
         if (!ocr.error && ocrText.length >= MIN_REAL_TEXT) {
           text = ocrText; // نص الصورة الفعلي — نظيف ومطابق للمطبوع

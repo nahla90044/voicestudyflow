@@ -22,6 +22,7 @@ import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
 import { markUpdateRequired } from "./appVersion";
 import { base64ToBytes } from "./base64";
 import { supabase } from "./supabase";
+import { recordPerf } from "./perf";
 
 /* -------- سجلّ عام لكل مشغّلات السرد: صوت واحد فقط في أي لحظة -------- */
 // يُحفظ على globalThis فيبقى حتى لو أُعيد تحميل هذه الوحدة (التحديث السريع أثناء التطوير)،
@@ -488,6 +489,7 @@ async function synthToFileNow(
 
   // الأمان: الصوت يُولَّد دائمًا عبر الدالة السحابية «tts» (المفتاح سرّي بالسيرفر).
   // لا يوجد مفتاح صوت داخل التطبيق إطلاقًا، فلا يمكن استخراجه أو إساءة استخدامه.
+  const ttsT0 = Date.now();
   const { data, error } = await within(
     supabase.functions.invoke("tts", {
       body: {
@@ -503,6 +505,7 @@ async function synthToFileNow(
     TTS_REQUEST_MS,
     "TTS_TIMEOUT"
   );
+  recordPerf("tts.sentence", Date.now() - ttsT0, !error, text.length);
   if (error) {
     // نسخة لم تعد مدعومة (426) → قفل التطبيق بشاشة التحديث
     if ((error as { context?: { status?: number } })?.context?.status === 426) markUpdateRequired();

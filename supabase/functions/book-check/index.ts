@@ -94,9 +94,11 @@ Deno.serve(async (req: Request) => {
       return reject("hidden_commands", "يحتوي الملف على تعليمات خفية غير مسموح بها.", { severity: "high", signals: g.signals, excerpt: g.excerpt });
     }
 
-    // ٢) الصور: صفحات الصور (نص قليل) أولًا ثم الأولى — SafeSearch
+    // ٢ و٣ معًا (بالتوازي لتسريع الرفع): الصور عبر SafeSearch، وسياق النص عبر وكيل السياسة.
+    // الحكم بعدها بالأولوية نفسها: الصور أولًا ثم السياق.
     const visionKey = Deno.env.get("GOOGLE_VISION_API_KEY");
-    if (visionKey) {
+    const imagesTask = (async (): Promise<any | null> => {
+      if (!visionKey) return null;
       const byLowText = [...texts].sort((a, b) => a.t.length - b.t.length).map((x) => x.i);
       const imgPages = [...new Set([...byLowText.slice(0, IMAGE_PAGES - 2), 0, 1].filter((i) => i < n))].slice(0, IMAGE_PAGES);
       const requests = [];
@@ -108,31 +110,25 @@ Deno.serve(async (req: Request) => {
           // صفحة تعذّر رسمها → نتجاوزها
         }
       }
-      if (requests.length) {
-        const vr = await fetch("https://vision.googleapis.com/v1/images:annotate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": visionKey },
-          body: JSON.stringify({ requests }),
-        });
-        const vj = await vr.json().catch(() => ({}));
-        await admin.from("cost_log").insert({ user_id: caller.id, fn: "book-check", action: "safesearch", images: requests.length });
-        const hit = (vj?.responses ?? []).find((r: any) => {
+      if (!requests.length) return null;
+      const vr = await fetch("https://vision.googleapis.com/v1/images:annotate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": visionKey },
+        body: JSON.stringify({ requests }),
+      });
+      const vj = await vr.json().catch(() => ({}));
+      await admin.from("cost_log").insert({ user_id: caller.id, fn: "book-check", action: "safesearch", images: requests.length });
+      return (
+        (vj?.responses ?? []).find((r: any) => {
           const s = r?.safeSearchAnnotation;
           return s && LIKELY.has(s.adult) && !LIKELY.has(s.medical);
-        });
-        if (hit) {
-          return reject("sexual_images", "يحتوي الملف على صور غير لائقة تخالف شروط الاستخدام.", {
-            severity: "medium",
-            signals: ["sexual_images"],
-            excerpt: JSON.stringify(hit.safeSearchAnnotation),
-          });
-        }
-      }
-    }
+        }) ?? null
+      );
+    })();
 
-    // ٣) وكيل السياق (سياسة المحتوى)
     const sample = all.replace(/\s+/g, " ").slice(0, 14000);
-    if (sample.trim().length > 200) {
+    const policyTask = (async (): Promise<{ verdict?: string; category?: string; minors?: boolean; advice?: string; context?: string }> => {
+      if (sample.trim().length <= 200) return {};
       const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
       const msg = await client.messages.create({
         model: "claude-sonnet-4-6",
@@ -142,17 +138,27 @@ Deno.serve(async (req: Request) => {
       });
       await admin.from("cost_log").insert({ user_id: caller.id, fn: "book-check", action: "policy", model: "claude-sonnet-4-6", input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
       const raw = msg.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
-      let v: { verdict?: string; category?: string; minors?: boolean; advice?: string; context?: string } = {};
       try {
-        v = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}");
-      } catch {}
-      if (v.verdict === "reject") {
-        return reject(String(v.category || "policy"), String(v.advice || "يخالف هذا الكتاب سياسة المحتوى في التطبيق."), {
-          severity: v.minors ? "high" : "medium",
-          signals: ["policy", ...(v.minors ? ["minors"] : [])],
-          excerpt: `${v.category ?? ""} | ${v.context ?? ""}`.slice(0, 500),
-        });
+        return JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? "{}");
+      } catch {
+        return {};
       }
+    })();
+
+    const [hit, v] = await Promise.all([imagesTask, policyTask]);
+    if (hit) {
+      return reject("sexual_images", "يحتوي الملف على صور غير لائقة تخالف شروط الاستخدام.", {
+        severity: "medium",
+        signals: ["sexual_images"],
+        excerpt: JSON.stringify(hit.safeSearchAnnotation),
+      });
+    }
+    if (v.verdict === "reject") {
+      return reject(String(v.category || "policy"), String(v.advice || "يخالف هذا الكتاب سياسة المحتوى في التطبيق."), {
+        severity: v.minors ? "high" : "medium",
+        signals: ["policy", ...(v.minors ? ["minors"] : [])],
+        excerpt: `${v.category ?? ""} | ${v.context ?? ""}`.slice(0, 500),
+      });
     }
 
     await admin.from("book_checks").upsert({ pdf_path: pdfPath, user_id: caller.id, status: "allow", category: null, reason: null });

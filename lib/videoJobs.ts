@@ -13,6 +13,7 @@ import { startSummaryJob, watchSummaryJob } from "./summaryJobs";
 import type { StudySummary } from "./studySummary";
 import { getCachedSummary, summaryCacheKey, type SummarySource } from "./unitSummary";
 import { getOrMakeVideo, type VideoScript } from "./videoScript";
+import { recordPerf } from "./perf";
 
 export type VideoJob = {
   key: string;
@@ -98,6 +99,7 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
     .then((p) => (p.granted || !p.canAskAgain ? null : Notifications.requestPermissionsAsync()))
     .catch(() => {});
   (async () => {
+    const t0 = Date.now();
     try {
       const summary = (await getCachedSummary(pdfPath, src)) ?? (await summaryFor(pdfPath, src, meta, (p) => emit((last = { ...last, ...p, stage: "summary" }))));
       if (!summary) {
@@ -110,6 +112,7 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
         emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, script: p.soFar ?? last.script }))
       );
       emit((last = { ...last, status: complete ? "done" : "failed", script: script ?? last.script, etaSec: 0 }));
+      recordPerf("video.total", Date.now() - t0, complete, last.total);
       if (!viewing.get(key)) void notify(meta, complete);
     } catch (e) {
       emit((last = { ...last, status: (e as Error).message === "USER_QUOTA" ? "quota" : "failed" }));

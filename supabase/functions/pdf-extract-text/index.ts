@@ -4,6 +4,7 @@
 // الرد:   { page, totalPages, text }
 import { canAccessPdf } from "../_shared/paths.ts";
 import { pdfCleared } from "../_shared/bookCheck.ts";
+import { openCached } from "../_shared/pdfCache.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDocumentProxy } from "https://esm.sh/unpdf@1.6.2";
 
@@ -54,13 +55,8 @@ Deno.serve(async (req: Request) => {
     // الكتاب لم يجتز فحص الرفع الإلزامي (أو رُفض) → لا معالجة
     if (!(await pdfCleared(pdfPath))) return json({ error: "NOT_CLEARED" }, 403);
 
-    const { data: file, error: dErr } = await supabase.storage
-      .from("pdfs")
-      .download(pdfPath);
-    if (dErr || !file) throw dErr ?? new Error("Failed to download PDF");
-
-    const buf = new Uint8Array(await file.arrayBuffer());
-    const pdf = await getDocumentProxy(buf);
+    // الملف مفتوح في الذاكرة لدقائق: الصفحات التالية من الكتاب نفسه بلا تنزيل جديد
+    const pdf = await openCached(supabase, pdfPath, "pdfjs", (b) => getDocumentProxy(b));
     const totalPages = pdf.numPages;
     const page = Math.min(requestedPage, totalPages);
 

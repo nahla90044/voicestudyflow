@@ -27,6 +27,7 @@ import { requestPaywall } from "../../lib/plan";
 import { extractPdfPageText } from "../../lib/pdfText";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
+import { recordPerf } from "../../lib/perf";
 
 function randomId(len = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -185,17 +186,21 @@ export default function AddBookScreen() {
 
       // 1) upload — المسار يبدأ بمجلّد المستخدم حتى لا يصل غيره لملفاته
       const path = `${userId}/${Date.now()}_${randomId(8)}.pdf`;
+      const upT0 = Date.now();
       const buffer = await fetch(file.uri).then((r) => r.arrayBuffer());
 
       const { error: upErr } = await supabase.storage.from("pdfs").upload(path, buffer, {
         contentType: "application/pdf",
         upsert: false,
       });
+      recordPerf("upload.file", Date.now() - upT0, !upErr, Math.round(buffer.byteLength / 1024));
       if (upErr) throw upErr;
 
       // 1.5) فحص إلزامي على السيرفر قبل أي معالجة: الأوامر الخفية، الصور المخلة، وسياسة المحتوى بحسب السياق
       setChecking(true);
+      const chkT0 = Date.now();
       const chk = await checkBook(path).finally(() => setChecking(false));
+      recordPerf("upload.check", Date.now() - chkT0, chk.status !== "error");
       if (chk.status !== "allow") {
         if (chk.status === "error") await supabase.storage.from("pdfs").remove([path]).catch(() => {});
         Alert.alert(
