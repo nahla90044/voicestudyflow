@@ -1,7 +1,7 @@
 // lib/ai.ts
 // مساعد الذكاء الاصطناعي عبر Supabase Edge Function: ai-assist
 import { getCurrentLang } from "./i18n";
-import { requestPaywall } from "./plan";
+import { refreshUsage, requestPaywall } from "./plan";
 import { fetch as streamFetch } from "expo/fetch";
 
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
@@ -317,6 +317,7 @@ export async function aiAssistStream(action: AiAction, text: string, onText: (so
     all += dec.decode();
     const err = all.match(/\[\[STREAM_ERROR:([^\]]*)\]\]/);
     if (err) throw new Error(err[1] || "STREAM_ERROR");
+    setTimeout(refreshUsage, 800);
     return all;
   } finally {
     if (idle) clearTimeout(idle);
@@ -354,6 +355,7 @@ export async function aiAssist(
   }
   if (data?.error) throw new Error(data.error);
 
+  setTimeout(refreshUsage, 800); // العدّادات الظاهرة تتحدّث
   return String(data?.result ?? "");
 }
 

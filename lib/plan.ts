@@ -54,6 +54,16 @@ export function invalidatePlan(): void {
   cached = null;
 }
 
+const usageListeners = new Set<() => void>();
+/** يُستدعى بعد أي استهلاك (طلب ذكاء/صفحة) فتتحدّث كل العدّادات الظاهرة */
+export function refreshUsage(): void {
+  usageListeners.forEach((f) => f());
+}
+export function onUsageChange(fn: () => void): () => void {
+  usageListeners.add(fn);
+  return () => usageListeners.delete(fn);
+}
+
 export type Usage = { pages: number; premium: number; ai: number; credits: number };
 
 /** استهلاك الفترة الحالية: الشهر (أو التجربة لمرة واحدة للمجانية) + رصيد الصفحات الإضافية */

@@ -9,6 +9,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
+import { UsageChip } from "../components/brand/usage-chip";
 import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
@@ -236,6 +237,7 @@ export default function UnitSummaryScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <UsageChip kind="ai" />
           <Pressable
             onPress={togglePlay}
             style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}

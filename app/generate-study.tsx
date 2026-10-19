@@ -11,6 +11,7 @@ import { Radius, Spacing } from "../constants/design";
 import { aiAssist, generateFlashcards, CARD_TYPES, type CardType } from "../lib/ai";
 import { getUserId } from "../lib/auth";
 import { addCards } from "../lib/flashcards";
+import { UsageChip } from "../components/brand/usage-chip";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
 import { addSavedItem } from "../lib/savedStudy";
@@ -288,6 +289,7 @@ export default function GenerateStudyScreen() {
             </>
           ) : null}
 
+          <UsageChip kind="ai" />
           {busy ? (
             <View style={styles.busy}>
               <ActivityIndicator color={pal.accent} />

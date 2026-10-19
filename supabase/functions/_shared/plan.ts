@@ -78,8 +78,8 @@ export async function getCaller(req: Request): Promise<Caller> {
 export async function consume(caller: Caller, kind: "voice" | "ai", amount: number): Promise<boolean> {
   const enforced = Deno.env.get("QUOTAS_ENFORCED") === "true";
   if (!caller) return !enforced;
-  if (caller.plan === "owner") return true;
-  const limit = enforced ? limitsFor(caller)[kind] : -1;
+  // المالكة: بلا حد، لكن يُسجَّل استهلاكها (للعدّادات وقياس التكلفة الحقيقية)
+  const limit = caller.plan === "owner" ? -1 : enforced ? limitsFor(caller)[kind] : -1;
   const { data, error } = await caller.admin.rpc("consume_usage_p", {
     p_user: caller.id,
     p_period: periodOf(caller.plan),
@@ -91,7 +91,7 @@ export async function consume(caller: Caller, kind: "voice" | "ai", amount: numb
     console.error("consume_usage_p", error.message);
     return true; // عطل في العدّ لا يجب أن يوقف المستخدم
   }
-  return data === true;
+  return caller.plan === "owner" || data === true;
 }
 
 export type PageResult = "again" | "ok" | "credit" | "over";
@@ -100,8 +100,7 @@ export type PageResult = "again" | "ok" | "credit" | "over";
 export async function consumePage(caller: Caller, pageKey: string, tier: "std" | "prem"): Promise<PageResult> {
   const enforced = Deno.env.get("QUOTAS_ENFORCED") === "true";
   if (!caller) return enforced ? "over" : "ok";
-  if (caller.plan === "owner") return "ok";
-  const limit = enforced ? limitsFor(caller)[tier] : -1;
+  const limit = caller.plan === "owner" ? -1 : enforced ? limitsFor(caller)[tier] : -1;
   const { data, error } = await caller.admin.rpc("consume_page", {
     p_user: caller.id,
     p_period: periodOf(caller.plan),
@@ -113,5 +112,6 @@ export async function consumePage(caller: Caller, pageKey: string, tier: "std" |
     console.error("consume_page", error.message);
     return "ok";
   }
+  if (caller.plan === "owner") return "ok";
   return (data as PageResult) ?? "ok";
 }

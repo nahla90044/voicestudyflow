@@ -14,6 +14,7 @@ import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet,
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { SlideView } from "../components/brand/slide-view";
+import { UsageChip } from "../components/brand/usage-chip";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem } from "../lib/savedStudy";
@@ -376,6 +377,7 @@ export default function UnitVideoScreen() {
               {job && job.total > 1 ? (
                 <Text style={[styles.dim, { color: pal.dim }]}>{t("video.parts", { n: job.done, total: job.total })}</Text>
               ) : null}
+              <UsageChip kind="ai" />
               <Text style={[styles.dim, { color: pal.dim }]}>{t("video.bgHint")}</Text>
             </>
           )}
@@ -481,6 +483,7 @@ export default function UnitVideoScreen() {
             ) : null}
           </SceneCard>
 
+          <UsageChip kind="ai" />
           {complete ? (
             <Pressable onPress={() => router.push({ pathname: "/unit-quiz", params: quizParams })} style={[styles.primary, { backgroundColor: pal.accent, flexDirection: dir.row }]}>
               <Ionicons name="school-outline" size={18} color={pal.onAccent} />

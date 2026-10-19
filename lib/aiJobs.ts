@@ -9,7 +9,7 @@ import { AppState } from "react-native";
 import type { AiAction } from "./ai";
 import { getCurrentLang } from "./i18n";
 import { streamPart, whenActive } from "./partsRunner";
-import { requestPaywall } from "./plan";
+import { refreshUsage, requestPaywall } from "./plan";
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
 
 const POLL_MS = 2000;
@@ -110,6 +110,7 @@ async function jobPartInner<P>(
       }
       if (row.status === "done") {
         await forget();
+        refreshUsage();
         const p = parseFull(raw);
         if (!p) throw new Error("JOB_FAILED");
         return p;

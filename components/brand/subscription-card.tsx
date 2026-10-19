@@ -50,6 +50,13 @@ export function SubscriptionCard() {
           <Text style={[styles.plan, { color: gold, textAlign: dir.textAlign }]}>{t("sub.plan.owner")}</Text>
         </View>
         <Text style={[styles.label, { color: pal.dim, textAlign: dir.textAlign }]}>{t("sub.owner.desc")}</Text>
+        {/* استهلاك المالكة يُعدّ أيضًا (بلا حد) لمعرفة الاستخدام الحقيقي */}
+        {usage ? (
+          <>
+            <Text style={[styles.label, { color: pal.ink, textAlign: dir.textAlign }]}>{t("usage.pagesUnlimited", { used: usage.pages })}</Text>
+            <Text style={[styles.label, { color: pal.ink, textAlign: dir.textAlign }]}>{t("usage.aiUnlimited", { used: usage.ai })}</Text>
+          </>
+        ) : null}
       </SceneCard>
     );
   }

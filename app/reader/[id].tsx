@@ -26,6 +26,7 @@ import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../..
 
 import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
+import { UsageChip } from "../../components/brand/usage-chip";
 import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
 import * as Print from "expo-print";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
@@ -3473,6 +3474,8 @@ export default function ReaderScreen() {
             </Pressable>
           ))}
         </View>
+        {/* عدّاد الاستهلاك: الصفحات لتبويب الاستماع، والطلبات لتبويب الدراسة */}
+        {toolTab === "listen" ? <UsageChip kind="pages" /> : toolTab === "study" ? <UsageChip kind="ai" /> : null}
         <View style={[styles.inGrid, { flexDirection: dir.row }]}>
           {toolTab === "listen" ? (
             <>
@@ -3749,6 +3752,7 @@ export default function ReaderScreen() {
                 <Ionicons name="close" size={22} color={Palette.textMuted} />
               </Pressable>
             </View>
+            <UsageChip kind="ai" />
 
             <View style={styles.aiActions}>
               <Pressable
