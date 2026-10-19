@@ -23,6 +23,8 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { ScrollView as GHScrollView } from "react-native-gesture-handler";
 import { InkLayer, InkToolbar, INK_COLORS } from "../../components/reader/ink-layer";
 import { TocSheet } from "../../components/reader/toc-sheet";
+import { FloatingCalc } from "../../components/reader/floating-calc";
+import { NotesPad } from "../../components/reader/notes-pad";
 import { ErrorBoundary } from "../../components/brand/error-boundary";
 import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../../lib/ink";
 
@@ -302,6 +304,9 @@ function GoldPlayButton({
 }
 
 /** أداة في لوحة القارئ الداخلية: أيقونة (أو نص) + تسمية، وتتلوّن عند التفعيل */
+// عرض كل زر محسوب من عرض الشبكة الفعلي (٤ في الصف) — النسبة الثابتة كانت تترك فراغًا زائدًا على جانب
+const InToolWidth = React.createContext<number | undefined>(undefined);
+
 function InTool({
   icon,
   text,
@@ -319,8 +324,14 @@ function InTool({
   disabled?: boolean;
   badge?: string;
 }) {
+  const w = React.useContext(InToolWidth);
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.inTool, on && styles.inToolOn, disabled && { opacity: 0.45 }]} accessibilityLabel={label}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.inTool, w ? { width: w } : null, on && styles.inToolOn, disabled && { opacity: 0.45 }]}
+      accessibilityLabel={label}
+    >
       <View>
         {icon ? (
           <Ionicons name={icon} size={19} color={on ? SKY.onAccent : Palette.text} />
@@ -356,10 +367,11 @@ export default function ReaderScreen() {
   // اللغة الافتراضية للصوت/الترجمة تتبع لغة الواجهة (إنجليزي → صوت إنجليزي… إلخ)
   const uiVoiceLang: "ar" | "en" | "fr" = lang === "en" || lang === "fr" ? lang : "ar";
   const uiVoiceId = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === uiVoiceLang)?.voiceId ?? DEFAULT_VOICE_ID;
-  const { id, title, pdf_path } = useLocalSearchParams<{
+  const { id, title, pdf_path, notes: openNotesParam } = useLocalSearchParams<{
     id?: string;
     title?: string;
     pdf_path?: string;
+    notes?: string;
   }>();
 
   // تخمين أولي من عنوان الكتاب (عنوان عربي → صوت عربي) إلى أن يصل نص الصفحة
@@ -459,6 +471,9 @@ export default function ReaderScreen() {
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false); // فهرس الكتاب (فصول/وحدات) للانتقال السريع
+  const [calcOpen, setCalcOpen] = useState(false); // آلة حاسبة عائمة
+  const [notesPadOpen, setNotesPadOpen] = useState(openNotesParam === "1"); // صفحة الملاحظات (الاستماع مستمر)
+  const [gridW, setGridW] = useState(0); // عرض شبكة الأدوات (لحساب عرض الأزرار)
   const gotoInputRef = useRef<TextInput>(null);
   const [gotoValue, setGotoValue] = useState("");
   // ترقيم الكتاب المطبوع: الفرق بين رقم الصفحة في الملف ورقمها المطبوع (يُستنتج تلقائيًا)
@@ -3632,7 +3647,11 @@ export default function ReaderScreen() {
           ))}
         </View>
         {/* عدّاد الاستهلاك: الصفحات لتبويب الاستماع، والطلبات لتبويب الدراسة */}
-        <View style={[styles.inGrid, { flexDirection: dir.row }]}>
+        <View
+          style={[styles.inGrid, { flexDirection: dir.row }]}
+          onLayout={(e) => setGridW(e.nativeEvent.layout.width)}
+        >
+        <InToolWidth.Provider value={gridW > 0 ? Math.floor((gridW - 6 * 3) / 4) : undefined}>
           {toolTab === "listen" ? (
             <>
               <InTool text={`${rate}×`} label={t("reader.tool.speed")} on={toolOpt === "speed"} onPress={() => setToolOpt(toolOpt === "speed" ? null : "speed")} />
@@ -3661,6 +3680,8 @@ export default function ReaderScreen() {
           ) : toolTab === "study" ? (
             <>
               <InTool icon="list-circle-outline" label={t("toc.title")} onPress={() => setTocOpen(true)} />
+              <InTool icon="create-outline" label={t("notes.title")} onPress={() => setNotesPadOpen(true)} />
+              <InTool icon="calculator-outline" label={t("calc.title")} on={calcOpen} onPress={() => setCalcOpen((v) => !v)} />
               <InTool icon="sparkles-outline" label={t("reader.tools.ai")} onPress={() => setAiOpen(true)} />
               <InTool
                 icon="chatbubble-ellipses-outline"
@@ -3689,14 +3710,6 @@ export default function ReaderScreen() {
                   presUsedRef.current = true;
                   warmAllMusic();
                   setPresentOpen(true);
-                }}
-              />
-              <InTool
-                icon="albums-outline"
-                label={t("reader.ai.cards")}
-                onPress={() => {
-                  // بطاقات مراجعة للصفحة: يُختار نوعها أولًا، ثم تُحفظ في «البطاقات» مع الحفظ والطباعة
-                  if (!aiBusy) pickCardType();
                 }}
               />
               <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
@@ -3740,6 +3753,7 @@ export default function ReaderScreen() {
               />
             </>
           )}
+        </InToolWidth.Provider>
         </View>
         {toolOpt === "speed" ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.optRow, { flexDirection: dir.row }]}>
@@ -4601,6 +4615,22 @@ export default function ReaderScreen() {
       />
       </ErrorBoundary>
 
+      {notesPadOpen && bookId ? (
+        <ErrorBoundary where="notes" compact>
+          <NotesPad
+            bookId={bookId}
+            bookTitle={typeof title === "string" ? title : ""}
+            speaking={speaking}
+            onTogglePlay={togglePlay}
+            onClose={() => setNotesPadOpen(false)}
+          />
+        </ErrorBoundary>
+      ) : null}
+      {calcOpen ? (
+        <ErrorBoundary where="calc" compact>
+          <FloatingCalc onClose={() => setCalcOpen(false)} />
+        </ErrorBoundary>
+      ) : null}
       {coach.overlay}
     </SafeAreaView>
   );

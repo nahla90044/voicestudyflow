@@ -5,6 +5,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { listSaves, type StudySave } from "../../lib/studySaves";
+import { loadNotes } from "../../lib/notes";
 import React, { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -63,6 +64,9 @@ export default function BookHubScreen() {
   const loadSaves = useCallback(() => {
     if (!bookId) return;
     listSaves(bookId).then(setSaves).catch(() => setSaves([]));
+    loadNotes(bookId)
+      .then((ps) => setNoteCount(ps.filter((p) => p.text.trim() || p.strokes.length).length))
+      .catch(() => setNoteCount(0));
   }, [bookId]);
   useFocusEffect(
     useCallback(() => {
@@ -70,6 +74,7 @@ export default function BookHubScreen() {
     }, [tab, loadSaves])
   );
   const [ready, setReady] = useState<BookReadiness | null>(null);
+  const [noteCount, setNoteCount] = useState(0); // صفحات الملاحظات المكتوبة لهذا الكتاب
   const [examOpen, setExamOpen] = useState(false);
   const [ranges, setRanges] = useState<UnitRange[] | null>(null);
 
@@ -366,6 +371,26 @@ export default function BookHubScreen() {
               </SceneCard>
             ))}
 
+          {/* صفحة الملاحظات: مكانها الثابت في محفوظات الكتاب (تُحفظ تلقائيًا، وتُفتح فوق القارئ) */}
+          {tab === "saves" && (
+            <PressableScale
+              onPress={() => router.push({ pathname: "/reader/[id]", params: { id: book.id, title: book.title, pdf_path: book.pdf_path, notes: "1" } })}
+              style={{ marginBottom: 10 }}
+            >
+              <SceneCard style={{ flexDirection: dir.row, alignItems: "center", gap: 12 }}>
+                <View style={[styles.toolIcon, { backgroundColor: pal.soft }]}>
+                  <Ionicons name="create-outline" size={19} color={pal.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.toolTxt, { color: pal.ink, textAlign: dir.textAlign }]}>{t("notes.title")}</Text>
+                  <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, marginTop: 2 }]} numberOfLines={1}>
+                    {noteCount > 0 ? t("notes.savedCount", { n: noteCount }) : t("notes.emptyHint")}
+                  </Text>
+                </View>
+                <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+              </SceneCard>
+            </PressableScale>
+          )}
           {tab === "saves" &&
             (saves === null ? (
               <ActivityIndicator color={pal.accent} style={{ marginTop: 24 }} />

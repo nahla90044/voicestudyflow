@@ -33,6 +33,8 @@ type Props = {
   /** التمرير الذي يجب أن ينتظر القلم (حتى لا تتحرك الصفحة أثناء الكتابة) */
    
   scrollRef?: React.RefObject<any>;
+  /** الكتابة بالإصبع أيضًا (صفحة الملاحظات؛ في صفحة الكتاب الإصبع للتصفح) */
+  allowFinger?: boolean;
 };
 
 function pathOf(p: number[], imgW: number, offsetX: number): string {
@@ -52,7 +54,7 @@ function pathOf(p: number[], imgW: number, offsetX: number): string {
   return d;
 }
 
-function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, width, height, scrollRef }: Props) {
+function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, width, height, allowFinger }: Props) {
   const live = useRef<number[] | null>(null);
   const [liveD, setLiveD] = useState("");
   const frame = useRef<number | null>(null);
@@ -61,8 +63,8 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
   // أحدث القيم تُقرأ من مرجع داخل الحركة: الحركة نفسها تُصنع مرة واحدة فقط.
   // (كانت تُعاد صناعتها مع كل تحديث للشاشة — والقارئ يحدّثها مرات كثيرة في الثانية أثناء القراءة
   // الصوتية — فيُعاد ضبطها وسط الخط فيضيع ولا يكتب القلم حتى يُطفأ ويُشغَّل من جديد.)
-  const cfg = useRef({ active, tool, color, imgW, offsetX, onChange });
-  cfg.current = { active, tool, color, imgW, offsetX, onChange };
+  const cfg = useRef({ active, tool, color, imgW, offsetX, onChange, allowFinger });
+  cfg.current = { active, tool, color, imgW, offsetX, onChange, allowFinger };
 
   const norm = (x: number, y: number) => {
     const c = cfg.current;
@@ -119,7 +121,7 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
         // القلم فقط وفي وضع الكتابة؛ أي لمسة أخرى تُرفض فورًا فتصل للصفحة كالعادة
         const c = cfg.current;
         const t = e.changedTouches[0] ?? e.allTouches[0];
-        const ok = c.active && c.imgW > 0 && e.pointerType === PointerType.STYLUS && !!t;
+        const ok = c.active && c.imgW > 0 && (e.pointerType === PointerType.STYLUS || !!c.allowFinger) && !!t;
         if (c.active) recordPerf("ink.down", 0, ok, Number(e.pointerType));
         if (!ok) return manager.fail();
         manager.activate();
@@ -186,7 +188,7 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
 /** لا يُعاد رسمها مع كل تحديث للقارئ (تظليل الكلمات أثناء القراءة) — فقط حين يتغيّر ما يخصها */
 export const InkLayer = React.memo(InkLayerImpl, (a, b) =>
   a.strokes === b.strokes && a.active === b.active && a.tool === b.tool && a.color === b.color &&
-  a.imgW === b.imgW && a.offsetX === b.offsetX && a.width === b.width && a.height === b.height && a.scrollRef === b.scrollRef && a.onChange === b.onChange
+  a.imgW === b.imgW && a.offsetX === b.offsetX && a.width === b.width && a.height === b.height && a.allowFinger === b.allowFinger && a.onChange === b.onChange
 );
 
 /** شريط أدوات القلم: الألوان، قلم التظليل، الممحاة، التراجع، مسح الصفحة، إنهاء */
