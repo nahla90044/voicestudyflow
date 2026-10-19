@@ -22,7 +22,7 @@ import { initPurchases } from "../lib/purchases";
 import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
 import { getCurrentLang, LanguageProvider } from "../lib/i18n";
-import { dangerAlert, FeedbackHost, isDangerAlert } from "../components/brand/feedback-host";
+import { dangerAlert, FeedbackHost, isDangerAlert, setNativeAlert } from "../components/brand/feedback-host";
 import { installGlobalErrorLogging } from "../lib/errorLog";
 import { dict } from "../lib/i18n/strings";
 import { closeReadingCard } from "../lib/readingCard";
@@ -34,6 +34,7 @@ const tr = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
 
 // التنبيهات بلا أزرار يضع لها iOS زر «OK» بلغة الجهاز؛ نضيف زرًا بلغة التطبيق لكل التطبيق مرة واحدة
 const nativeAlert = Alert.alert.bind(Alert);
+setNativeAlert((title, msg, buttons) => nativeAlert(title, msg, buttons));
 // ونوافذ الحذف (زر مدمّر) تظهر بطاقة تحذير مميزة موحّدة بدل نافذة النظام
 Alert.alert = (title, message, buttons, options) =>
   isDangerAlert(buttons)

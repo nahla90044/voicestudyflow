@@ -586,6 +586,12 @@ export default function ReaderScreen() {
   const [prefsLoaded, setPrefsLoaded] = useState(false); // اكتمل استرجاع الصفحة المحفوظة
   const scrollRef = useRef<ScrollView>(null);
   const pdfScrollRef = useRef<ScrollView>(null);
+  // مغادرة وضع الصفحة (عرض النص) → القلم يُطفأ، فلا يبقى مربوطًا بعرض صفحة أُزيل
+  useEffect(() => {
+    if (viewMode !== "pdf") setPenOn(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
   // صفحة جديدة → بلا تكبير متبقٍّ من سابقتها، ومن أعلاها (بدل إعادة بناء العرض)
   useEffect(() => {
     try {
@@ -685,6 +691,7 @@ export default function ReaderScreen() {
   const [pdfImgW2, setPdfImgW2] = useState(0); // عرض صورة الصفحة المعروضة (لتظليل الكلمة)
   const prefetchedRef = useRef(new Set<number>()); // صفحات حُمّلت صورها مسبقًا
   const imgUriRef = useRef(new Map<number, string>()); // صور الصفحات المحمّلة (للتقليب بالسحب)
+  const imgAspectRef = useRef(new Map<string, number>()); // نسبة أبعاد كل صورة (بلا قفز عند الظهور)
   const [nbr, setNbr] = useState<{ prev: string | null; next: string | null }>({ prev: null, next: null });
   const pagerX = useRef(new Animated.Value(0)).current; // إزاحة الصفحة أثناء السحب
   const totalPagesRef = useRef(0);
@@ -701,13 +708,23 @@ export default function ReaderScreen() {
     if ((viewMode !== "pdf" && !lensOpen) || !pdfPath || !prefsLoaded) return;
     const target = page;
     const myReq = ++imgReqRef.current;
-    // امسح صورة الصفحة السابقة فورًا إن اختلفت الصفحة (لا يبقى الغلاف القديم)
-    if (pageImgForRef.current !== target) setPageImg(null);
-    setPageImgLoading(true);
     // المجاورتان من الذاكرة فورًا (لا تظهر مجاورتا الصفحة السابقة أثناء السحب)
     setNbr({ prev: imgUriRef.current.get(target - 1) ?? null, next: imgUriRef.current.get(target + 1) ?? null });
+    // الصورة محمّلة مسبقًا (التقليب العادي) → تُعرض فورًا في نفس اللحظة، بلا مسح ولا وميض فارغ
+    const ready = imgUriRef.current.get(target);
+    if (ready) {
+      pageImgForRef.current = target;
+      setPageImg(ready);
+      setPageImgLoading(false);
+      const a = imgAspectRef.current.get(ready);
+      if (a) setPageImgAspect(a);
+    } else {
+      // امسح صورة الصفحة السابقة فورًا إن اختلفت الصفحة (لا يبقى الغلاف القديم)
+      if (pageImgForRef.current !== target) setPageImg(null);
+      setPageImgLoading(true);
+    }
     (async () => {
-      let uri = await getPageImage(pdfPath, target).catch(() => null);
+      let uri = ready ?? (await getPageImage(pdfPath, target).catch(() => null));
       // إعادة محاولة (قد لا تكون الصورة وُلِّدت بعد على الخادم)
       if (!uri && myReq === imgReqRef.current) uri = await getPageImage(pdfPath, target).catch(() => null);
       if (myReq !== imgReqRef.current) return; // وصل طلب أحدث لصفحة أخرى → تجاهل هذا
@@ -723,7 +740,12 @@ export default function ReaderScreen() {
           if (imgUriRef.current.has(n)) continue;
           prefetchedRef.current.add(n);
           const u = await getPageImage(pdfPath, n).catch(() => null);
-          if (u) imgUriRef.current.set(n, u);
+          if (u) {
+            imgUriRef.current.set(n, u);
+            // نسبة أبعادها تُعرف مسبقًا فلا تقفز الصفحة عند ظهورها
+            Image.getSize(u, (w, h) => h > 0 && imgAspectRef.current.set(u, w / h), () => {});
+            Image.prefetch(u).catch(() => {});
+          }
         }
         // الصفحتان المجاورتان جاهزتان → تظهران تحت الإصبع أثناء السحب
         if (myReq === imgReqRef.current) {
@@ -734,7 +756,10 @@ export default function ReaderScreen() {
       if (uri) {
         Image.getSize(
           uri,
-          (w, h) => myReq === imgReqRef.current && h > 0 && setPageImgAspect(w / h),
+          (w, h) => {
+            if (h > 0) imgAspectRef.current.set(uri!, w / h);
+            if (myReq === imgReqRef.current && h > 0) setPageImgAspect(w / h);
+          },
           () => {}
         );
       }
@@ -1970,7 +1995,8 @@ export default function ReaderScreen() {
       setSpeaking(true);
       playStartRef.current = Date.now();
       recordActivity({});
-      playFromPage(target, 0, true);
+      // ننتظر انتهاء إغلاق نافذة الانتقال: لو احتاج التشغيل نافذة أخرى (بوابة التحميل) فلا يرفضها iOS
+      setTimeout(() => playingRef.current && playFromPage(target, 0, true), 450);
     } else {
       loadSentences(target);
     }
@@ -2031,6 +2057,12 @@ export default function ReaderScreen() {
         }).start(() => {
           pagerResetRef.current = true;
           pagerCtl.current.commit(wantsNext ? 1 : -1);
+          // شبكة أمان: لو تأخرت صورة الصفحة الجديدة لأي سبب، تعود الصفحة لمكانها ولا تبقى خارج الشاشة
+          setTimeout(() => {
+            if (!pagerResetRef.current) return;
+            pagerResetRef.current = false;
+            pagerX.setValue(0);
+          }, 900);
         });
       },
       onPanResponderTerminate: () => {
@@ -2039,8 +2071,10 @@ export default function ReaderScreen() {
     })
   ).current;
   // بعد رسم الصفحة الجديدة نعيدها لمكانها في نفس الإطار → انتقال متصل بلا رجوع للصفحة القديمة
+  // ننتظر حتى تكون صورة الصفحة الجديدة نفسها في مكانها (لا ترجع الصورة القديمة لحظة)
   useLayoutEffect(() => {
     if (!pagerResetRef.current) return;
+    if (pageImg && pageImgForRef.current !== page) return;
     pagerResetRef.current = false;
     pagerX.setValue(0);
   }, [page, pageImg, pagerX]);
@@ -3237,7 +3271,7 @@ export default function ReaderScreen() {
                 resizeMode="contain"
               />
             ) : null}
-            {pageImg ? (
+            {/* عرض الصفحة مركّب دائمًا (لا يُزال ويُعاد مع كل تقليب — كان سبب الانهيار)، والتحميل طبقة فوقه */}
               <GHScrollView
                 // لا مفتاح لكل صفحة: إعادة بناء العرض عند كل تقليب كانت تسبب الانهيار
                 // («Unable to find node on an unmounted component») وتقطّع التقليب؛ التكبير يُعاد بالأثر أدناه
@@ -3271,6 +3305,7 @@ export default function ReaderScreen() {
                   style={{ direction: "ltr" }}
                   onLayout={(e) => setPdfImgW2(e.nativeEvent.layout.width)}
                 >
+                  {pageImg ? (
                   <Pressable
                     delayLongPress={380}
                     onPress={(e) => onPageTap(e.nativeEvent.locationX, e.nativeEvent.locationY)}
@@ -3282,6 +3317,7 @@ export default function ReaderScreen() {
                       resizeMode="contain"
                     />
                   </Pressable>
+                  ) : null}
                   {/* هايلايتر الجملة المقروءة (كل أسطرها) + الكلمة المنطوقة الآن */}
                   {pdfImgW2 > 0 &&
                     curRects.map((r, i) => {
@@ -3313,7 +3349,7 @@ export default function ReaderScreen() {
                   ) : null}
                 </View>
                 {/* طبقة قلم الآيباد فوق الصفحة والهامش */}
-                {isPad && pdfImgW2 > 0 && (penOn || inkStrokes.length > 0) ? (
+                {isPad && pdfImgW2 > 0 ? (
                   <InkLayer
                     strokes={inkStrokes}
                     onChange={changeInk}
@@ -3329,8 +3365,9 @@ export default function ReaderScreen() {
                 ) : null}
                 </View>
               </GHScrollView>
-            ) : (
-              <View style={styles.empty}>
+            {!pageImg ? (
+              <View style={[StyleSheet.absoluteFill, { justifyContent: "center" }]} pointerEvents="none">
+                <View style={styles.empty}>
                 {pageImgLoading ? (
                   <>
                     <ActivityIndicator color={Palette.primary} />
@@ -3343,7 +3380,8 @@ export default function ReaderScreen() {
                   </>
                 )}
               </View>
-            )}
+              </View>
+            ) : null}
             {penOn ? (
               <View pointerEvents="box-none" style={styles.inkBarWrap}>
                 <InkToolbar

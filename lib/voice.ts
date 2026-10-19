@@ -23,6 +23,7 @@ import { markUpdateRequired } from "./appVersion";
 import { base64ToBytes } from "./base64";
 import { supabase } from "./supabase";
 import { recordPerf } from "./perf";
+import { logAppError } from "./errorLog";
 
 /* -------- سجلّ عام لكل مشغّلات السرد: صوت واحد فقط في أي لحظة -------- */
 // يُحفظ على globalThis فيبقى حتى لو أُعيد تحميل هذه الوحدة (التحديث السريع أثناء التطوير)،
@@ -786,6 +787,14 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
     let finished = false;
     let started = false;
     player.addListener("playbackStatusUpdate", (status) => {
+      // خطأ داخل هذا المستمع كان يصل للمعالج العام فيُغلق التطبيق → يُسجَّل فقط
+      try {
+        onStatus(status);
+      } catch (e) {
+        void logAppError(e, "voice.status");
+      }
+    });
+    const onStatus = (status: { playing?: boolean; currentTime?: number; duration?: number; didJustFinish?: boolean }) => {
       // مشغّل قديم استُبدل (بدأ تشغيل أحدث) → تجاهله تمامًا حتى لا يتراكب ويتسارع
       if (myToken !== playToken) return;
       if (status.playing || (status.currentTime ?? 0) > 0) started = true;
@@ -821,7 +830,7 @@ export async function speakText(text: string, opts: SpeakOptions = {}): Promise<
         // نظّف هذا المشغّل فقط إن لم يُستبدل بمقطع جديد (لئلا نوقف التالي)
         if (currentPlayer === player) disposePlayer();
       }
-    });
+    };
 
     step = "التشغيل";
     silenceAllExcept(player); // ضمان: لا صوت آخر يقرأ بالتوازي

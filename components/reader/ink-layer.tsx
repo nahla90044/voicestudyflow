@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector, PointerType } from "react-native-gesture-handler";
+
+import { recordPerf } from "../../lib/perf";
 import Svg, { Path } from "react-native-svg";
 
 import type { InkTool, Stroke } from "../../lib/ink";
@@ -94,7 +96,10 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
       .onTouchesDown((e, manager) => {
         // القلم فقط وفي وضع الكتابة؛ أي لمسة أخرى تُرفض فورًا فتصل للصفحة كالعادة
         const c = cfg.current;
-        if (c.active && c.imgW > 0 && e.pointerType === PointerType.STYLUS) manager.activate();
+        const ok = c.active && c.imgW > 0 && e.pointerType === PointerType.STYLUS;
+        // تشخيص القلم (نوع اللمسة وهل قُبلت) — size = نوع المؤشر
+        if (c.active) recordPerf("ink.down", 0, ok, Number(e.pointerType));
+        if (ok) manager.activate();
         else manager.fail();
       })
       .onStart((e) => {
@@ -121,10 +126,12 @@ function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, w
         const s: Stroke = c.tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true, p } : { c: c.color, w: PEN_W, p };
         c.onChange([...current.current, s]);
       });
-    if (scrollRef) g = g.blocksExternalGesture(scrollRef);
-    return g;
+    // الربط بتمرير الصفحة فقط والقلم مفعّل: الربط والقلم مطفأ (عرض الكتابة أثناء تقليب الصفحات)
+    // كان يبحث عن عرض الصفحة لحظة إزالته فيُسقط التطبيق («Unable to find node on an unmounted component»)
+    if (scrollRef && active) g = g.blocksExternalGesture(scrollRef);
+    return g.enabled(active);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrollRef]);
+  }, [scrollRef, active]);
 
   const liveStyle = tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true } : { c: color, w: PEN_W, m: false };
 

@@ -18,6 +18,11 @@ type Card =
   | { kind: "danger"; title: string; body?: string; buttons: Btn[] };
 
 let push: ((c: Card) => void) | null = null;
+// تنبيه النظام الأصلي (قبل تعديله في app/_layout): بديل حين يتعذّر عرض البطاقة فوق نافذة مفتوحة
+let nativeAlert: ((title: string, msg?: string, buttons?: AlertButton[]) => void) | null = null;
+export function setNativeAlert(fn: (title: string, msg?: string, buttons?: AlertButton[]) => void): void {
+  nativeAlert = fn;
+}
 const pending: Card[] = [];
 
 function show(c: Card) {
@@ -58,20 +63,58 @@ export function FeedbackHost() {
     };
   }, []);
   const card = queue[0] ?? null;
-  // نغلق البطاقة أولًا ثم ننفّذ الزر (قد يفتح الزر بطاقة أخرى أو ينتقل لشاشة)
-  const close = (fn?: () => void) => {
-    setQueue((q) => q.slice(1));
-    if (fn) setTimeout(fn, 220);
+  // نغلق البطاقة أولًا ثم ننفّذ الزر بعد اكتمال الإغلاق (قد يفتح الزر بطاقة أخرى أو ينتقل لشاشة)
+  const pendingFn = useRef<(() => void) | null>(null);
+  const runPending = () => {
+    const fn = pendingFn.current;
+    pendingFn.current = null;
+    if (fn) fn();
   };
-  return <CardView card={card} onClose={close} />;
+  const close = (fn?: () => void) => {
+    pendingFn.current = fn ?? null;
+    setQueue((q) => q.slice(1));
+    setTimeout(runPending, 600); // احتياط إن لم يصل حدث انتهاء الإغلاق
+  };
+  // البطاقة لم تظهر (نافذة أخرى مفتوحة يرفض iOS العرض فوقها) → تنبيه النظام بدلها، ولا يعلق الطابور
+  const fallback = (c: Card) => {
+    setQueue((q) => (q[0] === c ? q.slice(1) : q));
+    if (c.kind === "danger" && nativeAlert) {
+      nativeAlert(c.title, c.body, c.buttons.map((b) => ({ text: b.text, style: b.style, onPress: b.onPress })));
+    }
+  };
+  return <CardView card={card} onClose={close} onDismissed={runPending} onNotShown={fallback} />;
 }
 
-function CardView({ card: current, onClose }: { card: Card | null; onClose: (fn?: () => void) => void }) {
+function CardView({
+  card: current,
+  onClose,
+  onDismissed,
+  onNotShown,
+}: {
+  card: Card | null;
+  onClose: (fn?: () => void) => void;
+  onDismissed: () => void;
+  onNotShown: (c: Card) => void;
+}) {
   // نُبقي محتوى آخر بطاقة أثناء تلاشي الإغلاق (وإلا تظهر لحظة كإطار أبيض فارغ)
   const last = useRef<Card | null>(current);
   if (current) last.current = current;
   const card = last.current;
   const visible = !!current;
+  // تأكيد الظهور: إن لم تُعرض النافذة خلال لحظة → البديل
+  const shownRef = useRef(false);
+  const presentedRef = useRef(false); // النافذة معروضة الآن (بطاقة تالية في نفس النافذة لا تحتاج حدث ظهور جديد)
+  useEffect(() => {
+    if (!current) return;
+    if (presentedRef.current) return;
+    shownRef.current = false;
+    const c = current;
+    const id = setTimeout(() => {
+      if (!shownRef.current) onNotShown(c);
+    }, 900);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current]);
   const dir = useDir();
   const { pal } = useScene();
   const pop = useRef(new Animated.Value(0)).current;
@@ -102,7 +145,20 @@ function CardView({ card: current, onClose }: { card: Card | null; onClose: (fn?
   const dismiss = () => onClose(card?.kind === "danger" ? cancelBtn?.onPress : card?.secondary?.onPress);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={dismiss}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={dismiss}
+      onShow={() => {
+        shownRef.current = true;
+        presentedRef.current = true;
+      }}
+      onDismiss={() => {
+        presentedRef.current = false;
+        onDismissed();
+      }}
+    >
       <Pressable style={styles.backdrop} onPress={dismiss}>
         <Animated.View
           onStartShouldSetResponder={() => true}
