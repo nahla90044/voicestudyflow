@@ -3,7 +3,7 @@
 // القلم وحده يكتب؛ الإصبع يبقى للتمرير والتكبير وقلب الصفحات: لمسة الإصبع تُرفض فورًا
 // فتأخذها الصفحة، ولمسة القلم تفعّل الرسم وتمنع التمرير (blocksExternalGesture).
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector, PointerType } from "react-native-gesture-handler";
 import Svg, { Path } from "react-native-svg";
@@ -50,14 +50,22 @@ function pathOf(p: number[], imgW: number, offsetX: number): string {
   return d;
 }
 
-export function InkLayer({ strokes, onChange, active, tool, color, imgW, offsetX, width, height, scrollRef }: Props) {
+function InkLayerImpl({ strokes, onChange, active, tool, color, imgW, offsetX, width, height, scrollRef }: Props) {
   const live = useRef<number[] | null>(null);
   const [liveD, setLiveD] = useState("");
   const frame = useRef<number | null>(null);
   const current = useRef(strokes);
   current.current = strokes;
+  // أحدث القيم تُقرأ من مرجع داخل الحركة: الحركة نفسها تُصنع مرة واحدة فقط.
+  // (كانت تُعاد صناعتها مع كل تحديث للشاشة — والقارئ يحدّثها مرات كثيرة في الثانية أثناء القراءة
+  // الصوتية — فيُعاد ضبطها وسط الخط فيضيع ولا يكتب القلم حتى يُطفأ ويُشغَّل من جديد.)
+  const cfg = useRef({ active, tool, color, imgW, offsetX, onChange });
+  cfg.current = { active, tool, color, imgW, offsetX, onChange };
 
-  const norm = (x: number, y: number) => [Math.round(((x - offsetX) / imgW) * 10000) / 10000, Math.round((y / imgW) * 10000) / 10000];
+  const norm = (x: number, y: number) => {
+    const c = cfg.current;
+    return [Math.round(((x - c.offsetX) / c.imgW) * 10000) / 10000, Math.round((y / c.imgW) * 10000) / 10000];
+  };
 
   function eraseAt(x: number, y: number) {
     const [nx, ny] = norm(x, y);
@@ -67,50 +75,56 @@ export function InkLayer({ strokes, onChange, active, tool, color, imgW, offsetX
       }
       return true;
     });
-    if (keep.length !== current.current.length) onChange(keep);
+    if (keep.length !== current.current.length) cfg.current.onChange(keep);
   }
 
   function redrawLive() {
     if (frame.current != null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
-      setLiveD(live.current ? pathOf(live.current, imgW, offsetX) : "");
+      setLiveD(live.current ? pathOf(live.current, cfg.current.imgW, cfg.current.offsetX) : "");
     });
   }
 
-  let pan = Gesture.Pan()
-    .runOnJS(true)
-    .manualActivation(true)
-    .minDistance(0)
-    .onTouchesDown((e, manager) => {
-      // القلم فقط وفي وضع الكتابة؛ أي لمسة أخرى تُرفض فورًا فتصل للصفحة كالعادة
-      if (active && imgW > 0 && e.pointerType === PointerType.STYLUS) manager.activate();
-      else manager.fail();
-    })
-    .onStart((e) => {
-      if (tool === "eraser") return eraseAt(e.x, e.y);
-      live.current = norm(e.x, e.y);
-      redrawLive();
-    })
-    .onUpdate((e) => {
-      if (tool === "eraser") return eraseAt(e.x, e.y);
-      if (!live.current) return;
-      const [nx, ny] = norm(e.x, e.y);
-      const n = live.current.length;
-      // نتجاهل الحركة الضئيلة جدًا (تقلّل حجم الحفظ دون أن يتغيّر الشكل)
-      if (Math.hypot(nx - live.current[n - 2], ny - live.current[n - 1]) < 0.0012) return;
-      live.current.push(nx, ny);
-      redrawLive();
-    })
-    .onFinalize(() => {
-      const p = live.current;
-      live.current = null;
-      setLiveD("");
-      if (!p || tool === "eraser") return;
-      const s: Stroke = tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true, p } : { c: color, w: PEN_W, p };
-      onChange([...current.current, s]);
-    });
-  if (scrollRef) pan = pan.blocksExternalGesture(scrollRef);
+  const pan = useMemo(() => {
+    let g = Gesture.Pan()
+      .runOnJS(true)
+      .manualActivation(true)
+      .minDistance(0)
+      .onTouchesDown((e, manager) => {
+        // القلم فقط وفي وضع الكتابة؛ أي لمسة أخرى تُرفض فورًا فتصل للصفحة كالعادة
+        const c = cfg.current;
+        if (c.active && c.imgW > 0 && e.pointerType === PointerType.STYLUS) manager.activate();
+        else manager.fail();
+      })
+      .onStart((e) => {
+        if (cfg.current.tool === "eraser") return eraseAt(e.x, e.y);
+        live.current = norm(e.x, e.y);
+        redrawLive();
+      })
+      .onUpdate((e) => {
+        if (cfg.current.tool === "eraser") return eraseAt(e.x, e.y);
+        if (!live.current) return;
+        const [nx, ny] = norm(e.x, e.y);
+        const n = live.current.length;
+        // نتجاهل الحركة الضئيلة جدًا (تقلّل حجم الحفظ دون أن يتغيّر الشكل)
+        if (Math.hypot(nx - live.current[n - 2], ny - live.current[n - 1]) < 0.0012) return;
+        live.current.push(nx, ny);
+        redrawLive();
+      })
+      .onFinalize(() => {
+        const p = live.current;
+        live.current = null;
+        setLiveD("");
+        const c = cfg.current;
+        if (!p || c.tool === "eraser") return;
+        const s: Stroke = c.tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true, p } : { c: c.color, w: PEN_W, p };
+        c.onChange([...current.current, s]);
+      });
+    if (scrollRef) g = g.blocksExternalGesture(scrollRef);
+    return g;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollRef]);
 
   const liveStyle = tool === "marker" ? { c: MARKER_COLOR, w: MARKER_W, m: true } : { c: color, w: PEN_W, m: false };
 
@@ -147,6 +161,12 @@ export function InkLayer({ strokes, onChange, active, tool, color, imgW, offsetX
     </GestureDetector>
   );
 }
+
+/** لا يُعاد رسمها مع كل تحديث للقارئ (تظليل الكلمات أثناء القراءة) — فقط حين يتغيّر ما يخصها */
+export const InkLayer = React.memo(InkLayerImpl, (a, b) =>
+  a.strokes === b.strokes && a.active === b.active && a.tool === b.tool && a.color === b.color &&
+  a.imgW === b.imgW && a.offsetX === b.offsetX && a.width === b.width && a.height === b.height && a.scrollRef === b.scrollRef && a.onChange === b.onChange
+);
 
 /** شريط أدوات القلم: الألوان، قلم التظليل، الممحاة، التراجع، مسح الصفحة، إنهاء */
 export function InkToolbar({

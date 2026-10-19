@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ScreenOrientation from "expo-screen-orientation";
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -456,6 +456,7 @@ export default function ReaderScreen() {
   const [fullText, setFullText] = useState(false); // تفتح بواجهة القراءة الكاملة (النص + الأزرار)؛ زر التكبير للملء
   // الانتقال لصفحة محددة
   const [gotoOpen, setGotoOpen] = useState(false);
+  const gotoInputRef = useRef<TextInput>(null);
   const [gotoValue, setGotoValue] = useState("");
   // ترقيم الكتاب المطبوع: الفرق بين رقم الصفحة في الملف ورقمها المطبوع (يُستنتج تلقائيًا)
   const [pageOffset, setPageOffset] = useState<number | null>(null);
@@ -600,12 +601,18 @@ export default function ReaderScreen() {
       on = false;
     };
   }, [isPad, bookId, page]);
-  function changeInk(next: Stroke[]) {
-    if (!bookId) return;
-    inkHistory.current = [...inkHistory.current.slice(-30), inkStrokes];
-    setInkStrokes(next);
-    saveInk(bookId, page, next);
-  }
+  // ثابتة ما دامت الصفحة نفسها (طبقة القلم لا تُعاد مع كل تحديث للشاشة)؛ آخر خطوط تُقرأ من مرجع
+  const inkNowRef = useRef<Stroke[]>([]);
+  inkNowRef.current = inkStrokes;
+  const changeInk = useCallback(
+    (next: Stroke[]) => {
+      if (!bookId) return;
+      inkHistory.current = [...inkHistory.current.slice(-30), inkNowRef.current];
+      setInkStrokes(next);
+      saveInk(bookId, page, next);
+    },
+    [bookId, page]
+  );
   function undoInk() {
     const prev = inkHistory.current.pop();
     if (prev && bookId) {
@@ -2592,9 +2599,26 @@ export default function ReaderScreen() {
     const latin = (sample.match(/[A-Za-z]/g) || []).length;
     return ar >= Math.max(4, latin); // عربي إن كانت الحروف العربية هي الغالبة
   }, [sentences]);
+  // اتجاه التقليب من لغة الكتاب كله (مجموع الصفحات المقروءة)، لا من الصفحة الحالية وحدها:
+  // صفحة فيها جداول/مصطلحات إنجليزية أو لم يُحمَّل نصها بعد كانت تقلب اتجاه السحب فيبدو أن التقليب توقف.
+  const bookLangRef = useRef({ ar: 0, la: 0, pages: new Set<number>() });
+  useEffect(() => {
+    const L = bookLangRef.current;
+    if (!sentences.length || L.pages.has(page)) return;
+    const sample = sentences.join(" ").slice(0, 3000);
+    L.ar += (sample.match(/[؀-ۿ]/g) || []).length;
+    L.la += (sample.match(/[A-Za-z]/g) || []).length;
+    L.pages.add(page);
+  }, [sentences, page]);
+  const bookArabic = bookLangRef.current.ar + bookLangRef.current.la >= 40 ? bookLangRef.current.ar >= bookLangRef.current.la : isArabicText;
+  // صفحة جديدة تبدأ بلا تكبير (التكبير كان يبقى من الصفحة السابقة فيتعطّل التقليب بالسحب)
+  useEffect(() => {
+    pdfZoomRef.current = 1;
+  }, [page]);
+
   // أحدث حالة لمقبض السحب (يُقرأ داخل PanResponder)
   pagerCtl.current = {
-    arabic: isArabicText,
+    arabic: bookArabic,
     playing: speaking,
     canPrev: page > 1,
     canNext: !totalPages || page < totalPages,
@@ -3131,22 +3155,24 @@ export default function ReaderScreen() {
           <View style={{ flex: 1, overflow: "hidden" }} {...(penOn ? {} : pager.panHandlers)}>
           <Animated.View style={{ flex: 1, transform: [{ translateX: pagerX }] }}>
             {/* الصفحتان المجاورتان خارج الشاشة — تنزلقان للداخل مع السحب */}
-            {pageImg && (isArabicText ? nbr.next : nbr.prev) ? (
+            {pageImg && (bookArabic ? nbr.next : nbr.prev) ? (
               <Image
-                source={{ uri: (isArabicText ? nbr.next : nbr.prev)! }}
+                source={{ uri: (bookArabic ? nbr.next : nbr.prev)! }}
                 style={[styles.pagerSide, { left: -screenW, width: screenW, aspectRatio: pageImgAspect }]}
                 resizeMode="contain"
               />
             ) : null}
-            {pageImg && (isArabicText ? nbr.prev : nbr.next) ? (
+            {pageImg && (bookArabic ? nbr.prev : nbr.next) ? (
               <Image
-                source={{ uri: (isArabicText ? nbr.prev : nbr.next)! }}
+                source={{ uri: (bookArabic ? nbr.prev : nbr.next)! }}
                 style={[styles.pagerSide, { left: screenW, width: screenW, aspectRatio: pageImgAspect }]}
                 resizeMode="contain"
               />
             ) : null}
             {pageImg ? (
               <GHScrollView
+                // مفتاح الصفحة: كل صفحة تُعرض بلا تكبير متبقٍّ من سابقتها
+                key={`pdf-${page}`}
                 ref={pdfScrollRef}
                 style={{ flex: 1 }}
                 contentContainerStyle={[styles.pdfImgWrap, fullText && styles.pdfImgWrapFull]}
@@ -3938,7 +3964,18 @@ export default function ReaderScreen() {
       </Modal>
 
       {/* الانتقال لصفحة محددة */}
-      <Modal visible={gotoOpen} transparent animationType="fade" onRequestClose={() => setGotoOpen(false)}>
+      {/* لوحة الأرقام تظهر فورًا: autoFocus داخل Modal في iOS لا يعمل دائمًا (كان يلزم الخروج والعودة)،
+          فنركّز الحقل صراحةً لحظة ظهور النافذة، ومرة احتياطية بعدها بقليل */}
+      <Modal
+        visible={gotoOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGotoOpen(false)}
+        onShow={() => {
+          gotoInputRef.current?.focus();
+          setTimeout(() => gotoInputRef.current?.focus(), 250);
+        }}
+      >
         <Pressable style={styles.gotoMask} onPress={() => setGotoOpen(false)}>
           <Pressable style={styles.gotoCard} onPress={() => {}}>
             <View style={styles.dictHead}>
@@ -3973,12 +4010,13 @@ export default function ReaderScreen() {
             <TextInput
               value={gotoValue}
               onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
+              ref={gotoInputRef}
               keyboardType="number-pad"
               placeholder={`${page}`}
               placeholderTextColor={Palette.placeholder}
               style={styles.gotoInput}
               textAlign="center"
-              autoFocus
+              selectTextOnFocus
               onSubmitEditing={submitGoto}
             />
             <Pressable onPress={submitGoto} style={styles.gotoBtn}

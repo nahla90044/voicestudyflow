@@ -52,6 +52,17 @@ export async function removeUnitContent(
   }
 }
 
+/** يحذف كل محتوى نوعٍ لهذا الكتاب يحقق شرطًا على رقمه (مثل أجزاء ملخّص وحدة عند إعادة التلخيص) */
+export async function removeUnitContentWhere(pdfPath: string, kind: UnitContentKind, match: (unit: number) => boolean): Promise<void> {
+  try {
+    const prefix = `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:`;
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(prefix) && match(Number(k.slice(prefix.length))));
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {
+    // نتجاهل
+  }
+}
+
 /** يخزّن المحتوى المولّد لهذه الوحدة محليًا لإعادة استخدامه بلا تكلفة ذكاء. */
 export async function setUnitContent<T>(
   pdfPath: string,

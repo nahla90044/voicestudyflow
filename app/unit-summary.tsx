@@ -14,7 +14,7 @@ import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
-import { summaryCacheKey, type SummarySource } from "../lib/unitSummary";
+import { clearSummary, summaryCacheKey, summaryRange, type SummarySource } from "../lib/unitSummary";
 import { startSummaryJob, watchSummaryJob } from "../lib/summaryJobs";
 import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
@@ -107,6 +107,52 @@ export default function UnitSummaryScreen() {
   // التلخيص مهمة خلفية (lib/summaryJobs): الخروج من هنا لا يوقفه، والعودة تتصل بنفس المهمة.
   // كل جزء يُحفظ فور اكتماله، فانقطاع الاتصال (قفل الشاشة) لا يضيّع ما ظهر.
   const [runId, setRunId] = useState(0);
+  // صفحات الكتاب التي يغطيها الملخّص — ليعرف الطالب هل غطّى الدرس كله
+  const [range, setRange] = useState<{ from: number; to: number } | null>(null);
+  useEffect(() => {
+    summaryRange(pdfPath, src).then(setRange).catch(() => setRange(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfPath, srcId, kind]);
+
+  /** إعادة التلخيص: نفس الصفحات، أو صفحات يحددها الطالب (إن كانت حدود الدرس ناقصة) */
+  function onRedo() {
+    const restart = async () => {
+      stopSummary();
+      setPlaying(false);
+      await clearSummary(pdfPath, src);
+      setSum(null);
+      setSaved(false);
+      setIncomplete(false);
+      setErr("");
+      setLoading(true);
+      setRunId((n) => n + 1);
+    };
+    Alert.alert(t("summary.redo.title"), t("summary.redo.body"), [
+      { text: t("summary.redo.same"), onPress: () => void restart() },
+      {
+        text: t("summary.redo.pages"),
+        onPress: () =>
+          Alert.prompt(
+            t("summary.redo.pagesTitle"),
+            t("summary.redo.pagesBody"),
+            async (v) => {
+              const m = String(v ?? "").replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).match(/(\d+)\D+(\d+)/);
+              if (!m) return;
+              const a = Math.min(Number(m[1]), Number(m[2]));
+              const b = Math.max(Number(m[1]), Number(m[2]));
+              if (!(a > 0)) return;
+              await clearSummary(pdfPath, { kind: "range", from: a, to: b });
+              stopSummary();
+              router.replace({ pathname: "/unit-summary", params: { pdf_path: pdfPath, from: String(a), to: String(b), title: unitTitle, book_title: bookTitle } });
+            },
+            "plain-text",
+            range ? `${range.from}-${range.to}` : "",
+            "numbers-and-punctuation"
+          ),
+      },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  }
   useEffect(() => {
     let on = true;
     let unwatch: (() => void) | undefined;
@@ -285,7 +331,19 @@ export default function UnitSummaryScreen() {
             </Pressable>
           </View>
 
+          {range && range.from !== range.to ? (
+            <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.coverage", { from: range.from, to: range.to, n: range.to - range.from + 1 })}</Text>
+          ) : null}
           {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} /> : null}
+          {sum && !streaming ? (
+            <Pressable
+              onPress={onRedo}
+              style={({ pressed }) => [styles.saveBtn, { flex: 0, flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Ionicons name="refresh" size={18} color={pal.accent} />
+              <Text style={[styles.saveTxt, { color: pal.ink }]}>{t("summary.redo.title")}</Text>
+            </Pressable>
+          ) : null}
           {streaming ? (
             <View style={[styles.writing, { backgroundColor: pal.soft }]}>
               <View style={{ flexDirection: dir.row, alignItems: "center", gap: 10 }}>

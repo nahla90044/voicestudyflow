@@ -7,7 +7,7 @@ import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
 import { extractPdfPageText } from "./pdfText";
 import { parsePartialSummary, parseStudySummary, type StudySummary, type SummarySection } from "./studySummary";
 import { getSyllabus } from "./syllabus";
-import { getUnitContent, setUnitContent } from "./unitContent";
+import { getUnitContent, removeUnitContent, removeUnitContentWhere, setUnitContent } from "./unitContent";
 import { unitTextParts } from "./unitScope";
 
 export type SummarySource = { kind: "page"; page: number } | { kind: "unit"; unit: number } | { kind: "range"; from: number; to: number };
@@ -34,6 +34,35 @@ export async function cacheSummary(pdfPath: string, src: SummarySource, s: Study
  * نص المصدر **كاملًا** مقسّمًا لأجزاء بالترتيب (جزء واحد للصفحة أو الوحدة القصيرة).
  * كل جزء يحمل سياقه («الجزء ٢ من ٤ من وحدة …») فيُلخَّص بشمول ثم تُدمج الأجزاء.
  */
+/** صفحات الكتاب التي يغطيها الملخّص (لعرضها للطالب: هل غطّى الدرس كله؟) */
+export async function summaryRange(pdfPath: string, src: SummarySource): Promise<{ from: number; to: number } | null> {
+  if (src.kind === "page") return { from: src.page, to: src.page };
+  if (src.kind === "range") return { from: src.from, to: src.to };
+  const units = (await getSyllabus(pdfPath).catch(() => null))?.data.units ?? [];
+  if (!units[src.unit]) return null;
+  const pages = await bookPages(pdfPath).catch(() => []);
+  const last = pages.reduce((m, p) => Math.max(m, p.page), 0);
+  const ranges = (await getCachedUnitRanges(pdfPath)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
+  const rg = ranges[src.unit];
+  return rg ? { from: rg.from, to: rg.to } : null;
+}
+
+/** إعادة التلخيص: يحذف الملخّص المخزَّن وكل أجزائه ومهامه، فيُكتب من جديد */
+export async function clearSummary(pdfPath: string, src: SummarySource): Promise<void> {
+  const k = summaryCacheKey(src);
+  await removeUnitContent(pdfPath, k.id, k.kind);
+  const base = (k.kind === "pagestudysummary" ? 1 : 2) * 1e12 + k.id * 1e4;
+  await removeUnitContentWhere(pdfPath, "studysummarypart", (u) => u >= base && u < base + 1e4);
+  try {
+    const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
+    const jobKeys = (await AsyncStorage.getAllKeys()).filter((x) => {
+      const m = x.match(/^vsf:aijob:sum:(.*):(\d+)$/);
+      return !!m && m[1] === pdfPath && Number(m[2]) >= base && Number(m[2]) < base + 1e4;
+    });
+    if (jobKeys.length) await AsyncStorage.multiRemove(jobKeys);
+  } catch {}
+}
+
 export async function summaryParts(pdfPath: string, src: SummarySource): Promise<string[]> {
   if (src.kind === "page") {
     let ctx = (await unitTextParts(pdfPath, src.page, src.page))[0] ?? "";
