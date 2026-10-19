@@ -140,9 +140,11 @@ export default function GenerateStudyScreen() {
         });
         done(t("generate.done.summary"));
       }
-    } catch {
+    } catch (e) {
       setBusy(false);
       setStatus("");
+      // نفاد الطلبات: شاشة الاشتراك تظهر تلقائيًا، فلا نضيف رسالة «تعذّر»
+      if ((e as Error).message === "USER_QUOTA") return;
       Alert.alert(t("generate.err.title"), t("generate.err.failed"));
     }
   }

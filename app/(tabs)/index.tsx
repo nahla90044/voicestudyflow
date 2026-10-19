@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
+import { UsageBar } from "../../components/brand/usage-chip";
 import { DownloadIndicator } from "../../components/brand/download-indicator";
 import { FadeIn } from "../../components/brand/fade-in";
 import { CountUp, PressableScale } from "../../components/brand/motion";
@@ -270,7 +271,9 @@ export default function HomeScreen() {
               <View {...coach.bind("menu")}>
                 <AppDrawer tint={pal.dark ? "#FFFFFF" : pal.ink} light={!pal.dark} />
               </View>
-              <View style={{ flex: 1 }} />
+              <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 6 }}>
+                <UsageBar />
+              </View>
               <CoachHelpButton onPress={coach.replay} />
               <View {...coach.bind("streak")} style={[styles.streakPill, { backgroundColor: pal.dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.75)", borderColor: pal.dark ? pal.accent + "55" : "transparent" }]}>
                 <Ionicons name="flame" size={14} color={pal.dark ? pal.accent : "#E07A2E"} />

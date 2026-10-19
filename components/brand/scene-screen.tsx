@@ -12,6 +12,7 @@ import { useDir } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
 import { sceneGrowth } from "../../lib/sceneCore";
 import { SceneArt } from "./scene-art";
+import { UsageBar } from "./usage-chip";
 
 // نقطة الارتكاز في كل رسم (بإحداثيات 390×470): قلب الشجرة، الرف، القمر
 const FOCUS = { garden: 270, study: 250, sky: 215 } as const;
@@ -68,7 +69,10 @@ export function SceneBanner({
       <View style={[styles.bannerInner, { paddingTop: insets.top + 6 }]}>
         <View style={[styles.bannerTop, { flexDirection: dir.row }]}>
           {left}
-          <View style={{ flex: 1 }} />
+          {/* عدّاد الاستهلاك في رأس كل شاشة */}
+          <View style={{ flex: 1, alignItems: "center", paddingHorizontal: 6 }}>
+            <UsageBar />
+          </View>
           {right}
         </View>
         <View>

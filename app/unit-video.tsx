@@ -12,6 +12,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
+import { celebrate } from "../components/brand/feedback-host";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { VideoStage } from "../components/brand/video-stage";
@@ -68,11 +69,26 @@ export default function UnitVideoScreen() {
       const params: Record<string, string> = { pdf_path: pdfPath };
       for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
       const key = startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params });
+      let sawRunning = false; // نحتفل فقط بتوليد تابعناه الآن (لا عند فتح فيديو جاهز)
       un = watchVideoJob(key, (j) => {
         if (!on) return;
         setJob(j);
         if (j.script?.scenes.length) setScript(j.script);
-        if (j.status === "done") setComplete(true);
+        if (j.status === "running") sawRunning = true;
+        if (j.status === "done") {
+          setComplete(true);
+          if (sawRunning) {
+            sawRunning = false;
+            celebrate({
+              emoji: "🎬",
+              title: t("video.ready.title"),
+              subtitle: unitTitle ? `«${unitTitle}»` : undefined,
+              body: t("video.ready.body"),
+              primary: { text: `${t("video.play")} ▶️`, onPress: () => playFrom(0) },
+              secondary: { text: t("addBook.success.later") },
+            });
+          }
+        }
       });
     })();
     return () => {

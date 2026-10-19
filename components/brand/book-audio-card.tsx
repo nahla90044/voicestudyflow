@@ -8,7 +8,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "rea
 
 import { getBookAudio, pauseBookAudio, startBookAudio, watchBookAudio, type BookAudio } from "../../lib/bookAudio";
 import { useDir, useI18n } from "../../lib/i18n";
-import { getPlan, getUsage, LIMITS } from "../../lib/plan";
+import { getPlan, getUsage, planLimits, requestPaywall } from "../../lib/plan";
 import { useScene } from "../../lib/scene";
 import { DEFAULT_VOICE_ID, VOICE_CATALOG } from "../../lib/voice";
 import { SceneCard } from "./scene-screen";
@@ -41,7 +41,17 @@ export function BookAudioCard({ pdfPath, bookTitle, total }: { pdfPath: string; 
     let note = "";
     if (plan !== "owner") {
       const u = await getUsage();
-      note = "\n\n" + t("bookAudio.quotaNote", { left: Math.max(0, LIMITS[plan].pages - u.pages) });
+      const lim = await planLimits(plan);
+      const pagesLeft = Math.max(0, (lim?.pages ?? 0) - u.pages);
+      // لا صفحات متبقية: زر الحفظ لن يحفظ شيئًا، فنعرض الترقية بدله
+      if (pagesLeft === 0) {
+        Alert.alert(t("reader.audioSave.title"), t("bookAudio.noPages"), [
+          { text: t("common.cancel"), style: "cancel" },
+          { text: t("sub.upgrade"), onPress: () => void requestPaywall("voice", true) },
+        ]);
+        return;
+      }
+      note = "\n\n" + t("bookAudio.quotaNote", { left: pagesLeft });
     }
     Alert.alert(t("reader.audioSave.title"), t("bookAudio.confirm", { left, total: all, saved: cur?.saved.length ?? 0 }) + note, [
       { text: t("common.cancel"), style: "cancel" },

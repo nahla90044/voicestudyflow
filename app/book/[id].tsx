@@ -147,7 +147,8 @@ export default function BookHubScreen() {
   }
 
   const pages = Number(book.page_count) || 0;
-  const pct = pages > 0 ? Math.min(100, Math.round((page / pages) * 100)) : 0;
+  // الصفحة الأولى = لم تبدأ القراءة بعد (كان كتاب من صفحتين جديد يظهر «50٪ مقروء»)
+  const pct = pages > 0 && page > 1 ? Math.min(100, Math.round((page / pages) * 100)) : 0;
   const started = page > 1;
   const units = syl?.data.units ?? [];
 

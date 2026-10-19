@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -700,6 +701,12 @@ export default function LibraryScreen() {
           );
         }}
         ListEmptyComponent={
+          // أثناء التحميل الأول لا نقول «لا توجد كتب» (كان يظهر لحظة ثم تظهر الكتب)
+          loading && rows.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <ActivityIndicator color={pal.accent} />
+            </View>
+          ) : (
           <View style={{ paddingHorizontal: 16 }}>
             <SceneCard>
               <Text style={{ color: pal.dim, textAlign: dir.textAlign, fontSize: 14, lineHeight: 22 }}>
@@ -707,6 +714,7 @@ export default function LibraryScreen() {
               </Text>
             </SceneCard>
           </View>
+          )
         }
       />
 

@@ -22,6 +22,7 @@ import { initPurchases } from "../lib/purchases";
 import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
 import { getCurrentLang, LanguageProvider } from "../lib/i18n";
+import { dangerAlert, FeedbackHost, isDangerAlert } from "../components/brand/feedback-host";
 import { dict } from "../lib/i18n/strings";
 import { closeReadingCard } from "../lib/readingCard";
 import { ThemeProvider } from "../lib/themeContext";
@@ -29,6 +30,14 @@ import { ONBOARDING_KEY } from "./onboarding";
 
 // نصوص خارج مزوّد اللغة (التخطيط العام يحيط به)
 const tr = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
+
+// التنبيهات بلا أزرار يضع لها iOS زر «OK» بلغة الجهاز؛ نضيف زرًا بلغة التطبيق لكل التطبيق مرة واحدة
+const nativeAlert = Alert.alert.bind(Alert);
+// ونوافذ الحذف (زر مدمّر) تظهر بطاقة تحذير مميزة موحّدة بدل نافذة النظام
+Alert.alert = (title, message, buttons, options) =>
+  isDangerAlert(buttons)
+    ? dangerAlert(title, message, buttons!)
+    : nativeAlert(title, message, buttons && buttons.length ? buttons : [{ text: tr("common.ok") }], options);
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -126,6 +135,7 @@ export default function RootLayout() {
           <Stack.Screen name="voice" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
         </Stack>
+        <FeedbackHost />
         {mustUpdate ? <UpdateRequired /> : null}
         {locked ? <AccountLocked onSignedOut={() => { setLocked(false); router.replace("/auth"); }} /> : null}
         {booting ? <AnimatedSplash ready={bootReady} onHidden={() => setBooting(false)} /> : null}

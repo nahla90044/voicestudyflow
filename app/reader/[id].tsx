@@ -27,13 +27,13 @@ import { hasMarginInk, loadInk, saveInk, type InkTool, type Stroke } from "../..
 
 import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
-import { UsageChip } from "../../components/brand/usage-chip";
+import { UsageBar, UsageChip } from "../../components/brand/usage-chip";
 import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
 import * as Print from "expo-print";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
-import { getPlan, getUsage, LIMITS } from "../../lib/plan";
+import { getPlan, getUsage, planLimits, requestPaywall } from "../../lib/plan";
 import { aiAssist, CARD_TYPES, defineWord, generateFlashcards, type CardType, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
 import { addSave, cardsHtml, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
 import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
@@ -2436,7 +2436,17 @@ export default function ReaderScreen() {
     let note = "";
     if (plan !== "owner") {
       const u = await getUsage();
-      note = "\n\n" + t("bookAudio.quotaNote", { left: Math.max(0, LIMITS[plan].pages - u.pages) });
+      const lim = await planLimits(plan);
+      const pagesLeft = Math.max(0, (lim?.pages ?? 0) - u.pages);
+      // لا صفحات متبقية: زر الحفظ لن يحفظ شيئًا، فنعرض الترقية بدله
+      if (pagesLeft === 0) {
+        Alert.alert(t("reader.audioSave.title"), t("bookAudio.noPages"), [
+          { text: t("reader.audioSave.no"), style: "cancel" },
+          { text: t("sub.upgrade"), onPress: () => void requestPaywall("voice", true) },
+        ]);
+        return;
+      }
+      note = "\n\n" + t("bookAudio.quotaNote", { left: pagesLeft });
     }
     Alert.alert(t("reader.audioSave.title"), t("bookAudio.confirm", { left, total, saved: savedN }) + note, [
       { text: t("reader.audioSave.no"), style: "cancel" },
@@ -3005,6 +3015,9 @@ export default function ReaderScreen() {
               {t("reader.pageInfo.loading", { done: ingestDone, total: ingestTotal })}
             </Text>
           ) : null}
+          <View style={{ marginTop: 4 }}>
+            <UsageBar onPaper={paper} light={!paper} />
+          </View>
         </View>
         <CoachHelpButton onPress={coach.replay} />
         <Pressable onPress={togglePaper} style={[styles.topBtn, paper && styles.topBtnPaper]} hitSlop={8} accessibilityLabel={t("reader.theme.toggle")}>

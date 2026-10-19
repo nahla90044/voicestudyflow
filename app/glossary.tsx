@@ -15,6 +15,7 @@ import { Radius } from "../constants/design";
 import { getDownloadState, startDownload, subscribeDownload, type DownloadState } from "../lib/downloadManager";
 import { addCards } from "../lib/flashcards";
 import { getGlossary, setBookKind, type BookKind, type GlossaryItem, type UnitRange } from "../lib/glossary";
+import { requestPaywall } from "../lib/plan";
 import { useDir, useI18n } from "../lib/i18n";
 import { setLastPage } from "../lib/readerPrefs";
 import { useScene, type ScenePalette } from "../lib/scene";
@@ -64,6 +65,7 @@ export default function GlossaryScreen() {
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [quota, setQuota] = useState(false); // انتهت الطلبات الذكية: لا معنى لإعادة المحاولة
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [saved, setSaved] = useState<Set<string>>(new Set());
@@ -147,6 +149,7 @@ export default function GlossaryScreen() {
       if (!titles.length) return;
       setLoading(true);
       setFailed(false);
+      setQuota(false);
       setMissing(false);
       setFilter("all");
       try {
@@ -156,7 +159,8 @@ export default function GlossaryScreen() {
         setRange(r.range);
         setMissing(r.missingPages);
         if (!r.items.length && !r.missingPages) setFailed(true);
-      } catch {
+      } catch (e) {
+        if ((e as Error).message === "USER_QUOTA") setQuota(true);
         setFailed(true);
       } finally {
         setLoading(false);
@@ -346,9 +350,12 @@ export default function GlossaryScreen() {
             <View style={[styles.stateIcon, { backgroundColor: pal.soft }]}>
               <Ionicons name="alert-circle-outline" size={32} color={pal.dark ? "#FFBE9A" : "#A2501E"} />
             </View>
-            <Text style={[styles.dim, { color: pal.dim }]}>{t("glossary.failed")}</Text>
-            <PressableScale onPress={() => void load(true)} style={[styles.dlBtn, { backgroundColor: pal.accent }]}>
-              <Text style={[styles.dlTxt, { color: pal.onAccent }]}>{t("glossary.retry")}</Text>
+            <Text style={[styles.dim, { color: pal.dim }]}>{quota ? t("pay.reason.ai") : t("glossary.failed")}</Text>
+            <PressableScale
+              onPress={() => (quota ? requestPaywall("ai", true) : void load(true))}
+              style={[styles.dlBtn, { backgroundColor: pal.accent }]}
+            >
+              <Text style={[styles.dlTxt, { color: pal.onAccent }]}>{quota ? t("sub.upgrade") : t("glossary.retry")}</Text>
             </PressableScale>
           </View>
         ) : (

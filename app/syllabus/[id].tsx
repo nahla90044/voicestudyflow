@@ -137,7 +137,8 @@ export default function SyllabusScreen() {
       setDone(new Array(data.units.length).fill(false));
       await loadSchedule(data.units.length);
     } catch (e: any) {
-      setErr(e?.message ?? t("syllabus.err.generate"));
+      // رسالة الخطأ الخام (مثل USER_QUOTA) لا تُعرض للمستخدم
+      setErr(e?.message === "USER_QUOTA" ? t("pay.reason.ai") : t("syllabus.err.generate"));
     } finally {
       setBusy(false);
     }

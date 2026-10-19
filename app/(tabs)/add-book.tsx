@@ -2,7 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { checkBook } from "../../lib/ai";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+
+import { celebrate } from "../../components/brand/feedback-host";
+import React, { useMemo, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
@@ -50,6 +52,7 @@ export default function AddBookScreen() {
   const { pal } = useScene();
 
   const [title, setTitle] = useState("");
+  const autoTitle = useRef(""); // آخر عنوان مأخوذ من اسم ملف
   const [minutes, setMinutes] = useState("60");
   const [pageCountManual, setPageCountManual] = useState(""); // اختياري
   const [file, setFile] = useState<any>(null);
@@ -73,9 +76,10 @@ export default function AddBookScreen() {
       }
       setFile(picked);
 
-      // عنوان تلقائي من اسم الملف إذا فاضي
-      if (!title.trim() && typeof picked?.name === "string") {
-        setTitle(picked.name.replace(/\.pdf$/i, ""));
+      // عنوان تلقائي من اسم الملف إذا كان فارغًا أو تلقائيًا من ملف سابق (لا نمسّ ما كتبه المستخدم)
+      if ((!title.trim() || title === autoTitle.current) && typeof picked?.name === "string") {
+        autoTitle.current = picked.name.replace(/\.pdf$/i, "");
+        setTitle(autoTitle.current);
       }
     }
   }
@@ -207,6 +211,7 @@ export default function AddBookScreen() {
           chk.status === "error" ? t("addBook.check.failedBody") : chk.advice || t("addBook.moderation.blockedBody")
         );
         setFile(null);
+        if (title === autoTitle.current) setTitle(""); // عنوان الملف المرفوض لا يبقى
         return;
       }
 
@@ -269,13 +274,10 @@ export default function AddBookScreen() {
           bufferEvery: 7,
         });
 
-        Alert.alert(t("common.done"), t("addBook.alert.planCreated", { pages: pageCount, days: result.days }));
-
-        // ✅ الانتقال لشاشة الخطة لعرضها
-        router.push("/calendar");
+        // بطاقة احتفالية؛ «عرض الخطة» ينقل لشاشة الخطة
+        celebrateBook(book.id, safeTitle, { pages: pageCount, days: result.days });
       } else {
-        Alert.alert(t("common.done"), t("addBook.alert.bookAdded"));
-        router.push("/library");
+        celebrateBook(book.id, safeTitle);
       }
 
       setTitle("");
@@ -288,12 +290,26 @@ export default function AddBookScreen() {
     }
   }
 
+  /** بطاقة النجاح بعد الرفع: فتح الكتاب مباشرة، أو المكتبة/الخطة */
+  function celebrateBook(id: string, name: string, plan?: { pages: number; days: number }) {
+    celebrate({
+      emoji: "📖",
+      title: t("addBook.success.title"),
+      subtitle: `«${name}»`,
+      body: plan ? t("addBook.success.plan", plan) : t("addBook.success.body"),
+      tip: t("addBook.success.tip"),
+      primary: { text: `${t("addBook.success.open")} 🚀`, onPress: () => router.push({ pathname: "/book/[id]", params: { id } }) },
+      secondary: { text: plan ? t("addBook.success.viewPlan") : t("addBook.success.later"), onPress: () => router.push(plan ? "/calendar" : "/library") },
+    });
+  }
+
   // ألوان الحقول: نفس نمط الملف الشخصي (مقروءة في المشهد الفاتح والداكن)
   const inputColors = { backgroundColor: pal.dark ? pal.soft : pal.bg, borderColor: pal.cardBorder, color: pal.ink };
   const planDisabled = !canCreatePlan || busy;
 
   return (
     <SceneScreen>
+
       <SceneBanner
         title={t("addBook.header.title")}
         subtitle={t("addBook.header.subtitle")}

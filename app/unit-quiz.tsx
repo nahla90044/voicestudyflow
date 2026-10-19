@@ -140,8 +140,8 @@ export default function UnitQuizScreen() {
         }
         setUnitContent(pdfPath, srcId, kind, qs);
         if (on) setQuiz(qs.map((q) => ({ ...q, ...where })));
-      } catch {
-        if (on) setErr(t("syllabus.err.quiz"));
+      } catch (e) {
+        if (on) setErr((e as Error).message === "USER_QUOTA" ? t("pay.reason.ai") : t("syllabus.err.quiz"));
       } finally {
         if (on) setLoading(false);
       }

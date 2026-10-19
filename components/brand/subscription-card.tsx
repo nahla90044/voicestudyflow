@@ -8,7 +8,7 @@ import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native"
 import { Ionicons } from "@expo/vector-icons";
 
 import { useDir, useI18n } from "../../lib/i18n";
-import { getPlan, getUsage, invalidatePlan, LIMITS, PAGE_PACK, requestPaywall, type Plan, type Usage } from "../../lib/plan";
+import { getPlan, getUsage, invalidatePlan, PAGE_PACK, planLimits, requestPaywall, type Plan, type Usage } from "../../lib/plan";
 import { buyPages, MANAGE_URL, purchasesAvailable, restore } from "../../lib/purchases";
 import { useScene } from "../../lib/scene";
 import { SceneCard } from "./scene-screen";
@@ -19,14 +19,17 @@ export function SubscriptionCard() {
   const { pal } = useScene();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [lim, setLim] = useState<{ pages: number; premium: number; ai: number } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       let on = true;
-      Promise.all([getPlan(true), getUsage()]).then(([p, u]) => {
+      Promise.all([getPlan(true), getUsage()]).then(async ([p, u]) => {
+        const l = await planLimits(p);
         if (!on) return;
         setPlan(p);
         setUsage(u);
+        setLim(l);
       });
       return () => {
         on = false;
@@ -35,7 +38,7 @@ export function SubscriptionCard() {
   );
 
   if (!plan) return null;
-  const limits = plan === "owner" ? null : LIMITS[plan];
+  const limits = plan === "owner" ? null : lim;
   const store = purchasesAvailable();
 
   // حساب المطوّرة: بطاقة ذهبية واضحة (كل المزايا مجانًا، بلا حدود ولا أزرار شراء)

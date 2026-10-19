@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { celebrate } from "../components/brand/feedback-host";
 import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
@@ -40,6 +41,12 @@ export default function UnitSummaryScreen() {
   const { id: srcId, kind } = summaryCacheKey(src);
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
+  /** ملخّص فيديو للوحدة نفسها (يُبنى من هذا الملخّص) */
+  function openVideo() {
+    const params: Record<string, string> = { pdf_path: pdfPath };
+    for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
+    router.push({ pathname: "/unit-video", params });
+  }
 
   const [loading, setLoading] = useState(true);
   const [sum, setSum] = useState<StudySummary | null>(null);
@@ -197,8 +204,21 @@ export default function UnitSummaryScreen() {
       const key = startSummaryJob(pdfPath, src, { title: unitTitle || bookTitle, params });
       setIncomplete(false);
       setErr("");
+      let sawRunning = false; // نحتفل فقط بتوليد تابعناه الآن (لا عند فتح ملخص جاهز)
       unwatch = watchSummaryJob(key, (j) => {
         if (!on) return;
+        if (j.status === "running") sawRunning = true;
+        if (j.status === "done" && j.result && sawRunning) {
+          sawRunning = false;
+          celebrate({
+            emoji: "📝",
+            title: t("summary.ready.title"),
+            subtitle: unitTitle ? `«${unitTitle}»` : undefined,
+            body: t("summary.ready.body"),
+            primary: { text: `${t("summary.ready.read")} 📖` },
+            secondary: { text: t("summary.ready.video"), onPress: () => openVideo() },
+          });
+        }
         if (j.soFar?.sections.length || j.soFar?.title) {
           setSum(j.soFar);
           setLoading(false);
@@ -209,7 +229,7 @@ export default function UnitSummaryScreen() {
         setLoading(false);
         if (j.status === "done" && j.result) setSum(j.result);
         else if (j.soFar?.sections.length) setIncomplete(true);
-        else setErr(t("syllabus.err.summary"));
+        else setErr(j.status === "quota" ? t("pay.reason.ai") : t("syllabus.err.summary"));
       });
     })();
     return () => {
@@ -344,11 +364,7 @@ export default function UnitSummaryScreen() {
 
           {/* 🎬 ملخّص فيديو للوحدة نفسها (يُبنى من هذا الملخّص) */}
           <Pressable
-            onPress={() => {
-              const params: Record<string, string> = { pdf_path: pdfPath };
-              for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
-              router.push({ pathname: "/unit-video", params });
-            }}
+            onPress={openVideo}
             style={({ pressed }) => [styles.saveBtn, { flex: 0, flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder, opacity: pressed ? 0.8 : 1 }]}
           >
             <Ionicons name="videocam" size={18} color={pal.accent} />

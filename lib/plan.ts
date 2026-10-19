@@ -37,10 +37,11 @@ export async function getPlan(force = false): Promise<Plan> {
   else {
     try {
       const uid = await getUserId();
-      const { data, error } = await supabase.from("entitlements").select("plan_id,expires_at").eq("user_id", uid).maybeSingle();
+      const { data, error } = await supabase.from("entitlements").select("plan_id,expires_at,trial").eq("user_id", uid).maybeSingle();
       if (error) throw error;
       const active = !!data && (data.expires_at === null || new Date(data.expires_at).getTime() > Date.now());
       if (active) plan = planOf(String(data!.plan_id));
+      inTrial = active && !!(data as { trial?: boolean }).trial;
     } catch {
       // بلا شبكة → نعرض ما يقوله المتجر مؤقتًا؛ السيرفر يقرّر عند الطلب
       plan = (await storeActivePlan()) ?? "free";
@@ -52,6 +53,26 @@ export async function getPlan(force = false): Promise<Plan> {
 
 export function invalidatePlan(): void {
   cached = null;
+}
+
+let inTrial = false; // أسبوع التجربة المجانية لباقة مدفوعة (حدوده ١٠ صفحات و٥ طلبات حتى أول دفعة)
+
+/**
+ * الحدود الفعلية كما يطبّقها السيرفر (_shared/plan.ts limitsFor): المجاني بلا دخول Apple = صفر،
+ * وأسبوع التجربة = ١٠ صفحات و٥ طلبات، وإلا حدود الباقة. (كان العدّاد يعرض حدود الباقة دائمًا)
+ */
+export async function planLimits(plan: Plan): Promise<{ pages: number; premium: number; ai: number } | null> {
+  if (plan === "owner") return null;
+  if (plan === "free") {
+    const { data } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+    const u = data?.user;
+    const apple =
+      ((u?.app_metadata?.providers as string[] | undefined) ?? []).includes("apple") ||
+      (u?.identities ?? []).some((i) => i.provider === "apple") ||
+      (u?.email ?? "").toLowerCase() === "review@voicestudyflow.app";
+    return apple ? LIMITS.free : { pages: 0, premium: 0, ai: 0 };
+  }
+  return inTrial ? { pages: 10, premium: 0, ai: 5 } : LIMITS[plan];
 }
 
 const usageListeners = new Set<() => void>();
