@@ -13,7 +13,7 @@ import { UsageChip } from "../components/brand/usage-chip";
 import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
-import { summaryHtml, summaryToSpeech, summaryToText, type StudySummary } from "../lib/studySummary";
+import { summaryHtml, summaryToText, type StudySummary } from "../lib/studySummary";
 import { clearSummary, summaryCacheKey, summaryRange, type SummarySource } from "../lib/unitSummary";
 import { hasSummaryJob, startSummaryJob, watchSummaryJob } from "../lib/summaryJobs";
 import { getSummaryMode, setSummaryMode, type SummaryMode } from "../lib/summaryPrefs";
@@ -22,19 +22,6 @@ import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
 import { playSummary, saveSummaryAudio, stopSummary, summaryChunks } from "../lib/summaryAudio";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
-
-// يزيل رموز الماركداون إن ظهرت (عنوان #، عريض **، خطوط ---، شفرة `) → نص نظيف
-function stripMarkdown(s: string): string {
-  return String(s || "")
-    .replace(/^#{1,6}\s*/gm, "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/__(.+?)__/g, "$1")
-    .replace(/^\s*-{3,}\s*$/gm, "")
-    .replace(/`+/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 export default function UnitSummaryScreen() {
   const { t } = useI18n();

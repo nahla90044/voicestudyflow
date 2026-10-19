@@ -12,9 +12,6 @@ import { setLastPage, setLastSentence } from "./readerPrefs";
 import { focusEvery, getFocusLevel } from "./settings";
 import { recordActivity } from "./stats";
 import { splitForReading } from "./textUtils";
-
-// الترويسات المقروءة لكل كتاب (الشريط العائم) — لا تُعاد في كل صفحة
-const seenHeaders = new Map<string, Set<string>>();
 import { closeReadingCard, nextSpeed, onReadingAction, syncReadingCard } from "./readingCard";
 import {
   holdAudioSession,
@@ -27,6 +24,9 @@ import {
   standardVoiceFor,
   stopSpeaking,
 } from "./voice";
+
+// الترويسات المقروءة لكل كتاب (الشريط العائم) — لا تُعاد في كل صفحة
+const seenHeaders = new Map<string, Set<string>>();
 
 export type PlayerState = {
   bookId: string;

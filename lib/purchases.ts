@@ -41,7 +41,7 @@ export const MANAGE_URL = "https://apps.apple.com/account/subscriptions";
 // والتحديثات الهوائية لم تكن تحمله فاختفت أزرار الشراء (رفض آبل ١٥ أكتوبر). يُطفأ صراحةً بـ "0" فقط.
 const ENABLED = process.env.EXPO_PUBLIC_IAP !== "0";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 function iap(): any | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -261,4 +261,4 @@ export async function storePrice(key: ProductKey): Promise<StorePrice | null> {
       : 0;
   return { text: String(p.displayPrice ?? ""), amount, perMonth, trialDays };
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

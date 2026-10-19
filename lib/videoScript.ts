@@ -8,12 +8,12 @@ import { jobPart } from "./aiJobs";
 import { runParts, type PartsProgress } from "./partsRunner";
 import type { StudySummary } from "./studySummary";
 import { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript } from "./videoScriptCore";
-export { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript };
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getUnitContent, removeUnitContent, removeUnitContentWhere, setUnitContent } from "./unitContent";
 import { summaryCacheKey, type SummarySource } from "./unitSummary";
 import { DEFAULT_VOICE_ID, prefetchText, speechCharsPerSec } from "./voice";
+export { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene, type VideoScript };
 
 export type VideoProgress = PartsProgress<VideoScript>;
 

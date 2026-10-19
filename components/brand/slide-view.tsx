@@ -9,6 +9,7 @@ import React, { useEffect, useMemo } from "react";
 import { Animated, Easing, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { resolveLayout, splitHead, type Slide, type SlideLayout } from "../../lib/ai";
+import { useDir, useI18n } from "../../lib/i18n";
 
 /** أيقونة خطّية لكل نوع شريحة (بدل الإيموجي) */
 const LAYOUT_ICON: Record<SlideLayout, keyof typeof Ionicons.glyphMap> = {
@@ -21,7 +22,6 @@ const LAYOUT_ICON: Record<SlideLayout, keyof typeof Ionicons.glyphMap> = {
   quote: "chatbox-ellipses-outline",
   summary: "checkmark-done-outline",
 };
-import { useDir, useI18n } from "../../lib/i18n";
 
 /** أزواج تدرّج (من → إلى) بتباين كافٍ للنص الأبيض */
 export const SLIDE_GRADIENTS: [string, string][] = [

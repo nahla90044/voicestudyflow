@@ -105,6 +105,13 @@ import {
 import { closeReadingCard, onReadingAction, setOpenReaderBook, syncReadingCard } from "../../lib/readingCard";
 import { Gradients as BaseGradients, Palette as BasePalette, Radius, Spacing } from "../../constants/design";
 import { SCENE_PALETTE } from "../../lib/sceneCore";
+import { focusEvery, getFocusLevel } from "../../lib/settings";
+import { handoff, takeOver } from "../../lib/player";
+import { useDictation } from "../../lib/stt";
+import { addWord, type SavedWord } from "../../lib/words";
+import { WordSheet } from "../../components/brand/word-sheet";
+import { parseWalkCommand, type WalkCommand } from "../../lib/voiceIntents";
+import { useDir, useI18n } from "../../lib/i18n";
 
 // القارئ يلبس دائمًا ألوان «سماء المعرفة» الليلية (كحلي + ذهبي): كروم هادئ داكن
 // يريح العين في جلسات الاستماع الطويلة، بدل تدرّجات النيون البنفسجية/السماوية.
@@ -147,13 +154,6 @@ const Gradients = {
   neonViolet: GOLD_SOLID,
   brandSoft: [GOLD_SOFT, "rgba(246,213,138,0.06)"] as const,
 } as const;
-import { focusEvery, getFocusLevel } from "../../lib/settings";
-import { handoff, takeOver } from "../../lib/player";
-import { useDictation } from "../../lib/stt";
-import { addWord, type SavedWord } from "../../lib/words";
-import { WordSheet } from "../../components/brand/word-sheet";
-import { parseWalkCommand, type WalkCommand } from "../../lib/voiceIntents";
-import { useDir, useI18n } from "../../lib/i18n";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 // دقائق مؤقّت النوم. 0 = مطفأ، و-1 = «حتى نهاية الكتاب» (بلا توقيت).

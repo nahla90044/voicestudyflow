@@ -202,6 +202,16 @@ export async function signOut() {
   }
   await supabase.auth.signOut();
   await clearUserCache(); // امسح كاش الحساب حتى لا يظهر للمستخدم التالي
+  // ملفات الحساب على الجهاز: صوت نصوص كتبه وصور صفحاتها — لا تبقى لحساب آخر على نفس الجهاز
+  try {
+    const { Directory, Paths } = await import("expo-file-system");
+    for (const name of ["tts-cache-v10", "page-img"]) {
+      const d = new Directory(Paths.cache, name);
+      if (d.exists) d.delete();
+    }
+  } catch {
+    // تنظيف أفضل-جهد
+  }
 }
 
 /* ===================== استعادة الدخول برمز (بلا متصفح) =====================

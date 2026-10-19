@@ -29,7 +29,7 @@ type Props = {
   width: number;
   height: number;
   /** التمرير الذي يجب أن ينتظر القلم (حتى لا تتحرك الصفحة أثناء الكتابة) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   scrollRef?: React.RefObject<any>;
 };
 
