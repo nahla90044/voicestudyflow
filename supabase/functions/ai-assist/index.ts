@@ -146,7 +146,7 @@ function askContextOf(q: string, ctx: unknown): Record<string, unknown> {
 }
 
 /** يسجّل مخالفة سؤال: تحذير، والثالثة (مدى الحياة) توقف الحساب. المالكة لا تُوقف. */
-async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<typeof getCaller>>>, kind: string, q: string, ctx: unknown): Promise<{ strikes: number; locked: boolean }> {
+async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<typeof getCaller>>>, kind: string, q: string, ctx: unknown, canLock = true): Promise<{ strikes: number; locked: boolean }> {
   const db = caller.admin;
   const { data: inc } = await db
     .from("security_incidents")
@@ -155,7 +155,7 @@ async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<ty
     .single();
   const { count } = await db.from("security_incidents").select("id", { count: "exact", head: true }).eq("user_id", caller.id).eq("fn", "ask-guard");
   const strikes = count ?? 1;
-  const locked = strikes >= 3 && caller.plan !== "owner";
+  const locked = canLock && strikes >= 3 && caller.plan !== "owner";
   if (locked) await db.from("account_locks").upsert({ user_id: caller.id, reason: "ask-guard", incident_id: inc?.id ?? null });
   return { strikes, locked };
 }
@@ -209,13 +209,18 @@ Deno.serve(async (req: Request) => {
       const bookScan = scanText(text, { hiddenOnly: true });
       const userText = action === "ask" ? String(body.userQuestion ?? "") : question ?? "";
       const g = bookScan.ok ? scanText(userText) : bookScan;
+      if (!g.ok && action === "ask" && bookScan.ok) {
+        // «كتابك يجيب»: سؤال بصيغة أوامر → ردّ هادئ بلا تحذير ولا إيقاف، مع توثيق صامت
+        await askStrike(req, caller, "injection", userText, body.askContext, false);
+        return json({ result: targetLang === "en" ? ASK_OFFTOPIC.en : ASK_OFFTOPIC.ar, offtopic: true });
+      }
       if (!g.ok) {
         const locked = await recordIncident(req, g, { fn: "ai-assist", action, email: emailFrom(req), owner: caller?.plan === "owner" });
         return json(UNSAFE_BODY(locked), 200);
       }
     }
-    // «كتابك يجيب»: وكيل يفحص السؤال قبل الإجابة — خارج الكتاب يُعتذر عنه (بلا خصم)،
-    // والمخالف (ألفاظ مسيئة، سبّ، أوامر مباشرة أو خفية، محتوى غير لائق) يُرفض ويُسجّل تحذيرًا، والثالث يوقف الحساب.
+    // «كتابك يجيب»: وكيل يفحص السؤال قبل الإجابة — كل ما هو خارج الكتاب (ومنه الإساءة والأوامر) يُرد عليه
+    // بهدوء بأنه خارج نطاق الكتاب وبلا خصم، بلا تحذير ولا إيقاف (قرار نهلة ١٩ أكتوبر)؛ والمخالف يُوثَّق بصمت للمراجعة.
     if (action === "ask") {
       const userQ = String(body.userQuestion ?? question).slice(0, 500);
       const v = await askGuard(req, userQ);
@@ -223,8 +228,9 @@ Deno.serve(async (req: Request) => {
         return json({ result: targetLang === "en" ? ASK_OFFTOPIC.en : ASK_OFFTOPIC.ar, offtopic: true });
       }
       if (v.verdict === "violation") {
-        const { strikes, locked } = await askStrike(req, caller, v.kind, String(body.userQuestion ?? question), body.askContext);
-        return json({ ...UNSAFE_BODY(locked), askWarning: true, strikes }, 200);
+        // قرار نهلة: لا تحذير ولا إيقاف في «كتابك يجيب» — ردّ هادئ بأنه خارج نطاق الكتاب، وتوثيق صامت للمراجعة فقط
+        await askStrike(req, caller, v.kind, String(body.userQuestion ?? question), body.askContext, false);
+        return json({ result: targetLang === "en" ? ASK_OFFTOPIC.en : ASK_OFFTOPIC.ar, offtopic: true });
       }
     }
     if (COUNTED.has(action)) {
