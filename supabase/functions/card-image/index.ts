@@ -6,6 +6,7 @@
 import { requireUpdatedApp } from "../_shared/client.ts";
 import { getCaller } from "../_shared/plan.ts";
 import { logCost } from "../_shared/cost.ts";
+import { isLocked, LOCKED_BODY } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,6 +84,7 @@ Deno.serve(async (req: Request) => {
 
     const caller = await getCaller(req);
     if (!caller) return json({ error: "AUTH" }, 401);
+    if (await isLocked(req)) return json(LOCKED_BODY);
     const admin = caller.admin;
     const hash = await sha(`v1|${front.replace(/\s+/g, " ")}|${back.replace(/\s+/g, " ")}`);
     const publicUrl = (path: string) => admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;

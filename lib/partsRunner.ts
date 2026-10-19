@@ -67,7 +67,8 @@ export async function streamPart<P>(
       if (p) onPartial(p, soFar.length);
     });
   } catch (e) {
-    if ((e as Error).message === "USER_QUOTA") throw e;
+    const em = (e as Error).message;
+    if (em === "USER_QUOTA" || em === "UNSAFE_CONTENT" || em === "ACCOUNT_LOCKED") throw e;
     if (wentAway || AppState.currentState !== "active") throw new Error("WENT_AWAY");
     raw = await aiAssist(action, ctx, undefined, undefined, undefined, 150000);
   } finally {
@@ -152,7 +153,8 @@ export async function runParts<P, R>(o: {
           learnSpeed(o.speedKey, chars[i], (Date.now() - started[i]) / 1000);
         } catch (e) {
           const m = (e as Error).message;
-          if (m === "USER_QUOTA") quota = e as Error;
+          // انتهاء الحصة أو محتوى غير آمن أو حساب موقوف → يتوقف كل شيء فورًا (لا إعادة محاولة)
+          if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") quota = e as Error;
           else if (m !== "WENT_AWAY" && ++tries >= MAX_TRIES) final[i] = null; // فشل حقيقي متكرر
           else if (m !== "WENT_AWAY") await new Promise((r) => setTimeout(r, 1500 * tries)); // مهلة قبل إعادة المحاولة
           chars[i] = 0;

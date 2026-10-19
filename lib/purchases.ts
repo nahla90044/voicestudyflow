@@ -31,6 +31,8 @@ const ALL_SKUS = [...SKUS, PAGES_SKU];
 
 // روابط إلزامية في شاشة الاشتراك. الشروط: اتفاقية آبل القياسية.
 export const TERMS_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
+/** شروط استخدام التطبيق نفسه (الملكية الفكرية، المحتوى المحظور، الاستخدام المقبول) */
+export const APP_TERMS_URL = "https://voicestudyflow.app/terms.html";
 // رابط سياسة الخصوصية المنشورة (نفس المسجّل في App Store Connect)
 export const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL ?? "https://voicestudyflow.app/privacy";
 export const MANAGE_URL = "https://apps.apple.com/account/subscriptions";

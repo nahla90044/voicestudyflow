@@ -8,6 +8,7 @@
 // بدون هذا الكاش كان كل مستخدم ينتظر توليد ٣٠–١٢٠ ثانية من الصوت ويُحاسَب عليه.
 //
 // الطلب: { prompt: string, lengthMs?: number }  ·  الرد: { audio: base64 mp3 }
+import { getCaller } from "../_shared/plan.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUpdatedApp } from "../_shared/client.ts";
 
@@ -48,6 +49,9 @@ Deno.serve(async (req: Request) => {
   const outdated = requireUpdatedApp(req, corsHeaders);
   if (outdated) return outdated;
   try {
+    // مستخدم معروف فقط؛ والتوليد الجديد (المدفوع) للمالكة وحدها — الجميع يأخذ المحفوظ مجانًا
+    const caller = await getCaller(req);
+    if (!caller) return json({ error: "AUTH" }, 401);
     const body = await req.json().catch(() => ({}));
     const prompt = String(body.prompt ?? "").slice(0, 600);
     // 3s..10min حسب حدود الخدمة (نبقى ضمن نطاق مناسب للخلفية)
@@ -72,6 +76,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (caller.plan !== "owner") return json({ error: "NOT_CACHED" }, 404);
     // ليست في الكاش → توليد (المقطوعات المحفوظة تعمل بلا مفتاح ElevenLabs)
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
@@ -87,7 +92,8 @@ Deno.serve(async (req: Request) => {
     });
     if (!res.ok) {
       const msg = await res.text().catch(() => "");
-      return json({ error: `ElevenLabs ${res.status}: ${msg}` }, 500);
+      console.error("elevenlabs", res.status, msg.slice(0, 200));
+      return json({ error: "GENERATION_FAILED" }, 500);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
 

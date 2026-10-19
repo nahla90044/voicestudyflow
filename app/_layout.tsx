@@ -4,11 +4,14 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
+import { Alert } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AnimatedSplash } from "../components/brand/animated-splash";
 import { UpdateRequired } from "../components/brand/update-required";
+import { AccountLocked } from "../components/brand/account-locked";
+import { accountLocked, onSecurity } from "../lib/security";
 import { checkMinVersion, onUpdateRequired } from "../lib/appVersion";
 import { rescueCachedMusic } from "../lib/sfx";
 import { resumeBookAudioIfRunning } from "../lib/bookAudio";
@@ -18,10 +21,14 @@ import { applyUpdateOnLaunch } from "../lib/otaUpdate";
 import { initPurchases } from "../lib/purchases";
 import { supabase } from "../lib/supabase";
 import { resumePendingDownload } from "../lib/downloadManager";
-import { LanguageProvider } from "../lib/i18n";
+import { getCurrentLang, LanguageProvider } from "../lib/i18n";
+import { dict } from "../lib/i18n/strings";
 import { closeReadingCard } from "../lib/readingCard";
 import { ThemeProvider } from "../lib/themeContext";
 import { ONBOARDING_KEY } from "./onboarding";
+
+// نصوص خارج مزوّد اللغة (التخطيط العام يحيط به)
+const tr = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -30,6 +37,16 @@ export default function RootLayout() {
   const [booting, setBooting] = useState(true); // السبلاش ظاهرة
   const [bootReady, setBootReady] = useState(false); // انتهى الإقلاع → تبدأ السبلاش بالتلاشي
   const [mustUpdate, setMustUpdate] = useState(false); // نسخة لم تعد مدعومة → قفل بشاشة التحديث
+  const [locked, setLocked] = useState(false); // حساب موقوف لاستخدام غير آمن → شاشة الإيقاف
+  // حماية السيرفر: محتوى غير آمن (تنبيه، ولم يُنفَّذ الطلب) أو حساب موقوف (شاشة الإيقاف)
+  useEffect(
+    () =>
+      onSecurity((e) => {
+        if (e.kind === "locked") setLocked(true);
+        else Alert.alert(tr("security.unsafeTitle"), tr("security.unsafeBody"));
+      }),
+    []
+  );
   useEffect(() => {
     const off = onUpdateRequired(() => setMustUpdate(true));
     void checkMinVersion();
@@ -67,6 +84,7 @@ export default function RootLayout() {
         }
         // أكمل أي تحميل كتاب لم يكتمل (يستأنف تلقائيًا حتى لو سُكِّر التطبيق سابقًا)
         resumePendingDownload();
+        if (authed && (await accountLocked())) setLocked(true);
       } finally {
         // السبلاش تتلاشى بنفسها بعد حدّ أدنى قصير (انظر AnimatedSplash)
         setBootReady(true);
@@ -109,6 +127,7 @@ export default function RootLayout() {
           <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
         </Stack>
         {mustUpdate ? <UpdateRequired /> : null}
+        {locked ? <AccountLocked onSignedOut={() => { setLocked(false); router.replace("/auth"); }} /> : null}
         {booting ? <AnimatedSplash ready={bootReady} onHidden={() => setBooting(false)} /> : null}
       </SafeAreaProvider>
       </ThemeProvider>

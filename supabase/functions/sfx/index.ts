@@ -2,6 +2,7 @@
 // توليد مؤثرات صوتية / خلفية موسيقية عبر ElevenLabs Sound Generation.
 // المفتاح يبقى سرّيًا بالسيرفر. الطلب: { prompt: string, duration?: number }
 // الرد: { audio: base64 mp3 }
+import { getCaller } from "../_shared/plan.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUpdatedApp } from "../_shared/client.ts";
 const corsHeaders = {
@@ -30,6 +31,9 @@ Deno.serve(async (req: Request) => {
   const outdated = requireUpdatedApp(req, corsHeaders);
   if (outdated) return outdated;
   try {
+    // مستخدم معروف فقط؛ والتوليد الجديد (المدفوع) للمالكة وحدها — الجميع يأخذ المحفوظ مجانًا
+    const caller = await getCaller(req);
+    if (!caller) return json({ error: "AUTH" }, 401);
     const body = await req.json().catch(() => ({}));
     const prompt = String(body.prompt ?? "").slice(0, 400);
     const duration = Math.min(22, Math.max(0.5, Number(body.duration ?? 3)));
@@ -50,6 +54,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (caller.plan !== "owner") return json({ error: "NOT_CACHED" }, 404);
     const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!apiKey) throw new Error("Missing ELEVENLABS_API_KEY");
     const res = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
@@ -59,7 +64,8 @@ Deno.serve(async (req: Request) => {
     });
     if (!res.ok) {
       const msg = await res.text().catch(() => "");
-      return json({ error: `ElevenLabs ${res.status}: ${msg}` }, 500);
+      console.error("elevenlabs", res.status, msg.slice(0, 200));
+      return json({ error: "GENERATION_FAILED" }, 500);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (store) {

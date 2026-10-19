@@ -36,6 +36,22 @@ export type Caller = { id: string; plan: Plan; admin: SupabaseClient; apple: boo
 
 // حساب مراجعة آبل (بريد وكلمة سر في App Store Connect): يأخذ التجربة المجانية بلا Apple
 const TRIAL_OK_EMAILS = new Set(["review@voicestudyflow.app"]);
+// الشراء التجريبي (Sandbox) يمنح اشتراكًا في الإنتاج لهذه الحسابات فقط (المراجعة والتجربة والمالكة)
+const SANDBOX_OK_EMAILS = new Set(["review@voicestudyflow.app", "test@voicestudyflow.app"]);
+
+/** هل يُقبل شراء تجريبي (Sandbox) لهذا المستخدم؟ (يمنع مختبري TestFlight من اشتراك مجاني حقيقي) */
+export async function sandboxAllowed(admin: SupabaseClient, userId: string): Promise<boolean> {
+  try {
+    const { data } = await admin.auth.admin.getUserById(userId);
+    const u = data?.user;
+    if (!u?.email_confirmed_at) return false;
+    const email = (u.email ?? "").trim().toLowerCase();
+    if (SANDBOX_OK_EMAILS.has(email) || OWNER_EMAILS.has(email)) return true;
+    return !!(await admin.from("app_owners").select("email").eq("email", email).maybeSingle()).data;
+  } catch {
+    return false;
+  }
+}
 
 /** حدود الحساب: المجاني بلا Apple لا تجربة له (صفر) */
 function limitsFor(caller: NonNullable<Caller>) {
@@ -57,7 +73,9 @@ export async function getCaller(req: Request): Promise<Caller> {
   const user = data?.user;
   if (error || !user) return null;
 
-  const email = (user.email ?? "").trim().toLowerCase();
+  // البريد لا يُعتمد لصلاحيات خاصة (المالكة/حساب المراجعة) إلا إن كان مؤكَّدًا
+  const confirmed = !!user.email_confirmed_at;
+  const email = confirmed ? (user.email ?? "").trim().toLowerCase() : "";
   const providers = ((user.app_metadata?.providers as string[] | undefined) ?? []).concat((user.identities ?? []).map((i) => i.provider));
   const apple = providers.includes("apple") || TRIAL_OK_EMAILS.has(email);
   // المطوّرة: القائمة الثابتة أو جدول app_owners (يُضاف له أي بريد جديد بلا نشر)

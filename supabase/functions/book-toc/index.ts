@@ -2,6 +2,8 @@
 // فهرس الكتاب من فهرس ملف الـPDF المدمج (العناوين وصفحاتها) — نفس طريقة تطبيق «حاكي».
 // الطلب: { pdfPath }  الرد: { chapters: [{ title, page, level }], totalPages }
 // المتصل يصل لملفاته فقط (مجلّد uid) أو ملفات العيّنات.
+import { canAccessPdf } from "../_shared/paths.ts";
+import { pdfCleared } from "../_shared/bookCheck.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getDocumentProxy } from "https://esm.sh/unpdf@1.6.2";
 import { requireUpdatedApp } from "../_shared/client.ts";
@@ -36,8 +38,9 @@ Deno.serve(async (req: Request) => {
     const userClient = createClient(url, anon, { global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } } });
     const { data: { user } } = await userClient.auth.getUser();
     if (!user) return json({ error: "Unauthorized" }, 401);
-    const owner = pdfPath.split("/")[0];
-    if (owner !== user.id && owner !== "samples") return json({ error: "Forbidden" }, 403);
+    if (!canAccessPdf(pdfPath, user.id)) return json({ error: "Forbidden" }, 403);
+    // الكتاب لم يجتز فحص الرفع الإلزامي (أو رُفض) → لا معالجة
+    if (!(await pdfCleared(pdfPath))) return json({ error: "NOT_CLEARED" }, 403);
 
     const admin = createClient(url, service);
     const { data: file, error } = await admin.storage.from("pdfs").download(pdfPath);

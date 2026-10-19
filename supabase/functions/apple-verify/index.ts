@@ -2,7 +2,7 @@
 // التطبيق يرسل المعاملات الموقّعة من Apple (بعد الشراء/الاستعادة/عند كل فتح) فنتحقّق
 // منها ونحدّث اشتراك المستخدم. الطلب يتطلّب دخول المستخدم (verify_jwt=true).
 // لا يُمنح اشتراك إلا بمعاملة موقّعة حقيقية من Apple لهذا التطبيق.
-import { getCaller } from "../_shared/plan.ts";
+import { sandboxAllowed, getCaller } from "../_shared/plan.ts";
 import { isActive, isTrial, PAGE_PACKS, PRODUCT_PLAN, verifyTransaction } from "../_shared/apple.ts";
 
 const json = (b: unknown, status = 200) =>
@@ -56,6 +56,12 @@ Deno.serve(async (req) => {
       continue;
     }
     await log("verified", String(t.productId), `env=${t.environment} token=${t.appAccountToken ? "yes" : "no"} active=${isActive(t)}`);
+    // شراء تجريبي (Sandbox) لا يمنح شيئًا في الإنتاج إلا لحسابات المراجعة والتجربة والمالكة
+    if (String(t.environment ?? "") !== "Production" && !(await sandboxAllowed(admin, caller.id))) {
+      await log("sandbox_ignored", String(t.productId), "");
+      handled++;
+      continue;
+    }
     // صفحات إضافية (شراء استهلاكي): تُضاف للرصيد مرة واحدة لكل معاملة
     const packPages = PAGE_PACKS[String(t.productId)];
     if (packPages) {

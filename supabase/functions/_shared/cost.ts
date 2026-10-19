@@ -37,7 +37,7 @@ export function logCost(req: Request, row: CostRow): Promise<void> {
     admin ??= createClient(url, key, { auth: { persistSession: false } });
     const p = admin
       .from("cost_log")
-      .insert({ ...row, user_id: userIdFrom(req) })
+      .insert({ ...row, user_id: userIdFrom(req) } as never)
       .then(({ error }) => {
         if (error) console.error("cost_log", error.message);
       });

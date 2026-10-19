@@ -11,7 +11,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { consume, consumePage, getCaller } from "../_shared/plan.ts";
 import { requireUpdatedApp } from "../_shared/client.ts";
 import { GEMINI_MODEL, geminiMp3, geminiVoiceFor, READ_STYLES, type ReadStyle } from "../_shared/gemini.ts";
-import { logCost } from "../_shared/cost.ts";
+import { logCost, userIdFrom } from "../_shared/cost.ts";
+import { canAccessPdf } from "../_shared/paths.ts";
+import { isLocked, LOCKED_BODY } from "../_shared/guard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,6 +46,8 @@ async function contentKey(voiceId: string, style: ReadStyle, text: string): Prom
 }
 
 const SHARED_BUCKET = "tts-shared";
+// أطول صفحة حقيقية مقيسة ٥٤٤٩ حرفًا؛ ١٠٠٠٠ يغطيها مع التشكيل وإعادة توليد بعض الجمل
+const PAGE_CHAR_CAP = 10000;
 
 // بعد رفض جوجل بسبب الحد (429) نتوقف عن مراسلتها دقيقة: كل طلب جديد يرجع فورًا
 // فيكمل التطبيق بصوت الجهاز بدل انتظار رفض جديد في كل جملة.
@@ -61,6 +65,7 @@ Deno.serve(async (req: Request) => {
   if (outdated) return outdated;
 
   try {
+    if (await isLocked(req)) return json(LOCKED_BODY, 200);
     const body = await req.json().catch(() => ({}));
     const text = String(body.text ?? "").slice(0, 5000);
     if (!text.trim()) return json({ error: "Empty text" }, 400);
@@ -74,7 +79,9 @@ Deno.serve(async (req: Request) => {
     // حصة الصفحات: صفحة الكتاب تُحسب مرة واحدة في الفترة (قبل الكاش — قيمة للمستخدم)
     const book = typeof body.book === "string" ? body.book : "";
     const pageNo = Number(body.page);
-    const hasPage = !!book && Number.isFinite(pageNo) && pageNo > 0;
+    // صفحة كتاب محسوبة فقط إن كان الكتاب ملك المستخدم (أو عيّنة) — وإلا تُعامل كنص عادي يُحسب بالحروف
+    const uidReq = userIdFrom(req);
+    const hasPage = !!book && !!uidReq && canAccessPdf(book, uidReq) && Number.isFinite(pageNo) && pageNo > 0 && pageNo < 100000;
     let caller: Awaited<ReturnType<typeof getCaller>> | undefined;
     const pageKey = hasPage ? `${(await sha(book)).slice(0, 20)}:${pageNo}` : undefined;
     if (hasPage && pageKey) {
@@ -107,9 +114,21 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // توليد جديد (ليس في الكاش) خارج صفحات الكتب → يُحسب بالأحرف
-    if (!hasPage) {
-      caller = await getCaller(req);
+    // صفحة الكتاب: سقف حروف لكل صفحة في الشهر (أعلى من أطول صفحة حقيقية) — ما يتجاوزه يُحسب بالأحرف
+    let pageCovered = false;
+    if (hasPage && caller && pageKey) {
+      const { data: okCap, error: capErr } = await caller.admin.rpc("add_page_chars", {
+        p_user: caller.id,
+        p_period: new Date().toISOString().slice(0, 7),
+        p_key: pageKey,
+        p_chars: text.length,
+        p_cap: PAGE_CHAR_CAP,
+      });
+      pageCovered = caller.plan === "owner" || (!capErr && okCap === true);
+    }
+    // توليد جديد (ليس في الكاش) خارج صفحات الكتب أو فوق سقف الصفحة → يُحسب بالأحرف
+    if (!pageCovered) {
+      caller ??= await getCaller(req);
       if (!(await consume(caller, "voice", text.length))) {
         // حصة المستخدم انتهت: التطبيق يكمل بصوت الجهاز ويعرض الاشتراك
         return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);

@@ -40,14 +40,24 @@ Deno.serve(async (req: Request) => {
     // 2) عميل بمفتاح الخدمة لحذف كل شيء
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    // ملفات PDF داخل مجلّد المستخدم
-    try {
-      const { data: files } = await admin.storage.from("pdfs").list(uid);
-      if (files?.length) {
-        await admin.storage.from("pdfs").remove(files.map((f) => `${uid}/${f.name}`));
+    // كل ملفات المستخدم: الكتب (pdfs) وصور صفحاتها (page-img) — بصفحات متتالية (كان يحذف أول ١٠٠ ملف فقط)
+    async function wipe(bucket: string, prefix: string): Promise<void> {
+      for (let round = 0; round < 50; round++) {
+        const { data: items } = await admin.storage.from(bucket).list(prefix, { limit: 1000 });
+        if (!items?.length) return;
+        const files = items.filter((f) => f.id).map((f) => `${prefix}/${f.name}`);
+        const dirs = items.filter((f) => !f.id).map((f) => `${prefix}/${f.name}`);
+        for (const d of dirs) await wipe(bucket, d);
+        if (!files.length) return;
+        await admin.storage.from(bucket).remove(files);
       }
-    } catch {
-      // نتجاهل
+    }
+    for (const bucket of ["pdfs", "page-img"]) {
+      try {
+        await wipe(bucket, uid);
+      } catch {
+        // نكمل الحذف
+      }
     }
 
     // صفوف القاعدة (الكتب تتسلسل للخطط والجلسات)
@@ -56,13 +66,20 @@ Deno.serve(async (req: Request) => {
     await admin.from("student_events").delete().eq("user_id", uid);
     await admin.from("page_cache").delete().like("pdf_path", `${uid}/%`);
     await admin.from("book_syllabus").delete().like("pdf_path", `${uid}/%`);
+    // سجلات تشغيلية مرتبطة بالمستخدم (بلا مفتاح أجنبي). سجل حوادث الأمان يبقى لحماية الخدمة (مذكور في الخصوصية)
+    await admin.from("cost_log").delete().eq("user_id", uid);
+    await admin.from("iap_log").delete().eq("user_id", uid);
 
     // 3) حذف حساب المصادقة نهائيًا
     const { error: dErr } = await admin.auth.admin.deleteUser(uid);
-    if (dErr) return json({ error: dErr.message }, 500);
+    if (dErr) {
+      console.error("delete user", dErr.message);
+      return json({ error: "DELETE_FAILED" }, 500);
+    }
 
     return json({ ok: true });
   } catch (e) {
-    return json({ error: String((e as Error)?.message ?? e) }, 500);
+    console.error("delete-account", String((e as Error)?.message ?? e));
+    return json({ error: "DELETE_FAILED" }, 500);
   }
 });

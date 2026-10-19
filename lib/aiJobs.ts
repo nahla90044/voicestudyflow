@@ -10,6 +10,7 @@ import type { AiAction } from "./ai";
 import { getCurrentLang } from "./i18n";
 import { streamPart, whenActive } from "./partsRunner";
 import { refreshUsage, requestPaywall } from "./plan";
+import { checkSecurity } from "./security";
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
 
 const POLL_MS = 2000;
@@ -30,6 +31,7 @@ async function startJob(action: AiAction, text: string, extra: { deep?: boolean;
       body: JSON.stringify({ action, text, targetLang: getCurrentLang(), job: true, ...extra }),
     });
     const j = (await res.json().catch(() => ({}))) as { jobId?: string; userQuota?: boolean; error?: string };
+    checkSecurity(j);
     if (j.userQuota) {
       requestPaywall("ai");
       throw new Error("USER_QUOTA");
@@ -67,7 +69,7 @@ export async function jobPart<P>(
     return await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra);
   } catch (e) {
     const m = (e as Error).message;
-    if (m === "USER_QUOTA") throw e;
+    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;
     // احتياط: تعذّرت مهمة السيرفر (أو لم تبدأ الكتابة) → البثّ المباشر المعتاد، فلا يتعطل التوليد أبدًا
     if (m === "JOB_START" || m === "JOB_STALLED") return streamPart(action, ctx, parsePartial, parseFull, onPartial);
     throw e;
@@ -86,7 +88,8 @@ async function jobPartInner<P>(
   let id = await AsyncStorage.getItem(jobKey(key)).catch(() => null);
   if (!id) {
     id = await startJob(action, ctx, extra).catch((e) => {
-      throw new Error((e as Error).message === "USER_QUOTA" ? "USER_QUOTA" : "JOB_START");
+      const m = (e as Error).message;
+      throw new Error(m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" ? m : "JOB_START");
     });
     await AsyncStorage.setItem(jobKey(key), id).catch(() => {});
   }

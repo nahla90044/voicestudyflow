@@ -7,6 +7,7 @@
 // EXPO_PUBLIC_ يُحزَّم داخل التطبيق ويصبح مكشوفًا. الواجهة (speakText/stopSpeaking)
 // تبقى كما هي.
 
+import { checkSecurity } from "./security";
 import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from "expo-audio";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Directory, File, Paths } from "expo-file-system";
@@ -510,6 +511,7 @@ async function synthToFileNow(
   const b64 = (data as { audio?: string; error?: string })?.audio;
   const d = data as { error?: string; quota?: boolean; userQuota?: boolean; premiumQuota?: boolean };
   if (d?.premiumQuota) throw new Error("PREMIUM_QUOTA");
+  checkSecurity(d);
   if (d?.userQuota) throw new Error("USER_QUOTA");
   if (d?.error) throw new Error(d.quota ? `QUOTA: ${d.error}` : d.error);
   if (!b64) throw new Error("لا يوجد صوت في رد الدالة");

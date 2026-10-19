@@ -1,12 +1,13 @@
 // app/auth.tsx
 // شاشة الحساب: إنشاء حساب جديد (ببريد + كلمة مرور وتأكيد بالبريد) أو تسجيل دخول.
 // بعد أول دخول مؤكَّد تُرحَّل بيانات الجهاز القديمة تلقائيًا إلى الحساب.
+import { APP_TERMS_URL, PRIVACY_URL } from "../lib/purchases";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CodePad } from "../components/brand/code-pad";
@@ -499,6 +500,17 @@ export default function AuthScreen() {
                 </Pressable>
               </SceneCard>
             )}
+            {/* الموافقة على الشروط عند التسجيل/الدخول */}
+            <Text style={[styles.consent, { color: pal.dim }]}>
+              {t("auth.consent")}{" "}
+              <Text style={{ color: pal.accent, fontWeight: "800" }} onPress={() => Linking.openURL(APP_TERMS_URL).catch(() => {})}>
+                {t("auth.terms")}
+              </Text>
+              {" "}{t("auth.and")}{" "}
+              <Text style={{ color: pal.accent, fontWeight: "800" }} onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})}>
+                {t("auth.privacy")}
+              </Text>
+            </Text>
             <VersionTag color={pal.dim} />
           </ScrollView>
         </KeyboardAvoidingView>
@@ -521,6 +533,7 @@ const ART_H = 300;
 
 // التخطيط فقط هنا؛ الألوان من المشهد داخل المكوّن (c)
 const styles = StyleSheet.create({
+  consent: { fontSize: 12.5, lineHeight: 20, textAlign: "center", marginTop: 14, paddingHorizontal: 12 },
   art: { position: "absolute", top: 0, left: 0, right: 0 },
   appleBtn: { width: "100%", height: 50 },
   orTxt: { fontSize: 12.5, fontWeight: "600", textAlign: "center", marginVertical: 14 },

@@ -1,6 +1,8 @@
 // supabase/functions/page-image/index.ts
 // يحوّل صفحة PDF إلى صورة PNG عالية الدقة (للعرض القابل للتكبير في القارئ).
 // الطلب: { pdfPath, page }   الرد: { image: base64Png, page, totalPages }
+import { canAccessPdf } from "../_shared/paths.ts";
+import { pdfCleared } from "../_shared/bookCheck.ts";
 import * as mupdf from "npm:mupdf@1.3.5";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -47,8 +49,9 @@ Deno.serve(async (req: Request) => {
     });
     const { data: { user }, error: uErr } = await userClient.auth.getUser();
     if (uErr || !user) return json({ error: "Unauthorized" }, 401);
-    const owner = pdfPath.split("/")[0];
-    if (owner !== user.id && owner !== "samples") return json({ error: "Forbidden" }, 403);
+    if (!canAccessPdf(pdfPath, user.id)) return json({ error: "Forbidden" }, 403);
+    // الكتاب لم يجتز فحص الرفع الإلزامي (أو رُفض) → لا معالجة
+    if (!(await pdfCleared(pdfPath))) return json({ error: "NOT_CLEARED" }, 403);
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 

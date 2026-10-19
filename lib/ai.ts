@@ -5,6 +5,7 @@ import { refreshUsage, requestPaywall } from "./plan";
 import { fetch as streamFetch } from "expo/fetch";
 
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
+import { checkSecurity } from "./security";
 
 export type AiAction =
   | "videoscript"
@@ -58,24 +59,21 @@ export function splitHead(b: string): { head: string; body: string } {
   return { head: "", body: b };
 }
 
-export type Moderation = { allowed: boolean; category: string; advice: string };
+export type BookCheck = { status: "allow" | "reject" | "error"; category?: string; advice?: string };
 
-/** يفحص نص الكتاب ضد سياسة المحتوى. عند فشل الذكاء يسمح (طبقة أفضل-جهد، لا تعطّل الرفع). */
-export async function moderateContent(text: string): Promise<Moderation> {
-  const ok = { allowed: true, category: "", advice: "" };
-  if (!text.trim()) return ok;
+/** فحص الكتاب الإلزامي على السيرفر بعد رفعه وقبل أي معالجة (أوامر خفية، صور مخلة، سياسة المحتوى) */
+export async function checkBook(pdfPath: string): Promise<BookCheck> {
   try {
-    const raw = await aiAssist("moderate", text);
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) return ok;
-    const obj = JSON.parse(m[0]);
-    return {
-      allowed: obj?.allowed !== false, // مسموح افتراضيًا إلا إذا صرّح بالرفض
-      category: String(obj?.category ?? "").trim(),
-      advice: String(obj?.advice ?? "").trim(),
-    };
-  } catch {
-    return ok; // فشل تقني → لا نمنع المستخدم
+    const { data, error } = await withTimeout(supabase.functions.invoke("book-check", { body: { pdfPath } }), 150000, "book-check");
+    if (error) return { status: "error" };
+    checkSecurity(data);
+    const d = data as { status?: string; category?: string; advice?: string };
+    if (d?.status === "allow") return { status: "allow" };
+    if (d?.status === "reject") return { status: "reject", category: d.category, advice: d.advice };
+    return { status: "error" };
+  } catch (e) {
+    if ((e as Error).message === "ACCOUNT_LOCKED") return { status: "reject" };
+    return { status: "error" };
   }
 }
 
@@ -297,6 +295,7 @@ export async function aiAssistStream(action: AiAction, text: string, onText: (so
     // ردّ JSON بدل البثّ = خطأ أو انتهاء الحصة
     if (!res.ok || type.includes("application/json")) {
       const j = (await res.json().catch(() => ({}))) as { userQuota?: boolean; error?: string };
+      checkSecurity(j);
       if (j?.userQuota) {
         requestPaywall("ai");
         throw new Error("USER_QUOTA");
@@ -348,6 +347,7 @@ export async function aiAssist(
   );
 
   if (error) throw error;
+  checkSecurity(data);
   if (data?.userQuota) {
     // انتهت طلبات الشهر لهذا المستخدم → عرض الاشتراك (إن كان الشراء متاحًا)
     requestPaywall("ai");

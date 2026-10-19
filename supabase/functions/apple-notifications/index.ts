@@ -4,6 +4,7 @@
 // الإعداد في App Store Connect → التطبيق → App Information → App Store Server Notifications:
 //   https://jhfufoltmjhauqvgqezv.functions.supabase.co/apple-notifications  (Production وSandbox، النسخة 2)
 // منشور بلا تحقّق JWT (Apple لا ترسل رمز دخول) — الحماية بتوقيع Apple نفسه.
+import { sandboxAllowed } from "../_shared/plan.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isActive, isTrial, PAGE_PACKS, PRODUCT_PLAN, verifyNotification, verifyRenewalInfo, verifyTransaction } from "../_shared/apple.ts";
 
@@ -38,6 +39,11 @@ Deno.serve(async (req) => {
 
   // لمن هذا الاشتراك؟ appAccountToken (هوية المستخدم وقت الشراء) أو ربط سابق بالمعاملة الأصلية
   let userId = t.appAccountToken && UUID.test(t.appAccountToken) ? t.appAccountToken : "";
+  // صاحب الرمز حُذف حسابه (انتقل الاشتراك لحساب جديد)؟ → نعتمد الربط المسجّل بالمعاملة
+  if (userId) {
+    const { data: u } = await admin.auth.admin.getUserById(userId).catch(() => ({ data: { user: null } }));
+    if (!u?.user) userId = "";
+  }
   if (!userId && t.originalTransactionId) {
     const { data } = await admin.from("apple_transactions").select("user_id").eq("original_transaction_id", t.originalTransactionId).maybeSingle();
     userId = data?.user_id ?? "";
@@ -71,6 +77,8 @@ Deno.serve(async (req) => {
     }
 
     if (!userId) return "ok (unlinked)";
+    // شراء تجريبي (Sandbox) لا يمنح اشتراكًا حقيقيًا إلا لحسابات المراجعة والتجربة والمالكة
+    if (String(t.environment ?? "") !== "Production" && !(await sandboxAllowed(admin, userId))) return "ok (sandbox ignored)";
     // معاملة مستبعدة (مثل اشتراك تجريبي اشتُري بالخطأ على حساب المراجعة) → لا تمنح شيئًا
     if (t.originalTransactionId) {
       const { data: ignored } = await admin.from("apple_tx_ignore").select("original_transaction_id").eq("original_transaction_id", t.originalTransactionId).maybeSingle();

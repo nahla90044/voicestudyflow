@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { checkBook } from "../../lib/ai";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
@@ -54,6 +55,7 @@ export default function AddBookScreen() {
   const [file, setFile] = useState<any>(null);
   // أي زر يحمّل حاليًا (حتى لا يدور الزرّان معًا)
   const [busyMode, setBusyMode] = useState<null | "save" | "plan">(null);
+  const [checking, setChecking] = useState(false); // فحص الكتاب الإلزامي على السيرفر
   const busy = busyMode !== null;
 
   const canCreatePlan = useMemo(() => {
@@ -194,6 +196,19 @@ export default function AddBookScreen() {
         upsert: false,
       });
       if (upErr) throw upErr;
+
+      // 1.5) فحص إلزامي على السيرفر قبل أي معالجة: الأوامر الخفية، الصور المخلة، وسياسة المحتوى بحسب السياق
+      setChecking(true);
+      const chk = await checkBook(path).finally(() => setChecking(false));
+      if (chk.status !== "allow") {
+        if (chk.status === "error") await supabase.storage.from("pdfs").remove([path]).catch(() => {});
+        Alert.alert(
+          chk.status === "error" ? t("addBook.check.failedTitle") : t("addBook.moderation.blockedTitle"),
+          chk.status === "error" ? t("addBook.check.failedBody") : chk.advice || t("addBook.moderation.blockedBody")
+        );
+        setFile(null);
+        return;
+      }
 
       // 2) insert book
       const safeTitle =
@@ -369,6 +384,9 @@ export default function AddBookScreen() {
             )}
           </Pressable>
 
+          {checking ? (
+            <Text style={[styles.checkingTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{t("addBook.moderation.checking")}</Text>
+          ) : null}
           {/* حفظ وإنشاء خطة: الزر الرئيسي بلون المشهد */}
           <Pressable
             onPress={() => save(true)}
@@ -399,6 +417,7 @@ export default function AddBookScreen() {
 }
 
 const styles = StyleSheet.create({
+  checkingTxt: { fontSize: 13.5, fontWeight: "700", textAlign: "center" },
   scroll: { paddingHorizontal: Spacing.lg, paddingTop: 6, paddingBottom: 40 },
   formCard: { gap: 12 },
   label: { fontWeight: "800", fontSize: 13 },

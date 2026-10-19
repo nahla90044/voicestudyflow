@@ -15,7 +15,7 @@ import { SceneCard, SceneIconButton, SceneScreen } from "../components/brand/sce
 import { isAppleAccount, signInWithApple, signOut } from "../lib/auth";
 import { useDir, useI18n } from "../lib/i18n";
 import { getPlan, invalidatePlan, PAGE_PACK } from "../lib/plan";
-import { buy, buyPages, pagesPrice, PRIVACY_URL, restore, storePrice, TERMS_URL, type ProductKey, type StorePrice } from "../lib/purchases";
+import { APP_TERMS_URL, buy, buyPages, pagesPrice, PRIVACY_URL, restore, storePrice, TERMS_URL, type ProductKey, type StorePrice } from "../lib/purchases";
 import { useScene } from "../lib/scene";
 import { sceneGrowth } from "../lib/sceneCore";
 
@@ -348,8 +348,12 @@ export default function PaywallScreen() {
             <Text style={[styles.link, styles.linkStrong, { color: pal.accent }]}>{t("pay.restore")}</Text>
           </Pressable>
           <Text style={[styles.sep, { color: pal.dim }]}>·</Text>
-          <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={6} accessibilityRole="link">
+          <Pressable onPress={() => Linking.openURL(APP_TERMS_URL)} hitSlop={6} accessibilityRole="link">
             <Text style={[styles.link, { color: pal.dim }]}>{t("pay.terms")}</Text>
+          </Pressable>
+          <Text style={[styles.sep, { color: pal.dim }]}>·</Text>
+          <Pressable onPress={() => Linking.openURL(TERMS_URL)} hitSlop={6} accessibilityRole="link">
+            <Text style={[styles.link, { color: pal.dim }]}>{t("pay.eula")}</Text>
           </Pressable>
           {!!PRIVACY_URL && (
             <>

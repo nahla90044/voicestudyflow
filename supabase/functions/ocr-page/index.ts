@@ -4,6 +4,8 @@
 //  2) نحوّل الصفحة المطلوبة إلى صورة PNG عبر MuPDF (WASM)
 //  3) نرسل الصورة إلى Google Vision (DOCUMENT_TEXT_DETECTION, ar) ونرجّع النص
 // إن لم يوجد مفتاح Vision: نرجّع معلومات التحويل فقط (للاختبار).
+import { canAccessPdf } from "../_shared/paths.ts";
+import { pdfCleared } from "../_shared/bookCheck.ts";
 import * as mupdf from "npm:mupdf@1.3.5";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireUpdatedApp } from "../_shared/client.ts";
@@ -60,6 +62,8 @@ function extractWords(vJson: any): WordBox[] {
   return out;
 }
 
+const OCR_DAILY_CAP = 700;
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   // نسخ التطبيق القديمة (قبل 2.0) تُرفض ويُطلب منها التحديث
@@ -84,10 +88,16 @@ Deno.serve(async (req: Request) => {
     });
     const { data: { user }, error: uErr } = await userClient.auth.getUser();
     if (uErr || !user) return json({ error: "Unauthorized" }, 401);
-    const owner = pdfPath.split("/")[0];
-    if (owner !== user.id && owner !== "samples") return json({ error: "Forbidden" }, 403);
+    if (!canAccessPdf(pdfPath, user.id)) return json({ error: "Forbidden" }, 403);
+    // الكتاب لم يجتز فحص الرفع الإلزامي (أو رُفض) → لا معالجة
+    if (!(await pdfCleared(pdfPath))) return json({ error: "NOT_CLEARED" }, 403);
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    // سقف يومي للقراءة الضوئية المدفوعة (يكفي كتابًا ممسوحًا كاملًا في اليوم ويمنع الاستغلال)
+    const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+    const { count: ocrToday } = await sb.from("cost_log").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("fn", "ocr").gte("created_at", since);
+    if ((ocrToday ?? 0) >= OCR_DAILY_CAP) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
+    await sb.from("cost_log").insert({ user_id: user.id, fn: "ocr", action: "vision", images: 1 });
     const { data: file, error: dErr } = await sb.storage.from("pdfs").download(pdfPath);
     if (dErr || !file) throw dErr ?? new Error("Failed to download PDF");
 
@@ -118,9 +128,10 @@ Deno.serve(async (req: Request) => {
     if (visionKey) {
       try {
         const b64 = renderB64(2).b64;
-        const vRes = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`, {
+        // المفتاح في الترويسة لا في الرابط (الروابط تظهر في السجلات)
+        const vRes = await fetch("https://vision.googleapis.com/v1/images:annotate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "x-goog-api-key": visionKey },
           body: JSON.stringify({
             requests: [
               {
