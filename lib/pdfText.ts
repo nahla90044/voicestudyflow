@@ -116,7 +116,7 @@ export async function getPageWords(pdfPath: string, page: number): Promise<WordB
   // 1) Google Vision أولًا — مواقع دقيقة بترتيب القراءة الصحيح
   try {
     const { data, error } = await supabase.functions.invoke("ocr-page", {
-      body: { pdfPath, page },
+      body: { pdfPath, page, wordsOnly: true },
     });
     if (!error) {
       const vw = (data as { words?: WordBox[] })?.words;

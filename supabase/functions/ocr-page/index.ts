@@ -94,6 +94,11 @@ Deno.serve(async (req: Request) => {
     if (!(await pdfCleared(pdfPath))) return json({ error: "NOT_CLEARED" }, 403);
 
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    // طلب المواضع فقط (للتظليل) ومحفوظة من قبل → فورًا وبلا تكلفة
+    if (body.wordsOnly === true) {
+      const { data: saved } = await sb.from("page_words").select("words").eq("pdf_path", pdfPath).eq("page", page).maybeSingle();
+      if (Array.isArray(saved?.words) && saved.words.length >= 8) return json({ words: saved.words, page, cached: true });
+    }
     // سقف يومي للقراءة الضوئية المدفوعة (يكفي كتابًا ممسوحًا كاملًا في اليوم ويمنع الاستغلال)
     const since = new Date(Date.now() - 24 * 3600_000).toISOString();
     const { count: ocrToday } = await sb.from("cost_log").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("fn", "ocr").gte("created_at", since);
@@ -177,6 +182,10 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // المواضع تُحفظ مرة واحدة لهذه الصفحة (أي طلب لاحق للتظليل فوري ومجاني)
+    if (words.length >= 8) {
+      await sb.from("page_words").upsert({ pdf_path: pdfPath, page: p, words }).then(() => {}, () => {});
+    }
     return json({ text, words, page: p, totalPages });
   } catch (error) {
     return json({ error: (error as Error).message }, 500);

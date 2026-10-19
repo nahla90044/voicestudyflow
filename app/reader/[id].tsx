@@ -529,6 +529,8 @@ export default function ReaderScreen() {
   const tashkeelCacheRef = useRef<Map<number, string>>(new Map());
   // نص الصفحات القادمة مجهّز مسبقًا → الانتقال بين الصفحات بلا انتظار (حتى والجوال مقفل)
   const pageTextCacheRef = useRef<Map<number, Awaited<ReturnType<typeof extractPdfPageText>>>>(new Map());
+  const sentencesRef = useRef<string[]>([]); // أحدث جمل الصفحة (لمقارنة مصادر مواضع الكلمات)
+  sentencesRef.current = sentences;
   const pageRetryRef = useRef<Set<number>>(new Set());
   // عرض البريزنتيشن: شرائح مولّدة من الصفحة تتنقّل مع الصوت
   const [presentOpen, setPresentOpen] = useState(false);
@@ -2664,6 +2666,14 @@ export default function ReaderScreen() {
     wordsSrcRef.current.set(p, "vision");
     const ws = cleanWords(await getPageWords(pdfPath, p));
     if (!ws.length) return;
+    // نأخذ مواضع التعرّف الضوئي فقط إن طابقت الجمل أفضل من الحالية (لا نستبدل الجيد بالأسوأ)
+    const cur = wordsCacheRef.current.get(p);
+    const sents = sentencesRef.current;
+    if (cur?.length && sents.length) {
+      const before = sentenceRects(sents, cur).confidence;
+      const after = sentenceRects(sents, ws).confidence;
+      if (after < before) return;
+    }
     wordsCacheRef.current.set(p, ws);
     if (p === livePageRef.current) setPageWords(ws);
   }
@@ -2675,6 +2685,14 @@ export default function ReaderScreen() {
     if (cached) return;
     let on = true;
     (async () => {
+      // نص الصفحة من التعرّف الضوئي (طبقة نص مشوّهة أو صفحة مصوّرة) → مواضعه من المصدر نفسه مباشرة،
+      // وإلا تتطابق جمل وتختفي أخرى («مرة يظهر ومرة يختفي»)
+      const src = pageTextCacheRef.current.get(p) ?? (await extractPdfPageText(pdfPath, p).catch(() => null));
+      if (!on) return;
+      if (src?.ocr) {
+        await loadVisionWords(p);
+        return;
+      }
       const ws = cleanWords(await getPageWordsFromText(pdfPath, p));
       if (!on) return;
       if (ws.length >= 8) {
@@ -2801,13 +2819,16 @@ export default function ReaderScreen() {
   }, [speaking, hlOk, activeSentence, hl, curWordBox]);
 
   // طبقة النص لم تطابق المقروء (ترتيب كلمات معطوب في بعض ملفات PDF) → نجرّب التعرّف الضوئي مرة
+  // وكذلك إن بقيت جمل بلا تطابق (تظليل يظهر ويختفي): نجرّب مواضع التعرّف الضوئي ونأخذ الأفضل
   useEffect(() => {
     if (viewMode !== "pdf" && !lensOpen) return;
-    if (!pageWords.length || !sentences.length || hlOk) return;
+    if (!pageWords.length || !sentences.length) return;
+    const unmatched = sentences.some((_, i) => !(hl.rects[i] ?? []).length);
+    if (hlOk && !unmatched) return;
     if (wordsSrcRef.current.get(page) !== "text") return;
     void loadVisionWords(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hlOk, pageWords, sentences, page, viewMode, lensOpen]);
+  }, [hlOk, hl, pageWords, sentences, page, viewMode, lensOpen]);
 
   // الجملة المقروءة تبقى في الثلث العلوي؛ وإن لم تتوفر مواضعها نتقدّم بنسبة الجمل
   const followTop = curRects.length ? Math.min(...curRects.map((r) => r.y)) : -1;
@@ -4079,73 +4100,63 @@ export default function ReaderScreen() {
       {/* الانتقال لصفحة محددة */}
       {/* لوحة الأرقام تظهر فورًا: autoFocus داخل Modal في iOS لا يعمل دائمًا (كان يلزم الخروج والعودة)،
           فنركّز الحقل صراحةً لحظة ظهور النافذة، ومرة احتياطية بعدها بقليل */}
-      <Modal
-        visible={gotoOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setGotoOpen(false)}
-        onShow={() => {
-          // iOS يتجاهل أحيانًا التركيز أثناء حركة ظهور النافذة → محاولات متتالية حتى تظهر لوحة الأرقام
-          for (const ms of [0, 120, 300, 600]) {
-            setTimeout(() => {
-              const i = gotoInputRef.current;
-              if (i && !i.isFocused()) i.focus();
-            }, ms);
-          }
-        }}
-      >
+      {/* الانتقال لصفحة: طبقة داخل الشاشة لا نافذة منفصلة — حقل الرقم يتلقى التركيز ولوحته من أول ضغطة
+          (النافذة المنفصلة على iOS كانت تتجاهل التركيز أثناء حركة ظهورها) */}
+      {gotoOpen ? (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 60, elevation: 60 }]}>
         <Pressable style={styles.gotoMask} onPress={() => setGotoOpen(false)}>
-          <Pressable style={styles.gotoCard} onPress={() => {}}>
-            <View style={styles.dictHead}>
-              <Text style={[styles.dictWord, { textAlign: dir.textAlign }]}>{t("reader.goto.title")}</Text>
-              <Pressable onPress={() => setGotoOpen(false)} hitSlop={8}>
-                <Ionicons name="close" size={22} color={Palette.textMuted} />
+            <Pressable style={styles.gotoCard} onPress={() => {}}>
+              <View style={styles.dictHead}>
+                <Text style={[styles.dictWord, { textAlign: dir.textAlign }]}>{t("reader.goto.title")}</Text>
+                <Pressable onPress={() => setGotoOpen(false)} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={Palette.textMuted} />
+                </Pressable>
+              </View>
+              {pageOffset != null ? (
+                <>
+                  <View style={[styles.gotoModes, { flexDirection: dir.row }]}>
+                    {(["book", "file"] as const).map((m) => (
+                      <Pressable
+                        key={m}
+                        onPress={() => {
+                          setGotoMode(m);
+                          setGotoValue(String(m === "book" ? (printedOf(page) ?? page) : page));
+                        }}
+                        style={[styles.gotoMode, gotoMode === m && styles.gotoModeOn]}
+                      >
+                        <Text style={[styles.gotoModeTxt, gotoMode === m && styles.gotoModeTxtOn]}>{t(`reader.goto.${m}`)}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>
+                    {t("reader.goto.now", { book: printedOf(page) ?? "—", file: page, total: totalPages || "؟" })}
+                  </Text>
+                </>
+              ) : (
+                <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.goto.hint", { total: totalPages || "؟" })}</Text>
+              )}
+              <TextInput
+                value={gotoValue}
+                onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
+                ref={gotoInputRef}
+                autoFocus
+                keyboardType="number-pad"
+                placeholder={`${page}`}
+                placeholderTextColor={Palette.placeholder}
+                style={styles.gotoInput}
+                textAlign="center"
+                selectTextOnFocus
+                onSubmitEditing={submitGoto}
+              />
+              <Pressable onPress={submitGoto} style={styles.gotoBtn}
+              >
+                <Ionicons name="arrow-back" size={18} color={SKY.onAccent} />
+                <Text style={styles.gotoBtnTxt}>{t("reader.goto.cta")}</Text>
               </Pressable>
-            </View>
-            {pageOffset != null ? (
-              <>
-                <View style={[styles.gotoModes, { flexDirection: dir.row }]}>
-                  {(["book", "file"] as const).map((m) => (
-                    <Pressable
-                      key={m}
-                      onPress={() => {
-                        setGotoMode(m);
-                        setGotoValue(String(m === "book" ? (printedOf(page) ?? page) : page));
-                      }}
-                      style={[styles.gotoMode, gotoMode === m && styles.gotoModeOn]}
-                    >
-                      <Text style={[styles.gotoModeTxt, gotoMode === m && styles.gotoModeTxtOn]}>{t(`reader.goto.${m}`)}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>
-                  {t("reader.goto.now", { book: printedOf(page) ?? "—", file: page, total: totalPages || "؟" })}
-                </Text>
-              </>
-            ) : (
-              <Text style={[styles.dictHint, { textAlign: dir.textAlign }]}>{t("reader.goto.hint", { total: totalPages || "؟" })}</Text>
-            )}
-            <TextInput
-              value={gotoValue}
-              onChangeText={(txt) => setGotoValue(txt.replace(/[^0-9٠-٩]/g, ""))}
-              ref={gotoInputRef}
-              autoFocus
-              keyboardType="number-pad"
-              placeholder={`${page}`}
-              placeholderTextColor={Palette.placeholder}
-              style={styles.gotoInput}
-              textAlign="center"
-              selectTextOnFocus
-              onSubmitEditing={submitGoto}
-            />
-            <Pressable onPress={submitGoto} style={styles.gotoBtn}
-            >
-              <Ionicons name="arrow-back" size={18} color={SKY.onAccent} />
-              <Text style={styles.gotoBtnTxt}>{t("reader.goto.cta")}</Text>
             </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </View>
+      ) : null}
 
       {/* قاموس: معنى الكلمة الملموسة */}
       <Modal visible={dictOpen} transparent animationType="fade" onRequestClose={() => setDictOpen(false)}>
