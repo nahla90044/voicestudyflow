@@ -909,6 +909,24 @@ export async function prefetchText(
   }
 }
 
+/**
+ * يحفظ صوت نص على الجهاز ويخبر بالنتيجة (لحفظ صوت الكتاب كاملًا): ok، أو quota (انتهت صفحات
+ * الباقة — يُوقف الحفظ)، أو fail (شبكة/خطأ مؤقت — تُعاد الصفحة لاحقًا).
+ */
+export async function cacheText(
+  text: string,
+  opts: { voiceId?: string; gender?: VoiceGender; page?: PageRef } = {}
+): Promise<"ok" | "quota" | "fail"> {
+  try {
+    const clean = cleanForSpeech(text, voiceLangOf(opts.voiceId));
+    if (!clean) return "ok";
+    await synthToFile(clean, opts.gender ?? "female", opts.voiceId, false, opts.page);
+    return "ok";
+  } catch (e) {
+    return /QUOTA/i.test(String((e as Error)?.message ?? e)) ? "quota" : "fail";
+  }
+}
+
 /** إيقاف الصوت. (لا صوت آلي في التطبيق إطلاقًا — Speech.stop احتياط لأي نطق قديم عالق) */
 // يوقف المقطع الحالي فقط (يُبقي المشغّل التالي المُحمّل مسبقًا للتشغيل المتواصل)
 function stopCurrentOnly(): void {

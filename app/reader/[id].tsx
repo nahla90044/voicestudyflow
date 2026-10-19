@@ -32,10 +32,11 @@ import * as Print from "expo-print";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
-import { getPlan } from "../../lib/plan";
+import { getPlan, getUsage, LIMITS } from "../../lib/plan";
 import { aiAssist, CARD_TYPES, defineWord, generateFlashcards, type CardType, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
 import { addSave, cardsHtml, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
 import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
+import { getBookAudio, pauseBookAudio, startBookAudio, watchBookAudio, type BookAudio } from "../../lib/bookAudio";
 import { cachedPageCount } from "../../lib/ingest";
 import { getDownloadState, startDownload, stopDownload, subscribeDownload } from "../../lib/downloadManager";
 import { addCards } from "../../lib/flashcards";
@@ -1694,7 +1695,8 @@ export default function ReaderScreen() {
   const aheadRef = useRef<{ token: number; to: number; whole: boolean; running: boolean }>({ token: 0, to: 0, whole: false, running: false });
   const aheadPagesRef = useRef(2);
   // حفظ صوت الكتاب كاملًا (زر مستقل): التقدّم يظهر على الزر، والضغط أثناءه يوقفه
-  const [audioSave, setAudioSave] = useState<{ done: number; total: number } | null>(null);
+  const [bookAud, setBookAud] = useState<BookAudio | null>(null);
+  useEffect(() => (pdfPath ? watchBookAudio(pdfPath, setBookAud) : undefined), [pdfPath]);
   useEffect(() => {
     getPlan()
       .then((pl) => (aheadPagesRef.current = pl === "free" ? 2 : 10))
@@ -2419,21 +2421,28 @@ export default function ReaderScreen() {
   }
 
   /** يسأل ثم يحفظ صوت الكتاب من الصفحة الحالية حتى آخره (زر «حفظ الصوت» أو مع «حفظ الكتاب») */
-  function askSaveBookAudio(totalArg?: number) {
+  // حفظ صوت الكتاب كله (lib/bookAudio): من الصفحة الأولى ويتخطى المحفوظ، مستقل عن هذه الشاشة،
+  // ويكمل من حيث وقف — كان يبدأ من الصفحة الحالية ويتوقف بالخروج فيبدو أنه يعيد من جديد.
+  async function askSaveBookAudio(totalArg?: number) {
     const total = totalArg || totalPages;
-    if (!total) return;
-    const from = Math.max(1, page);
-    Alert.alert(t("reader.audioSave.title"), t("reader.audioSave.body", { n: total - from + 1 }), [
+    if (!total || !pdfPath) return;
+    const cur = await getBookAudio(pdfPath);
+    const sameVoice = cur && cur.voiceId === pickVoice();
+    const savedN = sameVoice ? cur!.saved.length : 0;
+    const left = Math.max(0, total - savedN);
+    const plan = await getPlan();
+    let note = "";
+    if (plan !== "owner") {
+      const u = await getUsage();
+      note = "\n\n" + t("bookAudio.quotaNote", { left: Math.max(0, LIMITS[plan].pages - u.pages) });
+    }
+    Alert.alert(t("reader.audioSave.title"), t("bookAudio.confirm", { left, total, saved: savedN }) + note, [
       { text: t("reader.audioSave.no"), style: "cancel" },
       {
-        text: t("reader.audioSave.yes"),
+        text: savedN ? t("bookAudio.resume") : t("reader.audioSave.yes"),
         onPress: () => {
           showToast(t("reader.audioSave.started"));
-          setAudioSave({ done: 0, total: total - from + 1 });
-          saveAudioAhead(from, total, true, (done, all) => {
-            setAudioSave(done === all ? null : { done, total: all });
-            if (done === all) showToast(t("reader.audioSave.done"));
-          });
+          void startBookAudio({ pdfPath, bookTitle: bookTitleStr, voiceId: pickVoice(), precise: tashkeelRef.current, total });
         },
       },
     ]);
@@ -2503,13 +2512,12 @@ export default function ReaderScreen() {
   }
 
   function onAudioSaveTool() {
-    if (audioSave) {
-      stopAudioAhead();
-      setAudioSave(null);
+    if (bookAud?.status === "running") {
+      pauseBookAudio(pdfPath);
       showToast(t("reader.audioSave.stopped"));
       return;
     }
-    askSaveBookAudio();
+    void askSaveBookAudio();
   }
 
   useEffect(() => {
@@ -3596,9 +3604,15 @@ export default function ReaderScreen() {
                 onPress={startIngest}
               />
               <InTool
-                icon={audioSave ? "stop-circle-outline" : "headset-outline"}
-                label={audioSave ? t("reader.audioSave.progressShort", { done: audioSave.done, all: audioSave.total }) : t("reader.audioSave.tool")}
-                on={!!audioSave}
+                icon={bookAud?.status === "running" ? "pause-circle-outline" : bookAud?.status === "done" ? "checkmark-circle-outline" : "headset-outline"}
+                label={
+                  bookAud?.status === "running" || bookAud?.status === "paused"
+                    ? t("reader.audioSave.progressShort", { done: bookAud.saved.length, all: bookAud.total })
+                    : bookAud?.status === "done"
+                      ? t("bookAudio.savedShort")
+                      : t("reader.audioSave.tool")
+                }
+                on={bookAud?.status === "running" || bookAud?.status === "done"}
                 onPress={onAudioSaveTool}
               />
             </>

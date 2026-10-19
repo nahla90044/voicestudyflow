@@ -14,6 +14,7 @@ import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark
 import { PressableScale } from "../../components/brand/motion";
 import { NowPlayingDock } from "../../components/brand/now-playing-dock";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
+import { BookAudioCard } from "../../components/brand/book-audio-card";
 import { Radius, Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { getCards } from "../../lib/flashcards";
@@ -238,6 +239,9 @@ export default function BookHubScreen() {
               <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{started ? t("book.continue", { page }) : t("book.start")}</Text>
             </PressableScale>
           </SceneCard>
+
+          {/* الصوت المحفوظ: المكان الواضح لحفظ صوت الكتاب كله ومتابعة تقدّمه */}
+          <BookAudioCard pdfPath={book.pdf_path} bookTitle={book.title} total={pages} />
 
           {/* تبويبات الصفحة */}
           <View {...coach.bind("seg")} style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
