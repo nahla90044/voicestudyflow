@@ -3,6 +3,7 @@
 // المفتاح يبقى سريًا في السيرفر: ANTHROPIC_API_KEY (Supabase secret).
 // الطلب:  { action: "summarize" | "ask" | "quiz", text: string, question?: string }
 // الرد:   { result: string }
+import { logCost } from "../_shared/cost.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { consume, getCaller } from "../_shared/plan.ts";
 import { requireUpdatedApp } from "../_shared/client.ts";
@@ -202,9 +203,12 @@ Deno.serve(async (req: Request) => {
       const work = (async () => {
         let all = "";
         let lastSave = Date.now();
+        const usage = { in: 0, out: 0 };
         try {
           const st = client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
           for await (const ev of st) {
+            if (ev.type === "message_start") usage.in = ev.message.usage?.input_tokens ?? 0;
+            if (ev.type === "message_delta") usage.out = ev.usage?.output_tokens ?? usage.out;
             if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
               all += ev.delta.text;
               if (Date.now() - lastSave > 2500) {
@@ -217,6 +221,8 @@ Deno.serve(async (req: Request) => {
         } catch (e) {
           console.error("ai job", action, (e as Error).message);
           await admin.from("ai_jobs").update({ status: "failed", partial: all, error: (e as Error).message.slice(0, 300), updated_at: new Date().toISOString() }).eq("id", jobId);
+        } finally {
+          await logCost(req, { fn: "ai-assist", action, model, input_tokens: usage.in, output_tokens: usage.out });
         }
       })();
       // deno-lint-ignore no-explicit-any
@@ -230,15 +236,19 @@ Deno.serve(async (req: Request) => {
       const enc = new TextEncoder();
       const stream = new ReadableStream({
         async start(ctrl) {
+          const usage = { in: 0, out: 0 };
           try {
             const st = client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
             for await (const ev of st) {
+              if (ev.type === "message_start") usage.in = ev.message.usage?.input_tokens ?? 0;
+              if (ev.type === "message_delta") usage.out = ev.usage?.output_tokens ?? usage.out;
               if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") ctrl.enqueue(enc.encode(ev.delta.text));
             }
           } catch (e) {
             ctrl.enqueue(enc.encode(`\n[[STREAM_ERROR:${(e as Error).message}]]`));
           } finally {
             ctrl.close();
+            void logCost(req, { fn: "ai-assist", action, model, input_tokens: usage.in, output_tokens: usage.out });
           }
         },
       });
@@ -246,6 +256,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const msg = await client.messages.create(params as Parameters<typeof client.messages.create>[0]);
+    void logCost(req, { fn: "ai-assist", action, model, input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
 
     const result = msg.content
       .filter((b) => b.type === "text")

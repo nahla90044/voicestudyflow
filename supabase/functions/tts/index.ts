@@ -10,7 +10,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { consume, consumePage, getCaller } from "../_shared/plan.ts";
 import { requireUpdatedApp } from "../_shared/client.ts";
-import { geminiMp3, geminiVoiceFor, READ_STYLES, type ReadStyle } from "../_shared/gemini.ts";
+import { GEMINI_MODEL, geminiMp3, geminiVoiceFor, READ_STYLES, type ReadStyle } from "../_shared/gemini.ts";
+import { logCost } from "../_shared/cost.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,9 +76,9 @@ Deno.serve(async (req: Request) => {
     const pageNo = Number(body.page);
     const hasPage = !!book && Number.isFinite(pageNo) && pageNo > 0;
     let caller: Awaited<ReturnType<typeof getCaller>> | undefined;
-    if (hasPage) {
+    const pageKey = hasPage ? `${(await sha(book)).slice(0, 20)}:${pageNo}` : undefined;
+    if (hasPage && pageKey) {
       caller = await getCaller(req);
-      const pageKey = `${(await sha(book)).slice(0, 20)}:${pageNo}`;
       const r = await consumePage(caller, pageKey, "std");
       if (r === "over") return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
     }
@@ -98,6 +99,7 @@ Deno.serve(async (req: Request) => {
             const { data: tj } = await store.storage.from(SHARED_BUCKET).download(`${key}.json`);
             if (tj) starts = JSON.parse(await tj.text());
           } catch {}
+          void logCost(req, { fn: "tts", action: hasPage ? "page" : "voice", model: GEMINI_MODEL, chars: text.length, cached: true, page_key: pageKey });
           return json({ audio, starts, shared: true });
         }
       } catch {
@@ -119,6 +121,7 @@ Deno.serve(async (req: Request) => {
     const t0 = Date.now();
     try {
       out = await geminiMp3(voiceName, text, style);
+      void logCost(req, { fn: "tts", action: hasPage ? "page" : "voice", model: GEMINI_MODEL, chars: text.length, audio_seconds: out.seconds, page_key: pageKey });
     } catch (e) {
       // نُرجع 200 مع التفصيل ليصل للعميل فيكمل بصوت الجهاز (لا يتوقف)، لا 500 مبهم
       const msg = (e as Error).message;
@@ -137,6 +140,8 @@ Deno.serve(async (req: Request) => {
     if (ref > 0 && off(out.f0) > 0.11 && used < 7000) {
       try {
         const again = await geminiMp3(voiceName, text, style, 11, Math.min(9000, 20000 - used));
+        // إعادة التوليد لثبات الصوت تكلفة حقيقية أيضًا
+        void logCost(req, { fn: "tts", action: "retry", model: GEMINI_MODEL, chars: text.length, audio_seconds: again.seconds, page_key: pageKey });
         if (again.f0 > 0 && off(again.f0) < off(out.f0)) out = again;
       } catch {
         // المحاولة الثانية اختيارية — نكمل بالأولى

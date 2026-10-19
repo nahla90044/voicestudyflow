@@ -5,6 +5,7 @@
 // الطلب: { front, back }  الرد: { url } أو { error: "PLAN" | "CAP" | ... }
 import { requireUpdatedApp } from "../_shared/client.ts";
 import { getCaller } from "../_shared/plan.ts";
+import { logCost } from "../_shared/cost.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,7 +31,7 @@ function b64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-async function generate(front: string, back: string): Promise<{ bytes: Uint8Array; mime: string }> {
+async function generate(front: string, back: string): Promise<{ bytes: Uint8Array; mime: string; model: string }> {
   const key = Deno.env.get("GOOGLE_TTS_API_KEY");
   if (!key) throw new Error("Missing GOOGLE_TTS_API_KEY");
   const prompt =
@@ -59,7 +60,7 @@ async function generate(front: string, back: string): Promise<{ bytes: Uint8Arra
       const j = await res.json();
       const parts = j?.candidates?.[0]?.content?.parts ?? [];
       const img = parts.find((p: any) => p?.inlineData?.data);
-      if (img) return { bytes: b64ToBytes(img.inlineData.data), mime: img.inlineData.mimeType || "image/png" };
+      if (img) return { bytes: b64ToBytes(img.inlineData.data), mime: img.inlineData.mimeType || "image/png", model };
       last = `${model}: no image`;
     } catch (e) {
       last = `${model}: ${(e as Error).message}`;
@@ -88,7 +89,10 @@ Deno.serve(async (req: Request) => {
 
     // مولّدة سابقًا (لأي مستخدم) → فورًا وبلا تكلفة
     const { data: hit } = await admin.from("card_images").select("path").eq("hash", hash).maybeSingle();
-    if (hit?.path) return json({ url: publicUrl(hit.path), shared: true });
+    if (hit?.path) {
+      void logCost(req, { fn: "card-image", action: "image", images: 0, cached: true });
+      return json({ url: publicUrl(hit.path), shared: true });
+    }
 
     if (caller.plan === "free" || (caller.trial && caller.plan !== "owner")) return json({ error: "PLAN" });
     if (caller.plan !== "owner") {
@@ -97,7 +101,8 @@ Deno.serve(async (req: Request) => {
       if ((count ?? 0) >= (MONTHLY_CAP[caller.plan] ?? 0)) return json({ error: "CAP" });
     }
 
-    const { bytes, mime } = await generate(front, back);
+    const { bytes, mime, model } = await generate(front, back);
+    void logCost(req, { fn: "card-image", action: "image", model, images: 1 });
     const ext = mime.includes("jpeg") ? "jpg" : mime.includes("webp") ? "webp" : "png";
     const path = `${hash.slice(0, 2)}/${hash}.${ext}`;
     const up = await admin.storage.from(BUCKET).upload(path, bytes, { contentType: mime, upsert: true, cacheControl: "31536000" });
