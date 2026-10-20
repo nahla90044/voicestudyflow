@@ -264,8 +264,8 @@ export default function BookHubScreen() {
     { key: "syllabus", labelKey: "book.tool.syllabus", icon: "list", go: openSyllabus },
     { key: "ask", labelKey: "book.tool.ask", icon: "chatbubble-ellipses", go: () => router.push({ pathname: "/ask/[id]", params: { id: book.id } }) },
     { key: "glossary", labelKey: "book.tool.glossary", icon: "book", go: () => (units.length ? openGlossary(0) : openSyllabus()) },
-    { key: "cards", labelKey: "book.tool.cards", icon: "albums", badge: cards ? String(cards) : undefined, go: () => router.push({ pathname: "/flashcards", params: { book_id: book.id, from_book: "1" } }) },
-    { key: "notes", labelKey: "notes.title", icon: "create", go: () => router.push({ pathname: "/reader/[id]", params: { id: book.id, title: book.title, pdf_path: book.pdf_path, notes: "1" } }) },
+    { key: "cards", labelKey: "book.tool.cards", icon: "albums", badge: cards ? String(cards) : undefined, go: () => router.push({ pathname: "/unit-cards", params: { book_id: book.id, pdf_path: book.pdf_path, book_title: book.title } }) },
+    { key: "notes", labelKey: "notes.title", icon: "create", go: () => router.push({ pathname: "/notes", params: { book_id: book.id, book_title: book.title } }) },
     { key: "focus", labelKey: "book.tool.focus", icon: "timer", go: () => router.push("/pomodoro") },
   ];
 

@@ -26,7 +26,8 @@ export function NotesPad({
   bookId: string;
   bookTitle: string;
   speaking: boolean;
-  onTogglePlay: () => void;
+  /** بلا صوت جارٍ (مثل دفتر الملاحظات المستقل) لا يظهر زر التشغيل */
+  onTogglePlay?: () => void;
   onClose: () => void;
 }) {
   const { t, lang } = useI18n();
@@ -161,9 +162,11 @@ export function NotesPad({
           {t("notes.title")}
         </Text>
         {/* الاستماع مستمر: تشغيل/إيقاف من هنا */}
+        {onTogglePlay ? (
         <Pressable onPress={onTogglePlay} style={[styles.iconBtn, styles.play]} accessibilityLabel={speaking ? t("dock.pause") : t("dock.play")}>
           <Ionicons name={speaking ? "pause" : "play"} size={18} color="#141B2D" />
         </Pressable>
+        ) : null}
         <Pressable onPress={() => void print()} hitSlop={8} style={styles.iconBtn} accessibilityLabel={t("notes.print")}>
           {printing ? <ActivityIndicator color="#F3F4F8" /> : <Ionicons name="print-outline" size={20} color="#F3F4F8" />}
         </Pressable>

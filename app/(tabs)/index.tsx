@@ -408,6 +408,18 @@ export default function HomeScreen() {
             </FadeIn>
           )}
 
+          {/* خطتي: مكانها الثابت في الرئيسية (ما يُذاكر اليوم، والمهام، وخطة كل كتاب) */}
+          <PressableScale onPress={() => router.push("/calendar")} style={[styles.card, styles.planCard, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+            <View style={[styles.planIcon, { backgroundColor: pal.soft }]}>
+              <Ionicons name="calendar" size={20} color={pal.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("myplan.title")}</Text>
+              <Text style={[styles.planSub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("home.planSub")}</Text>
+            </View>
+            <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+          </PressableScale>
+
           {/* اقتراحات ذكية — حين لا يوجد كتاب حالي (مثل: إضافة أول كتاب) */}
           {!cont && (
             <FadeIn delay={70}>
@@ -507,6 +519,9 @@ const styles = StyleSheet.create({
 
   sectionHead: { alignItems: "baseline", justifyContent: "space-between", marginTop: 20, marginBottom: 10, paddingHorizontal: 4 },
   sectionTitle: { fontSize: 17, fontWeight: "900" },
+  planCard: { alignItems: "center", gap: 12, marginTop: 14 },
+  planIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  planSub: { fontSize: 13, marginTop: 2 },
   stepRow: { alignItems: "center", gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderRadius: 18 },
   stepIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   stepDot: { width: 10, height: 10, borderRadius: 5 },

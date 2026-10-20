@@ -8,7 +8,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { AppDrawer } from "../../components/brand/app-drawer";
-import { fmtDay } from "../../components/brand/date-range-sheet";
+import { DateRangeSheet, fmtDay } from "../../components/brand/date-range-sheet";
 import { SceneBanner, SceneCard, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
@@ -49,6 +49,7 @@ export default function PlanScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [books, setBooks] = useState<BookPlan[]>([]);
   const [edit, setEdit] = useState<Task | null>(null); // نافذة إضافة/تعديل مهمة (id فارغ = جديدة)
+  const [pickDate, setPickDate] = useState(false); // تقويم تاريخ المهمة
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,15 +313,11 @@ export default function PlanScreen() {
                   );
                 })}
               </View>
-              <View style={[styles.dateRow, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
-                <Pressable onPress={() => setEdit({ ...edit, date: addDays(edit.date, -1) })} style={[styles.nav, { backgroundColor: pal.card }]}>
-                  <Text style={[styles.addTxt, { color: pal.ink }]}>−</Text>
-                </Pressable>
+              <Pressable onPress={() => setPickDate(true)} style={[styles.dateRow, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
+                <Ionicons name="calendar" size={18} color={pal.accent} />
                 <Text style={[styles.weekTitle, { color: pal.ink }]}>{fmtDay(edit.date, lang)}</Text>
-                <Pressable onPress={() => setEdit({ ...edit, date: addDays(edit.date, 1) })} style={[styles.nav, { backgroundColor: pal.card }]}>
-                  <Text style={[styles.addTxt, { color: pal.ink }]}>+</Text>
-                </Pressable>
-              </View>
+                <Ionicons name="chevron-down" size={16} color={pal.dim} />
+              </Pressable>
               <TextInput
                 value={edit.time ?? ""}
                 onChangeText={(v) => setEdit({ ...edit, time: v })}
@@ -351,6 +348,19 @@ export default function PlanScreen() {
             </View>
           ) : null}
         </KeyboardAvoidingView>
+        {/* تقويم تاريخ المهمة (داخل نافذة المهمة نفسها) */}
+        <DateRangeSheet
+          visible={pickDate && !!edit}
+          single
+          title={t("myplan.taskDate")}
+          start={edit?.date ?? today}
+          end={edit?.date ?? today}
+          onClose={() => setPickDate(false)}
+          onSave={(d) => {
+            setPickDate(false);
+            setEdit((x) => (x ? { ...x, date: d } : x));
+          }}
+        />
       </Modal>
     </SceneScreen>
   );
@@ -391,6 +401,6 @@ const styles = StyleSheet.create({
   types: { flexWrap: "wrap", gap: 8 },
   typeChip: { alignItems: "center", gap: 6, paddingHorizontal: 12, height: 36, borderRadius: Radius.pill },
   typeTxt: { fontSize: 13.5, fontWeight: "800" },
-  dateRow: { alignItems: "center", gap: 8, borderRadius: 16, padding: 8 },
+  dateRow: { alignItems: "center", gap: 10, borderRadius: 16, paddingHorizontal: 14, height: 50 },
   save: { height: 52, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
 });

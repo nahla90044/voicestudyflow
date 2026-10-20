@@ -728,35 +728,28 @@ export default function SyllabusScreen() {
                       </View>
                     );
                   })()}
-                  {/* تقدّم الوحدة: أربعة مؤشرات (الاختبار، الملخص، الفيديو، البطاقات) */}
-                  {prog[i] && !selecting ? (
-                    <View style={[styles.uprog, { backgroundColor: pal.soft }]}>
-                      <View style={[styles.uprogHead, { flexDirection: dir.row }]}>
-                        <Text style={[styles.uprogTitle, { color: pal.ink }]}>{t("uprog.title")}</Text>
-                        <Text style={[styles.uprogPct, { color: pal.accent }]}>{Math.round((done[i] ? 1 : prog[i].pct) * 100)}%</Text>
-                      </View>
-                      {(
-                        [
-                          ["school-outline", t("uprog.quiz"), prog[i].quiz.correct, prog[i].quiz.answered, t("uprog.quizVal", { a: prog[i].quiz.correct, b: prog[i].quiz.answered })],
-                          ["headset-outline", t("uprog.summary"), prog[i].summary.heard, prog[i].summary.total, t("uprog.sumVal", { a: prog[i].summary.heard, b: prog[i].summary.total })],
-                          ["videocam-outline", t("uprog.video"), prog[i].video.seen, prog[i].video.total, t("uprog.vidVal", { a: prog[i].video.seen, b: prog[i].video.total })],
-                          ["albums-outline", t("uprog.cards"), prog[i].cards.reviewed, prog[i].cards.total, t("uprog.cardVal", { a: prog[i].cards.reviewed, b: prog[i].cards.total })],
-                        ] as const
-                      ).map(([icon, label, a2, b2, val]) => {
-                        const f = b2 > 0 ? Math.min(1, a2 / b2) : 0;
+                  {/* تقدّم الوحدة: سطر واحد، ولا يظهر إلا ما بُدئ فعلًا */}
+                  {prog[i] && !selecting
+                    ? (() => {
+                        const pg = prog[i];
+                        const parts = [
+                          pg.quiz.answered ? t("uprog.quizVal", { a: pg.quiz.correct, b: pg.quiz.answered }) : null,
+                          pg.summary.heard ? (pg.summary.heard >= pg.summary.total ? t("uprog.sumDone") : t("uprog.sumVal", { a: pg.summary.heard, b: pg.summary.total })) : null,
+                          pg.video.seen ? (pg.video.seen >= pg.video.total ? t("uprog.vidDone") : t("uprog.vidVal", { a: pg.video.seen, b: pg.video.total })) : null,
+                          pg.cards.reviewed ? t("uprog.cardVal", { a: pg.cards.reviewed, b: pg.cards.total }) : null,
+                        ].filter(Boolean) as string[];
+                        const pct = Math.round((done[i] ? 1 : pg.pct) * 100);
+                        if (!parts.length && !done[i]) return null;
                         return (
-                          <View key={label} style={[styles.barRow, { flexDirection: dir.row }]}>
-                            <Ionicons name={icon} size={14} color={pal.accent} />
-                            <Text style={[styles.uLbl, { color: pal.dim, textAlign: dir.textAlign }]}>{label}</Text>
-                            <View style={[styles.barTrack, { backgroundColor: pal.track }]}>
-                              <View style={[styles.barFill, { width: `${Math.max(f > 0 ? 3 : 0, Math.round(f * 100))}%`, backgroundColor: f >= 0.9 ? tone.good : pal.accent }, dir.isRTL ? { alignSelf: "flex-end" } : null]} />
+                          <View style={[styles.uline, { flexDirection: dir.row, backgroundColor: pal.soft }]}>
+                            <View style={[styles.uring, { borderColor: pct >= 90 ? tone.good : pal.accent }]}>
+                              <Text style={[styles.uringTxt, { color: pct >= 90 ? tone.good : pal.accent }]}>{pct}%</Text>
                             </View>
-                            <Text style={[styles.uVal, { color: b2 > 0 ? pal.ink : pal.dim }]}>{b2 > 0 ? val : t("uprog.notYet")}</Text>
+                            <Text style={[styles.ulineTxt, { color: pal.ink, textAlign: dir.textAlign }]}>{parts.join("  ·  ") || t("plan.phase.done")}</Text>
                           </View>
                         );
-                      })}
-                    </View>
-                  ) : null}
+                      })()
+                    : null}
                   {u.topics.map((topic, k) => (
                     <View key={k} style={[styles.topicRow, { flexDirection: dir.row }]}>
                       <Text style={[styles.topicDot, { color: pal.accent }]}>•</Text>
@@ -798,7 +791,7 @@ export default function SyllabusScreen() {
                         </View>
                         <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>
                           {btn("cards", "albums-outline", t("syllabus.action.cards"), () =>
-                            router.push({ pathname: "/flashcards", params: { book_id: bookId, from_book: "1", unit: String(i) } })
+                            router.push({ pathname: "/unit-cards", params: { book_id: bookId, pdf_path: pdfPath, unit: String(i), book_title: bookTitle } })
                           )}
                           {btn("gloss", "book-outline", t("syllabus.action.glossary"), () =>
                             router.push({ pathname: "/glossary", params: { pdf_path: pdfPath, book_id: bookId, book_title: bookTitle, unit: String(i), only_unit: "1" } })
@@ -1018,12 +1011,10 @@ const styles = StyleSheet.create({
   barVal: { width: 44, fontSize: 12.5, fontWeight: "900", textAlign: "center", fontVariant: ["tabular-nums"] },
   phase: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
   phaseTxt: { fontSize: 11.5, fontWeight: "900" },
-  uprog: { marginTop: 10, borderRadius: 16, padding: 12, gap: 7 },
-  uprogHead: { alignItems: "center", justifyContent: "space-between" },
-  uprogTitle: { fontSize: 13, fontWeight: "900" },
-  uprogPct: { fontSize: 15, fontWeight: "900" },
-  uLbl: { width: 70, fontSize: 12, fontWeight: "800" },
-  uVal: { width: 92, fontSize: 11.5, fontWeight: "800", textAlign: "center", fontVariant: ["tabular-nums"] },
+  uline: { marginTop: 10, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, alignItems: "center", gap: 10 },
+  uring: { width: 44, height: 44, borderRadius: 22, borderWidth: 2.5, alignItems: "center", justifyContent: "center" },
+  uringTxt: { fontSize: 12, fontWeight: "900" },
+  ulineTxt: { flex: 1, fontSize: 13, fontWeight: "700", lineHeight: 20 },
   objWrap: { marginTop: 8, paddingStart: 36, gap: 2 },
   objHead: { fontSize: 13, fontWeight: "900" },
   about: { fontSize: 14, lineHeight: 23, marginTop: 8, paddingStart: 36, opacity: 0.9 },
