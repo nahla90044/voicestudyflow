@@ -47,6 +47,25 @@ export async function getSyllabus(
   return { data: syl, done };
 }
 
+const normTitle = (s: string) =>
+  s.replace(/[\u064B-\u0652\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").replace(/[^\p{L}\p{N}]+/gu, " ").trim().toLowerCase();
+
+/** وحدة الذكاء المطابقة لعنوان من الفهرس: نفس «الوحدة + ترتيبها» إن وُجد، وإلا أكثر تشابه كلمات (٦٠٪ فأكثر) */
+function matchUnit(title: string, ai: SyllabusUnit[]): SyllabusUnit | undefined {
+  const t = normTitle(title);
+  const head = t.split(" ").slice(0, 3).join(" ");
+  const byHead = /^(الوحده|الفصل|الباب)/.test(head) ? ai.find((u) => normTitle(u.title).startsWith(head.split(" ").slice(0, head.includes(" عشر") ? 3 : 2).join(" "))) : undefined;
+  if (byHead) return byHead;
+  const words = new Set(t.split(" ").filter((w) => w.length > 2));
+  let best: { u?: SyllabusUnit; score: number } = { score: 0 };
+  for (const u of ai) {
+    const uw = normTitle(u.title).split(" ").filter((w) => w.length > 2);
+    const score = uw.length ? uw.filter((w) => words.has(w)).length / Math.max(words.size, uw.length) : 0;
+    if (score > best.score) best = { u, score };
+  }
+  return best.score >= 0.6 ? best.u : undefined;
+}
+
 /** يولّد المنهج من نص الكتاب (أول الصفحات) ويخزّنه. */
 export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
   // اجمع نص أوّل الصفحات الحقيقية
@@ -93,11 +112,13 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
   if (!syl && !toc.length) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
   if (toc.length) {
     // الوحدات من الفهرس الدقيق نفسه (ما كتبه الذكاء يُستفاد منه للمواضيع والأهداف فقط إن طابق العدد)
+    // مواضيع كل وحدة من نتيجة الذكاء: بمطابقة العنوان لا بالترتيب (كان اختلاف العدد يتركها كلها فارغة)
     const ai = syl?.units ?? [];
+    const pick = (title: string, i: number) => matchUnit(title, ai) ?? (ai.length === toc.length ? ai[i] : undefined);
     const units = toc.map((c, i) => ({
       title: c.title,
-      topics: ai.length === toc.length ? ai[i].topics : [],
-      outcome: ai.length === toc.length ? ai[i].outcome : undefined,
+      topics: pick(c.title, i)?.topics ?? [],
+      outcome: pick(c.title, i)?.outcome,
     }));
     syl = { title: syl?.title ?? "", units, tips: syl?.tips ?? [] };
     // حدود صفحات كل وحدة من الفهرس مباشرة (الملخص والاختبار والفيديو يستخدمونها)
