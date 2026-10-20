@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BuzanMindMap, MM_COLORS, mindmapPrintHtml } from "../../components/brand/mindmap";
@@ -15,6 +15,8 @@ import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../comp
 import { Radius, Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
+import { removeUnitContentWhere } from "../../lib/unitContent";
+import { PressableScale } from "../../components/brand/motion";
 import {
   generateMindmap,
   generateSyllabus,
@@ -128,11 +130,30 @@ export default function SyllabusScreen() {
     return () => clearInterval(id);
   }, [busy, t]);
 
+  // إعادة إنشاء المنهج (بتأكيد: تُحسب طلبًا) — من الفهرس الدقيق
+  function confirmRegenerate() {
+    Alert.alert(t("syllabus.regenTitle"), t("syllabus.regenBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("syllabus.regenerate"), onPress: () => void onGenerate() },
+    ]);
+  }
+
   async function onGenerate() {
     setErr("");
     setBusy(true);
     try {
+      const before = (syl?.units ?? []).map((u) => u.title).join("|");
       const data = await generateSyllabus(pdfPath);
+      // تغيّرت الوحدات → محتوى الوحدات القديم (ملخصات، اختبارات، خرائط، فيديو) لم يعد يطابقها فيُحذف
+      if (before && before !== data.units.map((u) => u.title).join("|")) {
+        const unitOnly = (u: number) => u < 1_000_000;
+        for (const k of ["quiz", "mindmap", "glossary", "summary"] as const) await removeUnitContentWhere(pdfPath, k, () => true).catch(() => {});
+        await removeUnitContentWhere(pdfPath, "studysummary", unitOnly).catch(() => {});
+        // أجزاء ملخص الوحدة: 2e12 + الوحدة×1e4 + …  (النطاقات بأرقام أكبر بكثير فلا تُمس)
+        await removeUnitContentWhere(pdfPath, "studysummarypart", (u: number) => u >= 2e12 && u < 2e12 + 1_000_000 * 1e4).catch(() => {});
+        await removeUnitContentWhere(pdfPath, "video", (u: number) => u >= 2e12 && u < 2e12 + 1_000_000).catch(() => {});
+        await removeUnitContentWhere(pdfPath, "videopart", (u: number) => u >= 2e12 * 1e4 && u < (2e12 + 1_000_000) * 1e4).catch(() => {});
+      }
       setSyl(data);
       setDone(new Array(data.units.length).fill(false));
       await loadSchedule(data.units.length);
@@ -273,7 +294,23 @@ export default function SyllabusScreen() {
 
   return (
     <SceneScreen>
-      <SceneBanner title={t("syllabus.title")} height={130} left={backBtn} right={printBtn} />
+      <SceneBanner
+        title={t("syllabus.title")}
+        height={130}
+        left={backBtn}
+        right={
+          <View style={{ flexDirection: dir.row, gap: 8 }}>
+            {syl ? (
+              <PressableScale onPress={busy ? undefined : confirmRegenerate}>
+                <SceneIconButton>
+                  {busy ? <ActivityIndicator color={pal.ink} /> : <Ionicons name="refresh" size={20} color={pal.ink} accessibilityLabel={t("syllabus.regenerate")} />}
+                </SceneIconButton>
+              </PressableScale>
+            ) : null}
+            {printBtn}
+          </View>
+        }
+      />
 
       {loading ? (
         <View style={styles.center}>
@@ -466,7 +503,7 @@ export default function SyllabusScreen() {
           {/* دور مستقل عن طابعة الهيدر: إعادة توليد المنهج كاملًا من الكتاب
               (يعيد بناء الوحدات بالفهرس الكامل بدل النسخة القديمة المختصرة). */}
           <Pressable
-            onPress={busy ? undefined : onGenerate}
+            onPress={busy ? undefined : confirmRegenerate}
             style={({ pressed }) => [
               styles.ghostBtn,
               {

@@ -80,6 +80,11 @@ export async function getBookKind(pdfPath: string, pages?: PageText[]): Promise<
 
 /** صفحات وحدات المنهج (تُعاد حسابها عند تغيّر عدد الصفحات الجاهزة) */
 export async function getUnitRanges(pdfPath: string, titles: string[], pageCount: number, pages?: PageText[]): Promise<UnitRange[]> {
+  // حدود من الفهرس الدقيق (عند إنشاء المنهج منه) لها الأولوية دائمًا
+  try {
+    const pinned = JSON.parse((await AsyncStorage.getItem(`unitranges:toc:${hashKey(pdfPath)}`)) || "null") as UnitRange[] | null;
+    if (Array.isArray(pinned) && pinned.length === titles.length) return pinned;
+  } catch {}
   const ps = pages ?? (await bookPages(pdfPath));
   const key = `unitranges:v1:${hashKey(pdfPath)}:${titles.length}:${ps.length}`;
   const cached = await AsyncStorage.getItem(key).catch(() => null);
@@ -94,6 +99,16 @@ export async function getUnitRanges(pdfPath: string, titles: string[], pageCount
   await AsyncStorage.setItem(key, JSON.stringify(r)).catch(() => {});
   await AsyncStorage.setItem(`unitranges:last:${hashKey(pdfPath)}`, JSON.stringify(r)).catch(() => {});
   return r;
+}
+
+/** حدود الوحدات من الفهرس الدقيق (تُعتمد بدل الحساب التقريبي) */
+export async function setUnitRanges(pdfPath: string, r: UnitRange[]): Promise<void> {
+  await AsyncStorage.setItem(`unitranges:last:${hashKey(pdfPath)}`, JSON.stringify(r)).catch(() => {});
+  await AsyncStorage.setItem(`unitranges:toc:${hashKey(pdfPath)}`, JSON.stringify(r)).catch(() => {});
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(`unitranges:v1:${hashKey(pdfPath)}:`));
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {}
 }
 
 /** آخر صفحات وحدات محسوبة (عرض فوري في صفحة الكتاب، بلا جلب نصوص الكتاب) */

@@ -67,8 +67,43 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
     throw new Error("لا يوجد نص كافٍ. يلزم فتح الكتاب وقراءة أول صفحاته أولًا.");
   }
 
-  const raw = await aiAssist("syllabus", text);
-  const syl = parseSyllabus(raw);
+  // الفهرس الدقيق أولًا: فهرس الملف المدمج أو الفهرس المطبوع المتحقَّق منه صفحةً صفحة.
+  // إن وُجد يُلتزم بوحداته وعناوينها وترتيبها وصفحاتها حرفيًا (الفهرس المضروب في أول الكتاب لا يُعتمد).
+  let toc: { title: string; page: number; to: number; level: number }[] = [];
+  try {
+    const total = Number((pages ?? []).length ? (await supabase.from("page_cache").select("total_pages").eq("pdf_path", pdfPath).limit(1).maybeSingle()).data?.total_pages : 0) || 0;
+    const { getBookToc } = await import("./bookToc");
+    const bt = await getBookToc(pdfPath, total, true);
+    toc = bt.book.filter((c) => c.level === 0);
+    if (toc.length < 2) toc = [];
+  } catch {
+    toc = [];
+  }
+  const tocNote = toc.length
+    ? `\n\nالفهرس الدقيق للكتاب (مُتحقَّق منه، ملزم): الوحدات هي بالضبط هذه ${toc.length} بهذا الترتيب وبهذه العناوين حرفيًا:\n${toc.map((c, i) => `${i + 1}. ${c.title}`).join("\n")}\nلا تضف وحدات ولا تحذف ولا تدمج ولا تعدّل العناوين.`
+    : "";
+
+  let syl: Syllabus | null = null;
+  try {
+    syl = parseSyllabus(await aiAssist("syllabus", text + tocNote));
+  } catch (e) {
+    // الفهرس الدقيق يكفي لبناء الوحدات بلا ذكاء؛ بدونه يظهر الخطأ (مثل نفاد الطلبات)
+    if (!toc.length) throw e;
+  }
+  if (!syl && !toc.length) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
+  if (toc.length) {
+    // الوحدات من الفهرس الدقيق نفسه (ما كتبه الذكاء يُستفاد منه للمواضيع والأهداف فقط إن طابق العدد)
+    const ai = syl?.units ?? [];
+    const units = toc.map((c, i) => ({
+      title: c.title,
+      topics: ai.length === toc.length ? ai[i].topics : [],
+      outcome: ai.length === toc.length ? ai[i].outcome : undefined,
+    }));
+    syl = { title: syl?.title ?? "", units, tips: syl?.tips ?? [] };
+    // حدود صفحات كل وحدة من الفهرس مباشرة (الملخص والاختبار والفيديو يستخدمونها)
+    const { setUnitRanges } = await import("./glossary");
+    await setUnitRanges(pdfPath, toc.map((c) => ({ from: c.page, to: c.to, found: true })));
+  }
   if (!syl) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
 
   await supabase.from("book_syllabus").upsert({
