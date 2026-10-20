@@ -1,10 +1,11 @@
 // app/study-file.tsx
 // «ملف المذاكرة»: ملخّصات وحدات الكتاب كلها بالترتيب في ملف PDF واحد.
-// بدل طلب الملخّص صفحة صفحة ثم جمعها يدويًا بأدوات خارجية: تُولَّد ملخّصات الوحدات الناقصة
-// واحدة بعد الأخرى (مع التقدّم)، والجاهزة تُؤخذ من المخزن فورًا بلا تكلفة.
+// بدل طلب الملخّص صفحة صفحة ثم جمعها يدويًا بأدوات خارجية: تُحدَّد الوحدات المطلوبة (أو كل الناقصة)
+// فتُولَّد واحدة بعد الأخرى في الخلفية (تكمل بعد مغادرة الشاشة، وإشعار واحد عند الانتهاء)،
+// والجاهزة تُؤخذ من المخزن فورًا بلا تكلفة.
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
@@ -16,7 +17,8 @@ import { mindmapSvg } from "../components/brand/mindmap";
 import { mindmapFromSummary, studyFileHtml, type StudySummary } from "../lib/studySummary";
 import { getSyllabus, type MindMap } from "../lib/syllabus";
 import { getUnitContent } from "../lib/unitContent";
-import { getCachedSummary, getOrMakeSummary, summaryRequestCost } from "../lib/unitSummary";
+import { getCachedSummary, summaryRequestCost } from "../lib/unitSummary";
+import { isSummaryQueueRunning, isUnitQueued, queueUnitSummaries, summaryJobKey, watchSummaryJob } from "../lib/summaryJobs";
 import { confirmCost } from "../lib/costConfirm";
 import { getSummaryMode, setSummaryMode } from "../lib/summaryPrefs";
 
@@ -34,7 +36,8 @@ export default function StudyFileScreen() {
   const [noSyllabus, setNoSyllabus] = useState(false);
   const [running, setRunning] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
-  const stopRef = useRef(false);
+  // الوحدات المحددة للتوليد (فارغ = كل الناقصة)
+  const [picked, setPicked] = useState<number[]>([]);
 
   const load = useCallback(async () => {
     const syl = await getSyllabus(pdfPath).catch(() => null);
@@ -54,43 +57,61 @@ export default function StudyFileScreen() {
 
   useEffect(() => {
     void load();
-    return () => {
-      stopRef.current = true;
-    };
   }, [load]);
+
+  // متابعة كل وحدة ناقصة (تعمل حتى لو بدأ توليدها قبل فتح الشاشة أو استمر بعد الخروج منها)
+  const unitCount = rows?.length ?? 0;
+  useEffect(() => {
+    if (!unitCount) return;
+    setRunning(isSummaryQueueRunning(pdfPath));
+    const offs = Array.from({ length: unitCount }, (_, i) =>
+      watchSummaryJob(
+        summaryJobKey(pdfPath, { kind: "unit", unit: i }),
+        (j) => {
+          setRows((cur) =>
+            cur?.map((r, k) =>
+              k !== i || r.state === "ready"
+                ? r
+                : j.status === "running"
+                  ? { ...r, state: "working" }
+                  : j.status === "done" && j.result
+                    ? { ...r, summary: j.result, state: "ready" }
+                    : { ...r, state: "failed" }
+            ) ?? cur
+          );
+          // بعد أن يأخذ الطابور دوره في نفس الحدث (ينتقل للوحدة التالية أو ينتهي) — لا قبله
+          setTimeout(() => setRunning(isSummaryQueueRunning(pdfPath)), 0);
+        },
+        false
+      )
+    );
+    return () => offs.forEach((f) => f());
+  }, [pdfPath, unitCount]);
 
   const missing = rows?.filter((r) => r.state !== "ready").length ?? 0;
   const ready = rows?.filter((r) => r.state === "ready").length ?? 0;
 
-  async function generateMissing() {
-    if (!rows || running) return;
-    // كل الوحدات الناقصة معًا: عدد طلباتها كلها قبل البدء
-    const costs = await Promise.all(rows.map((r, i) => (r.state === "ready" ? Promise.resolve(0) : summaryRequestCost(pdfPath, { kind: "unit", unit: i }).then((c) => c.pending).catch(() => 0))));
-    if (!(await confirmCost(costs.reduce((a, b) => a + b, 0), "studyfile", t))) return;
-    stopRef.current = false;
+  const togglePick = (i: number) => setPicked((cur) => (cur.includes(i) ? cur.filter((x) => x !== i) : [...cur, i].sort((x, y) => x - y)));
+  const missingIdx = rows?.map((r, i) => (r.state === "ready" ? -1 : i)).filter((i) => i >= 0) ?? [];
+  const target = picked.length ? picked : missingIdx;
+
+  async function generate() {
+    if (!rows || running || !target.length) return;
+    // عدد طلبات الوحدات المطلوبة كلها قبل البدء
+    const costs = await Promise.all(target.map((i) => summaryRequestCost(pdfPath, { kind: "unit", unit: i }).then((c) => c.pending).catch(() => 0)));
+    if (!(await confirmCost(costs.reduce((a, b) => a + b, 0), "studyfile", t, false, `studyfile:${pdfPath}`))) return;
+    const params = (i: number) => ({ pdf_path: pdfPath, unit: String(i), title: rows[i].title, book_title: bookTitle });
+    queueUnitSummaries(pdfPath, target, (i) => ({ title: rows[i].title, params: params(i) }), {
+      title: `${t("studyFile.title")} — ${bookTitle}`,
+      params: params(target[target.length - 1]),
+    });
+    setPicked([]);
     setRunning(true);
-    for (let i = 0; i < rows.length; i++) {
-      if (stopRef.current) break;
-      if (rows[i].state === "ready") continue;
-      setRows((cur) => cur?.map((r, k) => (k === i ? { ...r, state: "working" } : r)) ?? cur);
-      try {
-        const s = await getOrMakeSummary(pdfPath, { kind: "unit", unit: i });
-        setRows((cur) => cur?.map((r, k) => (k === i ? { ...r, summary: s, state: s ? "ready" : "failed" } : r)) ?? cur);
-      } catch (e) {
-        setRows((cur) => cur?.map((r, k) => (k === i ? { ...r, state: "failed" } : r)) ?? cur);
-        if ((e as Error).message === "USER_QUOTA") break; // انتهت الحصة: صفحة الاشتراك تظهر
-      }
-    }
-    setRunning(false);
   }
 
   async function onCreate() {
-    if (!missing) return;
-    const go = () =>
-      Alert.alert(t("studyFile.confirmTitle"), t("studyFile.confirmBody", { n: missing }), [
-        { text: t("common.cancel"), style: "cancel" },
-        { text: t("studyFile.confirmGo"), onPress: () => void generateMissing() },
-      ]);
+    if (!target.length) return;
+    const go = () => void generate();
     // أسلوب الملخّص لهذا الكتاب (مرة واحدة): الالتزام بالكتاب أو التوسّع
     if (await getSummaryMode(pdfPath)) return go();
     Alert.alert(t("summary.mode.title"), t("summary.mode.body"), [
@@ -167,14 +188,23 @@ export default function StudyFileScreen() {
           {/* الأزرار */}
           {missing > 0 ? (
             <Pressable
-              onPress={running ? () => (stopRef.current = true) : onCreate}
+              onPress={running ? undefined : onCreate}
               style={({ pressed }) => [styles.btn, { backgroundColor: running ? pal.soft : pal.accent, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
             >
               {running ? <ActivityIndicator color={pal.ink} /> : <Ionicons name="sparkles" size={18} color={pal.onAccent} />}
               <Text style={[styles.btnTxt, { color: running ? pal.ink : pal.onAccent }]}>
-                {running ? t("studyFile.stop") : t("studyFile.create", { n: missing })}
+                {running ? t("studyFile.working") : picked.length ? t("studyFile.createPicked", { n: picked.length }) : t("studyFile.create", { n: missing })}
               </Text>
             </Pressable>
+          ) : null}
+          {/* تحديد الوحدات: الضغط على الدائرة بجانب الوحدة، أو «تحديد الكل» */}
+          {missing > 0 && !running ? (
+            <View style={[styles.pickRow, { flexDirection: dir.row }]}>
+              <Text style={[styles.pickHint, { color: pal.dim, textAlign: dir.textAlign }]}>{t("studyFile.pickHint")}</Text>
+              <Pressable onPress={() => setPicked(picked.length === missingIdx.length ? [] : missingIdx)} hitSlop={8}>
+                <Text style={[styles.pickAll, { color: pal.accent }]}>{picked.length === missingIdx.length ? t("studyFile.pickNone") : t("studyFile.pickAll")}</Text>
+              </Pressable>
+            </View>
           ) : null}
           <Pressable
             onPress={onPdf}
@@ -194,9 +224,11 @@ export default function StudyFileScreen() {
           {rows.map((r, i) => (
             <Pressable
               key={i}
-              disabled={r.state !== "ready"}
+              disabled={r.state === "working" || running}
               onPress={() =>
-                router.push({ pathname: "/unit-summary", params: { pdf_path: pdfPath, unit: String(i), title: r.title, book_title: bookTitle } })
+                r.state === "ready"
+                  ? router.push({ pathname: "/unit-summary", params: { pdf_path: pdfPath, unit: String(i), title: r.title, book_title: bookTitle } })
+                  : togglePick(i)
               }
             >
               <SceneCard style={[styles.row, { flexDirection: dir.row }]}>
@@ -208,12 +240,18 @@ export default function StudyFileScreen() {
                 </Text>
                 {r.state === "working" ? (
                   <ActivityIndicator size="small" color={pal.accent} />
+                ) : r.state === "ready" ? (
+                  <Ionicons name="checkmark-circle" size={22} color="#15803D" />
+                ) : running && isUnitQueued(pdfPath, i) ? (
+                  <Ionicons name="time-outline" size={22} color={pal.accent} accessibilityLabel={t("studyFile.queued")} />
                 ) : (
-                  <Ionicons
-                    name={r.state === "ready" ? "checkmark-circle" : r.state === "failed" ? "alert-circle" : "ellipse-outline"}
-                    size={22}
-                    color={r.state === "ready" ? "#15803D" : r.state === "failed" ? "#D97706" : pal.dim}
-                  />
+                  <Pressable onPress={() => !running && togglePick(i)} hitSlop={12} accessibilityRole="checkbox" accessibilityState={{ checked: picked.includes(i) }}>
+                    <Ionicons
+                      name={picked.includes(i) ? "checkbox" : r.state === "failed" ? "alert-circle" : "square-outline"}
+                      size={24}
+                      color={picked.includes(i) ? pal.accent : r.state === "failed" ? "#D97706" : pal.dim}
+                    />
+                  </Pressable>
                 )}
               </SceneCard>
             </Pressable>
@@ -239,4 +277,7 @@ const styles = StyleSheet.create({
   num: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   numTxt: { fontSize: 14, fontWeight: "900" },
   unitTitle: { flex: 1, fontSize: 15, lineHeight: 23, fontWeight: "800" },
+  pickRow: { alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 4 },
+  pickHint: { flex: 1, fontSize: 13, fontWeight: "600" },
+  pickAll: { fontSize: 14, fontWeight: "900" },
 });

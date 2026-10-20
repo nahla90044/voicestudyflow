@@ -118,6 +118,56 @@ export function startSummaryJob(pdfPath: string, src: SummarySource, meta: Meta,
   return key;
 }
 
+/**
+ * ملخّصات عدة وحدات واحدة بعد الأخرى في الخلفية (تكمل بعد مغادرة الشاشة)، وإشعار واحد عند انتهاء الكل.
+ * انتهاء الحصة يوقف الباقي. الشاشة تتابع كل وحدة بـ watchSummaryJob.
+ */
+const queues = new Set<string>();
+const waitingUnits = new Map<string, Set<number>>(); // وحدات تنتظر دورها في الطابور (لعلامة الانتظار)
+export function isSummaryQueueRunning(pdfPath: string): boolean {
+  return queues.has(pdfPath);
+}
+export function isUnitQueued(pdfPath: string, unit: number): boolean {
+  return !!waitingUnits.get(pdfPath)?.has(unit);
+}
+export function queueUnitSummaries(pdfPath: string, units: number[], metaFor: (unit: number) => Meta, last: Meta): void {
+  if (!units.length || queues.has(pdfPath)) return;
+  queues.add(pdfPath);
+  waitingUnits.set(pdfPath, new Set(units));
+  let allOk = true;
+  const step = (k: number) => {
+    waitingUnits.get(pdfPath)?.delete(units[k - 1]);
+    if (k >= units.length) {
+      queues.delete(pdfPath);
+      waitingUnits.delete(pdfPath);
+      void notifyDone(last, allOk);
+      return;
+    }
+    const src: SummarySource = { kind: "unit", unit: units[k] };
+    const key = startSummaryJob(pdfPath, src, metaFor(units[k]), false);
+    let un: (() => void) | undefined;
+    let settled = false;
+    un = watchSummaryJob(
+      key,
+      (j) => {
+        if (j.status === "running" || settled) return;
+        settled = true;
+        un?.();
+        if (j.status !== "done") allOk = false;
+        if (j.status === "quota") {
+          queues.delete(pdfPath);
+          waitingUnits.delete(pdfPath);
+          return;
+        }
+        step(k + 1);
+      },
+      false
+    );
+    if (settled) un(); // انتهت فورًا (جاهزة) قبل أن يُحفظ إلغاء الاشتراك
+  };
+  step(0);
+}
+
 // الضغط على إشعار «الملخّص جاهز» يفتح الملخّص (من المخزن فورًا)
 Notifications.addNotificationResponseReceivedListener((r) => {
   const d = r.notification.request.content.data as { kind?: string; params?: Record<string, string> } | undefined;
