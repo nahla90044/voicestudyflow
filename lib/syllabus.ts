@@ -4,7 +4,8 @@
 import { aiAssist } from "./ai";
 import { supabase } from "./supabase";
 
-export type SyllabusUnit = { title: string; topics: string[]; outcome?: string };
+/** about: نبذة قصيرة عمّا تتناوله الوحدة (ليعرف الطالب ما هو مقبل عليه) */
+export type SyllabusUnit = { title: string; topics: string[]; outcome?: string; about?: string };
 export type Syllabus = { title?: string; units: SyllabusUnit[]; tips?: string[] };
 
 export function parseSyllabus(raw: string): Syllabus | null {
@@ -18,6 +19,7 @@ export function parseSyllabus(raw: string): Syllabus | null {
             title: String(u?.title ?? "").trim(),
             topics: Array.isArray(u?.topics) ? u.topics.map((t: any) => String(t).trim()).filter(Boolean) : [],
             outcome: u?.outcome ? String(u.outcome).trim() : undefined,
+            about: u?.about ? String(u.about).trim() : undefined,
           }))
           .filter((u: SyllabusUnit) => u.title)
       : [];
@@ -121,14 +123,16 @@ export async function generateSyllabus(pdfPath: string, onStage?: (s: SyllabusSt
     const brief =
       `هذه وحدات الكتاب الدقيقة (${struct.length} وحدة) من فهرسه، ومع كل وحدة مقتطف من صفحاتها الأولى. ` +
       `أعد المنهج بالوحدات نفسها بالضبط وبالترتيب نفسه وبعناوينها حرفيًا (لا تضف ولا تحذف ولا تدمج)، ` +
-      `ولكل وحدة topics: محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط، وoutcome: ما يتعلمه الطالب منها.\n\n` +
+      `ولكل وحدة: about نبذة من جملتين أو ثلاث بلغة سهلة عمّا تتناوله الوحدة وأهم أفكارها (ليعرف الطالب ما هو مقبل عليه)، ` +
+      `وtopics محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط، وoutcome ما يتعلمه الطالب منها. ` +
+      `أعد JSON بالشكل {"title":"…","units":[{"title":"…","about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
       struct.map((u, i) => `### ${i + 1}. ${u.title} (ص ${u.page}–${u.to})\n${ex[i]}`).join("\n\n");
     const ai = parseSyllabus(await aiAssist("syllabus", brief))?.units ?? [];
     syl = {
       title: "",
       units: struct.map((u, i) => {
         const m = ai.length === struct.length ? ai[i] : matchUnit(u.title, ai);
-        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome };
+        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about };
       }),
       tips: [],
     };

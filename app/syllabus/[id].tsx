@@ -320,6 +320,7 @@ export default function SyllabusScreen() {
         (u, i) => `
         <div class="unit">
           <h3>${i + 1}. ${esc(u.title)}</h3>
+          ${u.about ? `<p class="about">${esc(u.about)}</p>` : ""}
           ${sched[i] ? `<p class="when">${esc(t("syllabus.studyOn"))}: ${esc(fmtRange(sched[i]))}</p>` : ""}
           ${u.topics.length ? `<ul>${u.topics.map((topic) => `<li>${esc(topic)}</li>`).join("")}</ul>` : ""}
           ${u.outcome ? `<p class="out">${esc(u.outcome)}</p>` : ""}
@@ -339,6 +340,7 @@ export default function SyllabusScreen() {
       ul { margin: 6px 0; padding-inline-start: 20px; }
       li { margin: 3px 0; }
       .out { color: #0a7d52; font-size: 13px; margin: 6px 0 0; }
+      .about { color: #334155; font-size: 13.5px; line-height: 1.8; margin: 4px 0 6px; }
       .when { color: #0a6ed1; font-size: 12.5px; margin: 2px 0 6px; font-weight: 700; }
       .tips { margin-top: 18px; }
       .box { display:inline-block; width:14px; height:14px; border:1.5px solid #5b3df5; border-radius:4px; margin-inline-start:8px; vertical-align:middle; }
@@ -567,6 +569,8 @@ export default function SyllabusScreen() {
                       {i + 1}. {u.title}
                     </Text>
                   </View>
+                  {/* نبذة الوحدة: ما الذي تتناوله */}
+                  {!!u.about && <Text style={[styles.about, { color: pal.ink, textAlign: dir.textAlign }]}>{u.about}</Text>}
                   {isWorking && <Text style={[styles.workingTxt, { color: pal.accent, textAlign: dir.textAlign }]}>{t("syllabus.regenerating")}</Text>}
                   {sched[i] && (
                     <View style={[styles.schedRow, { flexDirection: dir.row }]}>
@@ -807,6 +811,7 @@ const styles = StyleSheet.create({
   },
   readNowTxt: { fontSize: 16, fontWeight: "900" },
   manageRow: { gap: 8 },
+  about: { fontSize: 14, lineHeight: 23, marginTop: 8, paddingStart: 36, opacity: 0.9 },
   manageBtn: { flex: 1, height: 46, borderRadius: Radius.pill, borderWidth: 1, alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 8 },
   manageTxt: { fontSize: 13.5, fontWeight: "900", flexShrink: 1 },
   selectHint: { fontSize: 13.5, lineHeight: 22, fontWeight: "700" },

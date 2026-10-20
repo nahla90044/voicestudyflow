@@ -180,7 +180,7 @@ async function regenerateOne(
   const note =
     `\n\nهذا نص وحدة واحدة فقط من الكتاب (الصفحات ${pages.from}–${pages.to})، وعنوانها المسجّل: «${old.title}». ` +
     "أعد منهجًا من وحدة واحدة بالضبط: عنوانها كما هو مكتوب في أول نصها (وإن لم يظهر فالعنوان المسجّل)، " +
-    "ومواضيعها الفرعية بترتيبها في النص نفسه، وما يتعلمه الطالب منها. لا تضف وحدات أخرى.";
+    "ونبذة about من جملتين أو ثلاث عمّا تتناوله، ومواضيعها الفرعية بترتيبها في النص نفسه، وما يتعلمه الطالب منها. لا تضف وحدات أخرى.";
   const got =
     parseSyllabus(await aiAssist("syllabus", text + note))?.units ?? [];
   const topics = [
@@ -196,6 +196,7 @@ async function regenerateOne(
     title: String(got[0]?.title ?? "").trim() || old.title,
     topics,
     outcome: got[0]?.outcome || old.outcome,
+    about: got[0]?.about || old.about,
   };
   const next: SyllabusState = {
     data: {

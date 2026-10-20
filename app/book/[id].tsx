@@ -421,7 +421,7 @@ export default function BookHubScreen() {
                         <View style={{ flex: 1 }}>
                           <Text
                             style={[styles.unitTitle, { color: done ? pal.dim : pal.ink, textAlign: dir.textAlign }]}
-                            numberOfLines={2}
+                            
                           >
                             {u.title}
                           </Text>
