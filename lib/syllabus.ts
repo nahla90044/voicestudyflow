@@ -6,7 +6,8 @@ import { supabase } from "./supabase";
 
 /** about: نبذة قصيرة عمّا تتناوله الوحدة (ليعرف الطالب ما هو مقبل عليه) */
 export type SyllabusUnit = { title: string; topics: string[]; outcome?: string; about?: string; objectives?: string[] };
-export type Syllabus = { title?: string; units: SyllabusUnit[]; tips?: string[] };
+/** ranges: صفحات كل وحدة المتحقَّق منها (من الفهرس) — محفوظة مع المنهج فتصل كل الأجهزة بالصفحات نفسها */
+export type Syllabus = { title?: string; units: SyllabusUnit[]; tips?: string[]; ranges?: { from: number; to: number }[] };
 
 export function parseSyllabus(raw: string): Syllabus | null {
   const m = raw.match(/\{[\s\S]*\}/);
@@ -49,6 +50,13 @@ export async function getSyllabus(
   // وحدات تغيّرت → يُمسح ما بُني على القديمة قبل أن تقرأه أي شاشة
   const { syncSyllabus } = await import("./syllabusSync");
   await syncSyllabus(pdfPath, (syl.units ?? []).map((u) => u.title)).catch(() => {});
+  // صفحات الوحدات المحفوظة مع المنهج هي المرجع على كل جهاز (لا حساب تقريبي)
+  if (Array.isArray(syl.ranges) && syl.ranges.length === syl.units.length) {
+    const { setUnitRanges, getCachedUnitRanges } = await import("./glossary");
+    const cur = await getCachedUnitRanges(pdfPath, syl.units.length);
+    if (!cur || cur.some((r, i) => r.from !== syl.ranges![i].from || r.to !== syl.ranges![i].to))
+      await setUnitRanges(pdfPath, syl.ranges.map((r) => ({ from: r.from, to: r.to, found: true })));
+  }
   const done = Array.isArray(data.done) ? (data.done as boolean[]) : [];
   return { data: syl, done };
 }
@@ -159,6 +167,7 @@ export async function generateSyllabus(pdfPath: string, onStage?: (s: SyllabusSt
   await syncSyllabus(pdfPath, syl.units.map((u) => u.title)).catch(() => {});
   const { setUnitRanges } = await import("./glossary");
   if (struct.length) await setUnitRanges(pdfPath, struct.map((u) => ({ from: u.page, to: u.to, found: true })));
+  if (struct.length) syl = { ...syl, ranges: struct.map((u) => ({ from: u.page, to: u.to })) };
   const { error } = await supabase.from("book_syllabus").upsert({ pdf_path: pdfPath, data: syl, done: new Array(syl.units.length).fill(false) });
   if (error) throw new Error("تعذّر حفظ المنهج. يُرجى المحاولة مرة أخرى.");
   return syl;

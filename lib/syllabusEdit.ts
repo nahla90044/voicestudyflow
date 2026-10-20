@@ -138,7 +138,7 @@ export async function removeUnits(
     return null;
   }
   const next: SyllabusState = {
-    data: { ...cur.data, units: keep.map((i) => cur.data.units[i]) },
+    data: { ...cur.data, units: keep.map((i) => cur.data.units[i]), ranges: cur.data.ranges?.length === cur.data.units.length ? keep.map((i) => cur.data.ranges![i]) : undefined },
     done: keep.map((i) => cur.done[i]),
   };
   await saveSyllabus(pdfPath, next);
