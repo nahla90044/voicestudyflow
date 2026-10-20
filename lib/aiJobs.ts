@@ -19,7 +19,13 @@ const MAX_AGE_MS = 9 * 60 * 1000; // مهمة «قيد التشغيل» أقدم
 const jobKey = (k: string) => `vsf:aijob:${k}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function startJob(action: AiAction, text: string, extra: { deep?: boolean; mode?: string } = {}): Promise<string> {
+type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string };
+
+/** آخر مهمة اكتملت لكل جزء (لإعادة توليد مجانية إن رفض وكيل الجودة نتيجتها) */
+const lastDone = new Map<string, string>();
+export const lastJobId = (key: string) => lastDone.get(key);
+
+async function startJob(action: AiAction, text: string, extra: JobExtra = {}): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? SUPABASE_PUBLIC_KEY;
   const ctrl = new AbortController();
@@ -64,11 +70,13 @@ export async function jobPart<P>(
   parsePartial: (raw: string) => P | null,
   parseFull: (raw: string) => P | null,
   onPartial: (p: P, chars: number) => void,
-  extra: { deep?: boolean; mode?: string } = {}
+  extra: JobExtra = {},
+  /** عدد الأحرف المكتوبة حتى الآن (لتقدّم حقيقي حتى لو لم يكتمل جزء قابل للعرض) */
+  onChars?: (chars: number) => void
 ): Promise<P> {
   const t0 = Date.now();
   try {
-    const r = await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra);
+    const r = await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra, onChars);
     recordPerf(`job.${action}`, Date.now() - t0, true, ctx.length);
     return r;
   } catch (e) {
@@ -87,7 +95,8 @@ async function jobPartInner<P>(
   parsePartial: (raw: string) => P | null,
   parseFull: (raw: string) => P | null,
   onPartial: (p: P, chars: number) => void,
-  extra: { deep?: boolean; mode?: string } = {}
+  extra: JobExtra = {},
+  onChars?: (chars: number) => void
 ): Promise<P> {
   let id = await AsyncStorage.getItem(jobKey(key)).catch(() => null);
   if (!id) {
@@ -114,11 +123,13 @@ async function jobPartInner<P>(
       const raw = row.status === "done" ? row.result ?? row.partial : row.partial;
       if (raw.length !== lastLen) {
         lastLen = raw.length;
+        onChars?.(raw.length);
         const p = parsePartial(raw);
         if (p) onPartial(p, raw.length);
       }
       if (row.status === "done") {
         await forget();
+        lastDone.set(key, id);
         refreshUsage();
         const p = parseFull(raw);
         if (!p) throw new Error("JOB_FAILED");

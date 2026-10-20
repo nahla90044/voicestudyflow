@@ -2,6 +2,7 @@
 // منهج دراسي (syllabus) لكل كتاب: وحدات بعناوين ومواضيع ومخرجات تعلّم،
 // مع متابعة التقدّم (تشيك ليست). يُولَّد بالذكاء من نص الكتاب ويُخزّن.
 import { recordPerf } from "./perf";
+import { verifiedQuestions } from "./qualityCore";
 import { aiAssist } from "./ai";
 import { supabase } from "./supabase";
 
@@ -139,6 +140,29 @@ async function unitExcerpts(pdfPath: string, units: { page: number; to: number }
 }
 
 /**
+ * طلب المنهج كمهمة سيرفر (مثل الملخّص): لا مهلة تقطعه، ولا يوقفه قفل الشاشة، ويتصل بنفس المهمة بعد
+ * الرجوع. onWrite: نسبة ما كُتب تقريبًا (لشريط تقدّم حقيقي بدل التوقف عند رقم ثابت).
+ */
+async function syllabusJob(pdfPath: string, text: string, units: number, onWrite?: (ratio: number) => void): Promise<Syllabus | null> {
+  const { jobPart } = await import("./aiJobs");
+  const expected = Math.max(1500, units * 420);
+  return jobPart<Syllabus>(
+    "syllabus",
+    text,
+    `syl:${pdfPath}`,
+    () => null,
+    (raw) => parseSyllabus(raw),
+    () => {},
+    {},
+    (chars) => onWrite?.(Math.min(0.97, chars / expected))
+  ).catch((e) => {
+    const m = (e as Error).message;
+    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;
+    return null;
+  });
+}
+
+/**
  * يولّد المنهج ويخزّنه — نفس الطريق في أول إنشاء وفي إعادة الإنشاء:
  * ١) بنية الوحدات من فهرس القارئ نفسه (مدمج/مطبوع متحقَّق منه، أو رأس الصفحة المتكرر)،
  * ٢) فحص صارم للبنية (لا مكرر ولا ترتيب مختل ولا وحدة صفحة أو صفحتين) — المنهج المختل لا يُحفظ أبدًا،
@@ -148,7 +172,8 @@ async function unitExcerpts(pdfPath: string, units: { page: number; to: number }
 export async function generateSyllabus(
   pdfPath: string,
   onStage?: (s: SyllabusStage) => void,
-  onRead?: (done: number, total: number) => void
+  onRead?: (done: number, total: number) => void,
+  onWrite?: (ratio: number) => void
 ): Promise<Syllabus> {
   onStage?.("structure");
   const { data: book } = await supabase.from("books").select("page_count").eq("pdf_path", pdfPath).limit(1).maybeSingle();
@@ -178,25 +203,29 @@ export async function generateSyllabus(
   let syl: Syllabus | null = null;
   if (struct.length) {
     const ex = await unitExcerpts(pdfPath, struct);
+    // الأهداف تُنقل حرفيًا من صفحة «أهداف الوحدة» في الكتاب نفسه (بلا ذكاء: أدق وأسرع)، والذكاء
+    // يكتب النبذة والمواضيع والهدف فقط — طلب أصغر بكثير لا يتجاوز وقته
+    const { objectivesFrom } = await import("./syllabusHealCore");
+    const objectives = struct.map((u) => objectivesFrom(pages, u));
     const brief =
       `هذه وحدات الكتاب الدقيقة (${struct.length} وحدة) من فهرسه، ومع كل وحدة مقتطف من صفحاتها الأولى. ` +
       `أعد المنهج بالوحدات نفسها بالضبط وبالترتيب نفسه وبعناوينها حرفيًا (لا تضف ولا تحذف ولا تدمج)، ` +
-      `ولكل وحدة: objectives أهداف الوحدة منقولة حرفيًا كما وردت في مقتطفها تحت «أهداف الوحدة» (بندًا بندًا، بلا إعادة صياغة؛ وإن لم ترد أهداف فاجعلها [])، ` +
-      `وabout نبذة من جملتين بلغة سهلة عمّا تتناوله الوحدة (تُستعمل فقط إن لم ترد أهداف)، ` +
-      `وtopics محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط، وoutcome ما يتعلمه الطالب منها. ` +
-      `أعد JSON بالشكل {"title":"…","units":[{"title":"…","objectives":["…"],"about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
+      `ولكل وحدة: about نبذة من جملتين بلغة سهلة عمّا تتناوله الوحدة، ` +
+      `وtopics محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط (حتى ٨ مواضيع قصيرة)، وoutcome ما يتعلمه الطالب منها في جملة. ` +
+      `أعد JSON بالشكل {"title":"…","units":[{"title":"…","about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
       struct.map((u, i) => `### ${i + 1}. ${u.title} (ص ${u.page}–${u.to})\n${ex[i]}`).join("\n\n");
-    const ai = parseSyllabus(await aiAssist("syllabus", brief))?.units ?? [];
+    const ai = (await syllabusJob(pdfPath, brief, struct.length, onWrite))?.units ?? [];
     syl = {
       title: "",
       units: struct.map((u, i) => {
         const m = ai.length === struct.length ? ai[i] : matchUnit(u.title, ai);
-        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about, objectives: m?.objectives?.length ? m.objectives : undefined };
+        const obj = objectives[i].length ? objectives[i] : m?.objectives ?? [];
+        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about, objectives: obj.length ? obj : undefined };
       }),
       tips: [],
     };
   } else {
-    const fromAi = parseSyllabus(await aiAssist("syllabus", text));
+    const fromAi = await syllabusJob(pdfPath, text, 10, onWrite);
     if (!fromAi?.units.length) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
     // نتيجة الذكاء نفسها تُفحص: لا وحدة مكررة
     const { unitKey } = await import("./unitStructure");
@@ -234,7 +263,7 @@ export async function generateUnitQuiz(context: string, count?: number): Promise
   try {
     const arr = JSON.parse(m[0]);
     if (!Array.isArray(arr)) return [];
-    return arr
+    const qs: QuizQ[] = arr
       .map((x: any) => ({
         q: String(x?.q ?? "").trim(),
         options: Array.isArray(x?.options) ? x.options.map((o: any) => String(o).trim()).filter(Boolean) : [],
@@ -247,9 +276,25 @@ export async function generateUnitQuiz(context: string, count?: number): Promise
       .filter((x: QuizQ) => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length)
       // النموذج يميل لجعل الإجابة الصحيحة أولًا دائمًا → نخلط الخيارات لكسر النمط
       .map((x: QuizQ) => (x.type === "tf" ? x : shuffleOptions(x))); // صح/خطأ يبقى بترتيبه
+    return verifyQuiz(qs, context);
   } catch {
     return [];
   }
+}
+
+/**
+ * مدقق الاختبار: يُحذف السؤال الذي لا يوجد اقتباس دليله في نص الوحدة (اختلاق أو خارج المادة).
+ * إن سقط أكثر من النصف فالخلل في المطابقة (نص ممسوح ضوئيًا مثلًا) لا في الأسئلة → تبقى كلها ويُسجَّل.
+ */
+function verifyQuiz(qs: QuizQ[], context: string): QuizQ[] {
+  const { kept, dropped } = verifiedQuestions(qs, context);
+  if (!dropped) return qs;
+  if (kept.length < qs.length / 2) {
+    recordPerf("qa.quiz.unmatched", 0, false, dropped);
+    return qs;
+  }
+  recordPerf("qa.quiz.dropped", 0, true, dropped);
+  return kept;
 }
 
 /** يخلط ترتيب خيارات السؤال ويعيد حساب موضع الإجابة الصحيحة (كسر نمط «دائمًا أ»). */

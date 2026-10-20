@@ -112,6 +112,39 @@ export async function consume(caller: Caller, kind: "voice" | "ai", amount: numb
   return caller.plan === "owner" || data === true;
 }
 
+// ===== وكيل العدّاد: خصم مسجَّل في دفتر، وردّ تلقائي لخصم العمل الفاشل =====
+export type Charge = { ok: boolean; id: number | null };
+
+/** يخصم ويسجّل القيد (للمطابقة والردّ). ok=false: انتهت الحصة */
+export async function charge(caller: Caller, kind: "voice" | "ai", amount: number, action: string): Promise<Charge> {
+  const ok = await consume(caller, kind, amount);
+  if (!ok || !caller) return { ok, id: null };
+  const { data } = await caller.admin
+    .from("usage_ledger")
+    .insert({ user_id: caller.id, period: periodOf(caller.plan), kind, amount: Math.max(1, Math.round(amount)), action })
+    .select("id")
+    .single();
+  return { ok, id: (data?.id as number | undefined) ?? null };
+}
+
+/** يردّ خصم قيد مرة واحدة فقط (العلامة refunded تُضبط ذرّيًا قبل الردّ) */
+export async function refund(caller: Caller, c: Charge, reason: string): Promise<void> {
+  if (!caller || !c.id) return;
+  try {
+    const { data } = await caller.admin
+      .from("usage_ledger")
+      .update({ refunded: true, reason: reason.slice(0, 120) })
+      .eq("id", c.id)
+      .eq("refunded", false)
+      .select("period,kind,amount")
+      .maybeSingle();
+    if (!data) return;
+    await caller.admin.rpc("refund_usage", { p_user: caller.id, p_period: data.period, p_kind: data.kind, p_amount: data.amount });
+  } catch (e) {
+    console.error("refund", (e as Error).message);
+  }
+}
+
 export type PageResult = "again" | "ok" | "credit" | "over";
 
 /** يستهلك صفحة كتاب (مرة واحدة لكل صفحة في الفترة). */

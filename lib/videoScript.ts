@@ -4,6 +4,8 @@
 // يُبنى من الملخّص الشامل (يغطي الوحدة كلها) عبر محرك الأجزاء المشترك (partsRunner):
 // أجزاء معًا ببثّ، حفظ كل جزء فورًا، إكمال بعد القفل، وقت متبقٍّ. السيناريو يُخزَّن مرة واحدة،
 // وصوت الراوي يُحفظ على الجهاز، فالعودة للفيديو فورية وبلا إنترنت.
+import { qaPart } from "./qualityAgent";
+import { checkVideoPart } from "./qualityCore";
 import { jobPart } from "./aiJobs";
 import { runParts, type PartsProgress } from "./partsRunner";
 import type { StudySummary } from "./studySummary";
@@ -62,7 +64,9 @@ export async function getOrMakeVideo(
     defaultSpeed: { chars: 7000, rate: 45 },
     load: (i) => getUnitContent<VideoScript>(pdfPath, ids.partId(n, i), "videopart").then((x) => (x?.scenes?.length ? x : undefined)),
     save: (i, p) => setUnitContent(pdfPath, ids.partId(n, i), "videopart", p),
-    run: (ctx, i, onPartial) => jobPart("videoscript", ctx, `vid:${pdfPath}:${ids.partId(n, i)}`, parsePartialVideo, parseVideo, onPartial),
+    // وكيل الجودة: جزء بلا مشاهد كافية أو يسكت راويه أو شاشاته بلا نقاط → يُعاد مرة واحدة مجانًا
+    run: (ctx, i, onPartial) =>
+      qaPart(`vid:${pdfPath}:${ids.partId(n, i)}`, "videoscript", ctx, (key, qaRetryOf) => jobPart("videoscript", ctx, key, parsePartialVideo, parseVideo, onPartial, { qaRetryOf }), checkVideoPart),
     merge: mergeVideo,
     onProgress,
     parallel: Math.min(6, n),

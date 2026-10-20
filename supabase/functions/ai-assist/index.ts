@@ -6,7 +6,7 @@
 import { logCost } from "../_shared/cost.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
-import { consume, getCaller } from "../_shared/plan.ts";
+import { charge, getCaller, refund, type Caller, type Charge } from "../_shared/plan.ts";
 import { requireUpdatedApp } from "../_shared/client.ts";
 
 const corsHeaders = {
@@ -80,7 +80,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-4-5-20251001",
 };
-const MAX_TOKENS: Record<string, number> = { videoscript: 12000, studysummary: 12000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 8000, unitquiz: 8000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoscript: 12000, studysummary: 12000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 8000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -174,6 +174,9 @@ Deno.serve(async (req: Request) => {
   const outdated = requireUpdatedApp(req, corsHeaders);
   if (outdated) return outdated;
 
+  // وكيل العدّاد: خصم هذا الطلب (إن خُصم) — يُردّ تلقائيًا إن فشل العمل نفسه
+  let charged: { caller: Caller; c: Charge } | null = null;
+  const refundCharge = (reason: string) => (charged ? refund(charged.caller, charged.c, reason) : Promise.resolve());
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
@@ -231,10 +234,27 @@ Deno.serve(async (req: Request) => {
         return json({ result: targetLang === "en" ? ASK_OFFTOPIC.en : ASK_OFFTOPIC.ar, offtopic: true });
       }
     }
-    if (COUNTED.has(action)) {
-      if (!(await consume(caller, "ai", 1))) {
-        return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
-      }
+    // وكيل الجودة رفض نتيجة مهمة سابقة (ملخّص/فيديو مقطوع أو قصير) → إعادة توليد واحدة مجانية لها:
+    // تُعلَّم المهمة الأصلية ذرّيًا (لنفس المستخدم ونفس الإجراء، منتهية، حديثة، لم تُستعمل) فلا تتكرر المجانية
+    let qaFree = false;
+    if (caller && typeof body.qaRetryOf === "string" && (action === "studysummary" || action === "videoscript")) {
+      const { data: prev } = await caller.admin
+        .from("ai_jobs")
+        .update({ qa_retried: true })
+        .eq("id", body.qaRetryOf)
+        .eq("user_id", caller.id)
+        .eq("action", action)
+        .eq("status", "done")
+        .eq("qa_retried", false)
+        .gte("created_at", new Date(Date.now() - 6 * 3600_000).toISOString())
+        .select("id")
+        .maybeSingle();
+      qaFree = !!prev;
+    }
+    if (COUNTED.has(action) && !qaFree) {
+      const ch = await charge(caller, "ai", 1, action);
+      if (!ch.ok) return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
+      charged = { caller, c: ch };
     }
 
     // الترجمة: اللغة الهدف يختارها المستخدم (افتراضي العربية للتوافق الخلفي).
@@ -329,7 +349,7 @@ Deno.serve(async (req: Request) => {
 
     // مهمة على السيرفر (الملخّص الشامل، الفيديو): نردّ فورًا برقم المهمة، والكتابة تكمل هنا في الخلفية
     // وتُحفظ أولًا بأول في ai_jobs — فلا يوقفها قفل شاشة الجوال ولا إغلاق التطبيق.
-    if (body.job === true && (action === "studysummary" || action === "videoscript")) {
+    if (body.job === true && (action === "studysummary" || action === "videoscript" || action === "syllabus")) {
       if (!caller) return json({ error: "AUTH" }, 401);
       const admin = caller.admin;
       const { data: row, error: insErr } = await admin.from("ai_jobs").insert({ user_id: caller.id, action }).select("id").single();
@@ -364,6 +384,7 @@ Deno.serve(async (req: Request) => {
           await admin.from("ai_jobs").update({ status: "done", partial: all, result: all, updated_at: new Date().toISOString() }).eq("id", jobId);
         } catch (e) {
           console.error("ai job", action, (e as Error).message);
+          await refundCharge(`job_failed:${action}`);
           await admin.from("ai_jobs").update({ status: "failed", partial: all, error: (e as Error).message.slice(0, 300), updated_at: new Date().toISOString() }).eq("id", jobId);
         } finally {
           await logCost(req, { fn: "ai-assist", action, model, input_tokens: usage.in, output_tokens: usage.out });
@@ -389,6 +410,7 @@ Deno.serve(async (req: Request) => {
               if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") ctrl.enqueue(enc.encode(ev.delta.text));
             }
           } catch (e) {
+            await refundCharge(`stream_failed:${action}`);
             ctrl.enqueue(enc.encode(`\n[[STREAM_ERROR:${(e as Error).message}]]`));
           } finally {
             ctrl.close();
@@ -408,8 +430,10 @@ Deno.serve(async (req: Request) => {
       .join("\n")
       .trim();
 
+    if (!result) await refundCharge(`empty:${action}`); // لا نتيجة = لا خصم
     return json({ result });
   } catch (error) {
+    await refundCharge("error");
     return json({ error: (error as Error).message }, 500);
   }
 });

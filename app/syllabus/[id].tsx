@@ -3,7 +3,7 @@
 // تشيك ليست لمتابعة التقدّم، ونسبة إنجاز، وطباعة/مشاركة المنهج.
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -218,6 +218,7 @@ export default function SyllabusScreen() {
 
   // تقدّم التوليد من مراحله الفعلية (الفهرس ← الفحص ← محتوى الوحدات ← الحفظ)، يتحرك ببطء داخل كل مرحلة
   const [stage, setStage] = useState<SyllabusStage | null>(null);
+  const realProgress = useRef(false);
   useEffect(() => {
     if (!busy || !stage) {
       if (!busy) setGenPct(0);
@@ -232,6 +233,8 @@ export default function SyllabusScreen() {
     const [from, to, msg] = range[stage];
     setGenMsg(msg);
     setGenPct((p) => Math.max(p, from));
+    // قراءة الصفحات وكتابة المحتوى لهما تقدّم حقيقي (عدد الصفحات/الأحرف) → لا مؤقّت يتسابق معه فيقفز الرقم
+    if (realProgress.current) return;
     const id = setInterval(() => setGenPct((p) => Math.min(to, p + Math.max(1, Math.round((to - p) * 0.06)))), 500);
     return () => clearInterval(id);
   }, [busy, stage, t]);
@@ -329,11 +332,20 @@ export default function SyllabusScreen() {
     setBusy(true);
     try {
       const before = (syl?.units ?? []).map((u) => u.title).join("|");
-      // قراءة صفحات الكتاب كلها أولًا (مرة واحدة لكل كتاب): التقدّم بعدد الصفحات الفعلي
-      const data = await generateSyllabus(pdfPath, setStage, (done, total) => {
-        setGenMsg(t("syllabus.gen.readPages", { done, total }));
-        setGenPct(Math.max(3, Math.round(3 + (27 * done) / Math.max(1, total))));
-      });
+      // تقدّم حقيقي: قراءة صفحات الكتاب (٣→٣٠) ثم ما كُتب من المنهج (٤٠→٩٥)، والرقم لا يرجع للخلف أبدًا
+      realProgress.current = false;
+      const data = await generateSyllabus(
+        pdfPath,
+        (st) => {
+          realProgress.current = st === "structure" || st === "content";
+          setStage(st);
+        },
+        (done, total) => {
+          setGenMsg(t("syllabus.gen.readPages", { done, total }));
+          setGenPct((p) => Math.max(p, Math.round(3 + (27 * done) / Math.max(1, total))));
+        },
+        (ratio) => setGenPct((p) => Math.max(p, Math.round(40 + 55 * ratio)))
+      );
       // تغيّرت الوحدات → محتوى الوحدات القديم (ملخصات، اختبارات، خرائط، فيديو) لم يعد يطابقها فيُحذف
       if (before && before !== data.units.map((u) => u.title).join("|")) await resetUnitContent(pdfPath);
       setSyl(data);

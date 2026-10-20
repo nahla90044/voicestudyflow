@@ -1,6 +1,8 @@
 // lib/unitSummary.ts
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
+import { qaPart } from "./qualityAgent";
+import { checkSummaryPart } from "./qualityCore";
 import { jobPart } from "./aiJobs";
 import { getSummaryMode } from "./summaryPrefs";
 import { runParts, type PartsProgress } from "./partsRunner";
@@ -158,7 +160,10 @@ export async function getOrMakeSummary(
     save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p),
     // مهمة سيرفر لكل جزء: تكمل وتُحفظ حتى لو قُفلت الشاشة أو أُغلق التطبيق
     // جزء فيه تمارين/مسائل/دراسة حالة → تفكير موسّع على السيرفر (يحلّ ويتحقق قبل الكتابة)
-    run: (ctx, i, onPartial) => jobPart("studysummary", ctx, `sum:${pdfPath}:${partId(i)}`, parsePartialPart, parseFullPart, onPartial, { deep: EXERCISE_RE.test(ctx), mode }),
+    // وكيل الجودة: الجزء الفارغ/المقطوع/القصير جدًا قياسًا بنصه يُعاد توليده مرة واحدة مجانًا
+    run: (ctx, i, onPartial) =>
+      qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
+        jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: EXERCISE_RE.test(ctx), mode, qaRetryOf }), checkSummaryPart),
     merge: mergeSummaries,
     onProgress,
     parallel: Math.min(6, n),
