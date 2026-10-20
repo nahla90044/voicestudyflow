@@ -324,18 +324,19 @@ export default function HomeScreen() {
                 <View style={[styles.hair, { backgroundColor: pal.track }]} />
 
                 <View style={[styles.statsRow, { flexDirection: dir.row }]}>
-                  <PressableScale onPress={() => router.push("/activity")} style={styles.statCell}>
+                  {/* إحصاءات للعرض فقط (التقدم له تبويبه)، إلا البطاقات المستحقة فهي دعوة للمراجعة */}
+                  <View style={styles.statCell}>
                     <Text style={[styles.statNum, { color: pal.ink }]}>
                       <CountUp value={todayMinutes} style={[styles.statNum, { color: pal.ink }]} />
                       <Text style={[styles.statUnit, { color: pal.dim }]}> / {goal}</Text>
                     </Text>
                     <Text style={[styles.statLbl, { color: pal.dim }]}>{t("scene.stat.minutes")}</Text>
-                  </PressableScale>
+                  </View>
                   <View style={[styles.vHair, { backgroundColor: pal.track }]} />
-                  <PressableScale onPress={() => router.push({ pathname: "/book/[id]", params: { id: cont.id } })} style={styles.statCell}>
+                  <View style={styles.statCell}>
                     <Text style={[styles.statNum, { color: pal.ink }]}>{ready ? `${ready.score}%` : "—"}</Text>
                     <Text style={[styles.statLbl, { color: pal.dim }]}>{t("ready.title")}</Text>
-                  </PressableScale>
+                  </View>
                   <View style={[styles.vHair, { backgroundColor: pal.track }]} />
                   <PressableScale onPress={() => router.push("/flashcards")} style={styles.statCell}>
                     <Text style={[styles.statNum, { color: due > 0 ? pal.accent : pal.ink }]}>{due}</Text>

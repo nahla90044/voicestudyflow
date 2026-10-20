@@ -3708,21 +3708,11 @@ export default function ReaderScreen() {
               {isArabicText ? (
                 <InTool icon="text-outline" label={tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")} on={tashkeelMode} onPress={toggleTashkeel} />
               ) : null}
-              <InTool
-                icon="easel-outline"
-                label={t("reader.aids.present")}
-                onPress={() => {
-                  presUsedRef.current = true;
-                  warmAllMusic();
-                  setPresentOpen(true);
-                }}
-              />
-              <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
-              <InTool icon="videocam-outline" label={t("video.open")} onPress={() => void openUnitVideo()} />
+              {/* العرض والخريطة والفيديو صارت داخل «المساعد الذكي» (أداة واحدة بدل أربع) */}
               <InTool
                 icon="library-outline"
                 label={t("reader.tools.bookPage")}
-                onPress={() => bookId && router.push({ pathname: "/book/[id]", params: { id: bookId } })}
+                onPress={() => bookId && router.dismissTo({ pathname: "/book/[id]", params: { id: bookId } })}
               />
             </>
           ) : (
@@ -3732,7 +3722,6 @@ export default function ReaderScreen() {
                 label={viewMode === "pdf" ? t("reader.tools.viewText") : t("reader.tools.viewPdf")}
                 onPress={toggleViewMode}
               />
-              <InTool icon={paper ? "moon-outline" : "sunny-outline"} label={paper ? t("reader.tools.night") : t("reader.tools.paper")} onPress={togglePaper} />
               <InTool icon="expand-outline" label={t("reader.tools.fullscreen")} onPress={() => setFullText(true)} />
               {isPad && viewMode === "pdf" ? (
                 <InTool icon="pencil-outline" label={t("reader.ink.title")} on={penOn} onPress={() => setPenOn((v) => !v)} />
@@ -4004,24 +3993,39 @@ export default function ReaderScreen() {
                 <Ionicons name="language" size={18} color={Palette.neonBlue} />
                 <Text style={styles.aiActionTxt}>{t("reader.ai.translate")}</Text>
               </Pressable>
+              <Pressable
+                style={styles.aiAction}
+                onPress={() => {
+                  setAiOpen(false);
+                  presUsedRef.current = true;
+                  warmAllMusic();
+                  setPresentOpen(true);
+                }}
+              >
+                <Ionicons name="easel" size={18} color={Palette.neonCyan} />
+                <Text style={styles.aiActionTxt}>{t("reader.aids.present")}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.aiAction}
+                onPress={() => {
+                  setAiOpen(false);
+                  void openMindmap();
+                }}
+              >
+                <Ionicons name="git-network" size={18} color={Palette.neonViolet} />
+                <Text style={styles.aiActionTxt}>{t("syllabus.mindmap.title")}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.aiAction}
+                onPress={() => {
+                  setAiOpen(false);
+                  void openUnitVideo();
+                }}
+              >
+                <Ionicons name="videocam" size={18} color={Palette.neonPink} />
+                <Text style={styles.aiActionTxt}>{t("video.open")}</Text>
+              </Pressable>
             </View>
-
-            {/* خانة السؤال الحر عن الصفحة: لحساب المالك فقط (تُقلّل سوء الاستخدام) */}
-            {owner ? (
-              <View style={styles.aiAskRow}>
-                <TextInput
-                  value={aiQuestion}
-                  onChangeText={setAiQuestion}
-                  placeholder={t("reader.ai.askPlaceholder")}
-                  placeholderTextColor={Palette.placeholder}
-                  style={[styles.aiInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
-                  editable={!aiBusy}
-                />
-                <Pressable style={styles.aiSend} onPress={() => runAi("ask")} disabled={aiBusy || !aiQuestion.trim()}>
-                  <Ionicons name="send" size={18} color={SKY.onAccent} />
-                </Pressable>
-              </View>
-            ) : null}
 
             <ScrollView style={styles.aiResultBox} contentContainerStyle={{ padding: 14 }}>
               {aiBusy ? (

@@ -90,7 +90,7 @@ export function StudyTabBar({ state, navigation }: BottomTabBarProps) {
         {/* ضغطة: بحث وأوامر · ضغطة مطوّلة: المساعد الصوتي مباشرة */}
         <PressableScale onPress={() => router.push("/command")} onLongPress={() => router.push("/voice")} style={styles.orbWrap}>
           <View {...coach.bind("orb")} style={[styles.orb, { backgroundColor: pal.accent, shadowColor: pal.accent }]}>
-            <Ionicons name="sparkles" size={24} color={pal.onAccent} accessibilityLabel={t("nav.orb")} />
+            <Ionicons name="flash" size={24} color={pal.onAccent} accessibilityLabel={t("nav.orb")} />
           </View>
         </PressableScale>
         {RIGHT.map(item)}

@@ -18,10 +18,9 @@ import { BrandMark } from "./logo";
 type Route = "/more" | "/explore" | "/pomodoro" | "/help" | "/profile" | "/calendar";
 type Item = { icon: keyof typeof Ionicons.glyphMap; labelKey: string; route: Route; color: string };
 
+// القائمة الجانبية = الحساب والإعدادات فقط (الخطة والتركيز في زر الإجراءات السريعة وسط الشريط)
 const ITEMS: Item[] = [
   { icon: "person-circle", labelKey: "drawer.profile", route: "/profile", color: Palette.neonBlue },
-  { icon: "calendar", labelKey: "tabs.plan", route: "/calendar", color: Palette.neonCyan },
-  { icon: "timer", labelKey: "drawer.focusTimer", route: "/pomodoro", color: Palette.success },
   { icon: "settings", labelKey: "drawer.settings", route: "/more", color: Palette.neonViolet },
   { icon: "file-tray-full", labelKey: "drawer.archive", route: "/explore", color: Palette.neonPink },
   { icon: "help-circle", labelKey: "drawer.help", route: "/help", color: Palette.neonCyan },

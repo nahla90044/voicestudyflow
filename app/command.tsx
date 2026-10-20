@@ -72,17 +72,13 @@ export default function CommandScreen() {
     setTimeout(fn, 10);
   };
 
+  // الإجراءات السريعة فقط (المراجعة والتقدم في الشريط السفلي؛ الإعدادات والأرشيف والمساعدة في القائمة الجانبية)
   const actions: Action[] = useMemo(
     () => [
       { key: "add", labelKey: "cmd.addBook", icon: "add-circle", go: go(() => router.push("/add-book")) },
       { key: "plan", labelKey: "cmd.plan", icon: "calendar", go: go(() => router.push("/calendar")) },
       { key: "focus", labelKey: "cmd.focus", icon: "timer", go: go(() => router.push("/pomodoro")) },
       { key: "words", labelKey: "words.title", icon: "bookmarks", go: go(() => router.push("/words")) },
-      { key: "review", labelKey: "cmd.review", icon: "albums", go: go(() => router.push("/flashcards")) },
-      { key: "progress", labelKey: "cmd.progress", icon: "stats-chart", go: go(() => router.push("/activity")) },
-      { key: "archive", labelKey: "cmd.archive", icon: "archive", go: go(() => router.push("/explore")) },
-      { key: "settings", labelKey: "cmd.settings", icon: "settings", go: go(() => router.push("/more")) },
-      { key: "help", labelKey: "cmd.help", icon: "help-circle", go: go(() => router.push("/help")) },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
