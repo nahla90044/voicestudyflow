@@ -20,6 +20,7 @@ import {
 } from "./syllabus";
 import { remapUnitContent, type UnitContentKind } from "./unitContent";
 import { unitText } from "./unitScope";
+import { remapProgress } from "./studyTrack";
 
 export type SyllabusState = { data: Syllabus; done: boolean[] };
 
@@ -83,6 +84,7 @@ async function remapUnits(
   }
   await remapSavedUnits(pdfPath, map);
   await remapAnsweredUnits(pdfPath, map);
+  await remapProgress(pdfPath, map).catch(() => {});
 }
 
 // الحفظ يُتحقق من وصوله: صلاحيات الجدول تمنع تعديل منهج كتاب لا يملكه المستخدم (مثل كتب العيّنة المشتركة)
@@ -138,6 +140,13 @@ export async function removeUnits(
     done: keep.map((i) => cur.done[i]),
   };
   await saveSyllabus(pdfPath, next);
+  // الجدول: تبقى تواريخ الوحدات الباقية كما هي
+  try {
+    const { data } = await supabase.from("book_syllabus").select("schedule").eq("pdf_path", pdfPath).maybeSingle();
+    const sc = data?.schedule as { start: string; end: string; units: unknown[] } | null;
+    if (sc?.units?.length === cur.data.units.length)
+      await supabase.from("book_syllabus").update({ schedule: { ...sc, units: keep.map((i) => sc.units[i]) } }).eq("pdf_path", pdfPath);
+  } catch {}
   const newIndex = new Map(keep.map((old, i) => [old, i]));
   await remapUnits(pdfPath, (u) => newIndex.get(u) ?? null);
   await keepUnitRanges(pdfPath, keep);

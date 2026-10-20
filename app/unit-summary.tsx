@@ -21,6 +21,7 @@ import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
 import { playSummary, saveSummaryAudio, stopSummary, summaryChunks } from "../lib/summaryAudio";
+import { markSeen } from "../lib/studyTrack";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 
 export default function UnitSummaryScreen() {
@@ -278,6 +279,10 @@ export default function UnitSummaryScreen() {
       void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
       // مقطعًا مقطعًا بالترتيب: الملخّص الطويل يُسمع كاملًا (كان يُرسل دفعة واحدة فيُقص بعد ٥٠٠٠ حرف)
       playSummary(liveChunks, 0, {
+        // «سُمع»: كل مقطع يُسجَّل لوحدته فيظهر في تقدّم الوحدة
+        onIndex: (i) => {
+          if (src.kind === "unit") markSeen(pdfPath, unitIdx, "s", i, liveChunks().chunks.length);
+        },
         onWaiting: setListenWait,
         onDone: () => {
           setPlaying(false);

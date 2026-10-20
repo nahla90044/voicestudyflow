@@ -18,6 +18,7 @@ import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../compone
 import { VideoStage } from "../components/brand/video-stage";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
+import { markSeen, seenScenes } from "../lib/studyTrack";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
@@ -117,6 +118,12 @@ export default function UnitVideoScreen() {
 
   // —— التشغيل ——
   const [idx, setIdx] = useState(0);
+  // المشاهد المشاهَدة سابقًا (من أي جهاز)
+  const [seen, setSeen] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (src.kind === "unit") void seenScenes(pdfPath, unitIdx).then(setSeen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfPath, unitIdx]);
   const [playing, setPlaying] = useState(false);
   const [stage, setStage] = useState<"ask" | "think" | "reveal">("ask");
   const [thinkLeft, setThinkLeft] = useState(THINK_SECONDS);
@@ -201,6 +208,11 @@ export default function UnitVideoScreen() {
       setWaitingMore(false);
       setIdx(k);
       setStage("ask");
+      // «شوهد»: كل مشهد يُسجَّل لوحدته (يتزامن بين الأجهزة) فيظهر في تقدّم الوحدة
+      if (src.kind === "unit") {
+        markSeen(pdfPath, unitIdx, "v", k, done ? scenes.length : Math.max(scenes.length, k + 2));
+        setSeen((s) => (s.has(k) ? s : new Set(s).add(k)));
+      }
       // المشهدان التاليان يُجهَّزان صوتيًا أثناء الحالي (بلا فجوات)
       for (const j of [k + 1, k + 2]) if (scenes[j]) for (const line of sceneSpeech(scenes[j])) void prefetchText(line, { voiceId: DEFAULT_VOICE_ID });
       const s = scenes[k];
@@ -527,6 +539,30 @@ export default function UnitVideoScreen() {
             <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>
               {complete ? t("video.scenes", { n: scenes.length }) : job?.etaSec ? `${t("video.writing")} · ${t("summary.eta", { time: fmtEta(job.etaSec) })}` : t("video.writing")}
             </Text>
+            {/* المشاهد: المشاهَد ✓ بلون واضح، والحالي بإطار — الضغط يشغّل من المشهد */}
+            {src.kind === "unit" && scenes.length ? (
+              <>
+                <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>
+                  {t("video.seenCount", { n: [...seen].filter((k) => k < scenes.length).length, total: scenes.length })}
+                </Text>
+                <View style={[styles.seenRow, { flexDirection: dir.row }]}>
+                  {scenes.map((_, k) => {
+                    const on = seen.has(k);
+                    return (
+                      <Pressable
+                        key={k}
+                        onPress={() => playFrom(k)}
+                        hitSlop={4}
+                        accessibilityLabel={t("video.sceneN", { n: k + 1 })}
+                        style={[styles.seenDot, { backgroundColor: on ? pal.accent : pal.track, borderColor: k === idx ? pal.ink : "transparent" }]}
+                      >
+                        {on ? <Ionicons name="checkmark" size={11} color={pal.onAccent} /> : <Text style={[styles.seenNum, { color: pal.dim }]}>{k + 1}</Text>}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
             {complete ? (
               <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>
                 {audioSave === "saved"
@@ -606,6 +642,9 @@ export default function UnitVideoScreen() {
 }
 
 const styles = StyleSheet.create({
+  seenRow: { flexWrap: "wrap", gap: 6 },
+  seenDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  seenNum: { fontSize: 10.5, fontWeight: "800" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 14 },
   stepRow: { alignItems: "center", gap: 10 },
   durRow: { alignItems: "center", gap: 8, borderRadius: Radius.pill, paddingHorizontal: 14, paddingVertical: 9, flexWrap: "wrap" },

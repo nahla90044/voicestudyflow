@@ -2,7 +2,7 @@
 // المنهج الدراسي (Syllabus) لكتاب: وحدات بعناوين ومواضيع ومخرجات،
 // تشيك ليست لمتابعة التقدّم، ونسبة إنجاز، وطباعة/مشاركة المنهج.
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,6 +11,13 @@ import { BuzanMindMap, MM_COLORS, mindmapPrintHtml } from "../../components/bran
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
 import { printBranded } from "../../lib/pdfBrand";
+import { DateRangeSheet } from "../../components/brand/date-range-sheet";
+import { getCachedUnitRanges, getUnitRanges } from "../../lib/glossary";
+import type { UnitRange } from "../../lib/glossaryCore";
+import { getExamDate } from "../../lib/readiness";
+import { addDays, distribute, isoOf, phaseOf, planStatus, type BookSchedule, type UnitWindow } from "../../lib/scheduleCore";
+import { getSchedule, saveSchedule, unitsProgress, type UnitProgress } from "../../lib/studyTrack";
+import { supabase } from "../../lib/supabase";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
@@ -22,12 +29,10 @@ import {
   generateMindmap,
   generateSyllabus,
   getSyllabus,
-  getUnitSchedule,
   setUnitDone,
   type MindMap,
   type Syllabus,
   type SyllabusStage,
-  type UnitSchedule,
 } from "../../lib/syllabus";
 
 
@@ -40,8 +45,8 @@ function fmtISO(iso: string): string {
   if (p.length < 3) return iso;
   return `${Number(p[2])} ${AR_MONTHS[Number(p[1]) - 1] ?? ""}`.trim();
 }
-function fmtRange(s: UnitSchedule): string {
-  return s.startISO === s.endISO ? fmtISO(s.startISO) : `${fmtISO(s.startISO)} – ${fmtISO(s.endISO)}`;
+function fmtWin(w: UnitWindow): string {
+  return w.start === w.end ? fmtISO(w.start) : `${fmtISO(w.start)} – ${fmtISO(w.end)}`;
 }
 
 export default function SyllabusScreen() {
@@ -79,7 +84,13 @@ export default function SyllabusScreen() {
   const [genMsg, setGenMsg] = useState(""); // رسالة المرحلة الحالية
   const [syl, setSyl] = useState<Syllabus | null>(null);
   const [done, setDone] = useState<boolean[]>([]);
-  const [sched, setSched] = useState<UnitSchedule[]>([]);
+  // صفحات الوحدات، وتقدّم كل وحدة، وجدول المذاكرة (تواريخ كل وحدة)
+  const [ranges, setRanges] = useState<UnitRange[]>([]);
+  const [prog, setProg] = useState<UnitProgress[]>([]);
+  const [plan, setPlan] = useState<BookSchedule | null>(null);
+  const [rangeSheet, setRangeSheet] = useState<{ mode: "plan" } | { mode: "unit"; i: number } | null>(null);
+  const [examISO, setExamISO] = useState<string | null>(null);
+  const today = isoOf(new Date());
   const [err, setErr] = useState("");
   // تعديل الوحدات: وضع التحديد، والوحدات المختارة، والوحدات الجاري إعادة إنشائها
   const [selecting, setSelecting] = useState(false);
@@ -99,13 +110,70 @@ export default function SyllabusScreen() {
   const { width: winW, height: winH } = useWindowDimensions();
   const mmTheme = { dark: !!pal.dark, bg: pal.card, ink: pal.ink, dim: pal.dim };
 
-  async function loadSchedule(unitCount: number) {
-    try {
-      setSched(await getUnitSchedule(bookId, unitCount));
-    } catch {
-      setSched([]);
+  // صفحات كل وحدة → تقدّمها وجدولها (الأيام تُوزَّع بحسب صفحات الوحدة)
+  async function loadTrack(units: { title: string }[]) {
+    if (!units.length) {
+      setRanges([]);
+      setProg([]);
+      setPlan(null);
+      return;
     }
+    try {
+      const titles = units.map((u) => u.title);
+      const cached = await getCachedUnitRanges(pdfPath);
+      let rs = cached?.length === titles.length ? cached : null;
+      if (!rs) {
+        const { data } = await supabase.from("books").select("page_count").eq("id", bookId).maybeSingle();
+        rs = await getUnitRanges(pdfPath, titles, Number(data?.page_count) || 0).catch(() => []);
+      }
+      setRanges(rs);
+      const weights = titles.map((_, i) => (rs![i] ? rs![i].to - rs![i].from + 1 : 1));
+      const [pg, pl, ex] = await Promise.all([unitsProgress(pdfPath, bookId, rs, titles.length), getSchedule(pdfPath, bookId, weights).catch(() => null), getExamDate(bookId)]);
+      setProg(pg);
+      setPlan(pl);
+      setExamISO(ex);
+    } catch {}
   }
+  const weightsOf = () => (syl?.units ?? []).map((_, i) => (ranges[i] ? ranges[i].to - ranges[i].from + 1 : 1));
+
+  // الرجوع من الملخص/الفيديو/الاختبار/البطاقات: تحديث التقدّم
+  useFocusEffect(
+    React.useCallback(() => {
+      if (syl?.units.length) void loadTrack(syl.units);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [syl])
+  );
+
+  async function savePlan(start: string, end: string) {
+    setRangeSheet(null);
+    const next: BookSchedule = { start, end, units: distribute(start, end, weightsOf()) };
+    setPlan(next);
+    await saveSchedule(pdfPath, next).catch(() => Alert.alert(t("plan.title"), t("syllabus.err.edit")));
+  }
+  async function saveUnitDates(i: number, start: string, end: string) {
+    setRangeSheet(null);
+    if (!plan) return;
+    const units = plan.units.map((w, k) => (k === i ? { start, end } : w));
+    const next: BookSchedule = { start: units.reduce((m, w) => (w.start < m ? w.start : m), plan.start), end: units.reduce((m, w) => (w.end > m ? w.end : m), plan.end), units };
+    setPlan(next);
+    await saveSchedule(pdfPath, next).catch(() => Alert.alert(t("plan.title"), t("syllabus.err.edit")));
+  }
+  function confirmDeletePlan() {
+    setRangeSheet(null);
+    Alert.alert(t("plan.deleteTitle"), t("plan.deleteBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: () => {
+          setPlan(null);
+          void saveSchedule(pdfPath, null).catch(() => {});
+        },
+      },
+    ]);
+  }
+  // إنجاز كل وحدة (المؤشَّرة منجزة = ١٠٠٪)
+  const actual = (syl?.units ?? []).map((_, i) => (done[i] ? 1 : prog[i]?.pct ?? 0));
 
   // أوقف أي قراءة صوتية عند مغادرة الشاشة (يمنع بقاء الصوت/التعليق بعد الخروج)
   useEffect(() => {
@@ -121,7 +189,7 @@ export default function SyllabusScreen() {
         if (r) {
           setSyl(r.data);
           setDone(r.done.length === r.data.units.length ? r.done : new Array(r.data.units.length).fill(false));
-          await loadSchedule(r.data.units.length);
+          await loadTrack(r.data.units);
         }
       } finally {
         setLoading(false);
@@ -172,7 +240,7 @@ export default function SyllabusScreen() {
   async function applyState(s: SyllabusState | null) {
     setSyl(s?.data ?? null);
     setDone(s?.done ?? []);
-    await loadSchedule(s?.data.units.length ?? 0);
+    await loadTrack(s?.data.units ?? []);
   }
 
   function confirmRegenUnits() {
@@ -247,7 +315,7 @@ export default function SyllabusScreen() {
       if (before && before !== data.units.map((u) => u.title).join("|")) await resetUnitContent(pdfPath);
       setSyl(data);
       setDone(new Array(data.units.length).fill(false));
-      await loadSchedule(data.units.length);
+      await loadTrack(data.units);
     } catch (e: any) {
       // رسالة الخطأ الخام (مثل USER_QUOTA) لا تُعرض للمستخدم
       setErr(e?.message === "USER_QUOTA" ? t("pay.reason.ai") : t("syllabus.err.generate"));
@@ -321,7 +389,7 @@ export default function SyllabusScreen() {
         <div class="unit">
           <h3>${i + 1}. ${esc(u.title)}</h3>
           ${u.objectives?.length ? `<p class="about"><b>${esc(t("syllabus.objectives"))}:</b></p><ul>${u.objectives.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>` : u.about ? `<p class="about">${esc(u.about)}</p>` : ""}
-          ${sched[i] ? `<p class="when">${esc(t("syllabus.studyOn"))}: ${esc(fmtRange(sched[i]))}</p>` : ""}
+          ${plan?.units[i] ? `<p class="when">${esc(t("syllabus.studyOn"))}: ${esc(fmtWin(plan.units[i]))}${ranges[i] ? ` · ${esc(t("glossary.pages", { from: ranges[i].from, to: ranges[i].to }))}` : ""}</p>` : ranges[i] ? `<p class="when">${esc(t("glossary.pages", { from: ranges[i].from, to: ranges[i].to }))}</p>` : ""}
           ${u.topics.length ? `<ul>${u.topics.map((topic) => `<li>${esc(topic)}</li>`).join("")}</ul>` : ""}
           ${u.outcome ? `<p class="out">${esc(u.outcome)}</p>` : ""}
         </div>`
@@ -463,12 +531,63 @@ export default function SyllabusScreen() {
             <View style={[styles.progTrack, { backgroundColor: pal.track }]}>
               <View style={[styles.progFill, { width: `${pct}%`, backgroundColor: pal.accent }]} />
             </View>
-            {sched.length === 0 && (
-              <Text style={[styles.noPlanHint, { marginTop: 12, color: pal.dim }]}>
-                {t("syllabus.noPlanHint")}
-              </Text>
-            )}
           </SceneCard>
+
+          {/* جدول المذاكرة: المخطط حتى اليوم مقابل إنجازك (أثر الاجتهاد واضح) */}
+          {(() => {
+            if (!plan)
+              return canEdit ? (
+                <Pressable onPress={() => setRangeSheet({ mode: "plan" })} style={({ pressed }) => [styles.cta, { backgroundColor: pal.soft, borderWidth: 1, borderColor: pal.accent, flexDirection: dir.row, opacity: pressed ? 0.9 : 1 }]}>
+                  <Ionicons name="calendar" size={18} color={pal.accent} />
+                  <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("plan.setup")}</Text>
+                </Pressable>
+              ) : null;
+            const st = planStatus(plan, actual, today);
+            const exp = Math.round(st.expected * 100);
+            const act = Math.round(st.actual * 100);
+            const ahead = st.diffUnits >= 0.5;
+            const behind = st.diffUnits <= -0.5;
+            const tint = ahead ? tone.good : behind ? tone.bad : pal.accent;
+            return (
+              <SceneCard style={{ gap: 10 }}>
+                <View style={[styles.planHead, { flexDirection: dir.row }]}>
+                  <Ionicons name="calendar" size={18} color={pal.accent} />
+                  <Text style={[styles.planTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("plan.title")}</Text>
+                  {canEdit ? (
+                    <Pressable onPress={() => setRangeSheet({ mode: "plan" })} hitSlop={8} style={[styles.pencil, { borderColor: pal.cardBorder }]}>
+                      <Ionicons name="create-outline" size={16} color={pal.ink} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <Text style={[styles.planDim, { color: pal.dim, textAlign: dir.textAlign }]}>
+                  {fmtWin({ start: plan.start, end: plan.end })}
+                  {st.daysLeft >= 0 ? `  ·  ${t("plan.daysLeft", { n: st.daysLeft })}` : `  ·  ${t("plan.ended")}`}
+                  {examISO ? `  ·  ${t("plan.exam", { date: fmtISO(examISO) })}` : ""}
+                </Text>
+                {([
+                  [t("plan.expected"), exp, pal.dim],
+                  [t("plan.actual"), act, tint],
+                ] as const).map(([label, v, c]) => (
+                  <View key={label} style={[styles.barRow, { flexDirection: dir.row }]}>
+                    <Text style={[styles.barLbl, { color: pal.dim, textAlign: dir.textAlign }]}>{label}</Text>
+                    <View style={[styles.barTrack, { backgroundColor: pal.track }]}>
+                      <View style={[styles.barFill, { width: `${Math.max(2, v)}%`, backgroundColor: c }, dir.isRTL ? { alignSelf: "flex-end" } : null]} />
+                    </View>
+                    <Text style={[styles.barVal, { color: pal.ink }]}>{v}%</Text>
+                  </View>
+                ))}
+                <Text style={[styles.planStatus, { color: tint, textAlign: dir.textAlign }]}>
+                  {ahead ? t("plan.ahead", { n: Math.abs(st.diffUnits) }) : behind ? t("plan.behind", { n: Math.abs(st.diffUnits) }) : t("plan.onTrack")}
+                </Text>
+                {st.projectedEnd && st.actual < 1 ? (
+                  <Text style={[styles.planDim, { color: pal.dim, textAlign: dir.textAlign }]}>
+                    {t("plan.projected", { date: fmtISO(st.projectedEnd) })}
+                    {st.projectedEnd > plan.end ? ` · ${t("plan.afterEnd")}` : ""}
+                  </Text>
+                ) : null}
+              </SceneCard>
+            );
+          })()}
 
           {/* إدارة المنهج في الأعلى: إعادة الإنشاء (نفس طريق أول إنشاء) · تعديل الوحدات · الحذف */}
           {!selecting && canEdit && (
@@ -585,17 +704,59 @@ export default function SyllabusScreen() {
                     <Text style={[styles.about, { color: pal.ink, textAlign: dir.textAlign }]}>{u.about}</Text>
                   ) : null}
                   {isWorking && <Text style={[styles.workingTxt, { color: pal.accent, textAlign: dir.textAlign }]}>{t("syllabus.regenerating")}</Text>}
-                  {sched[i] && (
-                    <View style={[styles.schedRow, { flexDirection: dir.row }]}>
-                      <Ionicons name="calendar-outline" size={13} color={pal.accent} />
-                      <Text style={[styles.schedTxt, { color: pal.accent }]}>
-                        {t("syllabus.studyOn")}: {fmtRange(sched[i])}{"  ·  "}
-                        {sched[i].dayTo !== sched[i].dayFrom
-                          ? t("syllabus.dayRange", { from: sched[i].dayFrom, to: sched[i].dayTo })
-                          : t("syllabus.day", { day: sched[i].dayFrom })}
-                      </Text>
+                  {/* الصفحات والتاريخ والحالة */}
+                  {(() => {
+                    const w = plan?.units[i];
+                    const ph = phaseOf(w, done[i] ? 1 : prog[i]?.pct ?? 0, today);
+                    const phColor = ph === "done" ? tone.good : ph === "late" ? tone.bad : ph === "now" ? pal.accent : pal.dim;
+                    return (
+                      <View style={[styles.schedRow, { flexDirection: dir.row }]}>
+                        <Ionicons name="calendar-outline" size={13} color={pal.accent} />
+                        <Text style={[styles.schedTxt, { color: pal.ink }]}>
+                          {[ranges[i] ? t("glossary.pages", { from: ranges[i].from, to: ranges[i].to }) : null, w ? fmtWin(w) : null].filter(Boolean).join("  ·  ")}
+                        </Text>
+                        {w ? (
+                          <View style={[styles.phase, { borderColor: phColor }]}>
+                            <Text style={[styles.phaseTxt, { color: phColor }]}>{t(`plan.phase.${ph}`)}</Text>
+                          </View>
+                        ) : null}
+                        {w && canEdit && !selecting ? (
+                          <Pressable onPress={() => setRangeSheet({ mode: "unit", i })} hitSlop={8} style={[styles.pencil, { borderColor: pal.cardBorder }]}>
+                            <Ionicons name="create-outline" size={14} color={pal.ink} />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
+                  {/* تقدّم الوحدة: أربعة مؤشرات (الاختبار، الملخص، الفيديو، البطاقات) */}
+                  {prog[i] && !selecting ? (
+                    <View style={[styles.uprog, { backgroundColor: pal.soft }]}>
+                      <View style={[styles.uprogHead, { flexDirection: dir.row }]}>
+                        <Text style={[styles.uprogTitle, { color: pal.ink }]}>{t("uprog.title")}</Text>
+                        <Text style={[styles.uprogPct, { color: pal.accent }]}>{Math.round((done[i] ? 1 : prog[i].pct) * 100)}%</Text>
+                      </View>
+                      {(
+                        [
+                          ["school-outline", t("uprog.quiz"), prog[i].quiz.correct, prog[i].quiz.answered, t("uprog.quizVal", { a: prog[i].quiz.correct, b: prog[i].quiz.answered })],
+                          ["headset-outline", t("uprog.summary"), prog[i].summary.heard, prog[i].summary.total, t("uprog.sumVal", { a: prog[i].summary.heard, b: prog[i].summary.total })],
+                          ["videocam-outline", t("uprog.video"), prog[i].video.seen, prog[i].video.total, t("uprog.vidVal", { a: prog[i].video.seen, b: prog[i].video.total })],
+                          ["albums-outline", t("uprog.cards"), prog[i].cards.reviewed, prog[i].cards.total, t("uprog.cardVal", { a: prog[i].cards.reviewed, b: prog[i].cards.total })],
+                        ] as const
+                      ).map(([icon, label, a2, b2, val]) => {
+                        const f = b2 > 0 ? Math.min(1, a2 / b2) : 0;
+                        return (
+                          <View key={label} style={[styles.barRow, { flexDirection: dir.row }]}>
+                            <Ionicons name={icon} size={14} color={pal.accent} />
+                            <Text style={[styles.uLbl, { color: pal.dim, textAlign: dir.textAlign }]}>{label}</Text>
+                            <View style={[styles.barTrack, { backgroundColor: pal.track }]}>
+                              <View style={[styles.barFill, { width: `${Math.max(f > 0 ? 3 : 0, Math.round(f * 100))}%`, backgroundColor: f >= 0.9 ? tone.good : pal.accent }, dir.isRTL ? { alignSelf: "flex-end" } : null]} />
+                            </View>
+                            <Text style={[styles.uVal, { color: b2 > 0 ? pal.ink : pal.dim }]}>{b2 > 0 ? val : t("uprog.notYet")}</Text>
+                          </View>
+                        );
+                      })}
                     </View>
-                  )}
+                  ) : null}
                   {u.topics.map((topic, k) => (
                     <View key={k} style={[styles.topicRow, { flexDirection: dir.row }]}>
                       <Text style={[styles.topicDot, { color: pal.accent }]}>•</Text>
@@ -705,6 +866,19 @@ export default function SyllabusScreen() {
       )}
 
       {coach.overlay}
+
+      {/* إعداد/تعديل جدول المذاكرة، أو تواريخ وحدة */}
+      <DateRangeSheet
+        visible={!!rangeSheet}
+        title={rangeSheet?.mode === "unit" ? t("plan.unitDates", { n: rangeSheet.i + 1 }) : plan ? t("plan.edit") : t("plan.setup")}
+        hint={rangeSheet?.mode === "unit" ? syl?.units[rangeSheet.i]?.title : plan ? t("plan.editHint") : t("plan.setupHint")}
+        start={rangeSheet?.mode === "unit" && plan?.units[rangeSheet.i] ? plan.units[rangeSheet.i].start : plan?.start ?? today}
+        end={rangeSheet?.mode === "unit" && plan?.units[rangeSheet.i] ? plan.units[rangeSheet.i].end : plan?.end ?? (examISO && examISO > today ? addDays(examISO, -1) : addDays(today, 27))}
+        onClose={() => setRangeSheet(null)}
+        onSave={(a, b) => (rangeSheet?.mode === "unit" ? void saveUnitDates(rangeSheet.i, a, b) : void savePlan(a, b))}
+        onDelete={rangeSheet?.mode === "plan" && plan ? confirmDeletePlan : undefined}
+        deleteLabel={t("plan.delete")}
+      />
 
       {/* مودال الخريطة الذهنية */}
       <Modal
@@ -832,6 +1006,24 @@ const styles = StyleSheet.create({
   },
   readNowTxt: { fontSize: 16, fontWeight: "900" },
   manageRow: { gap: 8 },
+  planHead: { alignItems: "center", gap: 8 },
+  planTitle: { flex: 1, fontSize: 16, fontWeight: "900" },
+  planDim: { fontSize: 12.5, lineHeight: 19 },
+  planStatus: { fontSize: 14.5, fontWeight: "900" },
+  pencil: { width: 32, height: 32, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
+  barRow: { alignItems: "center", gap: 8 },
+  barLbl: { width: 128, fontSize: 12.5, fontWeight: "800" },
+  barTrack: { flex: 1, height: 8, borderRadius: 4, overflow: "hidden" },
+  barFill: { height: 8, borderRadius: 4 },
+  barVal: { width: 44, fontSize: 12.5, fontWeight: "900", textAlign: "center", fontVariant: ["tabular-nums"] },
+  phase: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  phaseTxt: { fontSize: 11.5, fontWeight: "900" },
+  uprog: { marginTop: 10, borderRadius: 16, padding: 12, gap: 7 },
+  uprogHead: { alignItems: "center", justifyContent: "space-between" },
+  uprogTitle: { fontSize: 13, fontWeight: "900" },
+  uprogPct: { fontSize: 15, fontWeight: "900" },
+  uLbl: { width: 70, fontSize: 12, fontWeight: "800" },
+  uVal: { width: 92, fontSize: 11.5, fontWeight: "800", textAlign: "center", fontVariant: ["tabular-nums"] },
   objWrap: { marginTop: 8, paddingStart: 36, gap: 2 },
   objHead: { fontSize: 13, fontWeight: "900" },
   about: { fontSize: 14, lineHeight: 23, marginTop: 8, paddingStart: 36, opacity: 0.9 },
