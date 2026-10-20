@@ -3,6 +3,7 @@
 // جداول مقارنة، أمثلة، شرح للنقاط الصعبة، وتنبيهات مهمة — ثم «أهم النقاط» للمراجعة.
 // يُعرض في التطبيق (components/brand/summary-view) ويُسمع (summaryToSpeech) ويُطبع PDF (summaryHtml).
 // الـPDF بألوان مُصمتة فقط: طباعة آيفون تحوّل الشفافية/التدرّج إلى سواد.
+import { parseJsonLenient } from "./jsonRepair.ts";
 
 export type SummaryBlock =
   | { type: "text"; text: string }
@@ -164,7 +165,7 @@ export function parsePartialSummary(raw: string): StudySummary | null {
         depth--;
         if (depth === 0 && begin >= 0) {
           try {
-            const sec = section(JSON.parse(raw.slice(begin, i + 1)));
+            const sec = section(parseJsonLenient(raw.slice(begin, i + 1)));
             if (sec) out.sections.push(sec);
           } catch {
             // قسم غير صالح → نتخطاه
@@ -182,7 +183,7 @@ export function parseStudySummary(raw: string): StudySummary | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (m) {
     try {
-      const o = JSON.parse(m[0]);
+      const o = parseJsonLenient(m[0]) as any;
       const sections = (Array.isArray(o?.sections) ? o.sections : []).map(section).filter(Boolean) as SummarySection[];
       if (sections.length) return { title: str(o?.title), intro: str(o?.intro), sections, keypoints: strs(o?.keypoints) };
     } catch {

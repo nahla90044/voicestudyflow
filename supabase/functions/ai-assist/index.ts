@@ -238,7 +238,7 @@ Deno.serve(async (req: Request) => {
     // وكيل الجودة رفض نتيجة مهمة سابقة (ملخّص/فيديو مقطوع أو قصير) → إعادة توليد واحدة مجانية لها:
     // تُعلَّم المهمة الأصلية ذرّيًا (لنفس المستخدم ونفس الإجراء، منتهية، حديثة، لم تُستعمل) فلا تتكرر المجانية
     let qaFree = false;
-    if (caller && typeof body.qaRetryOf === "string" && (action === "studysummary" || action === "videoscript")) {
+    if (caller && typeof body.qaRetryOf === "string" && (action === "studysummary" || action === "videoscript" || action === "syllabus")) {
       const { data: prev } = await caller.admin
         .from("ai_jobs")
         .update({ qa_retried: true })

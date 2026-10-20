@@ -106,7 +106,11 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
   (async () => {
     const t0 = Date.now();
     try {
-      const summary = (await getCachedSummary(pdfPath, src)) ?? (await summaryFor(pdfPath, src, meta, (p) => emit((last = { ...last, ...p, stage: "summary" }))));
+      const summary = (await getCachedSummary(pdfPath, src)) ?? (await summaryFor(pdfPath, src, meta, (p) =>
+          // أرقام التقدّم فقط من مهمة الملخّص — لا هويتها (key): نسخها كان يحوّل كل تحديثات الفيديو التالية
+          // لعنوان الملخّص فلا تسمعها شاشة الفيديو أبدًا (تبقى متوقفة حتى يُعاد فتحها)
+          emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, stage: "summary" }))
+        ));
       if (!summary) {
         emit((last = { ...last, status: "failed" }));
         if (!viewing.get(key)) void notify(meta, false);

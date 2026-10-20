@@ -24,7 +24,7 @@ import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
 import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoRequestCost, videoSeconds, type VideoScript } from "../lib/videoScript";
 import { confirmCost } from "../lib/costConfirm";
-import { hasVideoJob, startVideoJob, watchVideoJob, type VideoJob } from "../lib/videoJobs";
+import { hasVideoJob, startVideoJob, videoJobKey, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking } from "../lib/voice";
 
 const THINK_SECONDS = 5;
@@ -67,19 +67,8 @@ export default function UnitVideoScreen() {
         setComplete(true);
         return;
       }
-      // عدد الطلبات قبل التجهيز (الملخّص الناقص + الفيديو)؛ الإلغاء يرجع للمكان السابق
-      if (!hasVideoJob(pdfPath, src)) {
-        const cost = await videoRequestCost(pdfPath, src, unitTitle).catch(() => null);
-        if (!on) return;
-        if (cost && !(await confirmCost(cost.pending, "video", t, cost.estimated))) {
-          if (router.canGoBack()) router.back();
-          return;
-        }
-      }
-      if (!on) return;
-      const params: Record<string, string> = { pdf_path: pdfPath };
-      for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
-      const key = startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params });
+      // المتابعة من لحظة فتح الشاشة (أيًّا كان من بدأ التجهيز: هذه الشاشة، أو نسخة أخرى منها، أو الخلفية)
+      const key = videoJobKey(pdfPath, src);
       let sawRunning = false; // نحتفل فقط بتوليد تابعناه الآن (لا عند فتح فيديو جاهز)
       un = watchVideoJob(key, (j) => {
         if (!on) return;
@@ -101,6 +90,19 @@ export default function UnitVideoScreen() {
           }
         }
       });
+      // عدد الطلبات قبل التجهيز (الملخّص الناقص + الفيديو)؛ الإلغاء يرجع للمكان السابق
+      if (!hasVideoJob(pdfPath, src)) {
+        const cost = await videoRequestCost(pdfPath, src, unitTitle).catch(() => null);
+        if (!on) return;
+        if (cost && !(await confirmCost(cost.pending, "video", t, cost.estimated, key))) {
+          if (on && router.canGoBack()) router.back();
+          return;
+        }
+      }
+      if (!on) return;
+      const params: Record<string, string> = { pdf_path: pdfPath };
+      for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
+      startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params });
     })();
     return () => {
       on = false;
@@ -368,7 +370,8 @@ export default function UnitVideoScreen() {
   // مرحلتان: الملخّص ٠–٥٠٪ ثم المشاهد ٥٠–١٠٠٪ (إن كان الملخّص جاهزًا مسبقًا تبدأ المشاهد من ٥٠٪)
   const inStage = Math.min(0.97, Math.max(byTime, byParts));
   maxPct.current = Math.max(maxPct.current, inStage);
-  const prepPct = (stageNow === "script" ? 0.5 : 0) + maxPct.current * 0.5;
+  // قبل بدء التجهيز (أثناء سؤال عدد الطلبات) لا تقدّم وهمي
+  const prepPct = job ? (stageNow === "script" ? 0.5 : 0) + maxPct.current * 0.5 : 0;
   const fmtClock = (sec: number) => {
     const n = Math.max(0, Math.round(sec));
     return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;

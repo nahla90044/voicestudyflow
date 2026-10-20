@@ -1,6 +1,7 @@
 // lib/syllabus.ts
 // منهج دراسي (syllabus) لكل كتاب: وحدات بعناوين ومواضيع ومخرجات تعلّم،
 // مع متابعة التقدّم (تشيك ليست). يُولَّد بالذكاء من نص الكتاب ويُخزّن.
+import { parseJsonLenient } from "./jsonRepair";
 import { recordPerf } from "./perf";
 import { verifiedQuestions } from "./qualityCore";
 import { aiAssist } from "./ai";
@@ -15,7 +16,7 @@ export function parseSyllabus(raw: string): Syllabus | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
-    const obj = JSON.parse(m[0]);
+    const obj = parseJsonLenient(m[0]) as any;
     const units: SyllabusUnit[] = Array.isArray(obj.units)
       ? obj.units
           .map((u: any) => ({
@@ -261,7 +262,7 @@ export async function generateUnitQuiz(context: string, count?: number): Promise
   const m = raw.match(/\[[\s\S]*\]/);
   if (!m) return [];
   try {
-    const arr = JSON.parse(m[0]);
+    const arr = parseJsonLenient(m[0]) as any;
     if (!Array.isArray(arr)) return [];
     const qs: QuizQ[] = arr
       .map((x: any) => ({
@@ -332,7 +333,7 @@ export async function generateMindmap(context: string): Promise<MindMap | null> 
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
-    const obj = JSON.parse(m[0]);
+    const obj = parseJsonLenient(m[0]) as any;
     const branches: MindBranch[] = Array.isArray(obj.branches)
       ? obj.branches
           .map((b: any) => ({

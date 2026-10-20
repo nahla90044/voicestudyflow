@@ -24,6 +24,8 @@ type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string };
 /** آخر مهمة اكتملت لكل جزء (لإعادة توليد مجانية إن رفض وكيل الجودة نتيجتها) */
 const lastDone = new Map<string, string>();
 export const lastJobId = (key: string) => lastDone.get(key);
+/** مهمة اكتملت لكن نتيجتها تعذّرت قراءتها: إعادة الجزء التالية مجانية (لا يدفع المستخدم ثمن خلل الصيغة) */
+const freeNext = new Map<string, string>();
 
 async function startJob(action: AiAction, text: string, extra: JobExtra = {}): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -100,7 +102,9 @@ async function jobPartInner<P>(
 ): Promise<P> {
   let id = await AsyncStorage.getItem(jobKey(key)).catch(() => null);
   if (!id) {
-    id = await startJob(action, ctx, extra).catch((e) => {
+    const free = extra.qaRetryOf ?? freeNext.get(key);
+    freeNext.delete(key);
+    id = await startJob(action, ctx, free ? { ...extra, qaRetryOf: free } : extra).catch((e) => {
       const m = (e as Error).message;
       throw new Error(m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" ? m : "JOB_START");
     });
@@ -132,7 +136,11 @@ async function jobPartInner<P>(
         lastDone.set(key, id);
         refreshUsage();
         const p = parseFull(raw);
-        if (!p) throw new Error("JOB_FAILED");
+        if (!p) {
+          freeNext.set(key, id);
+          recordPerf(`job.${action}.unreadable`, 0, false, raw.length);
+          throw new Error("JOB_FAILED");
+        }
         return p;
       }
       const age = Date.now() - new Date(row.created_at).getTime();

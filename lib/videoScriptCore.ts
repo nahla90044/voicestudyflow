@@ -1,6 +1,7 @@
 // lib/videoScriptCore.ts
 // منطق «ملخّص الفيديو» الخالص (بلا اعتماد على الجهاز): قراءة المشاهد من ردّ الذكاء
 // (كاملًا أو أولًا بأول أثناء البثّ)، والدمج بالترتيب، وتقسيم الملخّص إلى أجزاء. مُختبَر في tests/.
+import { parseJsonLenient } from "./jsonRepair.ts";
 import type { Slide, SlideColumn, SlideLayout } from "./ai";
 import { summaryToSpeech, type StudySummary } from "./studySummary.ts";
 
@@ -91,7 +92,7 @@ export function parsePartialVideo(raw: string): VideoScript | null {
         depth--;
         if (depth === 0 && begin >= 0) {
           try {
-            const sc = scene(JSON.parse(raw.slice(begin, i + 1)));
+            const sc = scene(parseJsonLenient(raw.slice(begin, i + 1)));
             if (sc) out.scenes.push(sc);
           } catch {}
           begin = -1;
@@ -106,7 +107,7 @@ export function parseVideo(raw: string): VideoScript | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (m) {
     try {
-      const o = JSON.parse(m[0]);
+      const o = parseJsonLenient(m[0]) as any;
       const scenes = (Array.isArray(o?.scenes) ? o.scenes : []).map(scene).filter(Boolean) as VideoScene[];
       if (scenes.length) return { title: str(o?.title), scenes };
     } catch {}

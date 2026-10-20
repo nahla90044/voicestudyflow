@@ -3716,7 +3716,18 @@ export default function ReaderScreen() {
               {isArabicText ? (
                 <InTool icon="text-outline" label={tashkeelMode ? t("reader.aids.tashkeelOn") : t("reader.aids.tashkeelOff")} on={tashkeelMode} onPress={toggleTashkeel} />
               ) : null}
-              {/* العرض والخريطة والفيديو صارت داخل «المساعد الذكي» (أداة واحدة بدل أربع) */}
+              {/* العرض والخريطة والفيديو هنا مباشرة (وأيضًا داخل «المساعد الذكي») — طلب نهلة: كانت تسهّل الدراسة */}
+              <InTool
+                icon="easel-outline"
+                label={t("reader.aids.present")}
+                onPress={() => {
+                  presUsedRef.current = true;
+                  warmAllMusic();
+                  setPresentOpen(true);
+                }}
+              />
+              <InTool icon="git-network-outline" label={t("syllabus.mindmap.title")} onPress={() => void openMindmap()} />
+              <InTool icon="videocam-outline" label={t("video.open")} onPress={() => void openUnitVideo()} />
               <InTool
                 icon="library-outline"
                 label={t("reader.tools.bookPage")}
@@ -3730,6 +3741,7 @@ export default function ReaderScreen() {
                 label={viewMode === "pdf" ? t("reader.tools.viewText") : t("reader.tools.viewPdf")}
                 onPress={toggleViewMode}
               />
+              <InTool icon={paper ? "moon-outline" : "sunny-outline"} label={paper ? t("reader.tools.night") : t("reader.tools.paper")} onPress={togglePaper} />
               <InTool icon="expand-outline" label={t("reader.tools.fullscreen")} onPress={() => setFullText(true)} />
               {isPad && viewMode === "pdf" ? (
                 <InTool icon="pencil-outline" label={t("reader.ink.title")} on={penOn} onPress={() => setPenOn((v) => !v)} />
@@ -4034,6 +4046,23 @@ export default function ReaderScreen() {
                 <Text style={styles.aiActionTxt}>{t("video.open")}</Text>
               </Pressable>
             </View>
+
+            {/* خانة السؤال الحر عن الصفحة: لحساب المالكة فقط (تُقلّل سوء الاستخدام) */}
+            {owner ? (
+              <View style={styles.aiAskRow}>
+                <TextInput
+                  value={aiQuestion}
+                  onChangeText={setAiQuestion}
+                  placeholder={t("reader.ai.askPlaceholder")}
+                  placeholderTextColor={Palette.placeholder}
+                  style={[styles.aiInput, { textAlign: dir.textAlign, writingDirection: dir.writingDirection }]}
+                  editable={!aiBusy}
+                />
+                <Pressable style={styles.aiSend} onPress={() => runAi("ask")} disabled={aiBusy || !aiQuestion.trim()}>
+                  <Ionicons name="send" size={18} color={SKY.onAccent} />
+                </Pressable>
+              </View>
+            ) : null}
 
             <ScrollView style={styles.aiResultBox} contentContainerStyle={{ padding: 14 }}>
               {aiBusy ? (
