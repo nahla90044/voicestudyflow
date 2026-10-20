@@ -79,3 +79,27 @@ export async function removeSavedForBook(pdfPath: string, kind: SavedKind): Prom
     // نتجاهل
   }
 }
+
+/**
+ * بعد حذف وحدات من المنهج: محفوظات الوحدات تتبع أرقامها الجديدة (map → رقم جديد)،
+ * ومحفوظات الوحدات المحذوفة تُزال (map → null). محفوظات الصفحات والنطاقات لا تتأثر.
+ */
+export async function remapSavedUnits(pdfPath: string, map: (unit: number) => number | null): Promise<void> {
+  try {
+    const all = await getSavedItems();
+    const next: SavedItem[] = [];
+    for (const it of all) {
+      const ofUnit = it.pdfPath === pdfPath && it.unit != null && it.key.endsWith(`|u${it.unit}`);
+      if (!ofUnit) {
+        next.push(it);
+        continue;
+      }
+      const to = map(it.unit!);
+      if (to === null) continue;
+      next.push({ ...it, unit: to, key: `${it.kind}|${pdfPath}|u${to}` });
+    }
+    await AsyncStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    // الفهرس اختياري
+  }
+}

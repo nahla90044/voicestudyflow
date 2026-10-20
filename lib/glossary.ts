@@ -111,6 +111,30 @@ export async function setUnitRanges(pdfPath: string, r: UnitRange[]): Promise<vo
   } catch {}
 }
 
+/** حدود الوحدات بعد حذف بعضها: تبقى حدود الوحدات المحفوظة بترتيبها (keep = أرقامها القديمة) */
+export async function keepUnitRanges(pdfPath: string, keep: number[]): Promise<void> {
+  const h = hashKey(pdfPath);
+  for (const key of [`unitranges:last:${h}`, `unitranges:toc:${h}`]) {
+    try {
+      const r = JSON.parse((await AsyncStorage.getItem(key)) || "null") as UnitRange[] | null;
+      if (Array.isArray(r)) await AsyncStorage.setItem(key, JSON.stringify(keep.map((i) => r[i]).filter(Boolean)));
+    } catch {}
+  }
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(`unitranges:v1:${h}:`));
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {}
+}
+
+/** حذف كل حدود الوحدات المحفوظة للكتاب (عند حذف المنهج) */
+export async function clearUnitRanges(pdfPath: string): Promise<void> {
+  const h = hashKey(pdfPath);
+  try {
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith("unitranges:") && k.split(":")[2] === h);
+    if (keys.length) await AsyncStorage.multiRemove(keys);
+  } catch {}
+}
+
 /** آخر صفحات وحدات محسوبة (عرض فوري في صفحة الكتاب، بلا جلب نصوص الكتاب) */
 export async function getCachedUnitRanges(pdfPath: string): Promise<UnitRange[] | null> {
   try {

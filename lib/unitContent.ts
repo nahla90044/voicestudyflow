@@ -76,3 +76,26 @@ export async function setUnitContent<T>(
     // التخزين اختياري — لا نُفشل العملية إن تعذّر
   }
 }
+
+/**
+ * يعيد ترقيم/يحذف محتوى نوعٍ لهذا الكتاب دفعة واحدة: map(رقم) → رقم جديد للنقل، أو null للحذف،
+ * أو undefined للإبقاء. يقرأ المتأثر كله أولًا ثم يحذفه ثم يكتبه بمفاتيحه الجديدة (لا تصادم بين القديم والجديد).
+ */
+export async function remapUnitContent(pdfPath: string, kind: UnitContentKind, map: (code: number) => number | null | undefined): Promise<void> {
+  try {
+    const prefix = `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:`;
+    const moves = (await AsyncStorage.getAllKeys())
+      .filter((k) => k.startsWith(prefix))
+      .map((k) => ({ k, to: map(Number(k.slice(prefix.length))) }))
+      .filter((m) => m.to !== undefined);
+    if (!moves.length) return;
+    const values = new Map(await AsyncStorage.multiGet(moves.map((m) => m.k)));
+    await AsyncStorage.multiRemove(moves.map((m) => m.k));
+    const sets = moves
+      .filter((m) => m.to !== null && values.get(m.k) != null)
+      .map((m) => [prefix + m.to, values.get(m.k)!] as [string, string]);
+    if (sets.length) await AsyncStorage.multiSet(sets);
+  } catch {
+    // التخزين المحلي اختياري
+  }
+}

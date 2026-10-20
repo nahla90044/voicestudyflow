@@ -225,37 +225,44 @@ export function BuzanMindMap({ map, size = 340, theme }: { map: MindMap; size?: 
 
 const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** نفس الخريطة كنص SVG (للطباعة وملف PDF) — مشهد فاتح للطباعة */
+/** لون مُصمت فاتح من لون الفرع (الطباعة لا تحتمل الشفافية) */
+function tint(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * a + 255 * (1 - a)));
+  return `rgb(${c.join(",")})`;
+}
+
+/** نفس الخريطة كنص SVG (للطباعة وملف PDF) — اتجاه SVG ثابت ltr: مواضع النصوص محسوبة يمينًا/يسارًا من نقاطها،
+ *  واتجاه الصفحة rtl كان يعكس محاذاتها فتتراكب النصوص على النقاط. نسخة طباعة نظيفة: ألوان مُصمتة فقط، بلا هالة ولا تدرّج
+ *  ولا شفافية (طباعة آيفون تحوّلها حلقات داكنة)، ونص أغمق وأوضح على الورق. */
 export function mindmapSvg(map: MindMap): string {
   const L = mindmapLayout(map);
+  // نص عربي: اتجاهه rtl (علامات الترقيم و«…» في مكانها الصحيح) مع قلب المحاذاة ليبقى موضعه البصري نفسه
+  const AR = /[\u0600-\u06FF]/;
+  const txt = (x: number, y: number, size: number, weight: number, fill: string, anchor: string, s: string) => {
+    const rtl = AR.test(s);
+    const a = rtl ? (anchor === "start" ? "end" : anchor === "end" ? "start" : anchor) : anchor;
+    return `<text x="${x}" y="${y}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${a}"${rtl ? ' direction="rtl" style="direction:rtl;unicode-bidi:embed"' : ""}>${esc(s)}</text>`;
+  };
   const parts: string[] = [];
-  parts.push(
-    `<defs><radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#8B7CFF" stop-opacity="0.3"/><stop offset="1" stop-color="#8B7CFF" stop-opacity="0"/></radialGradient>` +
-      `<linearGradient id="c" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CFF"/><stop offset="1" stop-color="#00B4D8"/></linearGradient></defs>`
-  );
-  parts.push(`<circle cx="${CX}" cy="${CY}" r="340" fill="url(#g)"/>`);
   for (const b of L.branches) {
     parts.push(`<path d="${b.shape}" fill="${b.color}"/>`);
     for (const lf of b.leaves) {
-      parts.push(`<path d="${lf.path}" stroke="${b.color}" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.8"/>`);
-      parts.push(`<circle cx="${lf.dotX}" cy="${lf.dotY}" r="8" fill="${b.color}"/>`);
+      parts.push(`<path d="${lf.path}" stroke="${tint(b.color, 0.75)}" stroke-width="4" stroke-linecap="round" fill="none"/>`);
+      parts.push(`<circle cx="${lf.dotX}" cy="${lf.dotY}" r="9" fill="${b.color}"/>`);
       lf.lines.forEach((ln, k) =>
-        parts.push(
-          `<text x="${lf.x}" y="${lf.y + 8 + (k - (lf.lines.length - 1) / 2) * 29}" font-size="23" font-weight="600" fill="#1F2937" text-anchor="${lf.anchor}">${esc(ln)}</text>`
-        )
+        parts.push(txt(lf.x, lf.y + 8 + (k - (lf.lines.length - 1) / 2) * 29, 24, 700, "#111827", lf.anchor, ln))
       );
     }
     const p = b.pill;
-    parts.push(`<rect x="${p.x - p.w / 2}" y="${p.y - p.h / 2}" width="${p.w}" height="${p.h}" rx="${p.h / 2}" fill="#fff" stroke="${b.color}" stroke-width="4"/>`);
+    parts.push(`<rect x="${p.x - p.w / 2}" y="${p.y - p.h / 2}" width="${p.w}" height="${p.h}" rx="${p.h / 2}" fill="${tint(b.color, 0.12)}" stroke="${b.color}" stroke-width="4"/>`);
     p.lines.forEach((ln, k) =>
-      parts.push(`<text x="${p.x}" y="${p.y + 10 + (k - (p.lines.length - 1) / 2) * 34}" font-size="26" font-weight="800" fill="${b.color}" text-anchor="middle">${esc(ln)}</text>`)
+      parts.push(txt(p.x, p.y + 10 + (k - (p.lines.length - 1) / 2) * 34, 26, 800, b.color, "middle", ln))
     );
   }
-  parts.push(`<circle cx="${CX}" cy="${CY}" r="${R_CENTER}" fill="url(#c)"/>`);
-  L.center.forEach((ln, k) =>
-    parts.push(`<text x="${CX}" y="${CY + 11 + (k - (L.center.length - 1) / 2) * 34}" font-size="30" font-weight="900" fill="#fff" text-anchor="middle">${esc(ln)}</text>`)
-  );
-  return `<svg viewBox="0 0 ${L.w} ${L.h}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'SF Arabic', sans-serif">${parts.join("")}</svg>`;
+  parts.push(`<circle cx="${CX}" cy="${CY}" r="${R_CENTER}" fill="#5B45E8"/>`);
+  L.center.forEach((ln, k) => parts.push(txt(CX, CY + 11 + (k - (L.center.length - 1) / 2) * 34, 30, 900, "#fff", "middle", ln)));
+  return `<svg viewBox="0 0 ${L.w} ${L.h}" width="100%" xmlns="http://www.w3.org/2000/svg" direction="ltr" font-family="-apple-system, 'SF Arabic', sans-serif" style="background:#fff;direction:ltr">${parts.join("")}</svg>`;
 }
 
 /** صفحة الطباعة: الخريطة كاملة (أفقية) ثم المخطط كقائمة — مشتركة بين المنهج والقارئ.
@@ -284,8 +291,9 @@ export function mindmapPrintHtml(
       * { font-family: -apple-system, 'SF Arabic', sans-serif; box-sizing: border-box; }
       body { margin: 0; color: #14233a; background: #fff; }
       h1 { font-size: 20px; text-align: center; margin: 4px 0 6px; }
-      .map { height: calc(100vh - 50px); display: flex; align-items: center; justify-content: center; page-break-after: always; }
-      .map svg { max-height: 100%; width: auto; max-width: 100%; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .map { display: flex; align-items: center; justify-content: center; page-break-after: always; break-inside: avoid; }
+      .map svg { width: 100%; height: auto; max-height: 680px; }
       h2 { font-size: 18px; margin: 6px 0 12px; }
       .center { display: inline-block; background: #7C5CFF; color: #fff; font-weight: 800; padding: 8px 18px; border-radius: 999px; margin-bottom: 14px; }
       .grid { columns: 2; column-gap: 16px; }

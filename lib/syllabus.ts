@@ -7,7 +7,7 @@ import { supabase } from "./supabase";
 export type SyllabusUnit = { title: string; topics: string[]; outcome?: string };
 export type Syllabus = { title?: string; units: SyllabusUnit[]; tips?: string[] };
 
-function parseSyllabus(raw: string): Syllabus | null {
+export function parseSyllabus(raw: string): Syllabus | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {

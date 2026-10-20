@@ -19,6 +19,54 @@ export type SummaryBlock =
 export type SummarySection = { emoji: string; heading: string; blocks: SummaryBlock[] };
 export type StudySummary = { title: string; intro: string; sections: SummarySection[]; keypoints: string[] };
 
+/** عبارة قصيرة (≤ max حرفًا بكلمات كاملة) لنقطة في الخريطة */
+function shortPhrase(s: string, max = 40): string {
+  const t = s.replace(/\s*[(（][^)）]*[)）]/g, "").replace(/^\s*[\d٠-٩]+[.)-]\s*/, "").replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const k = cut.lastIndexOf(" ");
+  return (k > 12 ? cut.slice(0, k) : cut).trim() + "…";
+}
+
+const OFF_CORE = /مراجع|مصادر|أنشطة|نشاط|مخرجات|أهداف|أسئلة|تمارين|تمرين|دراسة ال?حالة|مسرد|references|sources|activit|outcomes|objectives|questions|exercise|case study|glossary/i;
+
+/**
+ * خريطة ذهنية للوحدة مبنية من ملخّصها نفسه (بلا طلب ذكاء إضافي): المركز عنوان الوحدة،
+ * والفروع أقسام الملخّص، والنقاط أهم ما فيها (المصطلحات، رؤوس التعدادات، العمود الأول من الجداول).
+ * التمارين ودراسة الحالة لا تصير فروعًا.
+ */
+export function mindmapFromSummary(s: StudySummary, center: string): { center: string; branches: { label: string; points: string[] }[] } | null {
+  const branches = s.sections
+    .map((sec) => {
+      const pts: string[] = [];
+      const add = (x: string) => {
+        const v = shortPhrase(x);
+        if (v && !pts.includes(v) && pts.length < 3) pts.push(v);
+      };
+      for (const b of sec.blocks) {
+        if (b.type === "definition" && b.term) add(b.term);
+        else if (b.type === "list")
+          b.items.forEach((it) => {
+            const k = it.search(/[:：]/);
+            add(k > 0 && k <= 45 ? it.slice(0, k) : it);
+          });
+        else if (b.type === "table") b.rows.forEach((r) => r[0] && add(r[0]));
+        else if (b.type === "explain" && b.title) add(b.title);
+      }
+      if (pts.length < 2)
+        for (const b of sec.blocks) if (b.type === "text" || b.type === "important") add(b.text.split(/[.!؟?؛]/)[0] ?? "");
+      return { label: shortPhrase(sec.heading, 44), points: pts };
+    })
+    // الخريطة لصلب الوحدة فقط: لا مراجع ولا أنشطة ولا أهداف/مخرجات ولا أسئلة/تمارين ولا مسرد
+    .filter((b) => b.label && b.points.length && !OFF_CORE.test(b.label))
+    .slice(0, 6);
+  // المركز: عنوان الوحدة بلا «الوحدة السابعة:» ولا ما بين قوسين
+  const c0 = (center || s.title).replace(/\s*[(（][^)）]*[)）]/g, "").trim();
+  const k = c0.search(/[:：]/);
+  const c = shortPhrase(k > 0 && k <= 22 && /^(الوحدة|الفصل|الباب|unit|chapter)/i.test(c0) ? c0.slice(k + 1) : c0, 44);
+  return branches.length >= 2 ? { center: c || c0, branches } : null;
+}
+
 const str = (v: unknown) => String(v ?? "").replace(/\*\*|__|`|^#+\s*/gm, "").trim();
 const strs = (v: unknown) => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
 
@@ -190,7 +238,7 @@ const SECTION_COLORS: [string, string, string][] = [
 ];
 
 /** محتوى ملخّص واحد (رأس، فهرس، أقسام، أهم النقاط) — يُستعمل وحده أو داخل ملف المذاكرة المجمّع */
-function summaryBody(opts: { bookTitle: string; title: string; summary: StudySummary; rtl: boolean }): string {
+function summaryBody(opts: { bookTitle: string; title: string; summary: StudySummary; rtl: boolean; afterHero?: string }): string {
   const { summary: s, rtl } = opts;
   const start = rtl ? "right" : "left";
   const L = rtl
@@ -264,6 +312,7 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
 
   return `
     <div class="hero"><div class="book">${esc(opts.bookTitle)}</div><h1>${esc(s.title || opts.title)}</h1>${s.intro ? `<p>${esc(s.intro)}</p>` : ""}</div>
+    ${opts.afterHero ?? ""}
     ${toc}
     ${sections}
     ${key}`;
@@ -280,7 +329,7 @@ function summaryCss(rtl: boolean): string {
     .hero .book { font-size: 12.5px; color: #C7D2FE; font-weight: 700; }
     .hero h1 { font-size: 26px; margin: 6px 0 8px; line-height: 1.45; color: #fff; }
     .hero p { font-size: 14.5px; line-height: 1.9; margin: 0; color: #E0E7FF; }
-    .toc { border: 1.5px solid #E5E7EB; border-radius: 16px; padding: 14px 18px; margin-bottom: 20px; background: #F9FAFB; }
+    .toc { border: 1.5px solid #E5E7EB; border-radius: 16px; padding: 14px 18px; margin-bottom: 20px; background: #F9FAFB; break-inside: avoid; page-break-inside: avoid; }
     .toch { font-weight: 900; font-size: 14px; color: #4338CA; margin-bottom: 6px; }
     .toc ol { margin: 0; padding-${start}: 20px; columns: 2; column-gap: 24px; }
     .toc li { font-size: 13px; line-height: 1.9; color: #374151; }
@@ -334,17 +383,24 @@ export function summaryHtml(opts: { bookTitle: string; title: string; summary: S
  * ملف المذاكرة: ملخّصات وحدات الكتاب كلها بالترتيب في ملف واحد — غلاف، فهرس الوحدات،
  * ثم كل وحدة تبدأ في صفحة جديدة بشريط «الوحدة n». بدل طلب الملخّص صفحة صفحة وجمعه يدويًا.
  */
-export function studyFileHtml(opts: { bookTitle: string; units: { title: string; summary: StudySummary }[]; rtl: boolean }): string {
+export function studyFileHtml(opts: { bookTitle: string; units: { title: string; summary: StudySummary; mindmapSvg?: string }[]; rtl: boolean }): string {
   const { rtl } = opts;
   const dir = rtl ? "rtl" : "ltr";
   const start = rtl ? "right" : "left";
   const L = rtl
-    ? { file: "ملف المذاكرة", sub: "ملخّص شامل لكل وحدات الكتاب بالترتيب", toc: "الوحدات", unit: "الوحدة", n: "عدد الوحدات" }
-    : { file: "Study file", sub: "A complete summary of every unit, in order", toc: "Units", unit: "Unit", n: "Units" };
+    ? { file: "ملف المذاكرة", sub: "ملخّص شامل لكل وحدات الكتاب بالترتيب", toc: "الوحدات", unit: "الوحدة", n: "عدد الوحدات", mm: "الخريطة الذهنية للوحدة" }
+    : { file: "Study file", sub: "A complete summary of every unit, in order", toc: "Units", unit: "Unit", n: "Units", mm: "Unit mind map" };
   const toc = opts.units.map((u, i) => `<li><span class="un">${i + 1}</span>${esc(u.title)}</li>`).join("");
   const units = opts.units
     .map(
-      (u, i) => `<div class="unit"><div class="ubar"><span class="unum">${L.unit} ${i + 1}</span><span class="ut">${esc(u.title)}</span></div>${summaryBody({ bookTitle: opts.bookTitle, title: u.title, summary: u.summary, rtl })}</div>`
+      (u, i) => `<div class="unit"><div class="ubar"><span class="unum">${L.unit} ${i + 1}</span><span class="ut">${esc(u.title)}</span></div>${summaryBody({
+        bookTitle: opts.bookTitle,
+        title: u.title,
+        summary: u.summary,
+        rtl,
+        // ترتيب الوحدة: العنوان الكبير، ثم خريطتها الذهنية، ثم محتويات الملخّص
+        afterHero: u.mindmapSvg ? `<div class="mm"><div class="mmh">${L.mm}</div>${u.mindmapSvg}</div>` : undefined,
+      })}</div>`
     )
     .join("");
   return `<!doctype html><html dir="${dir}" lang="${rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>${summaryCss(rtl)}
@@ -362,6 +418,9 @@ export function studyFileHtml(opts: { bookTitle: string; units: { title: string;
     .ubar { display: flex; align-items: center; gap: 12px; border-${start}: 6px solid #4338CA; background: #EEF2FF; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
     .unum { background: #4338CA; color: #fff; font-weight: 900; font-size: 13px; padding: 3px 12px; border-radius: 999px; }
     .ut { font-weight: 900; font-size: 16px; color: #312E81; }
+    .mm { border: 1.5px solid #E5E7EB; border-radius: 18px; padding: 12px 10px 6px; margin-bottom: 18px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+    .mmh { font-weight: 900; font-size: 15px; color: #4338CA; text-align: center; margin-bottom: 4px; }
+    .mm svg { display: block; width: 100%; height: auto; }
   </style></head><body>
     <div class="cover"><div class="k">${L.file}</div><h1>${esc(opts.bookTitle)}</h1><div class="s">${L.sub} · ${L.n}: ${opts.units.length}</div></div>
     <div class="utoc"><div class="h">${L.toc}</div><ol>${toc}</ol></div>

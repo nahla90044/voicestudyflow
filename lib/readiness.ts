@@ -192,3 +192,15 @@ export async function getBookReadiness(pdfPath: string): Promise<BookReadiness |
     return null;
   }
 }
+
+/** بعد حذف وحدات من المنهج: إجابات أسئلة الوحدات تتبع أرقامها الجديدة، وأسئلة الوحدات المحذوفة تُزال */
+export async function remapAnsweredUnits(pdfPath: string, map: (unit: number) => number | null): Promise<void> {
+  const log = await readLog(pdfPath);
+  for (const [id, st] of Object.entries(log.q)) {
+    if (st.unit == null) continue;
+    const to = map(st.unit);
+    if (to === null) delete log.q[id];
+    else log.q[id] = { ...st, unit: to };
+  }
+  await writeLog(pdfPath, log);
+}

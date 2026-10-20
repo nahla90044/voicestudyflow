@@ -12,8 +12,10 @@ import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
 import { useScene } from "../lib/scene";
 import { sharePdf } from "../lib/studySaves";
-import { studyFileHtml, type StudySummary } from "../lib/studySummary";
-import { getSyllabus } from "../lib/syllabus";
+import { mindmapSvg } from "../components/brand/mindmap";
+import { mindmapFromSummary, studyFileHtml, type StudySummary } from "../lib/studySummary";
+import { getSyllabus, type MindMap } from "../lib/syllabus";
+import { getUnitContent } from "../lib/unitContent";
 import { getCachedSummary, getOrMakeSummary } from "../lib/unitSummary";
 import { getSummaryMode, setSummaryMode } from "../lib/summaryPrefs";
 
@@ -96,10 +98,24 @@ export default function StudyFileScreen() {
 
   async function onPdf() {
     if (!rows || pdfBusy) return;
-    const units = rows.filter((r) => r.summary).map((r) => ({ title: r.title, summary: r.summary! }));
-    if (!units.length) return;
+    if (!rows.some((r) => r.summary)) return;
     setPdfBusy(true);
     try {
+      // كل وحدة تبدأ بخريطتها الذهنية: المحفوظة من شاشة المنهج إن وُجدت، وإلا تُبنى من ملخّصها (بلا تكلفة)
+      const units: { title: string; summary: StudySummary; mindmapSvg?: string }[] = [];
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r.summary) continue;
+        let mm: MindMap | null = await getUnitContent<MindMap>(pdfPath, i, "mindmap").catch(() => null);
+        if (!mm?.branches?.length) mm = mindmapFromSummary(r.summary, r.title);
+        let svg: string | undefined;
+        try {
+          svg = mm ? mindmapSvg(mm) : undefined;
+        } catch {
+          svg = undefined; // الخريطة إضافة: لا تُفشل الملف
+        }
+        units.push({ title: r.title, summary: r.summary, mindmapSvg: svg });
+      }
       await sharePdf(studyFileHtml({ bookTitle, units, rtl: dir.isRTL }), `${t("studyFile.title")} — ${bookTitle}`);
     } catch {
       Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));

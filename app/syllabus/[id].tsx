@@ -15,7 +15,7 @@ import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../comp
 import { Radius, Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
-import { removeUnitContentWhere } from "../../lib/unitContent";
+import { deleteSyllabus, regenerateUnits, removeUnits, resetUnitContent, type SyllabusState } from "../../lib/syllabusEdit";
 import { PressableScale } from "../../components/brand/motion";
 import {
   generateMindmap,
@@ -48,6 +48,8 @@ export default function SyllabusScreen() {
   const { pal } = useScene();
   // ألوان الحالة بدرجات تُقرأ على المشهد الفاتح والداكن (كما في صفحة الكتاب)
   const tone = pal.dark ? { good: "#7BD8A4", bad: "#FF8A96" } : { good: "#2F7D4A", bad: "#B83A48" };
+  // أحمر الحذف المُصمت (نص أبيض واضح عليه في المشهدين)
+  const DANGER = "#D9485A";
   const { id, title, pdf_path } = useLocalSearchParams<{
     id?: string;
     title?: string;
@@ -65,6 +67,13 @@ export default function SyllabusScreen() {
   const [done, setDone] = useState<boolean[]>([]);
   const [sched, setSched] = useState<UnitSchedule[]>([]);
   const [err, setErr] = useState("");
+  // تعديل الوحدات: وضع التحديد، والوحدات المختارة، والوحدات الجاري إعادة إنشائها
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [working, setWorking] = useState<number[]>([]);
+  const editing = working.length > 0;
+  // كتب العيّنة مشتركة بين الجميع: منهجها للقراءة فقط (صلاحيات الجدول تمنع تعديله)
+  const canEdit = !!pdfPath && !pdfPath.startsWith("samples/");
 
   // الخريطة الذهنية (الاختبار والملخّص صارا صفحتين مستقلتين: unit-quiz / unit-summary)
   const [mmUnit, setMmUnit] = useState<number | null>(null);
@@ -130,11 +139,100 @@ export default function SyllabusScreen() {
     return () => clearInterval(id);
   }, [busy, t]);
 
-  // إعادة إنشاء المنهج (بتأكيد: تُحسب طلبًا) — من الفهرس الدقيق
+  // إعادة إنشاء المنهج كاملًا (بتأكيد: تُحسب طلبًا) — من الفهرس الدقيق
   function confirmRegenerate() {
     Alert.alert(t("syllabus.regenTitle"), t("syllabus.regenBody"), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("syllabus.regenerate"), onPress: () => void onGenerate() },
+    ]);
+  }
+
+  // زر إعادة الإنشاء: المنهج كاملًا أو وحدات محددة
+  function chooseRegenerate() {
+    Alert.alert(t("syllabus.regenChoose"), undefined, [
+      { text: t("syllabus.regenAll"), onPress: confirmRegenerate },
+      { text: t("syllabus.regenPick"), onPress: () => startSelecting() },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  }
+
+  // ===== تعديل الوحدات (تحديد ثم إعادة إنشاء أو حذف) =====
+  function startSelecting(first?: number) {
+    setPicked(first === undefined ? [] : [first]);
+    setSelecting(true);
+  }
+  function stopSelecting() {
+    setSelecting(false);
+    setPicked([]);
+  }
+  function togglePick(i: number) {
+    setPicked((p) => (p.includes(i) ? p.filter((x) => x !== i) : [...p, i]));
+  }
+  async function applyState(s: SyllabusState | null) {
+    setSyl(s?.data ?? null);
+    setDone(s?.done ?? []);
+    await loadSchedule(s?.data.units.length ?? 0);
+  }
+
+  function confirmRegenUnits() {
+    const units = [...picked];
+    if (!units.length) return;
+    Alert.alert(t("syllabus.unitsRegenTitle"), t("syllabus.unitsRegenBody", { n: units.length }), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("syllabus.select.regen", { n: units.length }), onPress: () => void runRegenUnits(units) },
+    ]);
+  }
+  async function runRegenUnits(units: number[]) {
+    stopSelecting();
+    setWorking(units);
+    const failed: number[] = [];
+    try {
+      await regenerateUnits(pdfPath, units, (i, s, error) => {
+        setWorking((w) => w.filter((x) => x !== i));
+        if (s) void applyState(s);
+        else if (error !== "USER_QUOTA") failed.push(i);
+      });
+      if (failed.length) Alert.alert(t("syllabus.unitsRegenTitle"), t("syllabus.err.unitRegen", { list: failed.map((i) => i + 1).join("، ") }));
+    } catch (e) {
+      Alert.alert(t("syllabus.unitsRegenTitle"), (e as Error)?.message === "USER_QUOTA" ? t("pay.reason.ai") : t("syllabus.err.edit"));
+    } finally {
+      setWorking([]);
+    }
+  }
+
+  function confirmDeleteUnits() {
+    const units = [...picked];
+    if (!units.length) return;
+    Alert.alert(t("syllabus.unitsDeleteTitle"), t("syllabus.unitsDeleteBody", { n: units.length }), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("syllabus.select.delete", { n: units.length }),
+        style: "destructive",
+        onPress: () =>
+          void removeUnits(pdfPath, units)
+            .then(async (s) => {
+              stopSelecting();
+              await applyState(s);
+            })
+            .catch(() => Alert.alert(t("syllabus.unitsDeleteTitle"), t("syllabus.err.edit"))),
+      },
+    ]);
+  }
+
+  function confirmDeleteSyllabus() {
+    Alert.alert(t("syllabus.deleteTitle"), t("syllabus.deleteBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("syllabus.delete"),
+        style: "destructive",
+        onPress: () =>
+          void deleteSyllabus(pdfPath)
+            .then(async () => {
+              stopSelecting();
+              await applyState(null);
+            })
+            .catch(() => Alert.alert(t("syllabus.deleteTitle"), t("syllabus.err.edit"))),
+      },
     ]);
   }
 
@@ -145,15 +243,7 @@ export default function SyllabusScreen() {
       const before = (syl?.units ?? []).map((u) => u.title).join("|");
       const data = await generateSyllabus(pdfPath);
       // تغيّرت الوحدات → محتوى الوحدات القديم (ملخصات، اختبارات، خرائط، فيديو) لم يعد يطابقها فيُحذف
-      if (before && before !== data.units.map((u) => u.title).join("|")) {
-        const unitOnly = (u: number) => u < 1_000_000;
-        for (const k of ["quiz", "mindmap", "glossary", "summary"] as const) await removeUnitContentWhere(pdfPath, k, () => true).catch(() => {});
-        await removeUnitContentWhere(pdfPath, "studysummary", unitOnly).catch(() => {});
-        // أجزاء ملخص الوحدة: 2e12 + الوحدة×1e4 + …  (النطاقات بأرقام أكبر بكثير فلا تُمس)
-        await removeUnitContentWhere(pdfPath, "studysummarypart", (u: number) => u >= 2e12 && u < 2e12 + 1_000_000 * 1e4).catch(() => {});
-        await removeUnitContentWhere(pdfPath, "video", (u: number) => u >= 2e12 && u < 2e12 + 1_000_000).catch(() => {});
-        await removeUnitContentWhere(pdfPath, "videopart", (u: number) => u >= 2e12 * 1e4 && u < (2e12 + 1_000_000) * 1e4).catch(() => {});
-      }
+      if (before && before !== data.units.map((u) => u.title).join("|")) await resetUnitContent(pdfPath);
       setSyl(data);
       setDone(new Array(data.units.length).fill(false));
       await loadSchedule(data.units.length);
@@ -301,9 +391,9 @@ export default function SyllabusScreen() {
         right={
           <View style={{ flexDirection: dir.row, gap: 8 }}>
             {syl ? (
-              <PressableScale onPress={busy ? undefined : confirmRegenerate}>
+              <PressableScale onPress={busy || editing ? undefined : canEdit ? chooseRegenerate : confirmRegenerate}>
                 <SceneIconButton>
-                  {busy ? <ActivityIndicator color={pal.ink} /> : <Ionicons name="refresh" size={20} color={pal.ink} accessibilityLabel={t("syllabus.regenerate")} />}
+                  {busy || editing ? <ActivityIndicator color={pal.ink} /> : <Ionicons name="refresh" size={20} color={pal.ink} accessibilityLabel={t("syllabus.regenerate")} />}
                 </SceneIconButton>
               </PressableScale>
             ) : null}
@@ -403,22 +493,41 @@ export default function SyllabusScreen() {
             <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("studyFile.open")}</Text>
           </Pressable>
 
-          {/* الوحدات (تشيك ليست) */}
+          {/* وضع التحديد: تلميح أعلى الوحدات */}
+          {selecting && <Text style={[styles.selectHint, { color: pal.dim, textAlign: dir.textAlign }]}>{t("syllabus.select.hint")}</Text>}
+
+          {/* الوحدات (تشيك ليست) — الضغط المطوّل يبدأ تحديد الوحدات للتعديل */}
           {syl.units.map((u, i) => {
             const isDone = done[i];
+            const isPicked = selecting && picked.includes(i);
+            const isWorking = working.includes(i);
             return (
-              <Pressable key={i} onPress={() => toggle(i)} style={styles.unitWrap}>
-                <SceneCard style={[styles.unitCard, isDone && { borderColor: pal.accent }]}>
+              <Pressable
+                key={i}
+                onPress={() => (selecting ? togglePick(i) : toggle(i))}
+                onLongPress={editing || !canEdit ? undefined : () => (selecting ? togglePick(i) : startSelecting(i))}
+                disabled={isWorking}
+                style={styles.unitWrap}
+              >
+                <SceneCard style={[styles.unitCard, isDone && !selecting && { borderColor: pal.accent }, isPicked && { borderColor: DANGER, borderWidth: 2 }]}>
                   <View style={[styles.unitHead, { flexDirection: dir.row }]}>
-                    <View
-                      style={[
-                        styles.check,
-                        { borderColor: pal.track },
-                        isDone && { backgroundColor: pal.accent, borderColor: pal.accent },
-                      ]}
-                    >
-                      {isDone && <Ionicons name="checkmark" size={16} color={pal.onAccent} />}
-                    </View>
+                    {isWorking ? (
+                      <ActivityIndicator color={pal.accent} style={styles.check} />
+                    ) : selecting ? (
+                      <View style={[styles.check, styles.pick, { borderColor: isPicked ? DANGER : pal.track }, isPicked && { backgroundColor: DANGER }]}>
+                        {isPicked && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                    ) : (
+                      <View
+                        style={[
+                          styles.check,
+                          { borderColor: pal.track },
+                          isDone && { backgroundColor: pal.accent, borderColor: pal.accent },
+                        ]}
+                      >
+                        {isDone && <Ionicons name="checkmark" size={16} color={pal.onAccent} />}
+                      </View>
+                    )}
                     <Text
                       style={[
                         styles.unitTitle,
@@ -429,6 +538,7 @@ export default function SyllabusScreen() {
                       {i + 1}. {u.title}
                     </Text>
                   </View>
+                  {isWorking && <Text style={[styles.workingTxt, { color: pal.accent, textAlign: dir.textAlign }]}>{t("syllabus.regenerating")}</Text>}
                   {sched[i] && (
                     <View style={[styles.schedRow, { flexDirection: dir.row }]}>
                       <Ionicons name="calendar-outline" size={13} color={pal.accent} />
@@ -452,8 +562,8 @@ export default function SyllabusScreen() {
                     </Text>
                   )}
 
-                  {/* أدوات الوحدة: شبكة ٢×٢ متوازنة (النص والأيقونة في منتصف كل إطار، سطر واحد) */}
-                  {(() => {
+                  {/* أدوات الوحدة: شبكة ٢×٢ متوازنة (النص والأيقونة في منتصف كل إطار، سطر واحد) — تُخفى أثناء التحديد */}
+                  {!selecting && (() => {
                     const params = { pdf_path: pdfPath, unit: i, title: u.title, book_title: bookTitle };
                     const drawing = mmLoading && mmUnit === i;
                     const btn = (key: string, icon: keyof typeof Ionicons.glyphMap, label: string, onPress: () => void, busy = false) => (
@@ -502,30 +612,91 @@ export default function SyllabusScreen() {
 
           {/* دور مستقل عن طابعة الهيدر: إعادة توليد المنهج كاملًا من الكتاب
               (يعيد بناء الوحدات بالفهرس الكامل بدل النسخة القديمة المختصرة). */}
-          <Pressable
-            onPress={busy ? undefined : confirmRegenerate}
-            style={({ pressed }) => [
-              styles.ghostBtn,
-              {
-                flexDirection: dir.row,
-                backgroundColor: pal.card,
-                borderColor: pal.cardBorder,
-                marginTop: Spacing.md,
-                opacity: busy ? 0.5 : pressed ? 0.9 : 1,
-              },
-            ]}
-          >
-            {busy ? (
-              <ActivityIndicator color={pal.ink} />
-            ) : (
-              <>
-                <Ionicons name="refresh" size={18} color={pal.ink} />
-                <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("syllabus.regenerate")}</Text>
-              </>
-            )}
-          </Pressable>
-          <View style={{ height: 24 }} />
+          {!selecting && (
+            <Pressable
+              onPress={busy || editing ? undefined : confirmRegenerate}
+              style={({ pressed }) => [
+                styles.ghostBtn,
+                {
+                  flexDirection: dir.row,
+                  backgroundColor: pal.card,
+                  borderColor: pal.cardBorder,
+                  marginTop: Spacing.md,
+                  opacity: busy || editing ? 0.5 : pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              {busy ? (
+                <ActivityIndicator color={pal.ink} />
+              ) : (
+                <>
+                  <Ionicons name="refresh" size={18} color={pal.ink} />
+                  <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("syllabus.regenerate")}</Text>
+                </>
+              )}
+            </Pressable>
+          )}
+          {/* تعديل الوحدات (تحديد لإعادة الإنشاء أو الحذف) وحذف المنهج — لكتب المستخدم فقط */}
+          {!selecting && canEdit && (
+            <>
+              <Pressable
+                onPress={busy || editing ? undefined : () => startSelecting()}
+                style={({ pressed }) => [
+                  styles.ghostBtn,
+                  { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, opacity: busy || editing ? 0.5 : pressed ? 0.9 : 1 },
+                ]}
+              >
+                <Ionicons name="checkbox-outline" size={18} color={pal.ink} />
+                <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("syllabus.manage")}</Text>
+              </Pressable>
+              <Pressable
+                onPress={busy || editing ? undefined : confirmDeleteSyllabus}
+                style={({ pressed }) => [
+                  styles.ghostBtn,
+                  { flexDirection: dir.row, backgroundColor: pal.card, borderColor: tone.bad, opacity: busy || editing ? 0.5 : pressed ? 0.9 : 1 },
+                ]}
+              >
+                <Ionicons name="trash-outline" size={18} color={tone.bad} />
+                <Text style={[styles.ctaTxt, { color: tone.bad }]}>{t("syllabus.delete")}</Text>
+              </Pressable>
+            </>
+          )}
+          <View style={{ height: selecting ? 150 : 24 }} />
         </ScrollView>
+      )}
+
+      {/* شريط إجراءات التحديد: إعادة إنشاء أو حذف الوحدات المختارة */}
+      {selecting && syl && (
+        <View style={[styles.selectBar, { backgroundColor: pal.card, borderColor: pal.cardBorder, paddingBottom: Math.max(insets.bottom, 12) }]}>
+          <View style={[styles.selectTop, { flexDirection: dir.row }]}>
+            <Pressable onPress={() => setPicked(picked.length === syl.units.length ? [] : syl.units.map((_, i) => i))} hitSlop={8}>
+              <Text style={[styles.selectLink, { color: pal.accent }]}>
+                {picked.length === syl.units.length ? t("syllabus.select.none") : t("syllabus.select.all")}
+              </Text>
+            </Pressable>
+            <Pressable onPress={stopSelecting} hitSlop={10} accessibilityLabel={t("common.cancel")}>
+              <Ionicons name="close" size={24} color={pal.dim} />
+            </Pressable>
+          </View>
+          <View style={[styles.selectActions, { flexDirection: dir.row }]}>
+            <Pressable
+              onPress={confirmRegenUnits}
+              disabled={!picked.length}
+              style={({ pressed }) => [styles.selectBtn, { backgroundColor: pal.accent, flexDirection: dir.row, opacity: !picked.length ? 0.4 : pressed ? 0.85 : 1 }]}
+            >
+              <Ionicons name="refresh" size={18} color={pal.onAccent} />
+              <Text style={[styles.selectBtnTxt, { color: pal.onAccent }]}>{t("syllabus.select.regen", { n: picked.length })}</Text>
+            </Pressable>
+            <Pressable
+              onPress={confirmDeleteUnits}
+              disabled={!picked.length}
+              style={({ pressed }) => [styles.selectBtn, { backgroundColor: DANGER, flexDirection: dir.row, opacity: !picked.length ? 0.4 : pressed ? 0.85 : 1 }]}
+            >
+              <Ionicons name="trash-outline" size={18} color="#fff" />
+              <Text style={[styles.selectBtnTxt, { color: "#fff" }]}>{t("syllabus.select.delete", { n: picked.length })}</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {/* مودال الخريطة الذهنية */}
@@ -653,6 +824,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   readNowTxt: { fontSize: 16, fontWeight: "900" },
+  selectHint: { fontSize: 13.5, lineHeight: 22, fontWeight: "700" },
+  pick: { borderRadius: 8 },
+  workingTxt: { fontSize: 12.5, fontWeight: "800", marginTop: 6, paddingStart: 36 },
+  selectBar: { position: "absolute", left: 0, right: 0, bottom: 0, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 10, paddingHorizontal: Spacing.lg, gap: 10 },
+  selectTop: { alignItems: "center", justifyContent: "space-between" },
+  selectLink: { fontSize: 14.5, fontWeight: "900" },
+  selectActions: { gap: 10 },
+  selectBtn: { flex: 1, height: 50, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", gap: 8 },
+  selectBtnTxt: { fontSize: 15, fontWeight: "900" },
   err: { fontSize: 13, textAlign: "center", marginTop: 8, fontWeight: "700" },
 
   genWrap: { alignSelf: "stretch", marginTop: Spacing.lg, gap: 8 },
