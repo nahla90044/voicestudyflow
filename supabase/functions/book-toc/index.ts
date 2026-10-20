@@ -67,13 +67,13 @@ async function printedToc(req: Request, pdf: any, n: number): Promise<{ title: s
   if (!key) return [];
   const client = new Anthropic({ apiKey: key });
   const msg = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5-5",
     max_tokens: 4000,
     system:
       'أنت محلّل فهارس كتب. يصلك نص صفحات «الفهرس/المحتويات» من كتاب (قد يكون النص مستخرجًا من PDF بترتيب مضطرب). استخرج عناصر الفهرس كما هي بالترتيب: عنوان كل فصل/باب/قسم ورقم صفحته المطبوع. لا تخترع عناصر ولا أرقامًا غير موجودة. level: 0 للأبواب أو الفصول الرئيسية، 1 لما تحتها. أعد فقط JSON: [{"title":"…","printed":12,"level":0}]. إن لم يكن النص فهرسًا فأعد [].',
     messages: [{ role: "user", content: tocPages.map((x) => x.text).join("\n-----\n").slice(0, 20000) }],
   });
-  void logCost(req, { fn: "book-toc", action: "printed-toc", model: "claude-sonnet-4-6", input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
+  void logCost(req, { fn: "book-toc", action: "printed-toc", model: "claude-sonnet-5-5", input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
   const raw = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
   const m = raw.match(/\[[\s\S]*\]/);
   let items: { title: string; printed: number; level: number }[] = [];

@@ -1,12 +1,14 @@
 -- scripts/cost-report.sql
 -- تقرير التكلفة الحقيقية من cost_log (أرقام الخدمات نفسها). الأسعار بالدولار من صفحات الأسعار الرسمية
--- وقت الكتابة — تُحدَّث هنا إن تغيّرت: Sonnet 4.6 ‏3/15 لكل مليون رمز، Haiku 4.5 ‏1/5،
+-- وقت الكتابة — تُحدَّث هنا إن تغيّرت: Sonnet 5.5 ‏2/10 لكل مليون رمز، Haiku 5.5 ‏0.1/0.5 (حتى ١٠٠ ألف رمز)؛ القديمان Sonnet 4.6 ‏3/15 وHaiku 4.5 ‏1/5،
 -- صوت Gemini Flash Lite TTS ‏6 لكل مليون رمز صوت (25 رمزًا/ثانية) ويتضاعف 2027، صورة Flash Image ‏0.039.
 with priced as (
   select *,
     case
-      when fn = 'ai-assist' and model like 'claude-haiku%' then (coalesce(input_tokens,0) * 1 + coalesce(output_tokens,0) * 5) / 1e6
-      when fn = 'ai-assist' then (coalesce(input_tokens,0) * 3 + coalesce(output_tokens,0) * 15) / 1e6
+      when model = 'claude-haiku-5-5' then (coalesce(input_tokens,0) * 0.1 + coalesce(output_tokens,0) * 0.5) / 1e6
+      when model = 'claude-sonnet-5-5' then (coalesce(input_tokens,0) * 2 + coalesce(output_tokens,0) * 10) / 1e6
+      when model like 'claude-haiku%' then (coalesce(input_tokens,0) * 1 + coalesce(output_tokens,0) * 5) / 1e6
+      when model like 'claude%' then (coalesce(input_tokens,0) * 3 + coalesce(output_tokens,0) * 15) / 1e6
       when fn = 'tts' and not cached then coalesce(audio_seconds,0) * 25 * 6 / 1e6
       when fn = 'card-image' then coalesce(images,0) * 0.039
       else 0 end as usd

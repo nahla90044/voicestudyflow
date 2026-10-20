@@ -64,21 +64,22 @@ const SYSTEM: Record<string, string> = {
     'أنت مُصنِّف محتوى صارم لتطبيق قراءة عربي محافظ. افحص النص المأخوذ من كتاب يريد المستخدم رفعه. اجعل allowed=false إذا احتوى أو روّج لأيٍّ من: محتوى جنسي صريح أو وصف أجساد عارية أو إثارة؛ الشذوذ الجنسي أو زنا المحارم أو أي إساءة للأطفال؛ التقليل من شأن الفئات الضعيفة (المرأة، الفقراء، المعاقون، المرضى النفسيون، كبار السن، الأطفال) أو إيذاء الحيوانات؛ التطرف أو الدعوة للعنف أو الكراهية أو الفتنة بين الأعراق والقبائل والأديان؛ السحر والشعوذة والكابالا والاستحضار والتنجيم والخرافات؛ الدعوة للانتحار أو إيذاء النفس؛ أو انحراف عقدي/ديني واضح أو محتوى تابو يسيء دينًا وخلقًا وعرفًا واجتماعيًا. خلاف ذلك allowed=true. كن دقيقًا ولا ترفض المحتوى العلمي/الطبي/التاريخي الجادّ لمجرد ذكره لهذه المواضيع. أعد فقط JSON صالحًا بالشكل: {"allowed": true او false, "category": "كلمة مختصرة للفئة أو فارغ", "advice": "نصيحة قصيرة مهذّبة للمستخدم بحسب نوع المخالفة، أو فارغ"}. لا تكتب أي شيء خارج JSON.',
 };
 
-// نموذج وحدود لكل إجراء (التنظيف والقاموس سريعان لأنهما يُستدعيان كثيرًا)
+// نموذج وحدود لكل إجراء (التنظيف والقاموس سريعان لأنهما يُستدعيان كثيرًا).
+// ٢٠ أكتوبر ٢٠٢٦ (قرار نهلة): الجيل الأحدث الأرخص — Haiku 5.5 بدل 4.5 (أرخص ١٠ مرات)، وSonnet 5.5 بدل 4.6 (أرخص بالثلث).
 const MODEL: Record<string, string> = {
-  cleanup: "claude-haiku-4-5-20251001",
-  define: "claude-haiku-4-5-20251001",
-  slides: "claude-haiku-4-5-20251001", // العرض التقديمي: تلخيص بسيط → نموذج سريع
-  filternoise: "claude-haiku-4-5-20251001", // تنقية الضجيج: مهمة بسيطة → نموذج سريع
-  fixspacing: "claude-haiku-4-5-20251001", // إصلاح المسافات: مهمة بسيطة → نموذج سريع
+  cleanup: "claude-haiku-5-5",
+  define: "claude-haiku-5-5",
+  slides: "claude-haiku-5-5", // العرض التقديمي: تلخيص بسيط → نموذج سريع
+  filternoise: "claude-haiku-5-5", // تنقية الضجيج: مهمة بسيطة → نموذج سريع
+  fixspacing: "claude-haiku-5-5", // إصلاح المسافات: مهمة بسيطة → نموذج سريع
   // النطق الدقيق (التشكيل) والترجمة الصوتية يُطلبان أثناء القراءة صفحةً-بصفحة،
   // فالسرعة أهم شيء لتجربة الاستماع → نموذج سريع بدل الإبطاء.
-  tashkeel: "claude-haiku-4-5-20251001",
-  ocrtashkeel: "claude-haiku-4-5-20251001", // تصحيح OCR + تشكيل: يُطلب أثناء القراءة → سريع
-  translate: "claude-haiku-4-5-20251001",
+  tashkeel: "claude-haiku-5-5",
+  ocrtashkeel: "claude-haiku-5-5", // تصحيح OCR + تشكيل: يُطلب أثناء القراءة → سريع
+  translate: "claude-haiku-5-5",
   // المنهج: استخراج الوحدات من الفهرس مهمة استخراجية منظّمة → نموذج سريع
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
-  syllabus: "claude-haiku-4-5-20251001",
+  syllabus: "claude-haiku-5-5",
 };
 const MAX_TOKENS: Record<string, number> = { videoscript: 12000, studysummary: 12000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 8000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
@@ -114,12 +115,12 @@ async function askGuard(req: Request, q: string): Promise<{ verdict: "ok" | "off
     if (!key) return { verdict: "ok", kind: "" };
     const client = new Anthropic({ apiKey: key });
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-haiku-5-5",
       max_tokens: 60,
       system: ASK_GUARD_PROMPT,
       messages: [{ role: "user", content: `<q>${q.replace(/<\/?q>/gi, "")}</q>` }],
     });
-    void logCost(req, { fn: "ai-assist", action: "askguard", model: "claude-haiku-4-5-20251001", input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
+    void logCost(req, { fn: "ai-assist", action: "askguard", model: "claude-haiku-5-5", input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
     const raw = msg.content.map((c) => (c.type === "text" ? c.text : "")).join("");
     const m = raw.match(/\{[\s\S]*\}/);
     const v = m ? (JSON.parse(m[0]) as { verdict?: string; kind?: string }) : {};
@@ -319,7 +320,7 @@ Deno.serve(async (req: Request) => {
 
     const client = new Anthropic({ apiKey });
 
-    const model = MODEL[action] ?? "claude-sonnet-4-6";
+    const model = MODEL[action] ?? "claude-sonnet-5-5";
     // ميزانية المخرجات: تكبر مع العدد المطلوب (كل بطاقة/سؤال يحتاج مساحة)
     const baseTok = MAX_TOKENS[action] ?? 1500;
     const maxTok = count > 0 && (action === "flashcards" || action === "unitquiz")
