@@ -26,6 +26,7 @@ import {
   setUnitDone,
   type MindMap,
   type Syllabus,
+  type SyllabusStage,
   type UnitSchedule,
 } from "../../lib/syllabus";
 
@@ -128,44 +129,31 @@ export default function SyllabusScreen() {
     })();
   }, [pdfPath]);
 
-  // مؤشّر تقدّم لتوليد المنهج — يوضّح أن التطبيق يعمل وكم تقريبًا تبقّى.
-  // (توليد المنهج الكامل نداءٌ واحد لا يبثّ تقدّمًا، فنُظهر تقدّمًا زمنيًا سلسًا.)
+  // تقدّم التوليد من مراحله الفعلية (الفهرس ← الفحص ← محتوى الوحدات ← الحفظ)، يتحرك ببطء داخل كل مرحلة
+  const [stage, setStage] = useState<SyllabusStage | null>(null);
   useEffect(() => {
-    if (!busy) {
-      setGenPct(0);
+    if (!busy || !stage) {
+      if (!busy) setGenPct(0);
       return;
     }
-    const msgs = [
-      t("syllabus.gen.reading"),
-      t("syllabus.gen.extracting"),
-      t("syllabus.gen.lectures"),
-      t("syllabus.gen.finishing"),
-    ];
-    let p = 0;
-    setGenPct(3);
-    setGenMsg(msgs[0]);
-    const id = setInterval(() => {
-      p = Math.min(92, p + Math.max(1, Math.round((92 - p) * 0.07)));
-      setGenPct(p);
-      setGenMsg(msgs[p < 25 ? 0 : p < 55 ? 1 : p < 82 ? 2 : 3]);
-    }, 450);
+    const range: Record<SyllabusStage, [number, number, string]> = {
+      structure: [3, 30, t("syllabus.gen.reading")],
+      check: [30, 40, t("syllabus.gen.extracting")],
+      content: [40, 92, t("syllabus.gen.lectures")],
+      save: [92, 99, t("syllabus.gen.finishing")],
+    };
+    const [from, to, msg] = range[stage];
+    setGenMsg(msg);
+    setGenPct((p) => Math.max(p, from));
+    const id = setInterval(() => setGenPct((p) => Math.min(to, p + Math.max(1, Math.round((to - p) * 0.06)))), 500);
     return () => clearInterval(id);
-  }, [busy, t]);
+  }, [busy, stage, t]);
 
   // إعادة إنشاء المنهج كاملًا (بتأكيد: تُحسب طلبًا) — من الفهرس الدقيق
   function confirmRegenerate() {
     Alert.alert(t("syllabus.regenTitle"), t("syllabus.regenBody"), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("syllabus.regenerate"), onPress: () => void onGenerate() },
-    ]);
-  }
-
-  // زر إعادة الإنشاء: المنهج كاملًا أو وحدات محددة
-  function chooseRegenerate() {
-    Alert.alert(t("syllabus.regenChoose"), undefined, [
-      { text: t("syllabus.regenAll"), onPress: confirmRegenerate },
-      { text: t("syllabus.regenPick"), onPress: () => startSelecting() },
-      { text: t("common.cancel"), style: "cancel" },
     ]);
   }
 
@@ -254,7 +242,7 @@ export default function SyllabusScreen() {
     setBusy(true);
     try {
       const before = (syl?.units ?? []).map((u) => u.title).join("|");
-      const data = await generateSyllabus(pdfPath);
+      const data = await generateSyllabus(pdfPath, setStage);
       // تغيّرت الوحدات → محتوى الوحدات القديم (ملخصات، اختبارات، خرائط، فيديو) لم يعد يطابقها فيُحذف
       if (before && before !== data.units.map((u) => u.title).join("|")) await resetUnitContent(pdfPath);
       setSyl(data);
@@ -265,6 +253,7 @@ export default function SyllabusScreen() {
       setErr(e?.message === "USER_QUOTA" ? t("pay.reason.ai") : t("syllabus.err.generate"));
     } finally {
       setBusy(false);
+      setStage(null);
     }
   }
 
@@ -403,13 +392,6 @@ export default function SyllabusScreen() {
         left={backBtn}
         right={
           <View style={{ flexDirection: dir.row, gap: 8 }}>
-            {syl ? (
-              <PressableScale onPress={busy || editing ? undefined : canEdit ? chooseRegenerate : confirmRegenerate}>
-                <SceneIconButton>
-                  {busy || editing ? <ActivityIndicator color={pal.ink} /> : <Ionicons name="refresh" size={20} color={pal.ink} accessibilityLabel={t("syllabus.regenerate")} />}
-                </SceneIconButton>
-              </PressableScale>
-            ) : null}
             {printBtn}
             <CoachHelpButton onPress={coach.replay} />
           </View>
@@ -420,12 +402,13 @@ export default function SyllabusScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={pal.accent} />
         </View>
-      ) : !syl ? (
+      ) : !syl || busy ? (
+        // أول إنشاء وإعادة الإنشاء بنفس الشاشة ونفس المراحل
         <View style={styles.center}>
           <Ionicons name="sparkles" size={40} color={pal.accent} />
-          <Text style={[styles.emptyTitle, { color: pal.ink }]}>{t("syllabus.empty.title")}</Text>
+          <Text style={[styles.emptyTitle, { color: pal.ink }]}>{syl ? t("syllabus.regenTitle") : t("syllabus.empty.title")}</Text>
           <Text style={[styles.emptySub, { color: pal.dim }]}>
-            {t("syllabus.empty.sub")}
+            {syl ? t("syllabus.regenSub") : t("syllabus.empty.sub")}
           </Text>
           {!!err && <Text style={[styles.err, { color: tone.bad }]}>{err}</Text>}
           {busy ? (
@@ -452,6 +435,7 @@ export default function SyllabusScreen() {
               <Text style={[styles.ctaTxt, { color: pal.onAccent }]}>{t("syllabus.empty.generate")}</Text>
             </Pressable>
           )}
+          {!busy && (
           <Pressable
             onPress={startReading}
             style={[styles.readNowBtn, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.accent }]}
@@ -459,6 +443,7 @@ export default function SyllabusScreen() {
             <Ionicons name="book" size={18} color={pal.accent} />
             <Text style={[styles.readNowTxt, { color: pal.ink }]}>{t("syllabus.readNowFull")}</Text>
           </Pressable>
+          )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -482,6 +467,33 @@ export default function SyllabusScreen() {
               </Text>
             )}
           </SceneCard>
+
+          {/* إدارة المنهج في الأعلى: إعادة الإنشاء (نفس طريق أول إنشاء) · تعديل الوحدات · الحذف */}
+          {!selecting && canEdit && (
+            <View {...coach.bind("manage")} style={[styles.manageRow, { flexDirection: dir.row }]}>
+              {(
+                [
+                  ["refresh", t("syllabus.regenShort"), confirmRegenerate, pal.ink, pal.cardBorder],
+                  ["checkbox-outline", t("syllabus.manage"), () => startSelecting(), pal.ink, pal.cardBorder],
+                  ["trash-outline", t("common.delete"), confirmDeleteSyllabus, tone.bad, tone.bad],
+                ] as const
+              ).map(([icon, label, onPress, color, border]) => (
+                <Pressable
+                  key={label}
+                  onPress={busy || editing ? undefined : onPress}
+                  style={({ pressed }) => [
+                    styles.manageBtn,
+                    { flexDirection: dir.row, backgroundColor: pal.card, borderColor: border, opacity: busy || editing ? 0.5 : pressed ? 0.85 : 1 },
+                  ]}
+                >
+                  <Ionicons name={icon} size={17} color={color} />
+                  <Text style={[styles.manageTxt, { color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
           {/* زر الدخول للقراءة — بارز فوق الوحدات */}
           <Pressable
@@ -629,56 +641,6 @@ export default function SyllabusScreen() {
 
           {/* دور مستقل عن طابعة الهيدر: إعادة توليد المنهج كاملًا من الكتاب
               (يعيد بناء الوحدات بالفهرس الكامل بدل النسخة القديمة المختصرة). */}
-          {!selecting && (
-            <Pressable
-              onPress={busy || editing ? undefined : confirmRegenerate}
-              style={({ pressed }) => [
-                styles.ghostBtn,
-                {
-                  flexDirection: dir.row,
-                  backgroundColor: pal.card,
-                  borderColor: pal.cardBorder,
-                  marginTop: Spacing.md,
-                  opacity: busy || editing ? 0.5 : pressed ? 0.9 : 1,
-                },
-              ]}
-            >
-              {busy ? (
-                <ActivityIndicator color={pal.ink} />
-              ) : (
-                <>
-                  <Ionicons name="refresh" size={18} color={pal.ink} />
-                  <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("syllabus.regenerate")}</Text>
-                </>
-              )}
-            </Pressable>
-          )}
-          {/* تعديل الوحدات (تحديد لإعادة الإنشاء أو الحذف) وحذف المنهج — لكتب المستخدم فقط */}
-          {!selecting && canEdit && (
-            <>
-              <Pressable
-                {...coach.bind("manage")}
-                onPress={busy || editing ? undefined : () => startSelecting()}
-                style={({ pressed }) => [
-                  styles.ghostBtn,
-                  { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder, opacity: busy || editing ? 0.5 : pressed ? 0.9 : 1 },
-                ]}
-              >
-                <Ionicons name="checkbox-outline" size={18} color={pal.ink} />
-                <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("syllabus.manage")}</Text>
-              </Pressable>
-              <Pressable
-                onPress={busy || editing ? undefined : confirmDeleteSyllabus}
-                style={({ pressed }) => [
-                  styles.ghostBtn,
-                  { flexDirection: dir.row, backgroundColor: pal.card, borderColor: tone.bad, opacity: busy || editing ? 0.5 : pressed ? 0.9 : 1 },
-                ]}
-              >
-                <Ionicons name="trash-outline" size={18} color={tone.bad} />
-                <Text style={[styles.ctaTxt, { color: tone.bad }]}>{t("syllabus.delete")}</Text>
-              </Pressable>
-            </>
-          )}
           <View style={{ height: selecting ? 150 : 24 }} />
         </ScrollView>
       )}
@@ -844,6 +806,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   readNowTxt: { fontSize: 16, fontWeight: "900" },
+  manageRow: { gap: 8 },
+  manageBtn: { flex: 1, height: 46, borderRadius: Radius.pill, borderWidth: 1, alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 8 },
+  manageTxt: { fontSize: 13.5, fontWeight: "900", flexShrink: 1 },
   selectHint: { fontSize: 13.5, lineHeight: 22, fontWeight: "700" },
   pick: { borderRadius: 8 },
   workingTxt: { fontSize: 12.5, fontWeight: "800", marginTop: 6, paddingStart: 36 },

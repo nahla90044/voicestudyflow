@@ -15,9 +15,6 @@ const ar: Record<string, string> = {
   "summary.why": "سبب الإجابة",
   "syllabus.regenTitle": "إعادة إنشاء المنهج",
   "syllabus.manage": "تعديل الوحدات",
-  "syllabus.regenChoose": "ما المطلوب إعادة إنشائه؟",
-  "syllabus.regenAll": "المنهج كاملًا",
-  "syllabus.regenPick": "وحدات محددة",
   "syllabus.select.hint": "اختيار الوحدات بالضغط عليها، ثم اختيار الإجراء من الأسفل.",
   "syllabus.select.all": "تحديد الكل",
   "syllabus.select.none": "إلغاء التحديد",
@@ -33,7 +30,7 @@ const ar: Record<string, string> = {
   "syllabus.regenerating": "جارٍ إعادة الإنشاء…",
   "syllabus.err.unitRegen": "تعذّرت إعادة إنشاء: {list}. يمكن المحاولة مرة أخرى.",
   "syllabus.err.edit": "تعذّر حفظ التعديل. يُرجى المحاولة مرة أخرى.",
-  "syllabus.regenBody": "يُعاد بناء الوحدات من فهرس الكتاب الدقيق بعناوينه وصفحاته (طلب ذكي واحد). إن تغيّرت الوحدات تُحذف ملخصاتها واختباراتها القديمة لتُنشأ من جديد مطابقة لها.",
+  "syllabus.regenBody": "يُبنى المنهج كاملًا من جديد بنفس طريقة أول إنشاء: الوحدات وصفحاتها من فهرس الكتاب الدقيق مع فحص يمنع التكرار والوحدات المختلة، ثم مواضيع كل وحدة من صفحاتها (طلب ذكي واحد). إن تغيّرت الوحدات تُحذف ملخصاتها واختباراتها القديمة لتُنشأ من جديد مطابقة لها.",
   "quiz.count.title": "كم سؤالًا؟",
   "quiz.count.hint": "الأسئلة من لبّ الوحدة، متنوعة: اختيار من متعدد، صح أو خطأ، إكمال الفراغ، تعريفات، ومقالي — وكلها تُجاب باختيار.",
   "quiz.count.auto": "تلقائي حسب حجم الوحدة",
@@ -1749,6 +1746,8 @@ const ar: Record<string, string> = {
   "coach.syl.unit.mindmap": "خريطة ذهنية تُطبع",
   "coach.syl.manage.title": "تعديل المنهج",
   "coach.syl.manage.body": "إعادة إنشاء المنهج كاملًا من الفهرس الدقيق، أو تحديد وحدات لإعادة إنشائها أو حذفها، أو حذف المنهج كله. الضغط المطوّل على وحدة يبدأ التحديد.",
+  "syllabus.regenShort": "إعادة الإنشاء",
+  "syllabus.regenSub": "يُبنى المنهج من جديد من فهرس الكتاب الدقيق: الوحدات وصفحاتها، ثم مواضيع كل وحدة من صفحاتها هي.",
 };
 
 const en: Record<string, string> = {
@@ -1762,9 +1761,6 @@ const en: Record<string, string> = {
   "summary.why": "Why",
   "syllabus.regenTitle": "Rebuild syllabus",
   "syllabus.manage": "Edit units",
-  "syllabus.regenChoose": "What should be rebuilt?",
-  "syllabus.regenAll": "The whole syllabus",
-  "syllabus.regenPick": "Selected units",
   "syllabus.select.hint": "Tap units to select them, then choose an action below.",
   "syllabus.select.all": "Select all",
   "syllabus.select.none": "Clear selection",
@@ -3468,6 +3464,8 @@ const en: Record<string, string> = {
   "coach.syl.unit.mindmap": "A printable mind map",
   "coach.syl.manage.title": "Edit the syllabus",
   "coach.syl.manage.body": "Rebuild the whole syllabus from the accurate contents, select units to rebuild or delete, or delete the syllabus. Long-press a unit to start selecting.",
+  "syllabus.regenShort": "Rebuild",
+  "syllabus.regenSub": "The syllabus is rebuilt from the book's accurate contents: units and their pages, then each unit's topics from its own pages.",
 };
 
 // الفرنسي: يُملأ في مرحلة لاحقة. حاليًا نعتمد على fallback الإنجليزي عبر دالة t.

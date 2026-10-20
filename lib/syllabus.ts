@@ -66,72 +66,87 @@ function matchUnit(title: string, ai: SyllabusUnit[]): SyllabusUnit | undefined 
   return best.score >= 0.6 ? best.u : undefined;
 }
 
-/** يولّد المنهج من نص الكتاب (أول الصفحات) ويخزّنه. */
-export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
-  // اجمع نص أوّل الصفحات الحقيقية
-  // نقرأ صفحاتٍ أكثر ونصًّا أطول حتى يلتقط الذكاء فهرس المحتويات كاملًا
-  // (كتاب فيه ١٥ وحدة يذكرها الفهرس في أوّله) فيغطّي كل الوحدات لا أوّلها فقط.
-  const { data: pages } = await supabase
-    .from("page_cache")
-    .select("text,page")
-    .eq("pdf_path", pdfPath)
-    .neq("source", "empty")
-    .order("page")
-    .limit(30);
-  const text = (pages ?? [])
-    .map((p: any) => p.text)
-    .join("\n")
-    .slice(0, 16000);
-  if (text.trim().length < 100) {
-    throw new Error("لا يوجد نص كافٍ. يلزم فتح الكتاب وقراءة أول صفحاته أولًا.");
-  }
+export type SyllabusStage = "structure" | "check" | "content" | "save";
 
-  // الفهرس الدقيق أولًا: فهرس الملف المدمج أو الفهرس المطبوع المتحقَّق منه صفحةً صفحة.
-  // إن وُجد يُلتزم بوحداته وعناوينها وترتيبها وصفحاتها حرفيًا (الفهرس المضروب في أول الكتاب لا يُعتمد).
-  let toc: { title: string; page: number; to: number; level: number }[] = [];
-  try {
-    const total = Number((pages ?? []).length ? (await supabase.from("page_cache").select("total_pages").eq("pdf_path", pdfPath).limit(1).maybeSingle()).data?.total_pages : 0) || 0;
-    const { getBookToc } = await import("./bookToc");
-    const bt = await getBookToc(pdfPath, total, true);
-    toc = bt.book.filter((c) => c.level === 0);
-    if (toc.length < 2) toc = [];
-  } catch {
-    toc = [];
+/** نص الصفحات الأولى من كل وحدة (أهدافها ومحاضراتها غالبًا هناك) بميزانية ثابتة للطلب الواحد */
+async function unitExcerpts(pdfPath: string, units: { page: number; to: number }[]): Promise<string[]> {
+  const { unitText } = await import("./unitScope");
+  const per = Math.max(500, Math.min(1600, Math.floor(15000 / Math.max(1, units.length))));
+  const out: string[] = new Array(units.length).fill("");
+  for (let i = 0; i < units.length; i += 4) {
+    await Promise.all(
+      units.slice(i, i + 4).map(async (u, k) => {
+        const t = await unitText(pdfPath, u.page, Math.min(u.to, u.page + 3)).catch(() => "");
+        out[i + k] = t.replace(/\s+/g, " ").slice(0, per);
+      })
+    );
   }
-  const tocNote = toc.length
-    ? `\n\nالفهرس الدقيق للكتاب (مُتحقَّق منه، ملزم): الوحدات هي بالضبط هذه ${toc.length} بهذا الترتيب وبهذه العناوين حرفيًا:\n${toc.map((c, i) => `${i + 1}. ${c.title}`).join("\n")}\nلا تضف وحدات ولا تحذف ولا تدمج ولا تعدّل العناوين.`
-    : "";
+  return out;
+}
 
+/**
+ * يولّد المنهج ويخزّنه — نفس الطريق في أول إنشاء وفي إعادة الإنشاء:
+ * ١) بنية الوحدات من فهرس القارئ نفسه (مدمج/مطبوع متحقَّق منه، أو رأس الصفحة المتكرر)،
+ * ٢) فحص صارم للبنية (لا مكرر ولا ترتيب مختل ولا وحدة صفحة أو صفحتين) — المنهج المختل لا يُحفظ أبدًا،
+ * ٣) مواضيع كل وحدة وهدفها من صفحاتها هي (طلب ذكي واحد)، ٤) الحفظ وتثبيت صفحات الوحدات.
+ * بلا بنية سليمة من الكتاب: يحلّل الذكاء أول الكتاب (كالسابق) ثم تُفحص نتيجته بنفس الفحص.
+ */
+export async function generateSyllabus(pdfPath: string, onStage?: (s: SyllabusStage) => void): Promise<Syllabus> {
+  onStage?.("structure");
+  const { data: first } = await supabase.from("page_cache").select("text,page,total_pages").eq("pdf_path", pdfPath).neq("source", "empty").order("page").limit(30);
+  const text = (first ?? []).map((p: any) => p.text).join("\n").slice(0, 16000);
+  if (text.trim().length < 100) throw new Error("لا يوجد نص كافٍ. يلزم فتح الكتاب وقراءة أول صفحاته أولًا.");
+  const total = Number((first ?? [])[0]?.total_pages) || 0;
+
+  // ١) المصادر بالترتيب: فهرس القارئ (نفس ما يظهر في «الفهرس» داخل القارئ)، ثم رأس الصفحة المتكرر
+  const { getBookToc } = await import("./bookToc");
+  const { bookPages } = await import("./glossary");
+  const { unitsFromRunningHeads } = await import("./unitHeadings");
+  const { checkStructure } = await import("./unitStructure");
+  const sources: { title: string; page: number }[][] = [];
+  const bt = await getBookToc(pdfPath, total, true).catch(() => ({ book: [], units: [] }));
+  sources.push(bt.book.filter((c) => c.level === 0));
+  sources.push(unitsFromRunningHeads(await bookPages(pdfPath).catch(() => []), total));
+
+  // ٢) أول بنية سليمة تُعتمد؛ وإلا أفضل بنية بعد التنظيف إن بقيت وحدتان فأكثر
+  onStage?.("check");
+  const checks = sources.filter((x) => x.length >= 2).map((x) => checkStructure(x, total));
+  let struct = checks.find((c) => c.sound)?.units ?? checks.find((c) => c.units.length >= 2)?.units ?? [];
+
+  // ٣) المحتوى: مواضيع كل وحدة من صفحاتها هي (طلب واحد)، أو تحليل أول الكتاب إن لم توجد بنية
+  onStage?.("content");
   let syl: Syllabus | null = null;
-  try {
-    syl = parseSyllabus(await aiAssist("syllabus", text + tocNote));
-  } catch (e) {
-    // الفهرس الدقيق يكفي لبناء الوحدات بلا ذكاء؛ بدونه يظهر الخطأ (مثل نفاد الطلبات)
-    if (!toc.length) throw e;
+  if (struct.length) {
+    const ex = await unitExcerpts(pdfPath, struct);
+    const brief =
+      `هذه وحدات الكتاب الدقيقة (${struct.length} وحدة) من فهرسه، ومع كل وحدة مقتطف من صفحاتها الأولى. ` +
+      `أعد المنهج بالوحدات نفسها بالضبط وبالترتيب نفسه وبعناوينها حرفيًا (لا تضف ولا تحذف ولا تدمج)، ` +
+      `ولكل وحدة topics: محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط، وoutcome: ما يتعلمه الطالب منها.\n\n` +
+      struct.map((u, i) => `### ${i + 1}. ${u.title} (ص ${u.page}–${u.to})\n${ex[i]}`).join("\n\n");
+    const ai = parseSyllabus(await aiAssist("syllabus", brief))?.units ?? [];
+    syl = {
+      title: "",
+      units: struct.map((u, i) => {
+        const m = ai.length === struct.length ? ai[i] : matchUnit(u.title, ai);
+        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome };
+      }),
+      tips: [],
+    };
+  } else {
+    const fromAi = parseSyllabus(await aiAssist("syllabus", text));
+    if (!fromAi?.units.length) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
+    // نتيجة الذكاء نفسها تُفحص: لا وحدة مكررة
+    const { unitKey } = await import("./unitStructure");
+    const seen = new Set<string>();
+    syl = { ...fromAi, units: fromAi.units.filter((u) => !seen.has(unitKey(u.title)) && !!seen.add(unitKey(u.title))) };
   }
-  if (!syl && !toc.length) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
-  if (toc.length) {
-    // الوحدات من الفهرس الدقيق نفسه (ما كتبه الذكاء يُستفاد منه للمواضيع والأهداف فقط إن طابق العدد)
-    // مواضيع كل وحدة من نتيجة الذكاء: بمطابقة العنوان لا بالترتيب (كان اختلاف العدد يتركها كلها فارغة)
-    const ai = syl?.units ?? [];
-    const pick = (title: string, i: number) => matchUnit(title, ai) ?? (ai.length === toc.length ? ai[i] : undefined);
-    const units = toc.map((c, i) => ({
-      title: c.title,
-      topics: pick(c.title, i)?.topics ?? [],
-      outcome: pick(c.title, i)?.outcome,
-    }));
-    syl = { title: syl?.title ?? "", units, tips: syl?.tips ?? [] };
-    // حدود صفحات كل وحدة من الفهرس مباشرة (الملخص والاختبار والفيديو يستخدمونها)
-    const { setUnitRanges } = await import("./glossary");
-    await setUnitRanges(pdfPath, toc.map((c) => ({ from: c.page, to: c.to, found: true })));
-  }
-  if (!syl) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
 
-  await supabase.from("book_syllabus").upsert({
-    pdf_path: pdfPath,
-    data: syl,
-    done: new Array(syl.units.length).fill(false),
-  });
+  // ٤) الحفظ: صفحات الوحدات مثبّتة من البنية (الملخص والاختبار والفيديو والفهرس تعتمدها)
+  onStage?.("save");
+  const { setUnitRanges } = await import("./glossary");
+  if (struct.length) await setUnitRanges(pdfPath, struct.map((u) => ({ from: u.page, to: u.to, found: true })));
+  const { error } = await supabase.from("book_syllabus").upsert({ pdf_path: pdfPath, data: syl, done: new Array(syl.units.length).fill(false) });
+  if (error) throw new Error("تعذّر حفظ المنهج. يُرجى المحاولة مرة أخرى.");
   return syl;
 }
 
