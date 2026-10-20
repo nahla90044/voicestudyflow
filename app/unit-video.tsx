@@ -22,8 +22,9 @@ import { markSeen, seenScenes } from "../lib/studyTrack";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
-import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoSeconds, type VideoScript } from "../lib/videoScript";
-import { startVideoJob, watchVideoJob, type VideoJob } from "../lib/videoJobs";
+import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoRequestCost, videoSeconds, type VideoScript } from "../lib/videoScript";
+import { confirmCost } from "../lib/costConfirm";
+import { hasVideoJob, startVideoJob, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking } from "../lib/voice";
 
 const THINK_SECONDS = 5;
@@ -66,6 +67,16 @@ export default function UnitVideoScreen() {
         setComplete(true);
         return;
       }
+      // عدد الطلبات قبل التجهيز (الملخّص الناقص + الفيديو)؛ الإلغاء يرجع للمكان السابق
+      if (!hasVideoJob(pdfPath, src)) {
+        const cost = await videoRequestCost(pdfPath, src, unitTitle).catch(() => null);
+        if (!on) return;
+        if (cost && !(await confirmCost(cost.pending, "video", t, cost.estimated))) {
+          if (router.canGoBack()) router.back();
+          return;
+        }
+      }
+      if (!on) return;
       const params: Record<string, string> = { pdf_path: pdfPath };
       for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
       const key = startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params });

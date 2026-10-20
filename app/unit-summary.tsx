@@ -14,7 +14,8 @@ import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToText, type StudySummary } from "../lib/studySummary";
-import { clearSummary, summaryCacheKey, summaryRange, type SummarySource } from "../lib/unitSummary";
+import { clearSummary, summaryCacheKey, summaryRange, summaryRequestCost, type SummarySource } from "../lib/unitSummary";
+import { confirmCost } from "../lib/costConfirm";
 import { hasSummaryJob, startSummaryJob, watchSummaryJob } from "../lib/summaryJobs";
 import { getSummaryMode, setSummaryMode, type SummaryMode } from "../lib/summaryPrefs";
 import { getUnitContent } from "../lib/unitContent";
@@ -199,6 +200,16 @@ export default function UnitSummaryScreen() {
         }
         return;
       }
+      // عدد الطلبات قبل التوليد (لا مفاجآت في العدّاد)؛ الإلغاء يرجع للمكان السابق
+      if (!hasSummaryJob(pdfPath, src)) {
+        const cost = await summaryRequestCost(pdfPath, src).catch(() => null);
+        if (!on) return;
+        if (cost && !(await confirmCost(cost.pending, "summary", t))) {
+          if (router.canGoBack()) router.back();
+          return;
+        }
+      }
+      if (!on) return;
       const params: Record<string, string> = { pdf_path: pdfPath };
       for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
       const key = startSummaryJob(pdfPath, src, { title: unitTitle || bookTitle, params });

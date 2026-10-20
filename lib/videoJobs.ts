@@ -39,6 +39,11 @@ export function videoJobKey(pdfPath: string, src: SummarySource): string {
   return `video|${pdfPath}|${k.kind}|${k.id}`;
 }
 
+/** فيديو يُجهَّز الآن (لا يُسأل عن تكلفته مرة ثانية عند الرجوع لشاشته) */
+export function hasVideoJob(pdfPath: string, src: SummarySource): boolean {
+  return jobs.get(videoJobKey(pdfPath, src))?.status === "running";
+}
+
 function emit(j: VideoJob) {
   jobs.set(j.key, j);
   subs.get(j.key)?.forEach((f) => f(j));

@@ -355,6 +355,8 @@ Deno.serve(async (req: Request) => {
       const { data: row, error: insErr } = await admin.from("ai_jobs").insert({ user_id: caller.id, action }).select("id").single();
       if (insErr || !row) return json({ error: insErr?.message ?? "JOB_CREATE" }, 500);
       const jobId = row.id as string;
+      // قيد الخصم مربوط بالمهمة: إن علقت يردّه الحارس تلقائيًا
+      if (charged?.c.id) await admin.from("usage_ledger").update({ ref: jobId }).eq("id", charged.c.id);
       const work = (async () => {
         let all = "";
         let lastSave = Date.now();

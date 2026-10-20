@@ -16,7 +16,8 @@ import { mindmapSvg } from "../components/brand/mindmap";
 import { mindmapFromSummary, studyFileHtml, type StudySummary } from "../lib/studySummary";
 import { getSyllabus, type MindMap } from "../lib/syllabus";
 import { getUnitContent } from "../lib/unitContent";
-import { getCachedSummary, getOrMakeSummary } from "../lib/unitSummary";
+import { getCachedSummary, getOrMakeSummary, summaryRequestCost } from "../lib/unitSummary";
+import { confirmCost } from "../lib/costConfirm";
 import { getSummaryMode, setSummaryMode } from "../lib/summaryPrefs";
 
 type UnitRow = { title: string; summary: StudySummary | null; state: "ready" | "missing" | "working" | "failed" };
@@ -63,6 +64,9 @@ export default function StudyFileScreen() {
 
   async function generateMissing() {
     if (!rows || running) return;
+    // كل الوحدات الناقصة معًا: عدد طلباتها كلها قبل البدء
+    const costs = await Promise.all(rows.map((r, i) => (r.state === "ready" ? Promise.resolve(0) : summaryRequestCost(pdfPath, { kind: "unit", unit: i }).then((c) => c.pending).catch(() => 0))));
+    if (!(await confirmCost(costs.reduce((a, b) => a + b, 0), "studyfile", t))) return;
     stopRef.current = false;
     setRunning(true);
     for (let i = 0; i < rows.length; i++) {

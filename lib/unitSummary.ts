@@ -135,6 +135,24 @@ const parseFullPart = (raw: string) => {
   return s?.sections.length ? s : null;
 };
 
+/** معرّف حفظ الجزء i من ملخّص من n أجزاء */
+function summaryPartId(src: SummarySource, n: number): (i: number) => number {
+  const base = summaryCacheKey(src);
+  return (i) => (base.kind === "pagestudysummary" ? 1 : 2) * 1e12 + base.id * 1e4 + n * 100 + i;
+}
+
+/**
+ * كم طلبًا سيستهلك توليد الملخّص (جزء = طلب؛ المحفوظ من الأجزاء لا يُعاد ولا يُحسب). ٠ = جاهز.
+ * يُعرض للطالب قبل التوليد فلا يفاجئه العدّاد (قرار نهلة ٢٠ أكتوبر).
+ */
+export async function summaryRequestCost(pdfPath: string, src: SummarySource): Promise<{ total: number; pending: number }> {
+  if (await getCachedSummary(pdfPath, src)) return { total: 0, pending: 0 };
+  const parts = await summaryParts(pdfPath, src);
+  const id = summaryPartId(src, parts.length);
+  const saved = await Promise.all(parts.map((_, i) => getUnitContent<StudySummary>(pdfPath, id(i), "studysummarypart").then((x) => !!x?.sections?.length).catch(() => false)));
+  return { total: parts.length, pending: saved.filter((x) => !x).length };
+}
+
 /**
  * ملخّص كامل: من المخزن، أو يُولَّد بمحرك الأجزاء (lib/partsRunner: معًا، ببثّ، حفظ كل جزء فورًا،
  * إكمال تلقائي بعد القفل) ويُدمج بالترتيب ويُخزَّن.
@@ -149,9 +167,8 @@ export async function getOrMakeSummary(
   const parts = await summaryParts(pdfPath, src);
   if (!parts.length) return null;
   const n = parts.length;
-  const base = summaryCacheKey(src);
   const mode = (await getSummaryMode(pdfPath)) ?? "strict";
-  const partId = (i: number) => (base.kind === "pagestudysummary" ? 1 : 2) * 1e12 + base.id * 1e4 + n * 100 + i;
+  const partId = summaryPartId(src, n);
   const results = await runParts<StudySummary, StudySummary>({
     parts,
     speedKey: "vsf:summary:speed",

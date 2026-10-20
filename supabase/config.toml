@@ -55,3 +55,8 @@ verify_jwt = true
 # إشعارات Apple للخادم: لا رمز دخول — الحماية بتوقيع Apple (التحقّق داخل الدالة)
 [functions.apple-notifications]
 verify_jwt = false
+
+[functions.ops-mail]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ops-mail/index.ts"

@@ -78,6 +78,24 @@ export async function getOrMakeVideo(
   return { script, complete };
 }
 
+/**
+ * كم طلبًا سيستهلك الفيديو: أجزاء الملخّص الناقصة (يُبنى منه) + أجزاء الفيديو الناقصة.
+ * قبل وجود الملخّص يُقدَّر عدد أجزاء الفيديو بعدد أجزاء الملخّص (estimated=true).
+ */
+export async function videoRequestCost(pdfPath: string, src: SummarySource, unitTitle: string): Promise<{ pending: number; estimated: boolean }> {
+  if (await getCachedVideo(pdfPath, src)) return { pending: 0, estimated: false };
+  const { getCachedSummary, summaryRequestCost } = await import("./unitSummary");
+  const summary = await getCachedSummary(pdfPath, src);
+  if (!summary) {
+    const s = await summaryRequestCost(pdfPath, src);
+    return { pending: s.pending + Math.max(1, s.total), estimated: true };
+  }
+  const parts = videoParts(summary, unitTitle);
+  const ids = cacheIds(src);
+  const saved = await Promise.all(parts.map((_, i) => getUnitContent<VideoScript>(pdfPath, ids.partId(parts.length, i), "videopart").then((x) => !!x?.scenes?.length).catch(() => false)));
+  return { pending: saved.filter((x) => !x).length, estimated: false };
+}
+
 /** مدة المشاهدة بالثواني من مشهد from: كلام الراوي بسرعته المقيسة ÷ سرعة التشغيل + وقفات التفكير والانتقال */
 export function videoSeconds(scenes: VideoScene[], rate = 1, from = 0, thinkSecs = 5): number {
   const cps = speechCharsPerSec() * rate;
