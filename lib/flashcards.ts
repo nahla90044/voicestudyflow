@@ -116,6 +116,13 @@ export async function removeCard(id: string): Promise<void> {
   await save(cards.filter((c) => c.id !== id));
 }
 
+/** يحذف بطاقات محددة بمعرّفاتها (حذف مجموعة أو تحديد متعدد). */
+export async function removeCards(ids: string[]): Promise<void> {
+  const gone = new Set(ids);
+  const cards = await getCards();
+  await save(cards.filter((c) => !gone.has(c.id)));
+}
+
 /** يؤرشف/يرجع كل بطاقات كتاب معيّن (أو البطاقات العامة إن كان bookId فارغًا). */
 export async function archiveCardsForBook(bookId: string | undefined, archived: boolean): Promise<void> {
   const norm = (b?: string) => b ?? "";

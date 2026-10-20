@@ -174,7 +174,7 @@ export default function BookHubScreen() {
     { key: "syllabus", labelKey: "book.tool.syllabus", icon: "list", go: openSyllabus },
     { key: "glossary", labelKey: "book.tool.glossary", icon: "book", go: () => (units.length ? openGlossary(0) : openSyllabus()) },
     { key: "mindmap", labelKey: "book.tool.mindmap", icon: "git-network", go: openSyllabus },
-    { key: "cards", labelKey: "book.tool.cards", icon: "albums", badge: cards ? String(cards) : undefined, go: () => router.push("/flashcards") },
+    { key: "cards", labelKey: "book.tool.cards", icon: "albums", badge: cards ? String(cards) : undefined, go: () => router.push({ pathname: "/flashcards", params: { book_id: book.id, from_book: "1" } }) },
     { key: "translate", labelKey: "book.tool.translate", icon: "language", go: openReader },
     { key: "slides", labelKey: "book.tool.slides", icon: "easel", go: openReader },
     { key: "focus", labelKey: "book.tool.focus", icon: "timer", go: () => router.push("/pomodoro") },

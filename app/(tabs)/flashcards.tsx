@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
@@ -9,7 +9,7 @@ import { cachedCardImage, cardImageAvgSecs, cardImagesBlocked, getCardImage } fr
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
-import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCardsForBook, reviewCard, setCardFav, type Card, type Rating } from "../../lib/flashcards";
+import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCards, removeCardsForBook, reviewCard, setCardFav, type Card, type Rating } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
 import { getSavedItems, removeSavedItem, updateSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 import { useScene } from "../../lib/scene";
@@ -46,6 +46,15 @@ export default function FlashcardsScreen() {
   const dir = useDir();
   const router = useRouter();
   const { pal } = useScene();
+  // فُتحت من أدوات كتاب: تُفتح بطاقات ذلك الكتاب مباشرة، وزر الرجوع يعيد إلى صفحته
+  const params = useLocalSearchParams<{ book_id?: string; from_book?: string }>();
+  const fromBook = params.from_book === "1";
+  const openBookRef = useRef<string | null>(null);
+  // وضع التحديد (حذف متعدد): مفاتيح المجموعات في تبويب البطاقات، ومفاتيح المحفوظات في الملخصات/الاختبارات
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  // مجموعة البطاقات المعروضة في المراجعة (لحذف كل بطاقاتها)
+  const [groupKey, setGroupKey] = useState<string>(ALL);
   const [tab, setTab] = useState<StudyTab>("cards");
   const [showArchived, setShowArchived] = useState(false); // عرض المؤرشفة بدل الحالية
   const [saved, setSaved] = useState<SavedItem[]>([]);
@@ -106,9 +115,15 @@ export default function FlashcardsScreen() {
   useFocusEffect(
     useCallback(() => {
       setMode("picker");
+      setSelecting(false);
+      setPicked([]);
+      if (typeof params.book_id === "string" && params.book_id) {
+        openBookRef.current = params.book_id;
+        setTab("cards");
+      }
       reload();
       getSavedItems().then(setSaved);
-    }, [reload])
+    }, [reload, params.book_id])
   );
 
   // عناصر المحفوظات (ملخّصات/اختبارات) مجمَّعة حسب الكتاب للتبويب الحالي
@@ -142,7 +157,13 @@ export default function FlashcardsScreen() {
     return it.page != null ? "pagesummary" : "summary";
   }
 
-  // حذف ملخّص/اختبار محفوظ (الفهرس + الملف المخزَّن) بعد تأكيد
+  // حذف ملخّص/اختبار محفوظ: الفهرس + الملف المخزَّن
+  async function purgeSaved(it: SavedItem) {
+    await removeSavedItem(it.key);
+    // الفيديو: يُحذف من الفهرس فقط (سيناريوه يبقى مخزَّنًا فيُفتح فورًا إن طُلب ثانية)
+    if (it.kind !== "video") await removeUnitContent(it.pdfPath, it.page ?? it.unit ?? 0, contentKind(it));
+  }
+
   function deleteSaved(it: SavedItem) {
     Alert.alert(t("flashcards.saved.deleteTitle"), t("flashcards.saved.deleteBody"), [
       { text: t("common.cancel"), style: "cancel" },
@@ -150,9 +171,7 @@ export default function FlashcardsScreen() {
         text: t("common.delete"),
         style: "destructive",
         onPress: async () => {
-          await removeSavedItem(it.key);
-          // الفيديو: يُحذف من الفهرس فقط (سيناريوه يبقى مخزَّنًا فيُفتح فورًا إن طُلب ثانية)
-          if (it.kind !== "video") await removeUnitContent(it.pdfPath, it.page ?? it.unit ?? 0, contentKind(it));
+          await purgeSaved(it);
           getSavedItems().then(setSaved);
         },
       },
@@ -244,12 +263,75 @@ export default function FlashcardsScreen() {
     return all.filter((c) => !c.archived && c.due <= today).length;
   }, [all]);
 
+  // فُتحت من أدوات كتاب: بعد تحميل البطاقات تُفتح مجموعة ذلك الكتاب (إن كانت له بطاقات)
+  useEffect(() => {
+    const id = openBookRef.current;
+    if (loading || !id) return;
+    openBookRef.current = null;
+    const g = books.find((b) => b.key === id);
+    if (g) startBook(g.key, g.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, books]);
+
+  // ===== التحديد والحذف المتعدد =====
+  function stopSelecting() {
+    setSelecting(false);
+    setPicked([]);
+  }
+  function togglePick(key: string) {
+    setPicked((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]));
+  }
+  const selectableKeys = useMemo(
+    () => (tab === "cards" ? books.map((b) => b.key) : savedGroups.flatMap((g) => g.items.map((it) => it.key))),
+    [tab, books, savedGroups]
+  );
+
+  function confirmDeletePicked() {
+    if (!picked.length) return;
+    if (tab === "cards") {
+      const ids = all.filter((c) => picked.some((k) => inGroup(k)(c))).map((c) => c.id);
+      Alert.alert(t("study.delete.manyTitle"), t("study.delete.cardsBody", { n: ids.length }), [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("study.select.delete", { n: picked.length }),
+          style: "destructive",
+          onPress: async () => {
+            await removeCards(ids);
+            stopSelecting();
+            reload();
+          },
+        },
+      ]);
+      return;
+    }
+    const items = saved.filter((it) => picked.includes(it.key));
+    Alert.alert(t("study.delete.manyTitle"), t("study.delete.manyBody", { n: items.length }), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("study.select.delete", { n: items.length }),
+        style: "destructive",
+        onPress: async () => {
+          for (const it of items) await purgeSaved(it);
+          stopSelecting();
+          refreshSaved();
+        },
+      },
+    ]);
+  }
+
+  // بطاقات مجموعة (كتاب، أو الكل، أو المفضلة) ضمن العرض الحالي
+  const inGroup = useCallback(
+    (key: string) => (c: Card) => (key === ALL || (key === FAV ? !!c.fav : (c.bookId ?? NONE) === key)) && inView(c),
+    [inView]
+  );
+
   function startBook(key: string, title: string) {
     const today = todayISO();
-    const inBook = (c: Card) => (key === ALL || (key === FAV ? !!c.fav : (c.bookId ?? NONE) === key)) && inView(c);
+    const inBook = inGroup(key);
     let q = all.filter((c) => inBook(c) && c.due <= today);
     if (q.length === 0) q = all.filter(inBook); // لا مستحقّ؟ راجعي كل بطاقات الكتاب
     setQueue(q);
+    setGroupKey(key);
     setBookName(title);
     setIdx(0);
     setFlipped(false);
@@ -323,6 +405,47 @@ export default function FlashcardsScreen() {
         },
       },
       { text: t("common.delete"), style: "destructive", onPress: deleteCurrentCard },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  }
+
+  // زر الحذف في المراجعة: هذه البطاقة فقط، أو كل بطاقات المجموعة المعروضة
+  function deleteMenu() {
+    const card = queue[idx];
+    const group = all.filter(inGroup(groupKey));
+    Alert.alert(t("flashcards.delete.menuTitle"), undefined, [
+      ...(card
+        ? [
+            {
+              text: t("flashcards.delete.this"),
+              style: "destructive" as const,
+              onPress: async () => {
+                await removeCard(card.id);
+                setQueue((q) => q.filter((c) => c.id !== card.id));
+                flip.setValue(0);
+                setFlipped(false);
+                reload();
+              },
+            },
+          ]
+        : []),
+      {
+        text: t("flashcards.delete.group", { name: bookName, n: group.length }),
+        style: "destructive" as const,
+        onPress: () =>
+          Alert.alert(t("flashcards.delete.menuTitle"), t("flashcards.delete.groupBody", { name: bookName, n: group.length }), [
+            { text: t("common.cancel"), style: "cancel" },
+            {
+              text: t("common.delete"),
+              style: "destructive",
+              onPress: async () => {
+                await removeCards(group.map((c) => c.id));
+                setMode("picker");
+                reload();
+              },
+            },
+          ]),
+      },
       { text: t("common.cancel"), style: "cancel" },
     ]);
   }
@@ -441,6 +564,20 @@ export default function FlashcardsScreen() {
         title={t("flashcards.header.title")}
         subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
         height={mode === "review" ? 150 : 190}
+        left={
+          mode === "review" || fromBook ? (
+            <Pressable
+              onPress={() => (mode === "review" ? setMode("picker") : router.back())}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={mode === "review" ? t("flashcards.backToGroups") : t("common.back")}
+            >
+              <SceneIconButton>
+                <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={22} color={pal.ink} />
+              </SceneIconButton>
+            </Pressable>
+          ) : undefined
+        }
         right={
           <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
             <CoachHelpButton onPress={mode === "review" ? studyCoach.replay : coach.replay} />
@@ -459,7 +596,14 @@ export default function FlashcardsScreen() {
           {(["cards", "summary", "quiz"] as StudyTab[]).map((seg) => {
             const on = tab === seg;
             return (
-              <Pressable key={seg} onPress={() => setTab(seg)} style={[styles.segBtn, on && { backgroundColor: pal.accent }]}>
+              <Pressable
+                key={seg}
+                onPress={() => {
+                  setTab(seg);
+                  stopSelecting();
+                }}
+                style={[styles.segBtn, on && { backgroundColor: pal.accent }]}
+              >
                 <Text style={[styles.segTxt, { color: on ? pal.onAccent : pal.dim }]} numberOfLines={1}>
                   {t(`flashcards.tab.${seg}`)}
                 </Text>
@@ -495,7 +639,21 @@ export default function FlashcardsScreen() {
               </Pressable>
             );
           })}
+          <View style={{ flex: 1 }} />
+          {selectableKeys.length > 0 ? (
+            <Pressable
+              onPress={() => (selecting ? stopSelecting() : setSelecting(true))}
+              style={[styles.archToggle, { flexDirection: dir.row, gap: 5, backgroundColor: selecting ? pal.soft : "transparent", borderColor: selecting ? pal.accent : pal.cardBorder }]}
+            >
+              <Ionicons name={selecting ? "close" : "checkbox-outline"} size={15} color={selecting ? pal.accent : pal.dim} />
+              <Text style={[styles.archToggleTxt, { color: selecting ? pal.accent : pal.dim }]}>{selecting ? t("common.cancel") : t("study.select")}</Text>
+            </Pressable>
+          ) : null}
         </View>
+      ) : null}
+
+      {selecting && mode !== "review" ? (
+        <Text style={[styles.longPressHint, { textAlign: dir.textAlign, color: pal.dim, paddingTop: 0, paddingBottom: 6 }]}>{t("study.select.hint")}</Text>
       ) : null}
 
       {tab !== "cards" ? (
@@ -519,8 +677,14 @@ export default function FlashcardsScreen() {
                   {g.title}
                 </Text>
                 {g.items.map((it) => (
-                  <Pressable key={it.key} onPress={() => openSaved(it)} onLongPress={() => savedMenu(it)} delayLongPress={300}>
-                    <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
+                  <Pressable
+                    key={it.key}
+                    onPress={() => (selecting ? togglePick(it.key) : openSaved(it))}
+                    onLongPress={selecting ? undefined : () => savedMenu(it)}
+                    delayLongPress={300}
+                  >
+                    <SceneCard style={[styles.bookRow, { flexDirection: dir.row }, selecting && picked.includes(it.key) && { borderColor: DANGER, borderWidth: 2 }]}>
+                      {selecting ? <PickBox on={picked.includes(it.key)} border={pal.track} /> : null}
                       {it.studied ? <Ionicons name="checkmark-circle" size={18} color={pal.accent} /> : null}
                       <View style={styles.bookInfo}>
                         <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={2}>
@@ -533,7 +697,7 @@ export default function FlashcardsScreen() {
                           )}
                         </Text>
                       </View>
-                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={pal.dim} />
+                      {selecting ? null : <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={20} color={pal.dim} />}
                     </SceneCard>
                   </Pressable>
                 ))}
@@ -556,7 +720,7 @@ export default function FlashcardsScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
-            {favCount > 0 ? (
+            {favCount > 0 && !selecting ? (
               <Pressable onPress={() => startBook(FAV, t("flashcards.favorites"))}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: "#F6C44522", borderColor: "#F6C44577" }]}>
                   <Ionicons name="star" size={20} color="#E0A800" />
@@ -567,7 +731,7 @@ export default function FlashcardsScreen() {
                 </SceneCard>
               </Pressable>
             ) : null}
-            {books.length > 1 ? (
+            {books.length > 1 && !selecting ? (
               <Pressable {...coach.bind("all")} onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
                   <View style={styles.bookInfo}>
@@ -584,8 +748,15 @@ export default function FlashcardsScreen() {
             ) : null}
 
             {books.map((b, index) => (
-              <Pressable key={b.key} {...(index === 0 ? coach.bind("deck") : null)} onPress={() => startBook(b.key, b.title)} onLongPress={() => bookMenu(b)} delayLongPress={300}>
-                <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
+              <Pressable
+                key={b.key}
+                {...(index === 0 ? coach.bind("deck") : null)}
+                onPress={() => (selecting ? togglePick(b.key) : startBook(b.key, b.title))}
+                onLongPress={selecting ? undefined : () => bookMenu(b)}
+                delayLongPress={300}
+              >
+                <SceneCard style={[styles.bookRow, { flexDirection: dir.row }, selecting && picked.includes(b.key) && { borderColor: DANGER, borderWidth: 2 }]}>
+                  {selecting ? <PickBox on={picked.includes(b.key)} border={pal.track} /> : null}
                   <View style={styles.bookInfo}>
                     <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]} numberOfLines={1}>
                       {b.title}
@@ -622,12 +793,13 @@ export default function FlashcardsScreen() {
         <View style={styles.body}>
           <View style={[styles.reviewTop, { flexDirection: dir.row }]}>
             <Pressable
-              onPress={() => setMode("picker")}
+              onPress={deleteMenu}
               hitSlop={8}
-              style={[styles.backChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
+              accessibilityLabel={t("flashcards.delete.menuTitle")}
+              style={[styles.backChip, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: DANGER }]}
             >
-              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={16} color={pal.ink} />
-              <Text style={[styles.backChipTxt, { color: pal.ink }]}>{t("flashcards.books")}</Text>
+              <Ionicons name="trash-outline" size={16} color={DANGER} />
+              <Text style={[styles.backChipTxt, { color: DANGER }]}>{t("common.delete")}</Text>
             </Pressable>
             <View style={[styles.fontRow, { flexDirection: dir.row }]}>
               <Pressable onPress={() => changeFont(-1)} disabled={fontStep <= 0} hitSlop={6} style={[styles.fontBtn, { backgroundColor: pal.card, borderColor: pal.cardBorder }, fontStep <= 0 && { opacity: 0.4 }]} accessibilityLabel={t("flashcards.fontSmaller")}>
@@ -785,7 +957,26 @@ export default function FlashcardsScreen() {
       )}
 
       {/* زر عائم: توليد مخصّص (اختيار الجزء/النوع/العدد) — يظهر خارج وضع المراجعة */}
-      {mode !== "review" ? (
+      {/* شريط الحذف المتعدد */}
+      {selecting && mode !== "review" ? (
+        <View style={[styles.selectBar, { backgroundColor: pal.card, borderColor: pal.cardBorder, flexDirection: dir.row }]}>
+          <Pressable onPress={() => setPicked(picked.length === selectableKeys.length ? [] : selectableKeys)} hitSlop={8}>
+            <Text style={[styles.selectLink, { color: pal.accent }]}>
+              {picked.length === selectableKeys.length ? t("study.select.none") : t("study.select.all")}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={confirmDeletePicked}
+            disabled={!picked.length}
+            style={({ pressed }) => [styles.selectBtn, { backgroundColor: DANGER, flexDirection: dir.row, opacity: !picked.length ? 0.4 : pressed ? 0.85 : 1 }]}
+          >
+            <Ionicons name="trash-outline" size={18} color="#fff" />
+            <Text style={styles.selectBtnTxt}>{t("study.select.delete", { n: picked.length })}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {mode !== "review" && !selecting ? (
         <Pressable
           {...coach.bind("gen")}
           onPress={() => router.push("/generate-study")}
@@ -798,6 +989,18 @@ export default function FlashcardsScreen() {
       {coach.overlay}
       {studyCoach.overlay}
     </SceneScreen>
+  );
+}
+
+// أحمر الحذف المُصمت (نص أبيض واضح عليه في المشهدين)
+const DANGER = "#D9485A";
+
+/** مربع التحديد في وضع الحذف المتعدد */
+function PickBox({ on, border }: { on: boolean; border: string }) {
+  return (
+    <View style={[styles.pickBox, { borderColor: on ? DANGER : border }, on && { backgroundColor: DANGER }]}>
+      {on ? <Ionicons name="checkmark" size={16} color="#fff" /> : null}
+    </View>
   );
 }
 
@@ -860,6 +1063,23 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabTxt: { fontSize: 15, fontWeight: "900" },
+  pickBox: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  selectBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: 12,
+    paddingBottom: 24,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  selectLink: { fontSize: 14.5, fontWeight: "900" },
+  selectBtn: { flex: 1, maxWidth: 260, height: 50, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", gap: 8 },
+  selectBtnTxt: { color: "#fff", fontSize: 15, fontWeight: "900" },
 
   dashRow: { gap: 4 },
   dash: { flex: 1, height: 5, borderRadius: 3 },
