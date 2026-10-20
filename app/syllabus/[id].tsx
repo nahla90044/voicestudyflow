@@ -2,7 +2,6 @@
 // المنهج الدراسي (Syllabus) لكتاب: وحدات بعناوين ومواضيع ومخرجات،
 // تشيك ليست لمتابعة التقدّم، ونسبة إنجاز، وطباعة/مشاركة المنهج.
 import { Ionicons } from "@expo/vector-icons";
-import * as Print from "expo-print";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
@@ -11,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BuzanMindMap, MM_COLORS, mindmapPrintHtml } from "../../components/brand/mindmap";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
+import { printBranded } from "../../lib/pdfBrand";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { useDir, useI18n } from "../../lib/i18n";
@@ -347,7 +347,7 @@ export default function SyllabusScreen() {
       ${tips}
     </body></html>`;
     try {
-      await Print.printAsync({ html });
+      await printBranded(html);
     } catch {}
   }
 
@@ -361,7 +361,7 @@ export default function SyllabusScreen() {
       dir: dir.isRTL ? "rtl" : "ltr",
     });
     try {
-      await Print.printAsync({ html });
+      await printBranded(html);
     } catch {}
   }
 

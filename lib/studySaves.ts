@@ -2,11 +2,10 @@
 // «محفوظات الكتاب»: العروض التقديمية وإجابات المساعد الذكي يحفظها المستخدم ليرجع لها
 // لاحقًا، مرتبطة بالكتاب وبحسابه (جدول study_saves) — تبقى بعد تسجيل الخروج وعلى كل أجهزته.
 // ومنها ملف PDF يُحفظ أو يُشارك (عرض كامل بشريحة لكل صفحة، أو نص المساعد مرتّبًا).
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
 
 import { resolveLayout, splitHead, type Slide } from "./ai";
 import type { StudySummary } from "./studySummary";
+import { shareBranded } from "./pdfBrand";
 import { supabase } from "./supabase";
 
 export type SaveKind = "slides" | "assistant";
@@ -319,13 +318,7 @@ export function textHtml(opts: { bookTitle: string; title: string; text: string;
 /** ينشئ ملف PDF ويفتح نافذة المشاركة (حفظ في «الملفات»، إرسال، طباعة…) */
 export async function sharePdf(html: string, fileTitle: string): Promise<void> {
   // العرض: مقاس صفحة أفقي ثابت (وإلا تقصّ آيفون الشريحة على ورقة طولية)
-  const deck = html.includes('data-deck="1"');
-  const { uri } = await Print.printToFileAsync(deck ? { html, ...DECK_PAGE } : { html });
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: fileTitle });
-  } else {
-    await Print.printAsync({ uri });
-  }
+  await shareBranded(html, fileTitle, html.includes('data-deck="1"') ? DECK_PAGE : undefined);
 }
 
 /** نص قابل للحفظ من الشرائح (للمشاركة النصية أو البحث لاحقًا) */

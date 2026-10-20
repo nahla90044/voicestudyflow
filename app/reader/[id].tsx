@@ -32,7 +32,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
 import { UsageBar } from "../../components/brand/usage-chip";
 import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
-import * as Print from "expo-print";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
@@ -115,6 +114,7 @@ import { addWord, type SavedWord } from "../../lib/words";
 import { WordSheet } from "../../components/brand/word-sheet";
 import { parseWalkCommand, type WalkCommand } from "../../lib/voiceIntents";
 import { useDir, useI18n } from "../../lib/i18n";
+import { printBranded } from "../../lib/pdfBrand";
 
 // القارئ يلبس دائمًا ألوان «سماء المعرفة» الليلية (كحلي + ذهبي): كروم هادئ داكن
 // يريح العين في جلسات الاستماع الطويلة، بدل تدرّجات النيون البنفسجية/السماوية.
@@ -2611,13 +2611,13 @@ export default function ReaderScreen() {
   async function printReaderMindmap() {
     if (!mmMap) return;
     try {
-      await Print.printAsync({
-        html: mindmapPrintHtml(mmMap, {
+      await printBranded(
+        mindmapPrintHtml(mmMap, {
           heading: `${t("syllabus.mindmap.title")} — ${mmTitle}`,
           outlineTitle: t("syllabus.mindmap.outline"),
           dir: dir.isRTL ? "rtl" : "ltr",
-        }),
-      });
+        })
+      );
     } catch {}
   }
 

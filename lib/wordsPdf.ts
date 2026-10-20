@@ -2,10 +2,10 @@
 // ملفات دراسة مطبوعة: «كلماتي» وقاموس الوحدة. تصميم مريح للعين: جداول بألوان هادئة
 // (لكل نوع معلومة لونه الثابت)، عناوين واضحة، وتصريف الأفعال في جدول. تُنشأ على الجهاز
 // ثم يُفتح الحفظ/المشاركة (الملفات، البريد، الطباعة…) فتبقى مع الطالب حتى بلا إنترنت.
-import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
 import type { GlossaryItem } from "./glossaryCore.ts";
+import { shareBranded } from "./pdfBrand";
 import type { SavedWord } from "./words";
 
 const AR_DIGITS = "٠١٢٣٤٥٦٧٨٩";
@@ -211,13 +211,9 @@ export function glossaryHtml(items: GlossaryItem[], L: GlossaryLabels, unitIndex
 /* ------------------------------ التصدير ------------------------------ */
 
 async function share(html: string, title: string): Promise<boolean> {
-  const { uri } = await Print.printToFileAsync({ html });
-  if (!(await Sharing.isAvailableAsync())) {
-    await Print.printAsync({ uri });
-    return false;
-  }
-  await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: title });
-  return true;
+  const canShare = await Sharing.isAvailableAsync();
+  await shareBranded(html, title);
+  return canShare;
 }
 
 /** يُنشئ ملف «كلماتي» ويفتح الحفظ/المشاركة. يُرجع false إن لم تتوفر المشاركة على الجهاز. */

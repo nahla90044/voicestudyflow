@@ -2,10 +2,9 @@
 // «صفحة الملاحظات» لكل كتاب (مثل Notability): صفحات مسطّرة فيها نص مكتوب وكتابة بالقلم معًا.
 // تُحفظ على الجهاز تلقائيًا لكل كتاب، وتُطبع/تُشارك PDF.
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
 
 import type { Stroke } from "./ink";
+import { shareBranded } from "./pdfBrand";
 
 export type NoteTable = { id: string; cells: string[][] };
 export type Sticky = { id: string; x: number; y: number; text: string; color: string }; // x,y نسبةً لعرض الورقة
@@ -104,7 +103,5 @@ export async function exportNotesPdf(pages: NotePage[], L: { title: string; book
     .ink { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }
   </style></head><body>
   <h1>${esc(L.title)}</h1><div class="sub">${esc(L.bookTitle)}</div>${body}</body></html>`;
-  const { uri } = await Print.printToFileAsync({ html });
-  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: L.title });
-  else await Print.printAsync({ uri });
+  await shareBranded(html, L.title);
 }

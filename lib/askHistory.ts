@@ -4,10 +4,9 @@
 //    وتبقى القديمة في «المحادثات السابقة».
 //  • حذف إجابة، أو محادثة كاملة، وطباعة إجابة أو محادثة (PDF للحفظ/المشاركة/الطباعة).
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Print from "expo-print";
-import * as Sharing from "expo-sharing";
 
 import type { QAAnswer } from "./bookQA";
+import { shareBranded } from "./pdfBrand";
 
 export type AskTurn = { id: number; q: string; a?: QAAnswer; error?: boolean; saved?: boolean; waiting?: boolean };
 export type AskSession = { id: string; startedAt: number; updatedAt: number; turns: AskTurn[] };
@@ -97,7 +96,5 @@ function html(turns: AskTurn[], L: AskPdfLabels): string {
 
 /** ينشئ PDF للإجابة أو المحادثة ويفتح الحفظ/المشاركة/الطباعة */
 export async function exportAskPdf(turns: AskTurn[], L: AskPdfLabels): Promise<void> {
-  const { uri } = await Print.printToFileAsync({ html: html(turns, L) });
-  if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: L.title });
-  else await Print.printAsync({ uri });
+  await shareBranded(html(turns, L), L.title);
 }
