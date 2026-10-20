@@ -5,6 +5,7 @@
 // كل عنصر: استماع، حفظ كبطاقة، وفتح صفحته في القارئ.
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { supabase } from "../lib/supabase";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -45,7 +46,8 @@ export default function GlossaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
-  const { pdf_path, book_id, book_title, unit, page_count } = useLocalSearchParams<{
+  const { pdf_path, book_id, book_title, unit, page_count, only_unit } = useLocalSearchParams<{
+    only_unit?: string;
     pdf_path?: string;
     book_id?: string;
     book_title?: string;
@@ -55,7 +57,15 @@ export default function GlossaryScreen() {
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const bookId = typeof book_id === "string" ? book_id : "";
   const bookTitle = typeof book_title === "string" ? book_title : "";
-  const pageCount = Number(page_count) || 0;
+  // عدد صفحات الكتاب: من المعامل، وإلا من سجل الكتاب (عند الفتح من المنهج)
+  const [pageCount, setPageCount] = useState(Number(page_count) || 0);
+  useEffect(() => {
+    if (pageCount || typeof book_id !== "string" || !book_id) return;
+    supabase.from("books").select("page_count").eq("id", book_id).maybeSingle().then(({ data }) => {
+      if (Number(data?.page_count)) setPageCount(Number(data!.page_count));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book_id]);
 
   const [titles, setTitles] = useState<string[]>([]);
   const [idx, setIdx] = useState(Number(unit ?? 0) || 0);
@@ -205,7 +215,7 @@ export default function GlossaryScreen() {
   async function saveCards(list: GlossaryItem[]) {
     const fresh = list.filter((i) => !saved.has(i.t));
     if (!fresh.length) return;
-    await addCards(fresh.map((i) => ({ front: i.t, back: i.ex ? `${i.m}\n\n${i.ex}` : i.m, bookId, bookTitle })));
+    await addCards(fresh.map((i) => ({ front: i.t, back: i.ex ? `${i.m}\n\n${i.ex}` : i.m, bookId, bookTitle, page: i.p })));
     setSaved((s) => new Set([...s, ...fresh.map((i) => i.t)]));
   }
 
@@ -258,7 +268,8 @@ export default function GlossaryScreen() {
       />
 
       {/* الوحدات */}
-      {titles.length > 1 && (
+      {/* من وحدة في المنهج: قاموسها هي فقط (بلا التنقل بين الوحدات) */}
+      {titles.length > 1 && only_unit !== "1" && (
         <View {...coach.bind("units")} style={{ flexGrow: 0, flexShrink: 0 }}>
           <ScrollView
             horizontal

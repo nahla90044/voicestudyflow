@@ -320,7 +320,7 @@ export default function SyllabusScreen() {
         (u, i) => `
         <div class="unit">
           <h3>${i + 1}. ${esc(u.title)}</h3>
-          ${u.about ? `<p class="about">${esc(u.about)}</p>` : ""}
+          ${u.objectives?.length ? `<p class="about"><b>${esc(t("syllabus.objectives"))}:</b></p><ul>${u.objectives.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>` : u.about ? `<p class="about">${esc(u.about)}</p>` : ""}
           ${sched[i] ? `<p class="when">${esc(t("syllabus.studyOn"))}: ${esc(fmtRange(sched[i]))}</p>` : ""}
           ${u.topics.length ? `<ul>${u.topics.map((topic) => `<li>${esc(topic)}</li>`).join("")}</ul>` : ""}
           ${u.outcome ? `<p class="out">${esc(u.outcome)}</p>` : ""}
@@ -570,7 +570,20 @@ export default function SyllabusScreen() {
                     </Text>
                   </View>
                   {/* نبذة الوحدة: ما الذي تتناوله */}
-                  {!!u.about && <Text style={[styles.about, { color: pal.ink, textAlign: dir.textAlign }]}>{u.about}</Text>}
+                  {/* أهداف الوحدة كما في الكتاب (وإلا نبذة عنها) */}
+                  {u.objectives?.length ? (
+                    <View style={styles.objWrap}>
+                      <Text style={[styles.objHead, { color: pal.accent, textAlign: dir.textAlign }]}>{t("syllabus.objectives")}</Text>
+                      {u.objectives.map((o, k) => (
+                        <View key={k} style={[styles.topicRow, { flexDirection: dir.row, paddingStart: 0 }]}>
+                          <Ionicons name="checkmark-circle-outline" size={15} color={pal.accent} style={{ marginTop: 3 }} />
+                          <Text style={[styles.topicTxt, { color: pal.ink, textAlign: dir.textAlign }]}>{o}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : u.about ? (
+                    <Text style={[styles.about, { color: pal.ink, textAlign: dir.textAlign }]}>{u.about}</Text>
+                  ) : null}
                   {isWorking && <Text style={[styles.workingTxt, { color: pal.accent, textAlign: dir.textAlign }]}>{t("syllabus.regenerating")}</Text>}
                   {sched[i] && (
                     <View style={[styles.schedRow, { flexDirection: dir.row }]}>
@@ -621,6 +634,14 @@ export default function SyllabusScreen() {
                         <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>
                           {btn("quiz", "school-outline", t("syllabus.action.quiz"), () => router.push({ pathname: "/unit-quiz", params }))}
                           {btn("mm", "git-network-outline", drawing ? t("syllabus.action.drawing") : t("syllabus.action.mindmap"), () => startMindmap(i), drawing)}
+                        </View>
+                        <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>
+                          {btn("cards", "albums-outline", t("syllabus.action.cards"), () =>
+                            router.push({ pathname: "/flashcards", params: { book_id: bookId, from_book: "1", unit: String(i) } })
+                          )}
+                          {btn("gloss", "book-outline", t("syllabus.action.glossary"), () =>
+                            router.push({ pathname: "/glossary", params: { pdf_path: pdfPath, book_id: bookId, book_title: bookTitle, unit: String(i), only_unit: "1" } })
+                          )}
                         </View>
                       </View>
                     );
@@ -811,6 +832,8 @@ const styles = StyleSheet.create({
   },
   readNowTxt: { fontSize: 16, fontWeight: "900" },
   manageRow: { gap: 8 },
+  objWrap: { marginTop: 8, paddingStart: 36, gap: 2 },
+  objHead: { fontSize: 13, fontWeight: "900" },
   about: { fontSize: 14, lineHeight: 23, marginTop: 8, paddingStart: 36, opacity: 0.9 },
   manageBtn: { flex: 1, height: 46, borderRadius: Radius.pill, borderWidth: 1, alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 8 },
   manageTxt: { fontSize: 13.5, fontWeight: "900", flexShrink: 1 },

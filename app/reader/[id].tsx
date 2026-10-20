@@ -973,6 +973,7 @@ export default function ReaderScreen() {
           ...c,
           bookId: typeof id === "string" ? id : undefined,
           bookTitle: typeof title === "string" ? title : undefined,
+          page: Math.min(...highlights.map((h) => h.page)),
         }))
       );
       showToast(t("reader.toast.cardsAdded", { count: n }));
@@ -1368,7 +1369,7 @@ export default function ReaderScreen() {
     try {
       const cards = await generateFlashcards(ctx, 1);
       const bookTitle = typeof title === "string" ? title : undefined;
-      const n = await addCards(cards.slice(0, 1).map((c) => ({ ...c, bookId, bookTitle })));
+      const n = await addCards(cards.slice(0, 1).map((c) => ({ ...c, bookId, bookTitle, page })));
       showToast(n ? t("reader.walk.cardSaved") : t("reader.ai.cardsFailed"));
     } catch {
       showToast(t("reader.ai.requestFailed"));
@@ -2291,7 +2292,7 @@ export default function ReaderScreen() {
         return;
       }
       const bookTitle = typeof title === "string" ? title : undefined;
-      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle, kind: cardType })));
+      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle, kind: cardType, page })));
       setAiCards(cards);
       setAiResult(t("reader.ai.cardsSaved", { count: n }));
     } catch {

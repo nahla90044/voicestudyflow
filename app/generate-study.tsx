@@ -2,7 +2,7 @@
 // توليد مخصّص: يختار المستخدم الكتاب، والجزء (كامل/نطاق صفحات)، والنوع
 // (بطاقات/اختبار/ملخّص)، والعدد — فيولّد ويُحفظ في مركز المذاكرة.
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -46,6 +46,8 @@ export default function GenerateStudyScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
+  // فُتحت من وحدة: الكتاب ونطاق صفحات الوحدة محدّدان مسبقًا
+  const preset = useLocalSearchParams<{ book_id?: string; from?: string; to?: string }>();
 
   const [books, setBooks] = useState<Book[]>([]);
   const [bookId, setBookId] = useState<string>("");
@@ -74,7 +76,13 @@ export default function GenerateStudyScreen() {
           .order("created_at", { ascending: false });
         const list = (data ?? []) as Book[];
         setBooks(list);
-        if (list[0]) selectBook(list[0]);
+        const pick = list.find((b) => b.id === preset.book_id) ?? list[0];
+        if (pick) await selectBook(pick);
+        if (preset.from && preset.to) {
+          setWhole(false);
+          setFrom(String(preset.from));
+          setTo(String(preset.to));
+        }
       } catch {
         setBooks([]);
       }
@@ -114,7 +122,8 @@ export default function GenerateStudyScreen() {
       if (type === "cards") {
         const cards = await generateFlashcards(text, count, cardType);
         if (cards.length === 0) throw new Error("empty");
-        const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title, kind: cardType })));
+        // نطاق محدد → البطاقات تُنسب لصفحته الأولى فتُجمَّع مع وحدتها
+        const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title, kind: cardType, page: whole ? undefined : f })));
         done(t("generate.done.cards", { count: n }));
       } else if (type === "quiz") {
         const qs = await generateUnitQuiz(text, count);

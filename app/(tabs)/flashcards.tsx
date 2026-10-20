@@ -14,6 +14,10 @@ import { useDir, useI18n } from "../../lib/i18n";
 import { getSavedItems, removeSavedItem, updateSavedItem, type SavedItem, type SavedKind } from "../../lib/savedStudy";
 import { useScene } from "../../lib/scene";
 import { removeUnitContent, type UnitContentKind } from "../../lib/unitContent";
+import { getCachedUnitRanges, getUnitRanges, type UnitRange } from "../../lib/glossary";
+import { cardsHtml, sharePdf } from "../../lib/studySaves";
+import { supabase } from "../../lib/supabase";
+import { getSyllabus } from "../../lib/syllabus";
 import { prefetchText, speakText, stopSpeaking } from "../../lib/voice";
 
 const ALL = "__all__";
@@ -27,6 +31,20 @@ function todayISO() {
 }
 
 type BookGroup = { key: string; title: string; total: number; due: number };
+// وحدات كتاب (من منهجه وصفحات وحداته) لتجميع بطاقاته حسب الوحدة
+type BookUnits = { pdfPath: string; titles: string[]; ranges: UnitRange[] };
+/** وحدة البطاقة من صفحتها (‎-1 = بلا وحدة) — تبقى صحيحة إن أُعيد إنشاء المنهج */
+const unitOf = (c: Card, bu: BookUnits | null) => (!bu || !c.page ? -1 : bu.ranges.findIndex((r) => c.page! >= r.from && c.page! <= r.to));
+
+async function loadBookUnits(bookId: string): Promise<BookUnits | null> {
+  const { data } = await supabase.from("books").select("pdf_path,page_count").eq("id", bookId).maybeSingle();
+  if (!data?.pdf_path) return null;
+  const titles = ((await getSyllabus(data.pdf_path).catch(() => null))?.data.units ?? []).map((u) => u.title);
+  if (!titles.length) return { pdfPath: data.pdf_path, titles: [], ranges: [] };
+  const cached = await getCachedUnitRanges(data.pdf_path);
+  const ranges = cached?.length === titles.length ? cached : await getUnitRanges(data.pdf_path, titles, Number(data.page_count) || 0).catch(() => []);
+  return { pdfPath: data.pdf_path, titles, ranges };
+}
 
 type StudyTab = "cards" | "summary" | "quiz";
 
@@ -47,20 +65,25 @@ export default function FlashcardsScreen() {
   const router = useRouter();
   const { pal } = useScene();
   // فُتحت من أدوات كتاب: تُفتح بطاقات ذلك الكتاب مباشرة، وزر الرجوع يعيد إلى صفحته
-  const params = useLocalSearchParams<{ book_id?: string; from_book?: string }>();
+  const params = useLocalSearchParams<{ book_id?: string; from_book?: string; unit?: string }>();
   const fromBook = params.from_book === "1";
   const openBookRef = useRef<string | null>(null);
   // وضع التحديد (حذف متعدد): مفاتيح المجموعات في تبويب البطاقات، ومفاتيح المحفوظات في الملخصات/الاختبارات
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
-  // مجموعة البطاقات المعروضة في المراجعة (لحذف كل بطاقاتها)
-  const [groupKey, setGroupKey] = useState<string>(ALL);
+  // المجموعة المعروضة في المراجعة (لحذف كل بطاقاتها): الكتاب أو وحدة منه أو المفضلة
+  const groupRef = useRef<(c: Card) => boolean>(() => false);
+  // الكتاب المفتوح ووحداته، والوحدة المعروضة في المراجعة (undefined = كل الكتاب، "none" = بلا وحدة)
+  const [bookKey, setBookKey] = useState<string | null>(null);
+  const [bookUnits, setBookUnits] = useState<BookUnits | null>(null);
+  const [reviewUnit, setReviewUnit] = useState<number | "none" | undefined>(undefined);
+  const unitParamRef = useRef<number | null>(null);
   const [tab, setTab] = useState<StudyTab>("cards");
   const [showArchived, setShowArchived] = useState(false); // عرض المؤرشفة بدل الحالية
   const [saved, setSaved] = useState<SavedItem[]>([]);
   const [all, setAll] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<"picker" | "review">("picker");
+  const [mode, setMode] = useState<"picker" | "book" | "review">("picker");
   const [queue, setQueue] = useState<Card[]>([]);
   const [fontStep, setFontStep] = useState(1);
   useEffect(() => {
@@ -119,11 +142,12 @@ export default function FlashcardsScreen() {
       setPicked([]);
       if (typeof params.book_id === "string" && params.book_id) {
         openBookRef.current = params.book_id;
+        unitParamRef.current = params.unit != null && params.unit !== "" && Number.isFinite(Number(params.unit)) ? Number(params.unit) : null;
         setTab("cards");
       }
       reload();
       getSavedItems().then(setSaved);
-    }, [reload, params.book_id])
+    }, [reload, params.book_id, params.unit])
   );
 
   // عناصر المحفوظات (ملخّصات/اختبارات) مجمَّعة حسب الكتاب للتبويب الحالي
@@ -214,7 +238,7 @@ export default function FlashcardsScreen() {
   // قائمة خيارات كتاب البطاقات (بالضغط المطوَّل)
   function bookMenu(b: BookGroup) {
     Alert.alert(b.title, undefined, [
-      { text: t("study.menu.review"), onPress: () => startBook(b.key, b.title) },
+      { text: t("study.menu.review"), onPress: () => openBook(b.key, b.title) },
       {
         text: showArchived ? t("study.menu.unarchive") : t("study.menu.archive"),
         onPress: () => archiveCardsForBook(b.key === NONE ? undefined : b.key, !showArchived).then(reload),
@@ -269,7 +293,7 @@ export default function FlashcardsScreen() {
     if (loading || !id) return;
     openBookRef.current = null;
     const g = books.find((b) => b.key === id);
-    if (g) startBook(g.key, g.title);
+    openBook(id, g?.title ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, books]);
 
@@ -325,19 +349,95 @@ export default function FlashcardsScreen() {
     [inView]
   );
 
-  function startBook(key: string, title: string) {
+  // فتح كتاب: بطاقاته مجمّعة حسب وحداته (ومن وحدة محددة: مراجعتها مباشرة)
+  function openBook(key: string, title: string) {
+    setBookKey(key);
+    setBookName(title);
+    setBookUnits(null);
+    setMode("book");
+    if (key === NONE) return;
+    void loadBookUnits(key).then((bu) => {
+      setBookUnits(bu);
+      const u = unitParamRef.current;
+      unitParamRef.current = null;
+      if (u !== null && bu) startBook(key, title, u, bu);
+    });
+  }
+
+  /** مراجعة بطاقات مجموعة: الكتاب كله، أو وحدة منه، أو بطاقاته بلا وحدة */
+  function startBook(key: string, title: string, unit?: number | "none", bu: BookUnits | null = bookUnits) {
     const today = todayISO();
     const inBook = inGroup(key);
-    let q = all.filter((c) => inBook(c) && c.due <= today);
-    if (q.length === 0) q = all.filter(inBook); // لا مستحقّ؟ راجعي كل بطاقات الكتاب
+    const inSel = (c: Card) => inBook(c) && (unit === undefined || (unit === "none" ? unitOf(c, bu) === -1 : unitOf(c, bu) === unit));
+    if (unit !== undefined && !all.some(inSel)) {
+      // وحدة بلا بطاقات بعد: عرض الكتاب، وعرض التوليد من صفحات الوحدة
+      setMode("book");
+      if (typeof unit === "number" && bu?.ranges[unit]) offerGenerate(key, unit, bu);
+      return;
+    }
+    let q = all.filter((c) => inSel(c) && c.due <= today);
+    if (q.length === 0) q = all.filter(inSel); // لا مستحقّ؟ راجعي كل بطاقات المجموعة
+    groupRef.current = inSel;
+    setReviewUnit(unit);
     setQueue(q);
-    setGroupKey(key);
     setBookName(title);
     setIdx(0);
     setFlipped(false);
     flip.setValue(0);
     setMode("review");
   }
+
+  function offerGenerate(key: string, unit: number, bu: BookUnits) {
+    const r = bu.ranges[unit];
+    Alert.alert(t("flashcards.unitEmptyTitle"), t("flashcards.unitEmptyBody", { from: r.from, to: r.to }), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("flashcards.generate"), onPress: () => router.push({ pathname: "/generate-study", params: { book_id: key, from: String(r.from), to: String(r.to) } }) },
+    ]);
+  }
+
+  // عدد بطاقات كل وحدة في الكتاب المفتوح (والمستحق منها)
+  const unitStats = useMemo(() => {
+    if (!bookKey) return null;
+    const today = todayISO();
+    const inBook = inGroup(bookKey);
+    const n = (bookUnits?.titles.length ?? 0) + 1;
+    const total = new Array(n).fill(0);
+    const due = new Array(n).fill(0);
+    let all_ = 0;
+    let allDue = 0;
+    for (const c of all) {
+      if (!inBook(c)) continue;
+      const u = unitOf(c, bookUnits);
+      const k = u === -1 ? n - 1 : u;
+      total[k]++;
+      all_++;
+      if (c.due <= today) {
+        due[k]++;
+        allDue++;
+      }
+    }
+    return { total, due, all: all_, allDue, none: n - 1 };
+  }, [all, bookKey, bookUnits, inGroup]);
+
+  // طباعة بطاقات (الكتاب كله أو وحدة) — PDF مختوم
+  async function printCards(unit?: number | "none") {
+    if (!bookKey) return;
+    const inBook = inGroup(bookKey);
+    const list = all.filter((c) => inBook(c) && (unit === undefined || (unit === "none" ? unitOf(c, bookUnits) === -1 : unitOf(c, bookUnits) === unit)));
+    if (!list.length) return;
+    const title = typeof unit === "number" ? `${bookName} — ${bookUnits?.titles[unit] ?? ""}` : bookName;
+    try {
+      await sharePdf(cardsHtml({ bookTitle: bookName, title, cards: list.map((c) => ({ front: c.front, back: c.back })), rtl: dir.isRTL }), title);
+    } catch {
+      Alert.alert(t("save.pdfFailedTitle"), t("save.pdfFailedBody"));
+    }
+  }
+
+  const goBackLevel = () => {
+    if (mode === "review" && bookKey && bookKey !== FAV) setMode("book");
+    else if (mode === "book" && fromBook) router.back();
+    else setMode("picker");
+  };
 
   function toggleFlip() {
     Animated.spring(flip, { toValue: flipped ? 0 : 180, useNativeDriver: true, friction: 9, tension: 12 }).start();
@@ -412,7 +512,7 @@ export default function FlashcardsScreen() {
   // زر الحذف في المراجعة: هذه البطاقة فقط، أو كل بطاقات المجموعة المعروضة
   function deleteMenu() {
     const card = queue[idx];
-    const group = all.filter(inGroup(groupKey));
+    const group = all.filter(groupRef.current);
     Alert.alert(t("flashcards.delete.menuTitle"), undefined, [
       ...(card
         ? [
@@ -440,7 +540,7 @@ export default function FlashcardsScreen() {
               style: "destructive",
               onPress: async () => {
                 await removeCards(group.map((c) => c.id));
-                setMode("picker");
+                setMode(bookKey && bookKey !== FAV ? "book" : "picker");
                 reload();
               },
             },
@@ -533,7 +633,7 @@ export default function FlashcardsScreen() {
   // وضع الاستماع (بعد أول استماع في الجلسة): صوت البطاقة الحالية والتالية جاهز مسبقًا → الاستماع فوري
   const listenModeRef = useRef(false);
   useEffect(() => {
-    if (!listenModeRef.current || mode !== "review") return;
+    if (!listenModeRef.current || mode === "picker") return;
     for (const c of [queue[idx], queue[idx + 1]]) {
       if (!c) continue;
       void prefetchText(c.front).catch(() => {});
@@ -562,12 +662,12 @@ export default function FlashcardsScreen() {
     <SceneScreen>
       <SceneBanner
         title={t("flashcards.header.title")}
-        subtitle={mode === "review" ? bookName : t("flashcards.header.subtitle")}
+        subtitle={mode !== "picker" ? bookName : t("flashcards.header.subtitle")}
         height={mode === "review" ? 150 : 190}
         left={
-          mode === "review" || fromBook ? (
+          mode !== "picker" || fromBook ? (
             <Pressable
-              onPress={() => (mode === "review" ? setMode("picker") : router.back())}
+              onPress={() => (mode === "picker" ? router.back() : goBackLevel())}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={mode === "review" ? t("flashcards.backToGroups") : t("common.back")}
@@ -600,6 +700,7 @@ export default function FlashcardsScreen() {
                 key={seg}
                 onPress={() => {
                   setTab(seg);
+                  setMode("picker");
                   stopSelecting();
                 }}
                 style={[styles.segBtn, on && { backgroundColor: pal.accent }]}
@@ -613,12 +714,12 @@ export default function FlashcardsScreen() {
         </View>
       </View>
 
-      {mode !== "review" ? (
+      {mode === "picker" ? (
         <Text style={[styles.longPressHint, { textAlign: dir.textAlign, color: pal.dim }]}>{t("study.longPressHint")}</Text>
       ) : null}
 
       {/* مبدّل: الحالية / المؤرشفة — لكل التبويبات (خارج وضع المراجعة) */}
-      {mode !== "review" ? (
+      {mode === "picker" ? (
         <View style={[styles.archToggleRow, { flexDirection: dir.row }]}>
           {[false, true].map((arch) => {
             const on = showArchived === arch;
@@ -652,7 +753,7 @@ export default function FlashcardsScreen() {
         </View>
       ) : null}
 
-      {selecting && mode !== "review" ? (
+      {selecting && mode === "picker" ? (
         <Text style={[styles.longPressHint, { textAlign: dir.textAlign, color: pal.dim, paddingTop: 0, paddingBottom: 6 }]}>{t("study.select.hint")}</Text>
       ) : null}
 
@@ -731,27 +832,11 @@ export default function FlashcardsScreen() {
                 </SceneCard>
               </Pressable>
             ) : null}
-            {books.length > 1 && !selecting ? (
-              <Pressable {...coach.bind("all")} onPress={() => startBook(ALL, t("flashcards.allBooks"))}>
-                <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
-                  <View style={styles.bookInfo}>
-                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>{t("flashcards.allBooks")}</Text>
-                    <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
-                      {t("flashcards.cardsCount", { count: all.length })}
-                    </Text>
-                  </View>
-                  <View style={[styles.dueBadge, { backgroundColor: totalDue === 0 ? pal.track : pal.accent }]}>
-                    <Text style={[styles.dueBadgeTxt, { color: totalDue === 0 ? pal.dim : pal.onAccent }]}>{totalDue}</Text>
-                  </View>
-                </SceneCard>
-              </Pressable>
-            ) : null}
-
             {books.map((b, index) => (
               <Pressable
                 key={b.key}
                 {...(index === 0 ? coach.bind("deck") : null)}
-                onPress={() => (selecting ? togglePick(b.key) : startBook(b.key, b.title))}
+                onPress={() => (selecting ? togglePick(b.key) : openBook(b.key, b.title))}
                 onLongPress={selecting ? undefined : () => bookMenu(b)}
                 delayLongPress={300}
               >
@@ -773,6 +858,89 @@ export default function FlashcardsScreen() {
             ))}
           </ScrollView>
         )
+      ) : mode === "book" ? (
+        /* ====== كتاب: بطاقاته حسب الوحدات ====== */
+        <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
+          {/* التنقل بين الكتب */}
+          {books.length > 1 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipsRow, { flexDirection: dir.row }]}>
+              {books.map((b) => {
+                const on = b.key === bookKey;
+                return (
+                  <Pressable key={b.key} onPress={() => openBook(b.key, b.title)} style={[styles.chipBtn, { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder }]}>
+                    <Text style={[styles.chipBtnTxt, { color: on ? pal.onAccent : pal.ink }]} numberOfLines={1}>
+                      {b.title}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+
+          {/* كل بطاقات الكتاب + طباعتها */}
+          <Pressable onPress={() => unitStats?.all && bookKey && startBook(bookKey, bookName)}>
+            <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
+              <Ionicons name="albums" size={20} color={pal.accent} />
+              <View style={styles.bookInfo}>
+                <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>{t("flashcards.bookAll")}</Text>
+                <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>{t("flashcards.bookStats", { total: unitStats?.all ?? 0, due: unitStats?.allDue ?? 0 })}</Text>
+              </View>
+              {unitStats?.all ? (
+                <Pressable onPress={() => void printCards()} hitSlop={8} style={[styles.printBtn, { borderColor: pal.cardBorder, backgroundColor: pal.card }]} accessibilityLabel={t("flashcards.print")}>
+                  <Ionicons name="print-outline" size={18} color={pal.ink} />
+                </Pressable>
+              ) : null}
+            </SceneCard>
+          </Pressable>
+
+          {bookUnits === null && bookKey !== NONE ? (
+            <ActivityIndicator color={pal.accent} style={{ marginTop: 16 }} />
+          ) : !bookUnits?.titles.length ? (
+            <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("flashcards.noUnits")}</Text>
+          ) : (
+            bookUnits.titles.map((title, i) => {
+              const total = unitStats?.total[i] ?? 0;
+              const due = unitStats?.due[i] ?? 0;
+              const r = bookUnits.ranges[i];
+              return (
+                <Pressable key={i} onPress={() => bookKey && startBook(bookKey, bookName, i)}>
+                  <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
+                    <View style={[styles.unitNum, { borderColor: total ? pal.accent : pal.track }]}>
+                      <Text style={[styles.unitNumTxt, { color: total ? pal.accent : pal.dim }]}>{i + 1}</Text>
+                    </View>
+                    <View style={styles.bookInfo}>
+                      <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink, fontSize: 15 }]}>{title}</Text>
+                      <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
+                        {r ? `${t("glossary.pages", { from: r.from, to: r.to })} · ` : ""}
+                        {total ? t("flashcards.bookStats", { total, due }) : t("flashcards.unitNone")}
+                      </Text>
+                    </View>
+                    {total ? (
+                      <Pressable onPress={() => void printCards(i)} hitSlop={8} style={[styles.printBtn, { borderColor: pal.cardBorder, backgroundColor: pal.card }]} accessibilityLabel={t("flashcards.print")}>
+                        <Ionicons name="print-outline" size={17} color={pal.ink} />
+                      </Pressable>
+                    ) : (
+                      <Ionicons name="add-circle-outline" size={22} color={pal.accent} />
+                    )}
+                  </SceneCard>
+                </Pressable>
+              );
+            })
+          )}
+          {unitStats && unitStats.total[unitStats.none] > 0 && bookUnits?.titles.length ? (
+            <Pressable onPress={() => bookKey && startBook(bookKey, bookName, "none")}>
+              <SceneCard style={[styles.bookRow, { flexDirection: dir.row }]}>
+                <Ionicons name="file-tray-outline" size={20} color={pal.dim} />
+                <View style={styles.bookInfo}>
+                  <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink, fontSize: 15 }]}>{t("flashcards.unassigned")}</Text>
+                  <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>
+                    {t("flashcards.bookStats", { total: unitStats.total[unitStats.none], due: unitStats.due[unitStats.none] })}
+                  </Text>
+                </View>
+              </SceneCard>
+            </Pressable>
+          ) : null}
+        </ScrollView>
       ) : reviewDone ? (
         /* ====== انتهت المراجعة ====== */
         <View style={styles.center}>
@@ -781,7 +949,7 @@ export default function FlashcardsScreen() {
           </View>
           <Text style={[styles.doneTitle, { color: pal.ink }]}>{t("flashcards.reviewDone", { book: bookName })}</Text>
           <Pressable
-            onPress={() => setMode("picker")}
+            onPress={goBackLevel}
             style={[styles.primaryBtn, { backgroundColor: pal.accent, flexDirection: dir.row, alignSelf: "stretch", marginTop: Spacing.lg }]}
           >
             <Ionicons name={dir.isRTL ? "arrow-forward" : "arrow-back"} size={18} color={pal.onAccent} />
@@ -813,6 +981,23 @@ export default function FlashcardsScreen() {
               </Text>
             </View>
           </View>
+
+          {/* التنقل بين وحدات الكتاب أثناء المراجعة */}
+          {bookKey && bookKey !== FAV && bookUnits?.titles.length && unitStats ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={[styles.chipsRow, { flexDirection: dir.row }]}>
+              {([undefined, ...bookUnits.titles.map((_, i) => i), ...(unitStats.total[unitStats.none] ? (["none"] as const) : [])] as (number | "none" | undefined)[])
+                .filter((u) => u === undefined || (u === "none" ? true : (unitStats.total[u] ?? 0) > 0))
+                .map((u) => {
+                  const on = reviewUnit === u;
+                  const label = u === undefined ? t("flashcards.allShort") : u === "none" ? t("flashcards.unassignedShort") : t("glossary.unitN", { n: u + 1 });
+                  return (
+                    <Pressable key={String(u)} onPress={() => startBook(bookKey, bookName, u)} style={[styles.chipBtn, { backgroundColor: on ? pal.accent : pal.card, borderColor: on ? pal.accent : pal.cardBorder }]}>
+                      <Text style={[styles.chipBtnTxt, { color: on ? pal.onAccent : pal.ink }]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+            </ScrollView>
+          ) : null}
 
           {/* شرطات التقدّم: المنجز باللون المميّز والباقي بلون المسار */}
           {useDashes ? (
@@ -958,7 +1143,7 @@ export default function FlashcardsScreen() {
 
       {/* زر عائم: توليد مخصّص (اختيار الجزء/النوع/العدد) — يظهر خارج وضع المراجعة */}
       {/* شريط الحذف المتعدد */}
-      {selecting && mode !== "review" ? (
+      {selecting && mode === "picker" ? (
         <View style={[styles.selectBar, { backgroundColor: pal.card, borderColor: pal.cardBorder, flexDirection: dir.row }]}>
           <Pressable onPress={() => setPicked(picked.length === selectableKeys.length ? [] : selectableKeys)} hitSlop={8}>
             <Text style={[styles.selectLink, { color: pal.accent }]}>
@@ -976,7 +1161,7 @@ export default function FlashcardsScreen() {
         </View>
       ) : null}
 
-      {mode !== "review" && !selecting ? (
+      {mode === "picker" && !selecting ? (
         <Pressable
           {...coach.bind("gen")}
           onPress={() => router.push("/generate-study")}
@@ -1063,6 +1248,12 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabTxt: { fontSize: 15, fontWeight: "900" },
+  chipsRow: { gap: 8, paddingVertical: 2 },
+  chipBtn: { paddingHorizontal: 14, height: 36, borderRadius: Radius.pill, borderWidth: 1, alignItems: "center", justifyContent: "center", maxWidth: 240 },
+  chipBtnTxt: { fontSize: 13.5, fontWeight: "800" },
+  printBtn: { width: 38, height: 38, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
+  unitNum: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  unitNumTxt: { fontSize: 13, fontWeight: "900" },
   pickBox: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   selectBar: {
     position: "absolute",

@@ -5,7 +5,7 @@ import { aiAssist } from "./ai";
 import { supabase } from "./supabase";
 
 /** about: نبذة قصيرة عمّا تتناوله الوحدة (ليعرف الطالب ما هو مقبل عليه) */
-export type SyllabusUnit = { title: string; topics: string[]; outcome?: string; about?: string };
+export type SyllabusUnit = { title: string; topics: string[]; outcome?: string; about?: string; objectives?: string[] };
 export type Syllabus = { title?: string; units: SyllabusUnit[]; tips?: string[] };
 
 export function parseSyllabus(raw: string): Syllabus | null {
@@ -20,6 +20,7 @@ export function parseSyllabus(raw: string): Syllabus | null {
             topics: Array.isArray(u?.topics) ? u.topics.map((t: any) => String(t).trim()).filter(Boolean) : [],
             outcome: u?.outcome ? String(u.outcome).trim() : undefined,
             about: u?.about ? String(u.about).trim() : undefined,
+            objectives: Array.isArray(u?.objectives) ? u.objectives.map((x: any) => String(x).trim()).filter(Boolean).slice(0, 12) : undefined,
           }))
           .filter((u: SyllabusUnit) => u.title)
       : [];
@@ -78,8 +79,10 @@ async function unitExcerpts(pdfPath: string, units: { page: number; to: number }
   for (let i = 0; i < units.length; i += 4) {
     await Promise.all(
       units.slice(i, i + 4).map(async (u, k) => {
-        const t = await unitText(pdfPath, u.page, Math.min(u.to, u.page + 3)).catch(() => "");
-        out[i + k] = t.replace(/\s+/g, " ").slice(0, per);
+        const t = (await unitText(pdfPath, u.page, Math.min(u.to, u.page + 3)).catch(() => "")).replace(/\s+/g, " ");
+        // «أهداف الوحدة» في الكتاب أدق من أي تخمين: المقتطف يبدأ منها إن وُجدت
+        const at = t.search(/أهداف\s+(ال)?(وحدة|وحده|فصل|درس)/);
+        out[i + k] = (at > 0 ? t.slice(at) : t).slice(0, per);
       })
     );
   }
@@ -123,16 +126,17 @@ export async function generateSyllabus(pdfPath: string, onStage?: (s: SyllabusSt
     const brief =
       `هذه وحدات الكتاب الدقيقة (${struct.length} وحدة) من فهرسه، ومع كل وحدة مقتطف من صفحاتها الأولى. ` +
       `أعد المنهج بالوحدات نفسها بالضبط وبالترتيب نفسه وبعناوينها حرفيًا (لا تضف ولا تحذف ولا تدمج)، ` +
-      `ولكل وحدة: about نبذة من جملتين أو ثلاث بلغة سهلة عمّا تتناوله الوحدة وأهم أفكارها (ليعرف الطالب ما هو مقبل عليه)، ` +
+      `ولكل وحدة: objectives أهداف الوحدة منقولة حرفيًا كما وردت في مقتطفها تحت «أهداف الوحدة» (بندًا بندًا، بلا إعادة صياغة؛ وإن لم ترد أهداف فاجعلها [])، ` +
+      `وabout نبذة من جملتين بلغة سهلة عمّا تتناوله الوحدة (تُستعمل فقط إن لم ترد أهداف)، ` +
       `وtopics محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط، وoutcome ما يتعلمه الطالب منها. ` +
-      `أعد JSON بالشكل {"title":"…","units":[{"title":"…","about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
+      `أعد JSON بالشكل {"title":"…","units":[{"title":"…","objectives":["…"],"about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
       struct.map((u, i) => `### ${i + 1}. ${u.title} (ص ${u.page}–${u.to})\n${ex[i]}`).join("\n\n");
     const ai = parseSyllabus(await aiAssist("syllabus", brief))?.units ?? [];
     syl = {
       title: "",
       units: struct.map((u, i) => {
         const m = ai.length === struct.length ? ai[i] : matchUnit(u.title, ai);
-        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about };
+        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about, objectives: m?.objectives?.length ? m.objectives : undefined };
       }),
       tips: [],
     };

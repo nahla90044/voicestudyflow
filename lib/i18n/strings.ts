@@ -1748,6 +1748,19 @@ const ar: Record<string, string> = {
   "coach.syl.manage.body": "إعادة إنشاء المنهج كاملًا من الفهرس الدقيق، أو تحديد وحدات لإعادة إنشائها أو حذفها، أو حذف المنهج كله. الضغط المطوّل على وحدة يبدأ التحديد.",
   "syllabus.regenShort": "إعادة الإنشاء",
   "syllabus.regenSub": "يُبنى المنهج من جديد من فهرس الكتاب الدقيق: الوحدات وصفحاتها، ثم مواضيع كل وحدة من صفحاتها هي.",
+  "flashcards.bookAll": "كل بطاقات الكتاب",
+  "flashcards.unassigned": "بطاقات غير مرتبطة بوحدة",
+  "flashcards.unassignedShort": "بلا وحدة",
+  "flashcards.allShort": "الكل",
+  "flashcards.print": "طباعة البطاقات",
+  "flashcards.unitNone": "لا بطاقات بعد",
+  "flashcards.noUnits": "لا منهج لهذا الكتاب بعد، فالبطاقات كلها في «كل بطاقات الكتاب». إنشاء المنهج يجمّعها حسب الوحدات.",
+  "flashcards.unitEmptyTitle": "لا بطاقات لهذه الوحدة بعد",
+  "flashcards.unitEmptyBody": "توليد بطاقات من صفحات الوحدة ({from}–{to})؟",
+  "flashcards.generate": "توليد بطاقات",
+  "syllabus.action.cards": "بطاقات الوحدة",
+  "syllabus.objectives": "أهداف الوحدة",
+  "syllabus.action.glossary": "قاموس الوحدة",
 };
 
 const en: Record<string, string> = {
@@ -3466,6 +3479,19 @@ const en: Record<string, string> = {
   "coach.syl.manage.body": "Rebuild the whole syllabus from the accurate contents, select units to rebuild or delete, or delete the syllabus. Long-press a unit to start selecting.",
   "syllabus.regenShort": "Rebuild",
   "syllabus.regenSub": "The syllabus is rebuilt from the book's accurate contents: units and their pages, then each unit's topics from its own pages.",
+  "flashcards.bookAll": "All cards in this book",
+  "flashcards.unassigned": "Cards not linked to a unit",
+  "flashcards.unassignedShort": "No unit",
+  "flashcards.allShort": "All",
+  "flashcards.print": "Print cards",
+  "flashcards.unitNone": "No cards yet",
+  "flashcards.noUnits": "This book has no syllabus yet, so all cards are under All cards. Creating the syllabus groups them by unit.",
+  "flashcards.unitEmptyTitle": "No cards for this unit yet",
+  "flashcards.unitEmptyBody": "Generate cards from this unit's pages ({from}–{to})?",
+  "flashcards.generate": "Generate cards",
+  "syllabus.action.cards": "Unit cards",
+  "syllabus.objectives": "Unit objectives",
+  "syllabus.action.glossary": "Unit glossary",
 };
 
 // الفرنسي: يُملأ في مرحلة لاحقة. حاليًا نعتمد على fallback الإنجليزي عبر دالة t.
