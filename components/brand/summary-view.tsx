@@ -128,8 +128,18 @@ export function SummaryView({ summary, bookTitle }: { summary: StudySummary; boo
                   <Text style={[styles.solHead, ta]}>
                     <Ionicons name="checkmark-circle" size={14} color="#10B981" /> {t("summary.solution")}
                   </Text>
-                  <Text style={[styles.body, { color: pal.dark ? "#D1FAE5" : "#065F46", fontWeight: "800" }, ta]}>{b.answer}</Text>
+                  {/* الجواب بلون غامق واضح */}
+                  <Text style={[styles.body, { color: pal.dark ? "#ECFDF5" : "#064E3B", fontWeight: "900" }, ta]}>{b.answer}</Text>
                 </>
+              ) : null}
+              {b.why ? (
+                <>
+                  <Text style={[styles.solHead, ta]}>{t("summary.why")}</Text>
+                  <Text style={[styles.body, { color: pal.dark ? "#D1FAE5" : "#065F46" }, ta]}>{b.why}</Text>
+                </>
+              ) : null}
+              {b.quote ? (
+                <Text style={[styles.body, { color: pal.dark ? "#A7F3D0" : "#374151", fontStyle: "italic", marginTop: 4 }, ta]}>«{b.quote}»</Text>
               ) : null}
             </View>
           </View>

@@ -80,7 +80,8 @@ export async function generateSyllabus(pdfPath: string): Promise<Syllabus> {
 }
 
 export type QuizLevel = "easy" | "medium" | "hard";
-export type QuizQ = { q: string; options: string[]; answer: number; level: QuizLevel };
+export type QuizType = "mcq" | "tf" | "fill" | "def" | "essay";
+export type QuizQ = { q: string; options: string[]; answer: number; level: QuizLevel; type?: QuizType; why?: string; quote?: string };
 
 function normLevel(v: any): QuizLevel {
   const s = String(v ?? "").toLowerCase();
@@ -101,10 +102,13 @@ export async function generateUnitQuiz(context: string, count?: number): Promise
         options: Array.isArray(x?.options) ? x.options.map((o: any) => String(o).trim()).filter(Boolean) : [],
         answer: Number(x?.answer ?? 0),
         level: normLevel(x?.level),
+        type: (["mcq", "tf", "fill", "def", "essay"].includes(String(x?.type)) ? String(x.type) : "mcq") as QuizType,
+        why: String(x?.why ?? "").trim() || undefined,
+        quote: String(x?.quote ?? "").trim() || undefined,
       }))
       .filter((x: QuizQ) => x.q && x.options.length >= 2 && x.answer >= 0 && x.answer < x.options.length)
       // النموذج يميل لجعل الإجابة الصحيحة أولًا دائمًا → نخلط الخيارات لكسر النمط
-      .map((x: QuizQ) => shuffleOptions(x));
+      .map((x: QuizQ) => (x.type === "tf" ? x : shuffleOptions(x))); // صح/خطأ يبقى بترتيبه
   } catch {
     return [];
   }

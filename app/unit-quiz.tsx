@@ -18,7 +18,10 @@ import { setLastPage } from "../lib/readerPrefs";
 import { getBookReadiness, getDueMistakes, markQuizDone, recordAnswer } from "../lib/readiness";
 import { computeReadiness } from "../lib/readinessCore";
 import { addSavedItem } from "../lib/savedStudy";
-import { generateUnitQuiz, getSyllabus, type QuizQ } from "../lib/syllabus";
+import { generateUnitQuiz, type QuizQ } from "../lib/syllabus";
+import { summaryToSpeech } from "../lib/studySummary";
+import { getCachedSummary, summaryRange } from "../lib/unitSummary";
+import { unitTextParts } from "../lib/unitScope";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { useScene, type ScenePalette } from "../lib/scene";
 
@@ -59,6 +62,21 @@ export default function UnitQuizScreen() {
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
 
   const [loading, setLoading] = useState(true);
+  // اختيار عدد الأسئلة قبل التوليد (0 = تلقائي)
+  const [countAsk, setCountAsk] = useState(false);
+  const countResolve = useRef<((n: number | null) => void) | null>(null);
+  const askCount = () =>
+    new Promise<number | null>((resolve) => {
+      countResolve.current = resolve;
+      setLoading(false);
+      setCountAsk(true);
+    });
+  const chooseCount = (n: number | null) => {
+    setCountAsk(false);
+    countResolve.current?.(n);
+    countResolve.current = null;
+    if (n === null) router.back();
+  };
   const [err, setErr] = useState("");
   const [quiz, setQuiz] = useState<Item[]>([]);
   const [step, setStep] = useState(0);
@@ -116,24 +134,35 @@ export default function UnitQuizScreen() {
 
         const where = { unit: pageMode ? null : unitIdx, page: pageMode ? pageNum : null };
         const cached = await getUnitContent<QuizQ[]>(pdfPath, srcId, kind);
-        if (cached && cached.length) {
+        // اختبارات بالصيغة القديمة (من عنوان الوحدة وأهدافها فقط) تُعاد بالصيغة الجديدة من محتوى الوحدة
+        if (cached && cached.length && cached.some((q) => q.type)) {
           if (on) setQuiz(cached.map((q) => ({ ...q, ...where })));
           return;
         }
+        // عدد الأسئلة: يختاره الطالب أولًا (أو «تلقائي» حسب حجم الوحدة)
+        const count = pageMode ? 6 : await askCount(); // الصفحة الواحدة: ٦ أسئلة مباشرة
+        if (!on || count === null) return;
+        if (on) setLoading(true);
         let ctx = "";
         if (pageMode) {
           const res = await extractPdfPageText(pdfPath, pageNum);
           ctx = (res.text || "").slice(0, 4000);
         } else {
-          const r = await getSyllabus(pdfPath);
-          const u = r?.data.units[unitIdx];
-          if (u) ctx = `الوحدة: ${u.title}\nالمواضيع: ${u.topics.join("، ")}\n${u.outcome ?? ""}`;
+          // محتوى الوحدة نفسه (لا عنوانها وأهدافها): الملخص الشامل إن وُجد، وإلا نص صفحاتها
+          const src = { kind: "unit" as const, unit: unitIdx };
+          const sum = await getCachedSummary(pdfPath, src).catch(() => null);
+          if (sum) ctx = summaryToSpeech(sum);
+          if (ctx.trim().length < 1500) {
+            const range = await summaryRange(pdfPath, src).catch(() => null);
+            if (range) ctx = (await unitTextParts(pdfPath, range.from, range.to).catch(() => [] as string[])).join("\n\n");
+          }
+          ctx = ctx.slice(0, 29000);
         }
         if (!ctx.trim()) {
           if (on) setErr(t("syllabus.err.quiz"));
           return;
         }
-        const qs = await generateUnitQuiz(ctx);
+        const qs = await generateUnitQuiz(ctx, count || undefined);
         if (qs.length === 0) {
           if (on) setErr(t("syllabus.err.quiz"));
           return;
@@ -267,7 +296,25 @@ export default function UnitQuizScreen() {
         </View>
       )}
 
-      {loading ? (
+      {countAsk ? (
+        <View style={styles.center}>
+          <SceneCard style={styles.countCard}>
+            <Text style={[styles.countTitle, { color: pal.ink }]}>{t("quiz.count.title")}</Text>
+            <Text style={[styles.dim, { color: pal.dim, textAlign: "center" }]}>{t("quiz.count.hint")}</Text>
+            {[0, 10, 15, 20, 25].map((n) => (
+              <Pressable
+                key={n}
+                onPress={() => chooseCount(n)}
+                style={({ pressed }) => [styles.countBtn, { backgroundColor: n === 0 ? pal.accent : pal.soft, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.countBtnTxt, { color: n === 0 ? pal.onAccent : pal.ink }]}>
+                  {n === 0 ? t("quiz.count.auto") : t("quiz.count.n", { n })}
+                </Text>
+              </Pressable>
+            ))}
+          </SceneCard>
+        </View>
+      ) : loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={pal.accent} />
           <Text style={[styles.dim, { color: pal.dim }]}>{t("quiz2.preparing")}</Text>
@@ -310,6 +357,9 @@ export default function UnitQuizScreen() {
                 )}
               </View>
 
+              {q.type ? (
+                <Text style={[styles.typeTag, { color: pal.accent, textAlign: dir.textAlign }]}>{t(`quiz.type.${q.type}`)}</Text>
+              ) : null}
               <Text style={[styles.question, { color: pal.ink, textAlign: dir.textAlign }]}>{q.q}</Text>
             </SceneCard>
 
@@ -377,6 +427,10 @@ export default function UnitQuizScreen() {
                       : t("quiz2.right")
                     : t("quiz2.wrong", { answer: q.options[q.answer] ?? "" })}
                 </Text>
+                {q.why ? <Text style={[styles.fbWhy, { color: pal.ink, textAlign: dir.textAlign }]}>{q.why}</Text> : null}
+                {q.quote ? (
+                  <Text style={[styles.fbQuote, { color: pal.dim, textAlign: dir.textAlign, borderColor: pal.accent }]}>«{q.quote}»</Text>
+                ) : null}
                 {picked !== q.answer && (
                   <Text style={[styles.fbBody, { color: pal.dim, textAlign: dir.textAlign }]}>{t("quiz2.comesBack")}</Text>
                 )}
@@ -525,6 +579,13 @@ const styles = StyleSheet.create({
   feedback: { padding: 14, borderRadius: 22, gap: 6, borderWidth: StyleSheet.hairlineWidth },
   fbTitle: { fontSize: 15, fontWeight: "800", lineHeight: 23 },
   fbBody: { fontSize: 13.5, lineHeight: 22 },
+  fbWhy: { fontSize: 14.5, lineHeight: 24, fontWeight: "600", marginTop: 6 },
+  fbQuote: { fontSize: 13.5, lineHeight: 22, fontStyle: "italic", marginTop: 6, paddingHorizontal: 10, borderLeftWidth: 3, borderRightWidth: 3 },
+  typeTag: { fontSize: 12.5, fontWeight: "800", marginBottom: 6 },
+  countCard: { width: "100%", maxWidth: 420, gap: 10, padding: 20, alignItems: "stretch" },
+  countTitle: { fontSize: 19, fontWeight: "900", textAlign: "center" },
+  countBtn: { borderRadius: 14, paddingVertical: 13, alignItems: "center" },
+  countBtnTxt: { fontSize: 15.5, fontWeight: "800" },
   fbLinks: { gap: 16, marginTop: 2 },
   fbLink: { fontSize: 13, fontWeight: "800" },
 

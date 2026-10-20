@@ -13,7 +13,7 @@ export type SummaryBlock =
   | { type: "explain"; title?: string; text: string }
   | { type: "important"; text: string }
   // تمارين نهاية الوحدة محلولة (الحل بلون مختلف)، ودراسة الحالة بشرح مبسّط موسّع وأسئلتها محلولة
-  | { type: "exercise"; q: string; steps: string[]; answer: string }
+  | { type: "exercise"; q: string; steps: string[]; answer: string; why?: string; quote?: string }
   | { type: "case"; title?: string; text: string; analysis: string; qa: { q: string; a: string }[] };
 
 export type SummarySection = { emoji: string; heading: string; blocks: SummaryBlock[] };
@@ -52,7 +52,9 @@ function block(b: any): SummaryBlock | null {
     case "exercise": {
       const q = str(b.q ?? b.question);
       const answer = str(b.answer ?? b.solution);
-      return q && (answer || strs(b.steps).length) ? { type: "exercise", q, steps: strs(b.steps), answer } : null;
+      return q && (answer || strs(b.steps).length)
+        ? { type: "exercise", q, steps: strs(b.steps), answer, why: str(b.why ?? b.reason) || undefined, quote: str(b.quote) || undefined }
+        : null;
     }
     case "case": {
       const text = str(b.text);
@@ -156,7 +158,7 @@ export function summaryToSpeech(s: StudySummary): string {
       if (b.type === "text" || b.type === "example" || b.type === "important") out.push(b.text);
       else if (b.type === "definition") out.push(`${b.term}: ${b.text}`);
       else if (b.type === "explain") out.push([b.title, b.text].filter(Boolean).join(". "));
-      else if (b.type === "exercise") out.push([b.q, ...b.steps, b.answer].filter(Boolean).join(". "));
+      else if (b.type === "exercise") out.push([b.q, ...b.steps, b.answer, b.why].filter(Boolean).join(". "));
       else if (b.type === "case") out.push([b.title, b.text, b.analysis, ...b.qa.map((x) => `${x.q} ${x.a}`)].filter(Boolean).join(". "));
       else if (b.type === "list") out.push([b.title, ...b.items.map((x) => x.replace(/[:：]/, "، "))].filter(Boolean).join(". "));
       else if (b.type === "table") {
@@ -192,8 +194,8 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
   const { summary: s, rtl } = opts;
   const start = rtl ? "right" : "left";
   const L = rtl
-    ? { toc: "محتويات الملخّص", key: "أهم النقاط للمراجعة", ex: "مثال", hard: "توضيح", imp: "مهم", def: "تعريف", exQ: "تمرين", sol: "الحل", steps: "خطوات الحل", cs: "دراسة حالة", an: "الشرح المبسّط", csq: "أسئلة الحالة" }
-    : { toc: "Contents", key: "Key points to review", ex: "Example", hard: "Explained", imp: "Important", def: "Definition", exQ: "Exercise", sol: "Solution", steps: "Steps", cs: "Case study", an: "Simple explanation", csq: "Case questions" };
+    ? { toc: "محتويات الملخّص", key: "أهم النقاط للمراجعة", ex: "مثال", hard: "توضيح", imp: "مهم", def: "تعريف", exQ: "تمرين", sol: "الحل", why: "سبب الإجابة", steps: "خطوات الحل", cs: "دراسة حالة", an: "الشرح المبسّط", csq: "أسئلة الحالة" }
+    : { toc: "Contents", key: "Key points to review", ex: "Example", hard: "Explained", imp: "Important", def: "Definition", exQ: "Exercise", sol: "Solution", why: "Why", steps: "Steps", cs: "Case study", an: "Simple explanation", csq: "Case questions" };
 
   const blockHtml = (b: SummaryBlock, c: [string, string, string]): string => {
     switch (b.type) {
@@ -201,7 +203,9 @@ function summaryBody(opts: { bookTitle: string; title: string; summary: StudySum
         // الحل بلون مختلف دائمًا (أخضر) عن نص السؤال
         return `<div class="exq"><span class="tag" style="background:#334155">${L.exQ}</span><b>${esc(b.q)}</b></div><div class="sol">${
           b.steps.length ? `<div class="solh">${L.steps}</div><ol>${b.steps.map((x) => `<li>${esc(x)}</li>`).join("")}</ol>` : ""
-        }${b.answer ? `<div class="solh">${L.sol}</div><div>${esc(b.answer)}</div>` : ""}</div>`;
+        }${b.answer ? `<div class="solh">${L.sol}</div><div class="ans">${esc(b.answer)}</div>` : ""}${
+          b.why ? `<div class="solh">${L.why}</div><div>${esc(b.why)}</div>` : ""
+        }${b.quote ? `<div class="qt">«${esc(b.quote)}»</div>` : ""}</div>`;
       case "case":
         return `<div class="case"><span class="tag" style="background:#7C3AED">${L.cs}</span>${b.title ? `<b>${esc(b.title)}</b>` : ""}<p>${esc(b.text)}</p></div>${
           b.analysis ? `<div class="an"><div class="anh">${L.an}</div><p>${esc(b.analysis)}</p></div>` : ""
@@ -300,6 +304,7 @@ function summaryCss(rtl: boolean): string {
     .exq { background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 12px; padding: 10px 14px; margin: 10px 0 0; font-size: 14.5px; line-height: 1.9; break-inside: avoid; }
     .sol { background: #ECFDF5; border: 1.5px solid #34D399; border-radius: 12px; padding: 10px 14px; margin: 6px 0 12px; font-size: 14.5px; line-height: 1.9; color: #065F46; break-inside: avoid; }
     .sol ol { margin: 4px 0; padding-${start}: 20px; } .solh { font-weight: 900; color: #047857; margin-top: 4px; }
+    .sol .ans { font-weight: 900; color: #064E3B; font-size: 15.5px; } .sol .qt { font-style: italic; color: #374151; margin-top: 6px; padding-${start}: 10px; border-${start}: 3px solid #34D399; }
     .case { background: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 12px; padding: 10px 14px; margin: 10px 0 6px; font-size: 14.5px; line-height: 1.9; }
     .an { background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 12px; padding: 10px 14px; margin: 6px 0 12px; font-size: 14.5px; line-height: 1.95; }
     .anh { font-weight: 900; color: #B45309; }
