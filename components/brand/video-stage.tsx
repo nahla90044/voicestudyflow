@@ -81,6 +81,9 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
   const items = layout === "compare" ? (scene.columns ?? []).length : scene.bullets.length;
   const shown = (i: number) => progress >= (items <= 1 ? 0.05 : 0.05 + (i / items) * 0.8);
 
+  // لا تُقصّ النقاط أبدًا (كان العرض يقتطع ٢–٥ والراوي يذكرها كلها): الحجم يتكيّف مع عددها
+  const fit = (n: number, base: number) => (n <= 3 ? base : n <= 5 ? base * 0.9 : base * 0.78);
+
   const bold = layout === "cover" || layout === "stat" || layout === "summary" || layout === "check";
   const ink = bold ? "#FFFFFF" : "#0F172A";
   const sub = bold ? "rgba(255,255,255,0.86)" : "#475569";
@@ -93,15 +96,36 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
 
   let content: React.ReactNode;
   if (layout === "check") {
+    const hasOpts = /\n/.test(scene.question ?? "");
     content = (
-      <View style={styles.centerCol}>
+      <View style={[styles.centerCol, hasOpts && { gap: 14 }]}>
         <View style={[styles.tag, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
           <Ionicons name="help-circle-outline" size={26} color="#FFFFFF" />
           <Text style={styles.tagTxt}>{t("video.check")}</Text>
         </View>
-        <Text style={[styles.question, ta]} numberOfLines={4} adjustsFontSizeToFit minimumFontScale={0.6}>
-          {scene.question}
-        </Text>
+        {(() => {
+          // السؤال كاملًا، والخيارات (كل خيار في سطر) تحته
+          const [q, ...opts] = (scene.question ?? "").split(/\n+/).map((x) => x.trim()).filter(Boolean);
+          const long = (scene.question ?? "").length > 160 || opts.length > 0;
+          return (
+            <>
+              <Text style={[styles.question, long && { fontSize: 34, lineHeight: 48 }, ta]} numberOfLines={opts.length ? 3 : 7} adjustsFontSizeToFit minimumFontScale={0.5}>
+                {q}
+              </Text>
+              {opts.length ? (
+                <View style={[styles.opts, opts.length > 3 && { flexDirection: dir.row, flexWrap: "wrap" }]}>
+                  {opts.map((o, i) => (
+                    <View key={i} style={[styles.opt, opts.length > 3 && { width: "48.8%" }]}>
+                      <Text style={[styles.optTxt, ta]} numberOfLines={opts.length > 3 ? 1 : 2} adjustsFontSizeToFit minimumFontScale={0.55}>
+                        {o}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </>
+          );
+        })()}
         {stage === "think" ? (
           <View style={styles.think}>
             <Text style={styles.thinkNum}>{thinkLeft}</Text>
@@ -111,7 +135,7 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
           <Text style={[styles.answerHead, ta]}>
             <Ionicons name="checkmark-circle" size={26} color="#047857" /> {t("video.answer")}
           </Text>
-          <Text style={[styles.answerTxt, ta]} numberOfLines={4} adjustsFontSizeToFit minimumFontScale={0.6}>
+          <Text style={[styles.answerTxt, hasOpts && { fontSize: 27, lineHeight: 40 }, ta]} numberOfLines={hasOpts ? 3 : 6} adjustsFontSizeToFit minimumFontScale={0.5}>
             {scene.answer}
           </Text>
         </Reveal>
@@ -130,9 +154,9 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
           </Reveal>
         ) : null}
         <View style={[styles.chips, { flexDirection: dir.row }]}>
-          {scene.bullets.slice(0, 4).map((b, i) => (
+          {scene.bullets.map((b, i) => (
             <Reveal key={i} visible={shown(i)} style={[styles.chip, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
-              <Text style={styles.chipTxt} numberOfLines={1}>
+              <Text style={[styles.chipTxt, { fontSize: fit(scene.bullets.length, 24) }]} numberOfLines={2}>
                 {b}
               </Text>
             </Reveal>
@@ -147,9 +171,9 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
           {scene.highlight}
         </Text>
         {title(46)}
-        {scene.bullets.slice(0, 3).map((b, i) => (
+        {scene.bullets.map((b, i) => (
           <Reveal key={i} visible={shown(i)}>
-            <Text style={[styles.bulletW, ta]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+            <Text style={[styles.bulletW, { fontSize: fit(scene.bullets.length, 28), lineHeight: fit(scene.bullets.length, 42) }, ta]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
               {b}
             </Text>
           </Reveal>
@@ -166,9 +190,9 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
         <Text style={[styles.quoteBy, { color: c1 }, ta]} numberOfLines={1}>
           {scene.title}
         </Text>
-        {scene.bullets.slice(0, 2).map((b, i) => (
+        {scene.bullets.map((b, i) => (
           <Reveal key={i} visible={shown(i)}>
-            <Text style={[styles.bullet, { color: "#334155" }, ta]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+            <Text style={[styles.bullet, { color: "#334155", fontSize: fit(scene.bullets.length + 1, 29), lineHeight: fit(scene.bullets.length + 1, 42) }, ta]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
               {b}
             </Text>
           </Reveal>
@@ -177,6 +201,7 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
     );
   } else if (layout === "compare") {
     const cols = (scene.columns ?? []).slice(0, 2);
+    const most = Math.max(0, ...cols.map((c) => c.bullets.length));
     content = (
       <View style={{ flex: 1, gap: 22 }}>
         {title(48)}
@@ -188,8 +213,8 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
                   {col.title}
                 </Text>
               </View>
-              {col.bullets.slice(0, 4).map((b, i) => (
-                <Text key={i} style={[styles.colTxt, ta]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {col.bullets.map((b, i) => (
+                <Text key={i} style={[styles.colTxt, { fontSize: fit(most, 26), lineHeight: fit(most, 38) }, ta]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>
                   • {b}
                 </Text>
               ))}
@@ -200,8 +225,10 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
     );
   } else {
     // list / cards / steps / summary
-    const list = scene.bullets.slice(0, layout === "cards" ? 4 : 5);
-    const grid = layout === "cards" && list.length >= 3;
+    const list = scene.bullets;
+    // بطاقات (٣ فأكثر) أو قائمة طويلة (٦ فأكثر) → عمودان، فتظهر كل النقاط بحجم مقروء
+    const grid = (layout === "cards" && list.length >= 3) || list.length >= 6;
+    const fs = fit(grid ? Math.ceil(list.length / 2) + 2 : list.length, 29);
     content = (
       <View style={{ flex: 1, gap: 24 }}>
         <View style={[{ alignItems: "center", gap: 18, flexDirection: dir.row }]}>
@@ -210,7 +237,7 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
           </View>
           <View style={{ flex: 1 }}>{title(50)}</View>
         </View>
-        <View style={[{ flex: 1, gap: 16 }, grid && { flexDirection: dir.row, flexWrap: "wrap" }]}>
+        <View style={[{ flex: 1, gap: list.length > 5 ? 12 : 16 }, grid && { flexDirection: dir.row, flexWrap: "wrap" }]}>
           {list.map((x, i) => {
             const { head: h, body: b } = splitHead(x);
             return (
@@ -230,7 +257,7 @@ export function VideoStage({ scene, index, total, progress, stage, thinkLeft, ca
                     <Text style={[styles.numTxt, { color: bold ? c1 : "#FFFFFF" }]}>{i + 1}</Text>
                   )}
                 </View>
-                <Text style={[styles.bullet, { color: ink, flex: 1 }, ta]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.6}>
+                <Text style={[styles.bullet, { color: ink, flex: 1, fontSize: fs, lineHeight: fs * 1.45 }, ta]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.55}>
                   {h ? <Text style={{ fontWeight: "900", color: bold ? "#FFFFFF" : c1 }}>{h}: </Text> : null}
                   {b}
                 </Text>
@@ -330,6 +357,9 @@ const styles = StyleSheet.create({
   question: { color: "#FFFFFF", fontSize: 46, lineHeight: 66, fontWeight: "900", alignSelf: "stretch", textAlign: "center" },
   think: { width: 120, height: 120, borderRadius: 60, borderWidth: 5, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
   thinkNum: { color: "#FFFFFF", fontSize: 56, fontWeight: "900" },
+  opts: { alignSelf: "stretch", gap: 10 },
+  opt: { backgroundColor: "rgba(255,255,255,0.16)", borderColor: "rgba(255,255,255,0.3)", borderWidth: 1.5, borderRadius: 18, paddingVertical: 10, paddingHorizontal: 20 },
+  optTxt: { color: "#FFFFFF", fontSize: 28, lineHeight: 40, fontWeight: "800" },
   answerBox: { backgroundColor: "#FFFFFF", borderRadius: 26, paddingVertical: 20, paddingHorizontal: 28, gap: 8, alignSelf: "stretch" },
   answerHead: { color: "#047857", fontSize: 26, fontWeight: "900" },
   answerTxt: { color: "#0F172A", fontSize: 32, lineHeight: 48, fontWeight: "800" },

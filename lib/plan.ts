@@ -43,8 +43,11 @@ export async function getPlan(force = false): Promise<Plan> {
       if (active) plan = planOf(String(data!.plan_id));
       inTrial = active && !!(data as { trial?: boolean }).trial;
     } catch {
-      // بلا شبكة → نعرض ما يقوله المتجر مؤقتًا؛ السيرفر يقرّر عند الطلب
-      plan = (await storeActivePlan()) ?? "free";
+      // تعثّر الاتصال: آخر خطة مؤكدة تبقى كما هي (لا تنزل لحظيًا إلى «مجانية برصيد صفر»)،
+      // وإلا ما يقوله المتجر؛ ولا تُحفظ النتيجة طويلًا فتُعاد المحاولة قريبًا. السيرفر يقرّر عند الطلب.
+      const fallback = cached?.plan ?? (await storeActivePlan()) ?? "free";
+      if (cached) cached = { plan: fallback, at: Date.now() - 50_000 };
+      return fallback;
     }
   }
   cached = { plan, at: Date.now() };
@@ -64,8 +67,9 @@ let inTrial = false; // أسبوع التجربة المجانية لباقة م
 export async function planLimits(plan: Plan): Promise<{ pages: number; premium: number; ai: number } | null> {
   if (plan === "owner") return null;
   if (plan === "free") {
-    const { data } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
-    const u = data?.user;
+    // من الجلسة المحفوظة (بلا شبكة) حتى لا يتحوّل الحد إلى صفر عند تعثّر الاتصال
+    const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+    const u = data?.session?.user;
     const apple =
       ((u?.app_metadata?.providers as string[] | undefined) ?? []).includes("apple") ||
       (u?.identities ?? []).some((i) => i.provider === "apple") ||

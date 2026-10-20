@@ -367,12 +367,15 @@ export default function ReaderScreen() {
   // اللغة الافتراضية للصوت/الترجمة تتبع لغة الواجهة (إنجليزي → صوت إنجليزي… إلخ)
   const uiVoiceLang: "ar" | "en" | "fr" = lang === "en" || lang === "fr" ? lang : "ar";
   const uiVoiceId = VOICE_CATALOG.find((v) => (v.lang ?? "ar") === uiVoiceLang)?.voiceId ?? DEFAULT_VOICE_ID;
-  const { id, title, pdf_path, notes: openNotesParam } = useLocalSearchParams<{
+  const { id, title, pdf_path, notes: openNotesParam, page: pageParam } = useLocalSearchParams<{
     id?: string;
     title?: string;
     pdf_path?: string;
     notes?: string;
+    /** فتح الكتاب على صفحة محددة (مثل بداية وحدة من فهرس صفحة الكتاب) بدل آخر صفحة */
+    page?: string;
   }>();
+  const startPage = Number(pageParam) >= 1 ? Math.floor(Number(pageParam)) : null;
 
   // تخمين أولي من عنوان الكتاب (عنوان عربي → صوت عربي) إلى أن يصل نص الصفحة
   const titleLang = textLang(typeof title === "string" ? title : "");
@@ -786,7 +789,8 @@ export default function ReaderScreen() {
   // تحميل التفضيلات: آخر صفحة + السرعة
   useEffect(() => {
     // المشغّل العام كان يقرأ هذا الكتاب؟ يتوقف هو، ونكمل نحن من موضعه المحفوظ
-    autoResumeRef.current = takeOver(bookId).wasPlaying;
+    // فتح على صفحة محددة: لا استئناف تلقائي لموضع قديم
+    autoResumeRef.current = takeOver(bookId).wasPlaying && startPage === null;
     if (!autoResumeRef.current) closeReadingCard(); // بطاقة قديمة متوقفة من المشغّل العام
     (async () => {
       const [savedPage, savedRate, savedSent] = await Promise.all([
@@ -794,13 +798,13 @@ export default function ReaderScreen() {
         getReadingRate(),
         getLastSentence(bookId),
       ]);
-      setPage(savedPage);
+      setPage(startPage ?? savedPage);
       setRate(savedRate);
       if (bookId) {
         setLastOpenedBook({ id: bookId, title: typeof title === "string" ? title : "", pdf_path: pdfPath }).catch(() => {});
       }
       rateRef.current = savedRate;
-      resumeIdxRef.current = savedSent; // يستأنف من نفس الجملة بالضبط
+      resumeIdxRef.current = startPage === null ? savedSent : 0; // يستأنف من نفس الجملة بالضبط
       prefsLoadedRef.current = true;
       setPrefsLoaded(true); // الآن page = الصفحة المحفوظة → حمّل صورتها (لا الغلاف)
     })();

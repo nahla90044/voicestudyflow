@@ -17,6 +17,7 @@ import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
 import { deleteSyllabus, regenerateUnits, removeUnits, resetUnitContent, type SyllabusState } from "../../lib/syllabusEdit";
 import { PressableScale } from "../../components/brand/motion";
+import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import {
   generateMindmap,
   generateSyllabus,
@@ -60,6 +61,18 @@ export default function SyllabusScreen() {
   const bookTitle = typeof title === "string" ? title : t("syllabus.title");
 
   const [loading, setLoading] = useState(true);
+  const coach = useCoachTour("syllabus_v1", [
+    { id: "read", title: t("coach.syl.read.title"), body: t("coach.syl.read.body"), shape: "rect" },
+    { id: "file", title: t("coach.syl.file.title"), body: t("coach.syl.file.body"), shape: "rect" },
+    { id: "unit", title: t("coach.syl.unit.title"), body: t("coach.syl.unit.body"), shape: "rect",
+      rows: [
+        { icon: "headset-outline", text: t("coach.syl.unit.summary") },
+        { icon: "videocam-outline", text: t("coach.syl.unit.video") },
+        { icon: "school-outline", text: t("coach.syl.unit.quiz") },
+        { icon: "git-network-outline", text: t("coach.syl.unit.mindmap") },
+      ] },
+    { id: "manage", title: t("coach.syl.manage.title"), body: t("coach.syl.manage.body"), shape: "rect" },
+  ], { delay: 1500, ready: !loading });
   const [busy, setBusy] = useState(false);
   const [genPct, setGenPct] = useState(0); // تقدّم توليد المنهج (٪)
   const [genMsg, setGenMsg] = useState(""); // رسالة المرحلة الحالية
@@ -398,6 +411,7 @@ export default function SyllabusScreen() {
               </PressableScale>
             ) : null}
             {printBtn}
+            <CoachHelpButton onPress={coach.replay} />
           </View>
         }
       />
@@ -471,6 +485,7 @@ export default function SyllabusScreen() {
 
           {/* زر الدخول للقراءة — بارز فوق الوحدات */}
           <Pressable
+            {...coach.bind("read")}
             onPress={startReading}
             style={({ pressed }) => [
               styles.cta,
@@ -483,6 +498,7 @@ export default function SyllabusScreen() {
 
           {/* ملف المذاكرة: ملخّصات الوحدات كلها بالترتيب في PDF واحد */}
           <Pressable
+            {...coach.bind("file")}
             onPress={() => router.push({ pathname: "/study-file", params: { pdf_path: pdfPath, book_title: bookTitle } })}
             style={({ pressed }) => [
               styles.cta,
@@ -504,6 +520,7 @@ export default function SyllabusScreen() {
             return (
               <Pressable
                 key={i}
+                {...(i === 0 ? coach.bind("unit") : null)}
                 onPress={() => (selecting ? togglePick(i) : toggle(i))}
                 onLongPress={editing || !canEdit ? undefined : () => (selecting ? togglePick(i) : startSelecting(i))}
                 disabled={isWorking}
@@ -640,6 +657,7 @@ export default function SyllabusScreen() {
           {!selecting && canEdit && (
             <>
               <Pressable
+                {...coach.bind("manage")}
                 onPress={busy || editing ? undefined : () => startSelecting()}
                 style={({ pressed }) => [
                   styles.ghostBtn,
@@ -698,6 +716,8 @@ export default function SyllabusScreen() {
           </View>
         </View>
       )}
+
+      {coach.overlay}
 
       {/* مودال الخريطة الذهنية */}
       <Modal

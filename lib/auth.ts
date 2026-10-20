@@ -41,18 +41,27 @@ const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com", "nah
 let ownerCache: { uid: string; owner: boolean } | null = null;
 export async function isOwner(): Promise<boolean> {
   try {
+    // الجلسة المحفوظة على الجهاز (بلا شبكة). كانت getUser() تطلب السيرفر في كل فحص، فإن تعثّر الاتصال
+    // لحظة رجعت «ليست المالكة» فتظهر الباقة مجانية برصيد صفر حتى إعادة الفتح (بلاغ نهلة ٢٠ أكتوبر).
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return false;
     if (OWNER_EMAILS.has(user.email?.trim().toLowerCase() ?? "")) return true;
     if (ownerCache?.uid === user.id) return ownerCache.owner;
+    const KEY = `vsf:owner:${user.id}`;
     const { data, error } = await supabase.rpc("am_i_owner");
-    if (error) return false; // بلا شبكة: لا نحفظ النتيجة، نعيد السؤال لاحقًا
+    if (error) {
+      // بلا شبكة: آخر نتيجة مؤكدة لهذا الحساب على الجهاز، لا «ليست المالكة»
+      const known = await AsyncStorage.getItem(KEY).catch(() => null);
+      return known === "1";
+    }
     ownerCache = { uid: user.id, owner: data === true };
+    await AsyncStorage.setItem(KEY, data === true ? "1" : "0").catch(() => {});
     return ownerCache.owner;
   } catch {
-    return false;
+    return ownerCache?.owner ?? false;
   }
 }
 
@@ -205,7 +214,7 @@ export async function signOut() {
   // ملفات الحساب على الجهاز: صوت نصوص كتبه وصور صفحاتها — لا تبقى لحساب آخر على نفس الجهاز
   try {
     const { Directory, Paths } = await import("expo-file-system");
-    for (const name of ["tts-cache-v10", "page-img", "offline-books-v1"]) {
+    for (const name of ["tts-cache-v10", "page-img", "offline-books-v1", "book-files-v1"]) {
       for (const base of [Paths.cache, Paths.document]) {
         const d = new Directory(base, name);
         if (d.exists) d.delete();

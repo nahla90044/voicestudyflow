@@ -42,7 +42,21 @@ function scene(o: any): VideoScene | null {
   }
   if ((layout === "stat" || layout === "quote") && !highlight) layout = "list";
   if (layout) out.layout = layout;
+  // لا مشهد بعنوان فقط والراوي يتكلم: النقاط تؤخذ من كلام الراوي نفسه
+  if (layout !== "cover" && !out.bullets.length && !out.columns?.length && !out.highlight) {
+    out.bullets = bulletsFromNarration(narration);
+    if (out.layout === "stat" || out.layout === "quote") out.layout = "list";
+  }
   return out.title || out.bullets.length || out.columns?.length || out.highlight ? out : null;
+}
+
+/** جمل كلام الراوي مختصرة إلى نقاط تُعرض (حتى ٥) */
+export function bulletsFromNarration(narration: string): string[] {
+  return (narration.match(/[^.!؟?؛]+[.!؟?؛]?/g) ?? [])
+    .map((x) => x.replace(/[.؛]+$/, "").trim())
+    .filter((x) => x.length >= 8)
+    .slice(0, 5)
+    .map((x) => (x.length > 110 ? x.slice(0, x.lastIndexOf(" ", 108)) + "…" : x));
 }
 
 function partialTitle(raw: string): string {
@@ -108,8 +122,21 @@ export function mergeVideo(list: VideoScript[]): VideoScript | null {
 
 const PART_MAX = 9000;
 
+// ما ليس من صلب الوحدة فلا يضيع عليه وقت الفيديو (ملخصات قديمة محفوظة قد تحتويه). التمارين ودراسة الحالة تبقى.
+const OFF_VIDEO = /مراجع|مصادر|المصادر|أهداف|مخرجات|نواتج التعلم|نواتج التعلّم|أنشطة|نشاط|references|sources|objectives|outcomes|activit/i;
+
+/** الملخّص بلا أقسام المراجع والأهداف والمخرجات والأنشطة (وأهم النقاط التي تذكرها) */
+export function coreForVideo(s: StudySummary): StudySummary {
+  return {
+    ...s,
+    sections: s.sections.filter((sec) => !OFF_VIDEO.test(sec.heading)),
+    keypoints: s.keypoints.filter((k) => !OFF_VIDEO.test(k)),
+  };
+}
+
 /** أجزاء السيناريو من الملخّص: أقسام كاملة متتالية (≤ ٩٠٠٠ حرف) مع سياق موضعها من الوحدة */
-export function videoParts(s: StudySummary, unitTitle: string): string[] {
+export function videoParts(full: StudySummary, unitTitle: string): string[] {
+  const s = coreForVideo(full);
   const secText = s.sections.map((sec) => summaryToSpeech({ title: "", intro: "", sections: [sec], keypoints: [] }));
   const groups: string[] = [];
   let cur = "";

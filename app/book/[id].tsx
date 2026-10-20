@@ -4,10 +4,11 @@
 // بدل القارئ مباشرة، فلا حاجة للتنقّل بين تبويبات متفرّقة لإيجاد أداة.
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { listSaves, type StudySave } from "../../lib/studySaves";
+import { listSaves, removeSave, type StudySave } from "../../lib/studySaves";
+import { addSaveRef, createFolder, deleteFolder, forgetSave, loadFolders, type BookFolder } from "../../lib/bookFolders";
 import { loadNotes } from "../../lib/notes";
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BookCover } from "../../components/brand/book-cover";
 import { ExamDateSheet } from "../../components/brand/exam-date-sheet";
@@ -40,14 +41,32 @@ export default function BookHubScreen() {
     ? { good: "#7BD8A4", mid: "#F2B36B", bad: "#FF8A96" }
     : { good: "#2F7D4A", mid: "#B86B12", bad: "#B83A48" };
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const coach = useCoachTour("book_v1", [
+  // v2: الوحدات صارت فهرسًا، وأدوات الوحدات في المنهج الدراسي، والمحفوظات فيها ملفات خاصة وحذف
+  const coach = useCoachTour("book_v2", [
     { id: "cta", title: t("coach.book.cta.title"), body: t("coach.book.cta.body"), shape: "rect" },
     { id: "seg", title: t("coach.book.seg.title"), body: t("coach.book.seg.body"), shape: "rect" },
-    { id: "unit", title: t("coach.book.unit.title"), body: t("coach.book.unit.body"), shape: "rect",
+    { id: "unit", title: t("coach.book.unit.title"), body: t("coach.book.unit.body"), shape: "rect" },
+    { id: "syl", title: t("coach.book.syl.title"), body: t("coach.book.syl.body"), shape: "rect",
       rows: [
-        { icon: "book", text: t("coach.book.unit.glossary") },
-        { icon: "headset", text: t("coach.book.unit.summary") },
-        { icon: "checkbox", text: t("coach.book.unit.quiz") },
+        { icon: "headset", text: t("coach.book.syl.summary") },
+        { icon: "videocam", text: t("coach.book.syl.video") },
+        { icon: "school", text: t("coach.book.syl.quiz") },
+        { icon: "git-network", text: t("coach.book.syl.mindmap") },
+        { icon: "refresh", text: t("coach.book.syl.edit") },
+      ] },
+    { id: "tools", title: t("coach.book.tools.title"), body: t("coach.book.tools.body"), shape: "rect",
+      rows: [
+        { icon: "list", text: t("coach.book.tools.syllabus") },
+        { icon: "chatbubble-ellipses", text: t("coach.book.tools.ask") },
+        { icon: "albums", text: t("coach.book.tools.cards") },
+        { icon: "timer", text: t("coach.book.tools.focus") },
+      ] },
+    { id: "saves", title: t("coach.book.saves.title"), body: t("coach.book.saves.body"), shape: "rect",
+      rows: [
+        { icon: "folder", text: t("coach.book.saves.folders") },
+        { icon: "create-outline", text: t("coach.book.saves.notes") },
+        { icon: "easel-outline", text: t("coach.book.saves.reader") },
+        { icon: "trash-outline", text: t("coach.book.saves.delete") },
       ] },
     { id: "create", title: t("coach.book.create.title"), body: t("coach.book.create.body"), shape: "rect" },
   ], { delay: 1500 });
@@ -61,9 +80,11 @@ export default function BookHubScreen() {
   const [tab, setTab] = useState<Tab>("units");
   // «المحفوظات»: العروض وإجابات المساعد المحفوظة من القارئ لهذا الكتاب
   const [saves, setSaves] = useState<StudySave[] | null>(null);
+  const [folders, setFolders] = useState<BookFolder[]>([]); // «ملفاتي»: ملفات ينشئها المستخدم ويضع فيها ما يشاء
   const loadSaves = useCallback(() => {
     if (!bookId) return;
     listSaves(bookId).then(setSaves).catch(() => setSaves([]));
+    loadFolders(bookId).then(setFolders).catch(() => setFolders([]));
     loadNotes(bookId)
       .then((ps) => setNoteCount(ps.filter((p) => p.text.trim() || p.strokes.length).length))
       .catch(() => setNoteCount(0));
@@ -161,12 +182,82 @@ export default function BookHubScreen() {
     router.push({ pathname: "/reader/[id]", params: { id: book.id, title: book.title, pdf_path: book.pdf_path } });
   const openSyllabus = () =>
     router.push({ pathname: "/syllabus/[id]", params: { id: book.id, title: book.title, pdf_path: book.pdf_path } });
-  const unitParams = (i: number, title: string) => ({ pdf_path: book.pdf_path, unit: String(i), title, book_title: book.title });
   const openGlossary = (i: number) =>
     router.push({
       pathname: "/glossary",
       params: { pdf_path: book.pdf_path, book_id: book.id, book_title: book.title, unit: String(i), page_count: String(pages) },
     });
+
+  // الوحدات فهرس: الضغط يفتح الكتاب على أول صفحة في الوحدة
+  const openUnit = (i: number) => {
+    const from = ranges?.[i]?.from;
+    router.push({
+      pathname: "/reader/[id]",
+      params: { id: book.id, title: book.title, pdf_path: book.pdf_path, ...(from ? { page: String(from) } : {}) },
+    });
+  };
+
+  // ===== المحفوظات: الملفات الخاصة والحذف =====
+  const openFolder = (f: BookFolder) =>
+    router.push({ pathname: "/book-folder", params: { book_id: book.id, folder_id: f.id, book_title: book.title } });
+  const newFolder = () => {
+    Alert.prompt?.(t("folders.newTitle"), undefined, [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("folders.new"),
+        onPress: async (txt?: string) => {
+          const name = (txt || "").trim();
+          if (!name) return;
+          const f = await createFolder(book.id, name);
+          setFolders(await loadFolders(book.id));
+          openFolder(f);
+        },
+      },
+    ]);
+  };
+  const confirmDeleteFolder = (f: BookFolder) => {
+    Alert.alert(t("folders.delete"), t("folders.deleteBody", { name: f.name }), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("common.delete"), style: "destructive", onPress: () => void deleteFolder(book.id, f.id).then(loadSaves) },
+    ]);
+  };
+  const confirmDeleteSave = (sv: StudySave) => {
+    Alert.alert(t("saves.deleteTitle"), t("saves.deleteBody", { name: sv.title }), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: () =>
+          void removeSave(sv.id)
+            .then(() => forgetSave(book.id, sv.id))
+            .then(loadSaves)
+            .catch(() => Alert.alert(t("saves.deleteTitle"), t("syllabus.err.edit"))),
+      },
+    ]);
+  };
+  const addSaveToFolder = (sv: StudySave) => {
+    if (!folders.length) return Alert.alert(t("folders.addToFolder"), t("folders.noFolders"));
+    Alert.alert(t("folders.addToFolder"), undefined, [
+      ...folders.map((f) => ({
+        text: f.name,
+        onPress: () =>
+          void addSaveRef(book.id, f.id, { id: sv.id, title: sv.title, kind: sv.kind }).then(() => {
+            loadSaves();
+            Alert.alert(t("folders.added", { name: f.name }));
+          }),
+      })),
+      { text: t("common.cancel"), style: "cancel" as const },
+    ]);
+  };
+  const openSave = (sv: StudySave) => router.push({ pathname: "/saved/[id]", params: { id: sv.id, book_title: book.title } });
+  const saveMenu = (sv: StudySave) => {
+    Alert.alert(sv.title, undefined, [
+      { text: t("saves.open"), onPress: () => openSave(sv) },
+      { text: t("folders.addToFolder"), onPress: () => addSaveToFolder(sv) },
+      { text: t("common.delete"), style: "destructive", onPress: () => confirmDeleteSave(sv) },
+      { text: t("common.cancel"), style: "cancel" },
+    ]);
+  };
 
   const tools: { key: string; labelKey: string; icon: keyof typeof Ionicons.glyphMap; badge?: string; go: () => void }[] = [
     { key: "read", labelKey: "book.tool.read", icon: "headset", go: openReader },
@@ -254,7 +345,12 @@ export default function BookHubScreen() {
             {(["units", "tools", "saves"] as Tab[]).map((k) => {
               const on = tab === k;
               return (
-                <PressableScale key={k} onPress={() => setTab(k)} style={[styles.segItem, on && { backgroundColor: pal.accent }]}>
+                <PressableScale
+                  key={k}
+                  {...(k === "tools" ? coach.bind("tools") : k === "saves" ? coach.bind("saves") : null)}
+                  onPress={() => setTab(k)}
+                  style={[styles.segItem, on && { backgroundColor: pal.accent }]}
+                >
                   <Text style={[styles.segTxt, { color: on ? pal.onAccent : pal.dim }]} numberOfLines={1}>
                     {t(`book.tab.${k}`)}
                   </Text>
@@ -278,89 +374,84 @@ export default function BookHubScreen() {
 
           {tab === "units" &&
             (units.length ? (
-              <SceneCard padded={false} style={{ overflow: "hidden" }}>
-                {units.map((u, i) => {
-                  const done = !!syl?.done[i];
-                  const acc = ready?.accuracy[i] ?? null;
-                  const accColor = acc === null ? pal.dim : acc >= 0.75 ? tone.good : acc >= 0.5 ? tone.mid : tone.bad;
-                  const weak = ready?.weakUnit === i && !ready.weakUntested;
-                  return (
-                    <View
-                      key={i}
-                      {...(i === 0 ? coach.bind("unit") : null)}
-                      style={[
-                        styles.unit,
-                        { flexDirection: dir.row },
-                        i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: pal.track },
-                        weak && { backgroundColor: pal.soft },
-                      ]}
-                    >
-                      <View
+              <>
+                {/* الوحدات فهرس للكتاب؛ أدوات كل وحدة في المنهج الدراسي */}
+                <View style={[styles.unitsHint, { flexDirection: dir.row }]}>
+                  <Text style={[styles.unitsHintTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{t("book.units.hint")}</Text>
+                  <PressableScale
+                    {...coach.bind("syl")}
+                    onPress={openSyllabus}
+                    style={[styles.sylLink, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
+                  >
+                    <Ionicons name="list" size={15} color={pal.accent} />
+                    <Text style={[styles.sylLinkTxt, { color: pal.ink }]}>{t("book.units.openSyllabus")}</Text>
+                  </PressableScale>
+                </View>
+                <SceneCard padded={false} style={{ overflow: "hidden" }}>
+                  {units.map((u, i) => {
+                    const done = !!syl?.done[i];
+                    const acc = ready?.accuracy[i] ?? null;
+                    const accColor = acc === null ? pal.dim : acc >= 0.75 ? tone.good : acc >= 0.5 ? tone.mid : tone.bad;
+                    const weak = ready?.weakUnit === i && !ready.weakUntested;
+                    return (
+                      <PressableScale
+                        key={i}
+                        {...(i === 0 ? coach.bind("unit") : null)}
+                        onPress={() => openUnit(i)}
                         style={[
-                          styles.unitNum,
-                          { borderColor: pal.track },
-                          done && { borderColor: pal.accent, backgroundColor: pal.accent },
+                          styles.unit,
+                          { flexDirection: dir.row },
+                          i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: pal.track },
+                          weak && { backgroundColor: pal.soft },
                         ]}
                       >
-                        {done ? (
-                          <Ionicons name="checkmark" size={15} color={pal.onAccent} />
-                        ) : (
-                          <Text style={[styles.unitNumTxt, { color: pal.dim }]}>{i + 1}</Text>
-                        )}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          style={[styles.unitTitle, { color: done ? pal.dim : pal.ink, textAlign: dir.textAlign }]}
-                          numberOfLines={2}
+                        <View
+                          style={[
+                            styles.unitNum,
+                            { borderColor: pal.track },
+                            done && { borderColor: pal.accent, backgroundColor: pal.accent },
+                          ]}
                         >
-                          {u.title}
-                        </Text>
-                        {ranges?.[i] && (
-                          <Text style={[styles.unitRange, { color: pal.dim, textAlign: dir.textAlign }]}>
-                            {t("glossary.pages", { from: ranges[i].from, to: ranges[i].to })}
-                            {ranges[i].found ? "" : " " + t("glossary.approx")}
+                          {done ? (
+                            <Ionicons name="checkmark" size={15} color={pal.onAccent} />
+                          ) : (
+                            <Text style={[styles.unitNumTxt, { color: pal.dim }]}>{i + 1}</Text>
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[styles.unitTitle, { color: done ? pal.dim : pal.ink, textAlign: dir.textAlign }]}
+                            numberOfLines={2}
+                          >
+                            {u.title}
                           </Text>
-                        )}
-                        {acc !== null && (
-                          <View style={[styles.accRow, { flexDirection: dir.row }]}>
-                            <View style={[styles.accTrack, { backgroundColor: pal.track }]}>
-                              <View
-                                style={[
-                                  styles.accFill,
-                                  { width: `${Math.max(4, Math.round(acc * 100))}%`, backgroundColor: accColor },
-                                  dir.isRTL ? { alignSelf: "flex-end" } : null,
-                                ]}
-                              />
+                          {ranges?.[i] && (
+                            <Text style={[styles.unitRange, { color: pal.dim, textAlign: dir.textAlign }]}>
+                              {t("glossary.pages", { from: ranges[i].from, to: ranges[i].to })}
+                              {ranges[i].found ? "" : " " + t("glossary.approx")}
+                            </Text>
+                          )}
+                          {acc !== null && (
+                            <View style={[styles.accRow, { flexDirection: dir.row }]}>
+                              <View style={[styles.accTrack, { backgroundColor: pal.track }]}>
+                                <View
+                                  style={[
+                                    styles.accFill,
+                                    { width: `${Math.max(4, Math.round(acc * 100))}%`, backgroundColor: accColor },
+                                    dir.isRTL ? { alignSelf: "flex-end" } : null,
+                                  ]}
+                                />
+                              </View>
+                              <Text style={[styles.accTxt, { color: accColor }]}>{t("book.unit.accuracy", { n: Math.round(acc * 100) })}</Text>
                             </View>
-                            <Text style={[styles.accTxt, { color: accColor }]}>{t("book.unit.accuracy", { n: Math.round(acc * 100) })}</Text>
-                          </View>
-                        )}
-                      </View>
-                      <PressableScale onPress={() => openGlossary(i)} style={[styles.mini, { backgroundColor: pal.soft }]}>
-                        <Ionicons name="book" size={16} color={pal.accent} accessibilityLabel={t("book.unit.glossary")} />
+                          )}
+                        </View>
+                        <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
                       </PressableScale>
-                      <PressableScale
-                        onPress={() => router.push({ pathname: "/unit-summary", params: unitParams(i, u.title) })}
-                        style={[styles.mini, { backgroundColor: pal.soft }]}
-                      >
-                        <Ionicons name="headset" size={17} color={pal.accent} accessibilityLabel={t("book.unit.summary")} />
-                      </PressableScale>
-                      <PressableScale
-                        onPress={() => router.push({ pathname: "/unit-video", params: unitParams(i, u.title) })}
-                        style={[styles.mini, { backgroundColor: pal.soft }]}
-                      >
-                        <Ionicons name="videocam" size={17} color={pal.accent} accessibilityLabel={t("video.open")} />
-                      </PressableScale>
-                      <PressableScale
-                        onPress={() => router.push({ pathname: "/unit-quiz", params: unitParams(i, u.title) })}
-                        style={[styles.mini, { backgroundColor: pal.soft }]}
-                      >
-                        <Ionicons name="checkbox" size={17} color={pal.accent} accessibilityLabel={t("book.unit.quiz")} />
-                      </PressableScale>
-                    </View>
-                  );
-                })}
-              </SceneCard>
+                    );
+                  })}
+                </SceneCard>
+              </>
             ) : (
               <SceneCard style={{ padding: Spacing.lg, gap: 12 }}>
                 <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, lineHeight: 22 }]}>{t("book.units.empty")}</Text>
@@ -370,6 +461,35 @@ export default function BookHubScreen() {
                 </PressableScale>
               </SceneCard>
             ))}
+
+          {/* «ملفاتي»: ملفات بأسماء خاصة يوضع فيها أي شيء (ملاحظة، ملف من الجهاز، عنصر محفوظ) */}
+          {tab === "saves" && (
+            <View style={{ gap: 10 }}>
+              <View style={[styles.secHead, { flexDirection: dir.row }]}>
+                <Text style={[styles.secTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("folders.section")}</Text>
+                <PressableScale onPress={newFolder} style={[styles.newBtn, { flexDirection: dir.row, backgroundColor: pal.accent }]}>
+                  <Ionicons name="add" size={17} color={pal.onAccent} />
+                  <Text style={[styles.newBtnTxt, { color: pal.onAccent }]}>{t("folders.new")}</Text>
+                </PressableScale>
+              </View>
+              {folders.map((f) => (
+                <PressableScale key={f.id} onPress={() => openFolder(f)}>
+                  <SceneCard style={{ flexDirection: dir.row, alignItems: "center", gap: 12 }}>
+                    <View style={[styles.toolIcon, { backgroundColor: pal.soft }]}>
+                      <Ionicons name="folder" size={19} color={pal.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.toolTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={2}>{f.name}</Text>
+                      <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign, marginTop: 2 }]}>{t("folders.count", { n: f.items.length })}</Text>
+                    </View>
+                    <PressableScale onPress={() => confirmDeleteFolder(f)} style={[styles.trash, { borderColor: pal.cardBorder }]}>
+                      <Ionicons name="trash-outline" size={17} color={tone.bad} accessibilityLabel={t("folders.delete")} />
+                    </PressableScale>
+                  </SceneCard>
+                </PressableScale>
+              ))}
+            </View>
+          )}
 
           {/* صفحة الملاحظات: مكانها الثابت في محفوظات الكتاب (تُحفظ تلقائيًا، وتُفتح فوق القارئ) */}
           {tab === "saves" && (
@@ -391,6 +511,9 @@ export default function BookHubScreen() {
               </SceneCard>
             </PressableScale>
           )}
+          {tab === "saves" && !!saves?.length && (
+            <Text style={[styles.secTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("saves.section")}</Text>
+          )}
           {tab === "saves" &&
             (saves === null ? (
               <ActivityIndicator color={pal.accent} style={{ marginTop: 24 }} />
@@ -401,7 +524,7 @@ export default function BookHubScreen() {
             ) : (
               <View style={{ gap: 10 }}>
                 {saves.map((sv) => (
-                  <PressableScale key={sv.id} onPress={() => router.push({ pathname: "/saved/[id]", params: { id: sv.id, book_title: book.title } })}>
+                  <PressableScale key={sv.id} onPress={() => openSave(sv)} onLongPress={() => saveMenu(sv)}>
                     <SceneCard style={{ flexDirection: dir.row, alignItems: "center", gap: 12 }}>
                       <View style={[styles.toolIcon, { backgroundColor: pal.soft }]}>
                         <Ionicons name={sv.kind === "slides" ? "easel-outline" : "sparkles-outline"} size={19} color={pal.accent} />
@@ -414,7 +537,12 @@ export default function BookHubScreen() {
                           {` · ${new Date(sv.created_at).toLocaleDateString()}`}
                         </Text>
                       </View>
-                      <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
+                      <PressableScale onPress={() => addSaveToFolder(sv)} style={[styles.trash, { borderColor: pal.cardBorder }]}>
+                        <Ionicons name="folder-open-outline" size={17} color={pal.accent} accessibilityLabel={t("folders.addToFolder")} />
+                      </PressableScale>
+                      <PressableScale onPress={() => confirmDeleteSave(sv)} style={[styles.trash, { borderColor: pal.cardBorder }]}>
+                        <Ionicons name="trash-outline" size={17} color={tone.bad} accessibilityLabel={t("common.delete")} />
+                      </PressableScale>
                     </SceneCard>
                   </PressableScale>
                 ))}
@@ -498,7 +626,15 @@ const styles = StyleSheet.create({
   accTrack: { flex: 1, height: 4, borderRadius: 2, overflow: "hidden" },
   accFill: { height: 4, borderRadius: 2 },
   accTxt: { fontSize: 11.5, fontWeight: "800" },
-  mini: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  unitsHint: { alignItems: "center", gap: 10 },
+  unitsHintTxt: { flex: 1, fontSize: 12.5, lineHeight: 19, fontWeight: "600" },
+  sylLink: { alignItems: "center", gap: 6, paddingHorizontal: 12, height: 36, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
+  sylLinkTxt: { fontSize: 13, fontWeight: "800" },
+  secHead: { alignItems: "center", justifyContent: "space-between", gap: 10 },
+  secTitle: { fontSize: 15, fontWeight: "900", flex: 1 },
+  newBtn: { alignItems: "center", gap: 6, paddingHorizontal: 14, height: 38, borderRadius: Radius.pill },
+  newBtnTxt: { fontSize: 13.5, fontWeight: "900" },
+  trash: { width: 36, height: 36, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
   create: { height: 48, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", gap: 8 },
   createTxt: { fontWeight: "900", fontSize: 14.5 },
   grid: { flexWrap: "wrap", gap: 8 },
