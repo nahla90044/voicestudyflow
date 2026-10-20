@@ -120,7 +120,7 @@ export default function SyllabusScreen() {
     }
     try {
       const titles = units.map((u) => u.title);
-      const cached = await getCachedUnitRanges(pdfPath);
+      const cached = await getCachedUnitRanges(pdfPath, titles.length);
       let rs = cached?.length === titles.length ? cached : null;
       if (!rs) {
         const { data } = await supabase.from("books").select("page_count").eq("id", bookId).maybeSingle();

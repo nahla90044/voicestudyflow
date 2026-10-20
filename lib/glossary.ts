@@ -136,10 +136,12 @@ export async function clearUnitRanges(pdfPath: string): Promise<void> {
 }
 
 /** آخر صفحات وحدات محسوبة (عرض فوري في صفحة الكتاب، بلا جلب نصوص الكتاب) */
-export async function getCachedUnitRanges(pdfPath: string): Promise<UnitRange[] | null> {
+export async function getCachedUnitRanges(pdfPath: string, count: number): Promise<UnitRange[] | null> {
   try {
     const raw = await AsyncStorage.getItem(`unitranges:last:${hashKey(pdfPath)}`);
-    return raw ? (JSON.parse(raw) as UnitRange[]) : null;
+    const r = raw ? (JSON.parse(raw) as UnitRange[]) : null;
+    // حدود محفوظة لمنهج سابق بعدد وحدات مختلف لا تُستعمل أبدًا (كانت تُعطي الوحدة صفحات وحدة أخرى)
+    return Array.isArray(r) && r.length === count ? r : null;
   } catch {
     return null;
   }

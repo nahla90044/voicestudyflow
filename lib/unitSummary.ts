@@ -43,7 +43,7 @@ export async function summaryRange(pdfPath: string, src: SummarySource): Promise
   if (!units[src.unit]) return null;
   const pages = await bookPages(pdfPath).catch(() => []);
   const last = pages.reduce((m, p) => Math.max(m, p.page), 0);
-  const ranges = (await getCachedUnitRanges(pdfPath)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
+  const ranges = (await getCachedUnitRanges(pdfPath, units.length)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
   const rg = ranges[src.unit];
   return rg ? { from: rg.from, to: rg.to } : null;
 }
@@ -83,7 +83,7 @@ export async function summaryParts(pdfPath: string, src: SummarySource): Promise
     fallback = `وحدة بعنوان «${u.title}». النقاط الرئيسية: ${u.topics.join("، ")}.${u.outcome ? ` الهدف: ${u.outcome}.` : ""}`;
     const pages = await bookPages(pdfPath).catch(() => []);
     const last = pages.reduce((m, p) => Math.max(m, p.page), 0);
-    const ranges = (await getCachedUnitRanges(pdfPath)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
+    const ranges = (await getCachedUnitRanges(pdfPath, units.length)) ?? (last ? await getUnitRanges(pdfPath, units.map((x) => x.title), last, pages) : []);
     const rg = ranges[src.unit];
     if (rg) range = { from: rg.from, to: rg.to };
   }

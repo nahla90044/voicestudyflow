@@ -46,6 +46,9 @@ export async function getSyllabus(
     .maybeSingle();
   if (!data?.data) return null;
   const syl = data.data as Syllabus;
+  // وحدات تغيّرت → يُمسح ما بُني على القديمة قبل أن تقرأه أي شاشة
+  const { syncSyllabus } = await import("./syllabusSync");
+  await syncSyllabus(pdfPath, (syl.units ?? []).map((u) => u.title)).catch(() => {});
   const done = Array.isArray(data.done) ? (data.done as boolean[]) : [];
   return { data: syl, done };
 }
@@ -151,6 +154,9 @@ export async function generateSyllabus(pdfPath: string, onStage?: (s: SyllabusSt
 
   // ٤) الحفظ: صفحات الوحدات مثبّتة من البنية (الملخص والاختبار والفيديو والفهرس تعتمدها)
   onStage?.("save");
+  // الوحدات الجديدة: يُمسح ما بُني على القديمة (إن تغيّرت) ثم تُثبَّت صفحاتها الجديدة
+  const { syncSyllabus } = await import("./syllabusSync");
+  await syncSyllabus(pdfPath, syl.units.map((u) => u.title)).catch(() => {});
   const { setUnitRanges } = await import("./glossary");
   if (struct.length) await setUnitRanges(pdfPath, struct.map((u) => ({ from: u.page, to: u.to, found: true })));
   const { error } = await supabase.from("book_syllabus").upsert({ pdf_path: pdfPath, data: syl, done: new Array(syl.units.length).fill(false) });

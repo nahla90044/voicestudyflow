@@ -126,7 +126,7 @@ export default function BookHubScreen() {
           // صفحات كل وحدة: فوريًا من آخر حساب، وإن لم يوجد نحسبها بالخلفية
           const titles = s?.data.units.map((u) => u.title) ?? [];
           if (titles.length) {
-            const cached = await getCachedUnitRanges(data.pdf_path);
+            const cached = await getCachedUnitRanges(data.pdf_path, titles.length);
             if (on && cached?.length === titles.length) setRanges(cached);
             else
               getUnitRanges(data.pdf_path, titles, Number(data.page_count) || 0)

@@ -97,6 +97,8 @@ async function saveSyllabus(pdfPath: string, s: SyllabusState): Promise<void> {
     .select("pdf_path");
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("NOT_SAVED");
+  const { markSynced } = await import("./syllabusSync");
+  await markSynced(pdfPath, s.data.units.map((u) => u.title));
 }
 
 async function current(pdfPath: string): Promise<SyllabusState> {
@@ -159,7 +161,7 @@ async function unitPages(
   units: SyllabusUnit[],
   i: number,
 ): Promise<{ from: number; to: number }> {
-  const cached = await getCachedUnitRanges(pdfPath);
+  const cached = await getCachedUnitRanges(pdfPath, units.length);
   if (cached?.length === units.length && cached[i]) return cached[i];
   const { data } = await supabase
     .from("page_cache")

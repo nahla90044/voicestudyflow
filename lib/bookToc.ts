@@ -98,7 +98,7 @@ async function buildToc(pdfPath: string, total: number, force: boolean): Promise
   let units: TocItem[] = [];
   const titles = (syl?.data.units ?? []).map((u) => u.title);
   if (titles.length) {
-    const ranges = (await getCachedUnitRanges(pdfPath)) ?? (await getUnitRanges(pdfPath, titles, total).catch(() => []));
+    const ranges = (await getCachedUnitRanges(pdfPath, titles.length)) ?? (await getUnitRanges(pdfPath, titles, total).catch(() => []));
     units = titles
       .map((title, i) => (ranges[i] ? { title, page: ranges[i].from, to: ranges[i].to, level: 0 } : null))
       .filter((x): x is TocItem => !!x);

@@ -70,7 +70,7 @@ export default function PlanScreen() {
         const row = (syl ?? []).find((s: any) => s.pdf_path === b.pdf_path);
         const units = ((row?.data as Syllabus | undefined)?.units ?? []).map((u) => u.title);
         if (!units.length) continue;
-        const ranges = (await getCachedUnitRanges(b.pdf_path)) ?? [];
+        const ranges = (await getCachedUnitRanges(b.pdf_path, units.length)) ?? [];
         const fit = ranges.length === units.length ? ranges : [];
         const weights = units.map((_, i) => (fit[i] ? fit[i].to - fit[i].from + 1 : 1));
         const [plan, prog] = await Promise.all([getSchedule(b.pdf_path, b.id, weights).catch(() => null), unitsProgress(b.pdf_path, b.id, fit, units.length).catch(() => [])]);

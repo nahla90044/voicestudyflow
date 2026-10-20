@@ -17,7 +17,7 @@ export async function unitForPage(pdfPath: string, page: number, totalPages: num
     const syl = await getSyllabus(pdfPath);
     const titles = (syl?.data.units ?? []).map((u) => u.title);
     if (titles.length) {
-      const ranges = (await getCachedUnitRanges(pdfPath)) ?? (await getUnitRanges(pdfPath, titles, total));
+      const ranges = (await getCachedUnitRanges(pdfPath, titles.length)) ?? (await getUnitRanges(pdfPath, titles, total));
       const idx = ranges.findIndex((r) => page >= r.from && page <= r.to);
       if (idx >= 0) return { title: titles[idx] ?? null, from: ranges[idx].from, to: ranges[idx].to, unitIndex: idx };
     }

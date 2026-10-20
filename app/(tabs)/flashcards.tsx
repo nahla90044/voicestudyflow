@@ -41,7 +41,7 @@ async function loadBookUnits(bookId: string): Promise<BookUnits | null> {
   if (!data?.pdf_path) return null;
   const titles = ((await getSyllabus(data.pdf_path).catch(() => null))?.data.units ?? []).map((u) => u.title);
   if (!titles.length) return { pdfPath: data.pdf_path, titles: [], ranges: [] };
-  const cached = await getCachedUnitRanges(data.pdf_path);
+  const cached = await getCachedUnitRanges(data.pdf_path, titles.length);
   const ranges = cached?.length === titles.length ? cached : await getUnitRanges(data.pdf_path, titles, Number(data.page_count) || 0).catch(() => []);
   return { pdfPath: data.pdf_path, titles, ranges };
 }
