@@ -12,10 +12,13 @@ import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
 import { printBranded } from "../../lib/pdfBrand";
 import { DateRangeSheet } from "../../components/brand/date-range-sheet";
+import { PlanSetupSheet } from "../../components/brand/plan-setup-sheet";
+import { healSyllabus } from "../../lib/syllabusHeal";
 import { getCachedUnitRanges, getUnitRanges } from "../../lib/glossary";
 import type { UnitRange } from "../../lib/glossaryCore";
-import { getExamDate } from "../../lib/readiness";
-import { addDays, distribute, isoOf, phaseOf, planStatus, type BookSchedule, type UnitWindow } from "../../lib/scheduleCore";
+import { getDailyGoal, setDailyGoal } from "../../lib/goals";
+import { getExamDate, setExamDate } from "../../lib/readiness";
+import { isoOf, phaseOf, planStatus, type BookSchedule, type UnitWindow } from "../../lib/scheduleCore";
 import { getSchedule, saveSchedule, unitsProgress, type UnitProgress } from "../../lib/studyTrack";
 import { supabase } from "../../lib/supabase";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
@@ -88,7 +91,10 @@ export default function SyllabusScreen() {
   const [ranges, setRanges] = useState<UnitRange[]>([]);
   const [prog, setProg] = useState<UnitProgress[]>([]);
   const [plan, setPlan] = useState<BookSchedule | null>(null);
-  const [rangeSheet, setRangeSheet] = useState<{ mode: "plan" } | { mode: "unit"; i: number } | null>(null);
+  // تواريخ وحدة واحدة (تقويم)، وإنشاء/تعديل الخطة كاملة (وقت المذاكرة)
+  const [rangeSheet, setRangeSheet] = useState<{ mode: "unit"; i: number } | null>(null);
+  const [planSheet, setPlanSheet] = useState(false);
+  const [goalMin, setGoalMin] = useState(60);
   const [examISO, setExamISO] = useState<string | null>(null);
   const today = isoOf(new Date());
   const [err, setErr] = useState("");
@@ -131,7 +137,8 @@ export default function SyllabusScreen() {
       const [pg, pl, ex] = await Promise.all([unitsProgress(pdfPath, bookId, rs, titles.length), getSchedule(pdfPath, bookId, weights).catch(() => null), getExamDate(bookId)]);
       setProg(pg);
       setPlan(pl);
-      setExamISO(ex);
+      setExamISO(pl?.exam ?? ex);
+      getDailyGoal().then((g) => setGoalMin(g >= 30 ? g : 60)).catch(() => {});
     } catch {}
   }
   const weightsOf = () => (syl?.units ?? []).map((_, i) => (ranges[i] ? ranges[i].to - ranges[i].from + 1 : 1));
@@ -144,10 +151,13 @@ export default function SyllabusScreen() {
     }, [syl])
   );
 
-  async function savePlan(start: string, end: string) {
-    setRangeSheet(null);
-    const next: BookSchedule = { start, end, units: distribute(start, end, weightsOf()) };
+  // الخطة من وقت المذاكرة: موعد الاختبار يُحفظ للكتاب، ودقائق اليوم تصير هدف اليوم في الرئيسية
+  async function savePlan(next: BookSchedule) {
+    setPlanSheet(false);
     setPlan(next);
+    setExamISO(next.exam ?? null);
+    if (bookId) void setExamDate(bookId, next.exam ?? null);
+    if (next.minutes) void setDailyGoal(next.minutes);
     await saveSchedule(pdfPath, next).catch(() => Alert.alert(t("plan.title"), t("syllabus.err.edit")));
   }
   async function saveUnitDates(i: number, start: string, end: string) {
@@ -159,7 +169,7 @@ export default function SyllabusScreen() {
     await saveSchedule(pdfPath, next).catch(() => Alert.alert(t("plan.title"), t("syllabus.err.edit")));
   }
   function confirmDeletePlan() {
-    setRangeSheet(null);
+    setPlanSheet(false);
     Alert.alert(t("plan.deleteTitle"), t("plan.deleteBody"), [
       { text: t("common.cancel"), style: "cancel" },
       {
@@ -190,6 +200,15 @@ export default function SyllabusScreen() {
           setSyl(r.data);
           setDone(r.done.length === r.data.units.length ? r.done : new Array(r.data.units.length).fill(false));
           await loadTrack(r.data.units);
+          // الإصلاح الذاتي بالخلفية: إن خالف المنهج تقسيم الكتاب المتحقَّق منه يُصحَّح ويُعرض المصحَّح
+          void healSyllabus(pdfPath, r.data, r.done).then(async (h) => {
+            if (!h) return;
+            const fresh = await getSyllabus(pdfPath);
+            if (!fresh) return;
+            setSyl(fresh.data);
+            setDone(fresh.done.length === fresh.data.units.length ? fresh.done : new Array(fresh.data.units.length).fill(false));
+            await loadTrack(fresh.data.units);
+          });
         }
       } finally {
         setLoading(false);
@@ -310,7 +329,11 @@ export default function SyllabusScreen() {
     setBusy(true);
     try {
       const before = (syl?.units ?? []).map((u) => u.title).join("|");
-      const data = await generateSyllabus(pdfPath, setStage);
+      // قراءة صفحات الكتاب كلها أولًا (مرة واحدة لكل كتاب): التقدّم بعدد الصفحات الفعلي
+      const data = await generateSyllabus(pdfPath, setStage, (done, total) => {
+        setGenMsg(t("syllabus.gen.readPages", { done, total }));
+        setGenPct(Math.max(3, Math.round(3 + (27 * done) / Math.max(1, total))));
+      });
       // تغيّرت الوحدات → محتوى الوحدات القديم (ملخصات، اختبارات، خرائط، فيديو) لم يعد يطابقها فيُحذف
       if (before && before !== data.units.map((u) => u.title).join("|")) await resetUnitContent(pdfPath);
       setSyl(data);
@@ -537,7 +560,7 @@ export default function SyllabusScreen() {
           {(() => {
             if (!plan)
               return canEdit ? (
-                <Pressable onPress={() => setRangeSheet({ mode: "plan" })} style={({ pressed }) => [styles.cta, { backgroundColor: pal.soft, borderWidth: 1, borderColor: pal.accent, flexDirection: dir.row, opacity: pressed ? 0.9 : 1 }]}>
+                <Pressable onPress={() => setPlanSheet(true)} style={({ pressed }) => [styles.cta, { backgroundColor: pal.soft, borderWidth: 1, borderColor: pal.accent, flexDirection: dir.row, opacity: pressed ? 0.9 : 1 }]}>
                   <Ionicons name="calendar" size={18} color={pal.accent} />
                   <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("plan.setup")}</Text>
                 </Pressable>
@@ -554,7 +577,7 @@ export default function SyllabusScreen() {
                   <Ionicons name="calendar" size={18} color={pal.accent} />
                   <Text style={[styles.planTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("plan.title")}</Text>
                   {canEdit ? (
-                    <Pressable onPress={() => setRangeSheet({ mode: "plan" })} hitSlop={8} style={[styles.pencil, { borderColor: pal.cardBorder }]}>
+                    <Pressable onPress={() => setPlanSheet(true)} hitSlop={8} style={[styles.pencil, { borderColor: pal.cardBorder }]}>
                       <Ionicons name="create-outline" size={16} color={pal.ink} />
                     </Pressable>
                   ) : null}
@@ -733,6 +756,7 @@ export default function SyllabusScreen() {
                     ? (() => {
                         const pg = prog[i];
                         const parts = [
+                          pg.pages.done ? t("uprog.pagesVal", { a: pg.pages.done, b: pg.pages.total }) : null,
                           pg.quiz.answered ? t("uprog.quizVal", { a: pg.quiz.correct, b: pg.quiz.answered }) : null,
                           pg.summary.heard ? (pg.summary.heard >= pg.summary.total ? t("uprog.sumDone") : t("uprog.sumVal", { a: pg.summary.heard, b: pg.summary.total })) : null,
                           pg.video.seen ? (pg.video.seen >= pg.video.total ? t("uprog.vidDone") : t("uprog.vidVal", { a: pg.video.seen, b: pg.video.total })) : null,
@@ -862,15 +886,31 @@ export default function SyllabusScreen() {
 
       {/* إعداد/تعديل جدول المذاكرة، أو تواريخ وحدة */}
       <DateRangeSheet
-        visible={!!rangeSheet}
-        title={rangeSheet?.mode === "unit" ? t("plan.unitDates", { n: rangeSheet.i + 1 }) : plan ? t("plan.edit") : t("plan.setup")}
-        hint={rangeSheet?.mode === "unit" ? syl?.units[rangeSheet.i]?.title : plan ? t("plan.editHint") : t("plan.setupHint")}
-        start={rangeSheet?.mode === "unit" && plan?.units[rangeSheet.i] ? plan.units[rangeSheet.i].start : plan?.start ?? today}
-        end={rangeSheet?.mode === "unit" && plan?.units[rangeSheet.i] ? plan.units[rangeSheet.i].end : plan?.end ?? (examISO && examISO > today ? addDays(examISO, -1) : addDays(today, 27))}
+        visible={!!rangeSheet && !!plan}
+        title={rangeSheet ? t("plan.unitDates", { n: rangeSheet.i + 1 }) : ""}
+        hint={rangeSheet ? syl?.units[rangeSheet.i]?.title : undefined}
+        start={rangeSheet && plan?.units[rangeSheet.i] ? plan.units[rangeSheet.i].start : today}
+        end={rangeSheet && plan?.units[rangeSheet.i] ? plan.units[rangeSheet.i].end : today}
         onClose={() => setRangeSheet(null)}
-        onSave={(a, b) => (rangeSheet?.mode === "unit" ? void saveUnitDates(rangeSheet.i, a, b) : void savePlan(a, b))}
-        onDelete={rangeSheet?.mode === "plan" && plan ? confirmDeletePlan : undefined}
-        deleteLabel={t("plan.delete")}
+        onSave={(a, b) => rangeSheet && void saveUnitDates(rangeSheet.i, a, b)}
+      />
+
+      {/* إنشاء/تعديل الخطة: الاختبار، وأيام الدراسة، ودقائق اليوم، ويوم البدء ← تقدير قبل الحفظ */}
+      <PlanSetupSheet
+        visible={planSheet}
+        editing={!!plan}
+        pages={weightsOf()}
+        done={actual.map((a) => a >= 0.9)}
+        prev={plan?.units}
+        initial={{
+          start: plan && plan.start > today ? plan.start : today,
+          exam: plan?.exam ?? (examISO && examISO > today ? examISO : null),
+          days: plan?.days ?? [0, 1, 2, 3, 4, 6],
+          minutes: plan?.minutes ?? goalMin,
+        }}
+        onClose={() => setPlanSheet(false)}
+        onSave={(s) => void savePlan(s)}
+        onDelete={plan ? confirmDeletePlan : undefined}
       />
 
       {/* مودال الخريطة الذهنية */}

@@ -1,6 +1,7 @@
 // lib/syllabus.ts
 // منهج دراسي (syllabus) لكل كتاب: وحدات بعناوين ومواضيع ومخرجات تعلّم،
 // مع متابعة التقدّم (تشيك ليست). يُولَّد بالذكاء من نص الكتاب ويُخزّن.
+import { recordPerf } from "./perf";
 import { aiAssist } from "./ai";
 import { supabase } from "./supabase";
 
@@ -58,6 +59,8 @@ export async function getSyllabus(
       await setUnitRanges(pdfPath, syl.ranges.map((r) => ({ from: r.from, to: r.to, found: true })));
   }
   const done = Array.isArray(data.done) ? (data.done as boolean[]) : [];
+  // الإصلاح الذاتي بالخلفية من أي شاشة تقرأ المنهج (مرة لكل نسخة منهج؛ بلا طلب ذكاء)
+  void import("./syllabusHeal").then((m) => m.healSyllabus(pdfPath, syl, done)).catch(() => {});
   return { data: syl, done };
 }
 
@@ -81,6 +84,41 @@ function matchUnit(title: string, ai: SyllabusUnit[]): SyllabusUnit | undefined 
 }
 
 export type SyllabusStage = "structure" | "check" | "content" | "save";
+
+/**
+ * الوكيل يقرأ الكتاب كاملًا قبل بناء الوحدات: الصفحات التي لم تُفتح بعد لا نص لها، وبدونها لا تُرى
+ * صفحات عناوين الوحدات (كتاب ٤٤٠ صفحة فُتح منه ٣٢ = وحدتان فقط). المقروء يُحفظ صفحة صفحة،
+ * فالانقطاع لا يضيّع شيئًا ويكمل من حيث وقف.
+ */
+async function readAllPages(pdfPath: string, total: number, onRead?: (done: number, total: number) => void): Promise<void> {
+  if (total <= 0) return;
+  const have = new Set<number>();
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data } = await supabase.from("page_cache").select("page").eq("pdf_path", pdfPath).range(from, from + 999);
+    (data ?? []).forEach((r: { page: number }) => have.add(Number(r.page)));
+    if ((data ?? []).length < 1000) break;
+  }
+  const missing = Array.from({ length: total }, (_, i) => i + 1).filter((p) => !have.has(p));
+  if (!missing.length) return;
+  const { extractPdfPageText } = await import("./pdfText");
+  let done = total - missing.length;
+  onRead?.(done, total);
+  const queue = [...missing];
+  const worker = async () => {
+    for (let p = queue.shift(); p !== undefined; p = queue.shift()) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await extractPdfPageText(pdfPath, p);
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        }
+      }
+      onRead?.(++done, total);
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+}
 
 /** نص الصفحات الأولى من كل وحدة (أهدافها ومحاضراتها غالبًا هناك) بميزانية ثابتة للطلب الواحد */
 async function unitExcerpts(pdfPath: string, units: { page: number; to: number }[]): Promise<string[]> {
@@ -107,27 +145,33 @@ async function unitExcerpts(pdfPath: string, units: { page: number; to: number }
  * ٣) مواضيع كل وحدة وهدفها من صفحاتها هي (طلب ذكي واحد)، ٤) الحفظ وتثبيت صفحات الوحدات.
  * بلا بنية سليمة من الكتاب: يحلّل الذكاء أول الكتاب (كالسابق) ثم تُفحص نتيجته بنفس الفحص.
  */
-export async function generateSyllabus(pdfPath: string, onStage?: (s: SyllabusStage) => void): Promise<Syllabus> {
+export async function generateSyllabus(
+  pdfPath: string,
+  onStage?: (s: SyllabusStage) => void,
+  onRead?: (done: number, total: number) => void
+): Promise<Syllabus> {
   onStage?.("structure");
-  const { data: first } = await supabase.from("page_cache").select("text,page,total_pages").eq("pdf_path", pdfPath).neq("source", "empty").order("page").limit(30);
+  const { data: book } = await supabase.from("books").select("page_count").eq("pdf_path", pdfPath).limit(1).maybeSingle();
+  const { data: head } = await supabase.from("page_cache").select("total_pages").eq("pdf_path", pdfPath).limit(1).maybeSingle();
+  const total = Number(book?.page_count) || Number(head?.total_pages) || 0;
+  await readAllPages(pdfPath, total, onRead);
+  const { data: first } = await supabase.from("page_cache").select("text,page").eq("pdf_path", pdfPath).neq("source", "empty").order("page").limit(30);
   const text = (first ?? []).map((p: any) => p.text).join("\n").slice(0, 16000);
-  if (text.trim().length < 100) throw new Error("لا يوجد نص كافٍ. يلزم فتح الكتاب وقراءة أول صفحاته أولًا.");
-  const total = Number((first ?? [])[0]?.total_pages) || 0;
+  if (text.trim().length < 100) throw new Error("لا يوجد نص كافٍ في الكتاب لبناء المنهج.");
 
-  // ١) المصادر بالترتيب: فهرس القارئ (نفس ما يظهر في «الفهرس» داخل القارئ)، ثم رأس الصفحة المتكرر
+  // ١) الوكيل: ثلاثة مصادر مستقلة — صفحات عناوين الوحدات (التي تسبق «أهداف الوحدة»)، وفهرس القارئ،
+  //    ورأس الصفحة المتكرر — تُقارن بفهرس الكتاب (ولو بلا أرقام صفحات) ويُعتمد المتفق معه
   const { getBookToc } = await import("./bookToc");
   const { bookPages } = await import("./glossary");
-  const { unitsFromRunningHeads } = await import("./unitHeadings");
-  const { checkStructure } = await import("./unitStructure");
-  const sources: { title: string; page: number }[][] = [];
+  const { structureFromPages } = await import("./unitStructure");
+  const pages = await bookPages(pdfPath).catch(() => []);
   const bt = await getBookToc(pdfPath, total, true).catch(() => ({ book: [], units: [] }));
-  sources.push(bt.book.filter((c) => c.level === 0));
-  sources.push(unitsFromRunningHeads(await bookPages(pdfPath).catch(() => []), total));
 
-  // ٢) أول بنية سليمة تُعتمد؛ وإلا أفضل بنية بعد التنظيف إن بقيت وحدتان فأكثر
+  // ٢) الفحص والاختيار: لا مكرر ولا ترتيب مختل ولا وحدة صفحة أو صفحتين، والمطابق للفهرس أولًا
   onStage?.("check");
-  const checks = sources.filter((x) => x.length >= 2).map((x) => checkStructure(x, total));
-  let struct = checks.find((c) => c.sound)?.units ?? checks.find((c) => c.units.length >= 2)?.units ?? [];
+  const verdict = structureFromPages(pages, total, [{ name: "reader-toc", units: bt.book.filter((c) => c.level === 0) }]);
+  const struct = verdict.units;
+  if (!verdict.verified) recordPerf("syllabus.unverified", 0, false, struct.length);
 
   // ٣) المحتوى: مواضيع كل وحدة من صفحاتها هي (طلب واحد)، أو تحليل أول الكتاب إن لم توجد بنية
   onStage?.("content");

@@ -2,7 +2,7 @@
 // فحص بنية وحدات الكتاب قبل اعتمادها في المنهج (مصدرها فهرس القارئ نفسه): لا يُحفظ منهج فيه
 // وحدة مكررة، أو ترتيب مختل، أو «وحدة» بصفحة أو صفحتين وسط وحدات كبيرة، أو صفحات غير متصلة.
 // كل مصدر (فهرس مدمج/مطبوع، رأس الصفحة المتكرر) يُفحص، ويُعتمد أول مصدر سليم.
-import { parseHeading } from "./unitHeadings.ts";
+import { ordinalOf, parseHeading, tocTitles, unitsFromDividers, unitsFromRunningHeads } from "./unitHeadings.ts";
 
 export type StructUnit = { title: string; page: number; to: number };
 export type StructCheck = { units: StructUnit[]; sound: boolean; problems: string[] };
@@ -68,4 +68,52 @@ export function checkStructure(raw: { title: string; page: number }[], total: nu
   if (units.length > 80) problems.push("عدد كبير جدًا");
   if (total > 0 && units.length && units[0].page > Math.max(20, total * 0.2)) problems.push("البداية متأخرة");
   return { units, sound: problems.length === 0, problems };
+}
+
+// ===== وكيل الوحدات: يقارن المصادر بفهرس الكتاب ويعتمد المتفق معه =====
+
+export type Candidate = { name: string; units: { title: string; page: number }[] };
+export type Verdict = { units: StructUnit[]; source: string; verified: boolean; problems: string[] };
+type TocEntry = { key: string; label: string; title: string };
+
+/**
+ * يختار بنية الوحدات من عدة مصادر مستقلة (صفحات عناوين الوحدات، فهرس القارئ، رأس الصفحة المتكرر):
+ * ١) المطابقة لفهرس الكتاب (نفس الوحدات بنفس الترتيب) والسليمة — «مُتحقَّق منها»،
+ * ٢) وإلا المتسلسلة الترتيب (الأولى، الثانية، …) والسليمة، ٣) وإلا أول سليمة، ٤) وإلا أفضل ما بقي.
+ * عناوين الوحدات تؤخذ كاملة من الفهرس متى وُجد.
+ */
+export function pickStructure(cands: Candidate[], toc: TocEntry[], total: number): Verdict {
+  const tocKeys = toc.map((t) => t.key);
+  const rated = cands
+    .filter((c) => c.units.length >= 2)
+    .map((c) => {
+      const chk = checkStructure(c.units, total);
+      const keys = chk.units.map((u) => unitKey(u.title));
+      const matchesToc = tocKeys.length >= 3 && keys.length === tocKeys.length && keys.every((k, i) => k === tocKeys[i]);
+      const ords = keys.map(ordinalOf);
+      const sequential = ords.every((n, i) => n === i + 1);
+      return { c, chk, matchesToc, sequential };
+    });
+  const pick =
+    rated.find((r) => r.matchesToc && r.chk.sound) ??
+    rated.find((r) => r.matchesToc) ??
+    rated.find((r) => r.sequential && r.chk.sound) ??
+    rated.find((r) => r.chk.sound) ??
+    rated.find((r) => r.chk.units.length >= 2);
+  if (!pick) return { units: [], source: "", verified: false, problems: ["لا مصدر"] };
+  const named = pick.chk.units.map((u) => {
+    const t = toc.find((x) => x.key === unitKey(u.title));
+    return t?.title ? { ...u, title: `${t.label}: ${t.title}` } : u;
+  });
+  return { units: named, source: pick.c.name, verified: pick.matchesToc || (pick.sequential && pick.chk.sound && !tocKeys.length), problems: pick.chk.problems };
+}
+
+/** الوكيل على نصوص صفحات الكتاب: الفهرس + صفحات العناوين + رأس الصفحة (+ مصادر إضافية كفهرس القارئ) */
+export function structureFromPages(pages: { page: number; text: string }[], total: number, extra: Candidate[] = []): Verdict {
+  const toc = tocTitles(pages);
+  return pickStructure(
+    [{ name: "dividers", units: unitsFromDividers(pages, total, toc) }, ...extra, { name: "running", units: unitsFromRunningHeads(pages, total) }],
+    toc,
+    total
+  );
 }

@@ -73,6 +73,7 @@ import {
   setLastSentence,
   setReadingRate,
 } from "../../lib/readerPrefs";
+import { markPageStudied } from "../../lib/studyTrack";
 import { MUSIC_ICON, MUSIC_OPTIONS, startAmbient, stopAmbient, warmAllMusic } from "../../lib/sfx";
 import { recordActivity, recordBookCompleted } from "../../lib/stats";
 import { markBookCompleted } from "../../lib/perks";
@@ -882,6 +883,13 @@ export default function ReaderScreen() {
     if (totalPages > 0 && page >= totalPages && seen.size >= Math.ceil(totalPages * 0.7)) void onBookFinished();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, page, totalPages]);
+
+  // صفحة بقيت على الشاشة ٤٠ ثانية = مذاكَرة بالقراءة (لمن يقرأ بعينه أو بالقلم دون استماع)
+  useEffect(() => {
+    if (!pdfPath || page < 1) return;
+    const id = setTimeout(() => markPageStudied(pdfPath, page), 40_000);
+    return () => clearTimeout(id);
+  }, [pdfPath, page]);
 
   // حفظ آخر جملة مقروءة لاستئناف دقيق (لا نكتب -1 عند الإيقاف)
   useEffect(() => {

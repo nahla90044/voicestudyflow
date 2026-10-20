@@ -41,7 +41,7 @@ export function syncSyllabus(pdfPath: string, titles: string[]): Promise<void> {
       await clearUnitRanges(pdfPath).catch(() => {});
       try {
         const keys = (await AsyncStorage.getAllKeys()).filter(
-          (k) => (/^vsf:aijob:(sum|vid):/.test(k) && k.includes(pdfPath)) || k === `vsf:toc:v3:${pdfPath}`
+          (k) => (/^vsf:aijob:(sum|vid):/.test(k) && k.includes(pdfPath)) || k === `vsf:toc:v4:${pdfPath}`
         );
         if (keys.length) await AsyncStorage.multiRemove(keys);
       } catch {}

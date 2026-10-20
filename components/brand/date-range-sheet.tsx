@@ -41,38 +41,12 @@ export function DateRangeSheet({ visible, title, hint, start, end, single, onClo
   const { pal } = useScene();
   const [a, setA] = useState(start);
   const [b, setB] = useState<string | null>(single ? start : end);
-  const [month, setMonth] = useState(start.slice(0, 7));
-  const today = isoOf(new Date());
 
   useEffect(() => {
     if (!visible) return;
     setA(start);
     setB(single ? start : end);
-    setMonth(start.slice(0, 7));
   }, [visible, start, end, single]);
-
-  // شبكة الشهر: تبدأ من الأحد، ٦ أسابيع
-  const grid = useMemo(() => {
-    const first = `${month}-01`;
-    const startDow = new Date(`${first}T00:00:00`).getDay();
-    return Array.from({ length: 42 }, (_, i) => addDays(first, i - startDow));
-  }, [month]);
-  const monthName = useMemo(() => {
-    try {
-      return new Date(`${month}-01T00:00:00`).toLocaleDateString(locale(lang), { month: "long", year: "numeric" });
-    } catch {
-      return month;
-    }
-  }, [month, lang]);
-  const weekdays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => new Date(2026, 9, 18 + i).toLocaleDateString(locale(lang), { weekday: "narrow" })),
-    [lang]
-  );
-  const shiftMonth = (n: number) => {
-    const d = new Date(`${month}-01T00:00:00`);
-    d.setMonth(d.getMonth() + n);
-    setMonth(isoOf(d).slice(0, 7));
-  };
 
   function pick(iso: string) {
     if (single) {
@@ -114,37 +88,7 @@ export function DateRangeSheet({ visible, title, hint, start, end, single, onClo
             ) : null}
           </View>
 
-          {/* التقويم */}
-          <View style={[styles.monthHead, { flexDirection: dir.row }]}>
-            <Pressable onPress={() => shiftMonth(-1)} hitSlop={10} style={[styles.nav, { backgroundColor: pal.soft }]}>
-              <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={18} color={pal.ink} />
-            </Pressable>
-            <Text style={[styles.monthName, { color: pal.ink }]}>{monthName}</Text>
-            <Pressable onPress={() => shiftMonth(1)} hitSlop={10} style={[styles.nav, { backgroundColor: pal.soft }]}>
-              <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.ink} />
-            </Pressable>
-          </View>
-          <View style={[styles.row7, { flexDirection: dir.row }]}>
-            {weekdays.map((w, i) => (
-              <Text key={i} style={[styles.wd, { color: pal.dim }]}>
-                {w}
-              </Text>
-            ))}
-          </View>
-          <View style={[styles.grid, { flexDirection: dir.row }]}>
-            {grid.map((iso) => {
-              const inMonth = iso.slice(0, 7) === month;
-              const isEdge = iso === a || (ready && iso === end_);
-              const inRange = !single && ready && iso > a && iso < end_;
-              return (
-                <Pressable key={iso} onPress={() => pick(iso)} style={styles.cellWrap}>
-                  <View style={[styles.cell, inRange && { backgroundColor: pal.accent + "33" }, isEdge && { backgroundColor: pal.accent }, iso === today && !isEdge && { borderWidth: 1.5, borderColor: pal.accent }]}>
-                    <Text style={[styles.cellTxt, { color: isEdge ? pal.onAccent : inMonth ? pal.ink : pal.dim, opacity: inMonth ? 1 : 0.45 }]}>{Number(iso.slice(8))}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+          <MonthCalendar a={a} b={ready ? end_ : null} single={single} onPick={pick} resetKey={visible ? start : ""} />
 
           {!single && ready ? <Text style={[styles.hint, { color: pal.dim, textAlign: "center" }]}>{t("dates.days", { n: daysBetween(a, end_) + 1 })}</Text> : null}
           <Pressable
@@ -163,6 +107,80 @@ export function DateRangeSheet({ visible, title, hint, start, end, single, onClo
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+/**
+ * شبكة شهر قابلة للتنقل (تبدأ من الأحد، ٦ أسابيع): a بداية/اليوم المختار، b نهاية المدة.
+ * تُستعمل داخل أي ورقة (اختيار مدة، أو يوم واحد كموعد الاختبار).
+ */
+export function MonthCalendar({ a, b, single, onPick, resetKey, minISO }: { a: string; b: string | null; single?: boolean; onPick: (iso: string) => void; resetKey?: string; minISO?: string }) {
+  const { lang } = useI18n();
+  const dir = useDir();
+  const { pal } = useScene();
+  const [month, setMonth] = useState(a.slice(0, 7));
+  const today = isoOf(new Date());
+  useEffect(() => {
+    setMonth(a.slice(0, 7));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
+
+  const grid = useMemo(() => {
+    const first = `${month}-01`;
+    const startDow = new Date(`${first}T00:00:00`).getDay();
+    return Array.from({ length: 42 }, (_, i) => addDays(first, i - startDow));
+  }, [month]);
+  const monthName = useMemo(() => {
+    try {
+      return new Date(`${month}-01T00:00:00`).toLocaleDateString(locale(lang), { month: "long", year: "numeric" });
+    } catch {
+      return month;
+    }
+  }, [month, lang]);
+  const weekdays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => new Date(2026, 9, 18 + i).toLocaleDateString(locale(lang), { weekday: "narrow" })),
+    [lang]
+  );
+  const shiftMonth = (n: number) => {
+    const d = new Date(`${month}-01T00:00:00`);
+    d.setMonth(d.getMonth() + n);
+    setMonth(isoOf(d).slice(0, 7));
+  };
+
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={[styles.monthHead, { flexDirection: dir.row }]}>
+        <Pressable onPress={() => shiftMonth(-1)} hitSlop={10} style={[styles.nav, { backgroundColor: pal.soft }]}>
+          <Ionicons name={dir.isRTL ? "chevron-forward" : "chevron-back"} size={18} color={pal.ink} />
+        </Pressable>
+        <Text style={[styles.monthName, { color: pal.ink }]}>{monthName}</Text>
+        <Pressable onPress={() => shiftMonth(1)} hitSlop={10} style={[styles.nav, { backgroundColor: pal.soft }]}>
+          <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.ink} />
+        </Pressable>
+      </View>
+      <View style={[styles.row7, { flexDirection: dir.row }]}>
+        {weekdays.map((w, i) => (
+          <Text key={i} style={[styles.wd, { color: pal.dim }]}>
+            {w}
+          </Text>
+        ))}
+      </View>
+      <View style={[styles.grid, { flexDirection: dir.row }]}>
+        {grid.map((iso) => {
+          const inMonth = iso.slice(0, 7) === month;
+          const off = !!minISO && iso < minISO;
+          const isEdge = iso === a || (!!b && iso === b);
+          const inRange = !single && !!b && iso > a && iso < b;
+          return (
+            <Pressable key={iso} disabled={off} onPress={() => onPick(iso)} style={styles.cellWrap}>
+              <View style={[styles.cell, inRange && { backgroundColor: pal.accent + "33" }, isEdge && { backgroundColor: pal.accent }, iso === today && !isEdge && { borderWidth: 1.5, borderColor: pal.accent }]}>
+                <Text style={[styles.cellTxt, { color: isEdge ? pal.onAccent : inMonth ? pal.ink : pal.dim, opacity: off ? 0.25 : inMonth ? 1 : 0.45 }]}>{Number(iso.slice(8))}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 

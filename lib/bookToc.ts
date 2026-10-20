@@ -7,12 +7,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
 import { supabase } from "./supabase";
 import { getSyllabus } from "./syllabus";
-import { unitsFromRunningHeads } from "./unitHeadings";
+import { structureFromPages } from "./unitStructure";
 
 export type TocItem = { title: string; page: number; to: number; level: number };
 export type BookToc = { book: TocItem[]; units: TocItem[] };
 
-const KEY = (p: string) => `vsf:toc:v3:${p}`; // v3: وحدات رأس الصفحة المتكرر (كانت تتكرر وتختل صفحاتها في v2)
+const KEY = (p: string) => `vsf:toc:v4:${p}`; // v4: وكيل الوحدات (صفحات العناوين + الفهرس بلا أرقام + رأس الصفحة)
 const CHAPTER_WORDS = /^(الفصل|الباب|الجزء|القسم|الوحدة|المبحث|المقدمة|مقدمة|تمهيد|الخاتمة|خاتمة|الملحق|ملحق|chapter|part|unit|introduction|preface)(?=[\s:،.\-–]|$)/i;
 
 /** نهاية كل عنصر = قبل بداية التالي من نفس المستوى أو أعلى */
@@ -36,9 +36,9 @@ async function outline(pdfPath: string): Promise<{ title: string; page: number; 
 
 async function headings(pdfPath: string, total: number): Promise<{ title: string; page: number; level: number }[]> {
   const pages = await bookPages(pdfPath).catch(() => []);
-  // كتب المقررات: رأس الوحدة يتكرر أعلى كل صفحة → وحدات دقيقة بصفحاتها (مستقلة عن اختلاف المسافات وصفحة الفهرس)
-  const running = unitsFromRunningHeads(pages, total);
-  if (running.length >= 2) return running;
+  // كتب المقررات: وكيل الوحدات (صفحات عناوين الوحدات، والفهرس ولو بلا أرقام، ورأس الصفحة المتكرر)
+  const units = structureFromPages(pages, total).units;
+  if (units.length >= 2) return units.map((u) => ({ title: u.title, page: u.page, level: 0 }));
   const out: { title: string; page: number; level: number }[] = [];
   const seen = new Set<string>();
   for (const p of [...pages].sort((a, b) => a.page - b.page)) {

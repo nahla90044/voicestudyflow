@@ -23,6 +23,9 @@ import { dropEmptyVocative, useDir, useI18n } from "../../lib/i18n";
 import { goalProgress, lastSevenDays, pickNextActions, type NextActionId } from "../../lib/nextActions";
 import { getBookReadiness, type BookReadiness } from "../../lib/readiness";
 import { buildDailyPath, type PathStep, type PathStepId } from "../../lib/readinessCore";
+import { MIN_PER_PAGE } from "../../lib/scheduleCore";
+import { getTodayStudy, type TodayStudy } from "../../lib/todayStudy";
+import { fmtDay } from "../../components/brand/date-range-sheet";
 import { getMyBookCount, getStats, type Stats } from "../../lib/stats";
 import { useScene } from "../../lib/scene";
 import { sceneGrowth } from "../../lib/sceneCore";
@@ -41,7 +44,7 @@ const ACTION_LOOK: Record<NextActionId, { icon: keyof typeof Ionicons.glyphMap; 
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const dir = useDir();
   const scene = useScene();
   const { width, height: winH } = useWindowDimensions();
@@ -67,6 +70,7 @@ export default function HomeScreen() {
   const [plan, setPlan] = useState<TodayPlan | null>(null);
   const [ready, setReady] = useState<BookReadiness | null>(null);
   const [cardsToday, setCardsToday] = useState(false);
+  const [study, setStudy] = useState<TodayStudy | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -86,6 +90,8 @@ export default function HomeScreen() {
         setCardsToday(rv);
         // جاهزية الكتاب الحالي (لبطاقة الجاهزية ومسار اليوم)
         getBookReadiness(c?.pdf_path ?? "").then((r) => on && setReady(r));
+        // خطة اليوم من خطة الكتاب (إن وُجدت) — المسار يُبنى منها
+        getTodayStudy(c?.pdf_path).then((x) => on && setStudy(x));
         setStats(s);
         setDue(d);
         setName(n.trim());
@@ -182,12 +188,34 @@ export default function HomeScreen() {
         hasSyllabus: (ready?.unitCount ?? 0) > 0,
         weakUnit: ready?.weakUnit ?? null,
         summaryToday: !!ready?.summaryToday,
+        plan: study ? planInput(study) : null,
       }),
-    [cont, todayMinutes, goal, due, cardsToday, ready]
+    [cont, todayMinutes, goal, due, cardsToday, ready, study]
   );
   const firstOpen = path.steps.findIndex((s) => !s.done);
 
+  // وحدة اليوم من الخطة → خطوات المسار: صفحاتها (المتبقي منها بدقائق الخطة)، ملخصها، اختبارها
+  function planInput(x: TodayStudy) {
+    const pr = x.progress;
+    const pagesLeft = pr ? Math.max(0, pr.pages.total - pr.pages.done) : 0;
+    return {
+      restDay: x.unit === null,
+      listenMin: Math.max(5, Math.min(x.schedule.minutes ?? goal, pagesLeft * MIN_PER_PAGE)),
+      listenDone: !!pr && pr.pages.total > 0 && pr.pages.done >= pr.pages.total * 0.9,
+      summaryDone: !!pr && pr.summary.total > 0 && pr.summary.heard >= pr.summary.total,
+      quizDone: !!pr && pr.quiz.answered > 0,
+    };
+  }
+
   function runStep(id: PathStepId) {
+    if (id === "cards") return router.push("/flashcards");
+    // من الخطة: كل خطوة لوحدة اليوم في كتاب الخطة (والرجوع يعيد للرئيسية)
+    if (study && (id === "listen" || id === "summary" || id === "quiz")) {
+      if (id === "listen") return router.push({ pathname: "/reader/[id]", params: { id: study.bookId, title: study.title, pdf_path: study.pdfPath, page: String(study.resumePage) } });
+      if (study.unit === null) return;
+      const params = { pdf_path: study.pdfPath, unit: String(study.unit), title: study.unitTitle, book_title: study.title };
+      return router.push({ pathname: id === "quiz" ? "/unit-quiz" : "/unit-summary", params });
+    }
     if (!cont) return;
     const unitParams = ready && ready.weakUnit !== null
       ? { pdf_path: cont.pdf_path, unit: String(ready.weakUnit), title: ready.weakTitle, book_title: cont.title }
@@ -195,8 +223,6 @@ export default function HomeScreen() {
     switch (id) {
       case "listen":
         return openBook(cont);
-      case "cards":
-        return router.push("/flashcards");
       case "mistakes":
         return router.push({ pathname: "/unit-quiz", params: { pdf_path: cont.pdf_path, mode: "mistakes", book_title: cont.title } });
       case "quiz":
@@ -207,6 +233,15 @@ export default function HomeScreen() {
   }
 
   function stepText(s: PathStep): { title: string; sub: string } {
+    if (study && study.unit !== null && (s.id === "listen" || s.id === "summary" || s.id === "quiz")) {
+      const n = study.unit + 1;
+      if (s.id === "listen")
+        return s.done
+          ? { title: t("path.unit.listenDone", { n }), sub: "" }
+          : { title: t("path.unit.listen", { n, from: study.range?.from ?? 1, to: study.range?.to ?? 1 }), sub: t("path.unit.listenSub", { min: s.minutes, page: study.resumePage }) };
+      if (s.id === "quiz") return { title: t("path.quiz.title", { n }), sub: t("path.quiz.sub", { min: s.minutes }) };
+      return { title: t("path.summary.title", { n }), sub: t("path.summary.sub", { min: s.minutes }) };
+    }
     const unitN = (ready?.weakUnit ?? 0) + 1;
     switch (s.id) {
       case "listen":
@@ -354,16 +389,39 @@ export default function HomeScreen() {
           )}
 
           {/* مسار اليوم */}
-          {cont && path.steps.length > 0 && (
+          {(cont || study) && (path.steps.length > 0 || study) && (
             <FadeIn delay={70}>
               <View style={[styles.sectionHead, { flexDirection: dir.row }]}>
                 <Text style={[styles.sectionTitle, { color: pal.ink }]}>{t("path.title")}</Text>
-                <Text style={[styles.small, { color: pal.dim }]}>
-                  {path.done === path.steps.length
-                    ? t("path.complete")
-                    : t("path.progress", { done: path.done, total: path.steps.length, min: path.minutesLeft })}
-                </Text>
+                {path.steps.length > 0 ? (
+                  <Text style={[styles.small, { color: pal.dim }]}>
+                    {path.done === path.steps.length
+                      ? t("path.complete")
+                      : t("path.progress", { done: path.done, total: path.steps.length, min: path.minutesLeft })}
+                  </Text>
+                ) : null}
               </View>
+              {/* مصدر المسار: خطة الكتاب (أو يوم راحة/لم تبدأ بعد) */}
+              {study ? (
+                <View style={[styles.fromPlan, { flexDirection: dir.row }]}>
+                  <Ionicons name="calendar-outline" size={14} color={pal.accent} />
+                  <Text style={[styles.small, { color: pal.dim, flex: 1, textAlign: dir.textAlign }]} numberOfLines={2}>
+                    {study.unit !== null
+                      ? t("path.fromPlan", { book: study.title, day: study.day, total: study.total })
+                      : study.next && study.day === 0
+                        ? t("path.notStarted", { book: study.title, date: fmtDay(study.next, lang) })
+                        : study.next
+                          ? t("path.restDay", { book: study.title, date: fmtDay(study.next, lang) })
+                          : t("path.fromPlan", { book: study.title, day: study.day, total: study.total })}
+                  </Text>
+                  {study.late ? (
+                    <View style={[styles.latePill, { borderColor: "#D9485A" }]}>
+                      <Text style={styles.lateTxt}>{t("path.late")}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              {path.steps.length > 0 ? (
               <View {...coach.bind("path")} style={[styles.card, cardStyle, { padding: 8, gap: 6 }]}>
                 {path.steps.map((st, i) => {
                   const txt = stepText(st);
@@ -405,6 +463,7 @@ export default function HomeScreen() {
                   );
                 })}
               </View>
+              ) : null}
             </FadeIn>
           )}
 
@@ -415,7 +474,20 @@ export default function HomeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.sectionTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("myplan.title")}</Text>
-              <Text style={[styles.planSub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("home.planSub")}</Text>
+              <Text style={[styles.planSub, { color: pal.dim, textAlign: dir.textAlign }]}>
+                {study && path.steps.length
+                  ? t("home.planToday", {
+                      done: path.done,
+                      total: path.steps.length,
+                      status:
+                        study.diffUnits >= 0.5
+                          ? t("home.planAhead", { n: Math.abs(study.diffUnits) })
+                          : study.diffUnits <= -0.5
+                            ? t("home.planBehind", { n: Math.abs(study.diffUnits) })
+                            : t("home.planOn"),
+                    })
+                  : t("home.planSub")}
+              </Text>
             </View>
             <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
           </PressableScale>
@@ -522,6 +594,9 @@ const styles = StyleSheet.create({
   planCard: { alignItems: "center", gap: 12, marginTop: 14 },
   planIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   planSub: { fontSize: 13, marginTop: 2 },
+  fromPlan: { alignItems: "center", gap: 6, marginBottom: 8, marginTop: -2 },
+  latePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  lateTxt: { color: "#D9485A", fontSize: 11.5, fontWeight: "800" },
   stepRow: { alignItems: "center", gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderRadius: 18 },
   stepIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   stepDot: { width: 10, height: 10, borderRadius: 5 },

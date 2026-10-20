@@ -182,6 +182,11 @@ export type PathInput = {
   hasSyllabus: boolean;
   weakUnit: number | null;
   summaryToday: boolean;
+  /**
+   * وحدة اليوم من خطة الكتاب — إن وُجدت يُبنى المسار منها (استماع صفحاتها، ملخصها، اختبارها، البطاقات).
+   * restDay: ليس يوم دراسة في الخطة (تبقى البطاقات المستحقة فقط).
+   */
+  plan?: { restDay: boolean; listenMin: number; listenDone: boolean; summaryDone: boolean; quizDone: boolean } | null;
 };
 
 /**
@@ -191,6 +196,16 @@ export type PathInput = {
  */
 export function buildDailyPath(i: PathInput): { steps: PathStep[]; done: number; minutesLeft: number } {
   const steps: PathStep[] = [];
+  if (i.plan) {
+    if (!i.plan.restDay) {
+      steps.push({ id: "listen", minutes: i.plan.listenMin, done: i.plan.listenDone });
+      steps.push({ id: "summary", minutes: 10, done: i.plan.summaryDone });
+      steps.push({ id: "quiz", minutes: 8, done: i.plan.quizDone });
+    }
+    if (i.dueCards > 0 || i.reviewedCardsToday) steps.push({ id: "cards", minutes: Math.max(3, Math.ceil(i.dueCards * 0.4)), done: i.dueCards === 0 });
+    const done = steps.filter((s) => s.done).length;
+    return { steps, done, minutesLeft: steps.filter((s) => !s.done).reduce((a, s) => a + s.minutes, 0) };
+  }
   if (i.hasBook) {
     const left = Math.max(0, i.goalMinutes - i.todayMinutes);
     steps.push({ id: "listen", minutes: left > 0 ? left : Math.min(15, i.goalMinutes), done: left === 0 });

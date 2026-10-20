@@ -65,3 +65,110 @@ export function unitsFromRunningHeads(pages: { page: number; text: string }[], t
     return { title: best ? `${u.label}: ${best}` : u.label, page: u.first, to: Math.max(u.first, to), level: 0 };
   });
 }
+
+// ===== صفحات عناوين الوحدات، وفهرس بلا أرقام صفحات =====
+// كتب كثيرة (مقررات الجامعة الإلكترونية مثلًا) تبدأ كل وحدة بصفحة عنوان قصيرة: «الوحدة الأولى — معنى التنفيذ…»
+// ثم «أهداف الوحدة». ورأس الصفحة المتكرر فيها قد يكون خاطئًا (صفحات الوحدة الأولى يعلوها «الوحدة الثانية»)،
+// وفهرسها يذكر الوحدات بلا أرقام صفحات. صفحة العنوان هي العلامة الأوثق لبداية الوحدة.
+
+const HEAD_ANY = new RegExp(`(${KIND})\\s+(${ORD}(?:\\s+(?:عشر(?:ة|ه)?|والعشرون|و?العشرون))?)(?![\\p{L}])`, "giu");
+
+/** كل عناوين الوحدات في نص (أينما وقعت، لا في أول السطر فقط) بالترتيب */
+export function findHeadings(text: string): { key: string; label: string; index: number; end: number }[] {
+  const t = String(text || "").normalize("NFKC").replace(/\s+/g, " ");
+  const out: { key: string; label: string; index: number; end: number }[] = [];
+  for (const m of t.matchAll(HEAD_ANY)) {
+    const label = `${m[1]} ${m[2]}`.replace(/\s+/g, " ").trim();
+    out.push({ key: norm(label), label, index: m.index ?? 0, end: (m.index ?? 0) + m[0].length });
+  }
+  return out;
+}
+
+const ORD_ROOTS: [RegExp, number][] = [
+  [/^(ال)?(اول|حادي)/, 1],
+  [/^(ال)?ثاني/, 2],
+  [/^(ال)?ثالث/, 3],
+  [/^(ال)?رابع/, 4],
+  [/^(ال)?خامس/, 5],
+  [/^(ال)?سادس/, 6],
+  [/^(ال)?سابع/, 7],
+  [/^(ال)?ثامن/, 8],
+  [/^(ال)?تاسع/, 9],
+  [/^(ال)?عاشر/, 10],
+];
+/** رقم الترتيب من مفتاح الوحدة («الوحده الحاديه عشره» → ١١)، أو null */
+export function ordinalOf(key: string): number | null {
+  const parts = key.split(" ").slice(1);
+  if (!parts.length) return null;
+  if (/^[0-9]+$/.test(parts[0])) return Number(parts[0]);
+  const r = ORD_ROOTS.find(([re]) => re.test(parts[0]));
+  if (!r) return null;
+  const rest = parts.slice(1).join(" ");
+  if (/عشرون/.test(rest)) return r[1] === 10 ? 20 : 20 + r[1];
+  if (/عشر/.test(rest)) return 10 + r[1];
+  return r[1];
+}
+
+/**
+ * الفهرس (ولو بلا أرقام صفحات): أول صفحة في أول الكتاب تذكر ٣ وحدات مختلفة فأكثر، ومعها الصفحات التالية
+ * المتصلة بها التي تكمل القائمة (فهرس على صفحتين). يُستخرج منها ترتيب الوحدات وعناوينها الكاملة.
+ */
+export function tocTitles(pages: { page: number; text: string }[]): { key: string; label: string; title: string }[] {
+  const head = [...pages].sort((a, b) => a.page - b.page).slice(0, 30);
+  const flat = (p: { text: string }) => String(p.text || "").normalize("NFKC").replace(/\s+/g, " ");
+  const start = head.findIndex((p) => new Set(findHeadings(flat(p)).map((h) => h.key)).size >= 3);
+  if (start < 0) return [];
+  const seen = new Set<string>();
+  const out: { key: string; label: string; title: string }[] = [];
+  for (let i = start; i < head.length; i++) {
+    const t = flat(head[i]);
+    const hs = findHeadings(t);
+    const fresh = hs.filter((h) => !seen.has(h.key));
+    if (i > start && new Set(fresh.map((h) => h.key)).size < 2) break; // انتهت صفحات الفهرس
+    hs.forEach((h, k) => {
+      if (seen.has(h.key)) return;
+      seen.add(h.key);
+      const raw = t.slice(h.end, k + 1 < hs.length ? hs[k + 1].index : undefined);
+      let title = raw.replace(/^[\s:：\-–—.]+/, "").replace(/\.{2,}.*$/, "").replace(/[\s.…:،0-9٠-٩]+$/, "").trim();
+      // قوس ناقص في الفهرس نفسه («… الولائي والمكاني)») لا يُترك مكسورًا في العنوان
+      if ((title.match(/\)/g) ?? []).length > (title.match(/\(/g) ?? []).length) title = title.replace(/\)\s*$/, "").trim();
+      out.push({ key: h.key, label: h.label, title });
+    });
+  }
+  return out;
+}
+
+/**
+ * بدايات الوحدات من صفحات عناوينها: صفحة قصيرة (بعد حذف رأس الصفحة لا يبقى إلا العنوان) تذكر «الوحدة …».
+ * تُؤخذ آخر وحدة مذكورة فيها (الرأس المتكرر يأتي أولًا ثم عنوان الصفحة الحقيقي).
+ * names: عناوين الفهرس (إن وُجد) لتسمية الوحدات بعناوينها الكاملة.
+ */
+export function unitsFromDividers(pages: { page: number; text: string }[], total: number, names: { key: string; label: string; title: string }[] = []): HeadingUnit[] {
+  const sorted = [...pages].sort((a, b) => a.page - b.page);
+  // إن كان للكتاب صفحات «أهداف الوحدة»: صفحة العنوان الحقيقية تسبقها مباشرة (لا صفحة خريطة أو صفحة قصيرة عابرة)
+  const OBJ = /اهداف الوحد/;
+  const objPages = new Set(sorted.filter((p) => OBJ.test(norm(String(p.text || "")))).map((p) => p.page));
+  const useObj = objPages.size >= 2;
+  // وإن كان للكتاب فهرس بعناوين وحدات: لا تُقبل إلا وحداته («المحاضرة الثالثة» ليست وحدة)
+  const allowed = names.length >= 3 ? new Set(names.map((n) => n.key)) : null;
+  const firstAt = new Map<string, { page: number; label: string; tail: string }>();
+  for (const p of sorted) {
+    const t = String(p.text || "").normalize("NFKC").replace(/\s+/g, " ").trim();
+    if (!t || t.length > 320) continue;
+    if (useObj && (objPages.has(p.page) || !(objPages.has(p.page + 1) || objPages.has(p.page + 2)))) continue;
+    const hs = findHeadings(t);
+    if (!hs.length || new Set(hs.map((h) => h.key)).size >= 3) continue;
+    const h = hs[hs.length - 1];
+    if (allowed && !allowed.has(h.key)) continue;
+    if (firstAt.has(h.key)) continue;
+    firstAt.set(h.key, { page: p.page, label: h.label, tail: t.slice(h.end).replace(/^[\s:：\-–—.]+/, "").trim() });
+  }
+  const list = [...firstAt.entries()].sort((a, b) => a[1].page - b[1].page);
+  if (list.length < 2) return [];
+  return list.map(([key, u], i) => {
+    const named = names.find((n) => n.key === key);
+    const title = named?.title || u.tail.slice(0, 120);
+    const to = i + 1 < list.length ? list[i + 1][1].page - 1 : Math.max(u.page, total || u.page);
+    return { title: title ? `${named?.label ?? u.label}: ${title}` : u.label, page: u.page, to: Math.max(u.page, to), level: 0 };
+  });
+}

@@ -99,7 +99,8 @@ export default function PlanScreen() {
       books.flatMap((b) =>
         (b.plan?.units ?? [])
           .map((w, i) => ({ b, i, w }))
-          .filter((x) => iso >= x.w.start && iso <= x.w.end)
+          // أيام الراحة في خطة الكتاب لا تُعرض فيها وحدات
+          .filter((x) => iso >= x.w.start && iso <= x.w.end && (!b.plan?.days?.length || b.plan.days.includes(new Date(`${iso}T00:00:00`).getDay())))
           .map((x) => ({ book: x.b, index: x.i, phase: phaseOf(x.w, x.b.actual[x.i] ?? 0, today) as UnitPhase }))
       ),
     [books, today]

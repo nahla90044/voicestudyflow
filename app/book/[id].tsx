@@ -7,7 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { listSaves, removeSave, type StudySave } from "../../lib/studySaves";
 import { addSaveRef, createFolder, deleteFolder, forgetSave, loadFolders, type BookFolder } from "../../lib/bookFolders";
 import { loadNotes } from "../../lib/notes";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BookCover } from "../../components/brand/book-cover";
@@ -24,6 +24,7 @@ import { useDir, useI18n } from "../../lib/i18n";
 import { getLastPage } from "../../lib/readerPrefs";
 import { useScene } from "../../lib/scene";
 import { getBookReadiness, setExamDate, type BookReadiness } from "../../lib/readiness";
+import { unitsProgress } from "../../lib/studyTrack";
 import { getCachedUnitRanges, getUnitRanges, type UnitRange } from "../../lib/glossary";
 import { supabase } from "../../lib/supabase";
 import { getSyllabus, type Syllabus } from "../../lib/syllabus";
@@ -153,6 +154,20 @@ export default function BookHubScreen() {
       </SceneIconButton>
     </PressableScale>
   );
+
+  // إنجاز كل وحدة (نفس حساب المنهج والخطة): منجزة = مؤشَّرة منجزة أو ٩٠٪ فأكثر
+  const [unitPct, setUnitPct] = useState<number[]>([]);
+  useEffect(() => {
+    if (!book?.pdf_path || !ranges || !syl?.data.units.length || ranges.length !== syl.data.units.length) return;
+    let on = true;
+    unitsProgress(book.pdf_path, bookId, ranges, syl.data.units.length)
+      .then((pg) => on && setUnitPct(pg.map((x) => x.pct)))
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book?.pdf_path, ranges, syl]);
 
   if (failed) {
     return (
@@ -387,7 +402,7 @@ export default function BookHubScreen() {
                 </View>
                 <SceneCard padded={false} style={{ overflow: "hidden" }}>
                   {units.map((u, i) => {
-                    const done = !!syl?.done[i];
+                    const done = !!syl?.done[i] || (unitPct[i] ?? 0) >= 0.9;
                     const acc = ready?.accuracy[i] ?? null;
                     const accColor = acc === null ? pal.dim : acc >= 0.75 ? tone.good : acc >= 0.5 ? tone.mid : tone.bad;
                     const weak = ready?.weakUnit === i && !ready.weakUntested;
@@ -403,11 +418,13 @@ export default function BookHubScreen() {
                           weak && { backgroundColor: pal.soft },
                         ]}
                       >
+                        {/* خط عمودي ملوّن على جانب الوحدة المنجزة */}
+                        {done ? <View style={[styles.doneBar, { backgroundColor: tone.good }, dir.isRTL ? { right: 0 } : { left: 0 }]} /> : null}
                         <View
                           style={[
                             styles.unitNum,
                             { borderColor: pal.track },
-                            done && { borderColor: pal.accent, backgroundColor: pal.accent },
+                            done && { borderColor: tone.good, backgroundColor: tone.good },
                           ]}
                         >
                           {done ? (
@@ -616,6 +633,7 @@ const styles = StyleSheet.create({
   mistakesIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   mistakesTxt: { flex: 1, fontSize: 14.5, fontWeight: "800" },
   unit: { alignItems: "center", gap: 10, paddingVertical: 12, paddingHorizontal: 14 },
+  doneBar: { position: "absolute", top: 0, bottom: 0, width: 5 },
   unitNum: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   unitNumTxt: { fontSize: 12, fontWeight: "800" },
   unitTitle: { fontSize: 14.5, fontWeight: "700", lineHeight: 21 },

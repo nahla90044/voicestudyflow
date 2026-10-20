@@ -28,6 +28,7 @@ import { extractPdfPageText } from "../../lib/pdfText";
 import { generatePlan } from "../../lib/plans";
 import { supabase } from "../../lib/supabase";
 import { recordPerf } from "../../lib/perf";
+import { startDownload } from "../../lib/downloadManager";
 
 function randomId(len = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -241,6 +242,10 @@ export default function AddBookScreen() {
         setFile(null);
         return;
       }
+
+      // 2.6) قراءة الكتاب كله بالخلفية من لحظة رفعه (يُستأنف بعد الإغلاق): فهرسه ووحداته تكون جاهزة
+      //      للمنهج والملخصات بلا انتظار ولا حاجة لفتح صفحاته أولًا
+      if (pageCount > 0) void startDownload(path, safeTitle, pageCount);
 
       // 3) create plan
       if (createPlanNow) {

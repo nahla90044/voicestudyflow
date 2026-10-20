@@ -1,7 +1,8 @@
 // lib/studyTrack.ts
 // تقدّم مذاكرة كل وحدة وجدولها — محفوظان مع المنهج على السيرفر (يتزامنان بين الجوال والآيباد):
 // - ما سُمع من الملخص وما شوهد من الفيديو (مقطعًا مقطعًا، فلا تعتمد على الذاكرة)
-// - تقدّم الوحدة من أربعة: إجابات الاختبار الصحيحة، الملخص المسموع، الفيديو المشاهَد، البطاقات المُراجَعة
+// - الصفحات المذاكَرة (سُمعت كاملة، أو بقيت على الشاشة ٤٠ ثانية) — تحت المفتاح "pages" على مستوى الكتاب
+// - تقدّم الوحدة من خمسة: صفحاتها، إجابات الاختبار الصحيحة، الملخص المسموع، الفيديو المشاهَد، البطاقات المُراجَعة
 // - جدول الوحدات: تواريخ مذاكرة كل وحدة (يعدّلها المستخدم)، والمخطط مقابل الفعلي
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -11,9 +12,12 @@ import { distribute, fitSchedule, type BookSchedule } from "./scheduleCore";
 import { supabase } from "./supabase";
 import type { UnitRange } from "./glossaryCore";
 
-type Seen = { s?: number[]; st?: number; v?: number[]; vt?: number };
+type Seen = { s?: number[]; st?: number; v?: number[]; vt?: number; p?: number[] };
+/** مفاتيح الوحدات أرقام ("0", "1"…)؛ و"pages" للصفحات المذاكَرة من الكتاب كله */
 export type RawProgress = Record<string, Seen>;
+const PAGES = "pages";
 export type UnitProgress = {
+  pages: { done: number; total: number };
   quiz: { correct: number; answered: number };
   summary: { heard: number; total: number };
   video: { seen: number; total: number };
@@ -30,7 +34,7 @@ function merge(a: RawProgress, b: RawProgress): RawProgress {
   const out: RawProgress = { ...a };
   for (const [k, v] of Object.entries(b)) {
     const o = out[k] ?? {};
-    out[k] = { s: union(o.s, v.s), st: Math.max(o.st ?? 0, v.st ?? 0), v: union(o.v, v.v), vt: Math.max(o.vt ?? 0, v.vt ?? 0) };
+    out[k] = { s: union(o.s, v.s), st: Math.max(o.st ?? 0, v.st ?? 0), v: union(o.v, v.v), vt: Math.max(o.vt ?? 0, v.vt ?? 0), p: union(o.p, v.p) };
   }
   return out;
 }
@@ -59,13 +63,7 @@ async function push(pdfPath: string) {
   } catch {}
 }
 
-/** يسجّل مقطع ملخص مسموعًا (kind "s") أو مشهد فيديو مشاهدًا (kind "v") لوحدة — الرفع مجمّع كل ٣ ثوانٍ */
-export function markSeen(pdfPath: string, unit: number, kind: "s" | "v", index: number, total: number): void {
-  if (!pdfPath || unit < 0 || index < 0) return;
-  const cur = mem.get(pdfPath) ?? {};
-  const u = cur[String(unit)] ?? {};
-  cur[String(unit)] = kind === "s" ? { ...u, s: union(u.s, [index]), st: Math.max(u.st ?? 0, total) } : { ...u, v: union(u.v, [index]), vt: Math.max(u.vt ?? 0, total) };
-  mem.set(pdfPath, cur);
+function schedulePush(pdfPath: string) {
   if (timers.has(pdfPath)) return;
   timers.set(
     pdfPath,
@@ -74,6 +72,27 @@ export function markSeen(pdfPath: string, unit: number, kind: "s" | "v", index: 
       void push(pdfPath);
     }, 3000)
   );
+}
+
+/** يسجّل صفحة من الكتاب مذاكَرة (من المشغّل عند انتهاء صوتها، أو من القارئ بعد بقائها على الشاشة) */
+export function markPageStudied(pdfPath: string, page: number): void {
+  if (!pdfPath || !(page >= 1)) return;
+  const cur = mem.get(pdfPath) ?? {};
+  const u = cur[PAGES] ?? {};
+  if (u.p?.includes(page)) return;
+  cur[PAGES] = { ...u, p: union(u.p, [Math.floor(page)]) };
+  mem.set(pdfPath, cur);
+  schedulePush(pdfPath);
+}
+
+/** يسجّل مقطع ملخص مسموعًا (kind "s") أو مشهد فيديو مشاهدًا (kind "v") لوحدة — الرفع مجمّع كل ٣ ثوانٍ */
+export function markSeen(pdfPath: string, unit: number, kind: "s" | "v", index: number, total: number): void {
+  if (!pdfPath || unit < 0 || index < 0) return;
+  const cur = mem.get(pdfPath) ?? {};
+  const u = cur[String(unit)] ?? {};
+  cur[String(unit)] = kind === "s" ? { ...u, s: union(u.s, [index]), st: Math.max(u.st ?? 0, total) } : { ...u, v: union(u.v, [index]), vt: Math.max(u.vt ?? 0, total) };
+  mem.set(pdfPath, cur);
+  schedulePush(pdfPath);
 }
 
 /** المشاهد المشاهَدة من فيديو وحدة (لعلامة «شوهد» على كل مشهد) */
@@ -90,14 +109,21 @@ export async function unitsProgress(pdfPath: string, bookId: string, ranges: Uni
     const r = ranges[i];
     const uc = r ? mine.filter((c) => c.page! >= r.from && c.page! <= r.to) : [];
     const seen = raw[String(i)] ?? {};
+    const studied = raw[PAGES]?.p ?? [];
     const p: Omit<UnitProgress, "pct"> = {
+      pages: r ? { done: studied.filter((x) => x >= r.from && x <= r.to).length, total: r.to - r.from + 1 } : { done: 0, total: 0 },
       quiz: { correct: qs.filter((q) => q.lastCorrect).length, answered: qs.length },
       summary: { heard: seen.s?.length ?? 0, total: seen.st ?? 0 },
       video: { seen: seen.v?.length ?? 0, total: seen.vt ?? 0 },
       cards: { reviewed: uc.filter((c) => c.box > 0).length, total: uc.length },
     };
     const f = (a: number, b: number) => (b > 0 ? Math.min(1, a / b) : 0);
-    const pct = (f(p.quiz.correct, p.quiz.answered) + f(p.summary.heard, p.summary.total) + f(p.video.seen, p.video.total) + f(p.cards.reviewed, p.cards.total)) / 4;
+    // الصفحات والاختبار أساس كل وحدة؛ الملخص والفيديو والبطاقات تُحسب متى استُعملت (لا تُفرض أداة لم تُفتح)
+    const parts = [f(p.pages.done, p.pages.total), p.quiz.answered > 0 ? f(p.quiz.correct, p.quiz.answered) : 0];
+    if (p.summary.total > 0) parts.push(f(p.summary.heard, p.summary.total));
+    if (p.video.total > 0) parts.push(f(p.video.seen, p.video.total));
+    if (p.cards.total > 0) parts.push(f(p.cards.reviewed, p.cards.total));
+    const pct = parts.reduce((a, b) => a + b, 0) / parts.length;
     return { ...p, pct };
   });
 }
@@ -107,6 +133,10 @@ export async function remapProgress(pdfPath: string, map: (u: number) => number 
   const raw = await getRawProgress(pdfPath);
   const next: RawProgress = {};
   for (const [k, v] of Object.entries(raw)) {
+    if (!/^\d+$/.test(k)) {
+      next[k] = v; // مفاتيح الكتاب (الصفحات) لا تتبع ترقيم الوحدات
+      continue;
+    }
     const to = map(Number(k));
     if (to !== null) next[String(to)] = v;
   }

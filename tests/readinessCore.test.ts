@@ -140,3 +140,13 @@ test("daily path without syllabus or book stays minimal", () => {
   assert.deepEqual(buildDailyPath({ ...basePath, hasSyllabus: false, weakUnit: null }).steps.map((s) => s.id), ["listen"]);
   assert.deepEqual(buildDailyPath({ ...basePath, hasBook: false, hasSyllabus: false, weakUnit: null }).steps, []);
 });
+
+test("مسار اليوم من الخطة: صفحات الوحدة ثم ملخصها ثم اختبارها ثم البطاقات؛ ويوم الراحة بطاقات فقط", () => {
+  const base = { hasBook: true, todayMinutes: 0, goalMinutes: 60, dueCards: 4, reviewedCardsToday: false, dueMistakes: 3, quizzedToday: false, hasSyllabus: true, weakUnit: 0, summaryToday: false };
+  const p = buildDailyPath({ ...base, plan: { restDay: false, listenMin: 45, listenDone: true, summaryDone: false, quizDone: false } });
+  assert.deepEqual(p.steps.map((s) => s.id), ["listen", "summary", "quiz", "cards"]);
+  assert.equal(p.done, 1);
+  assert.equal(p.minutesLeft, 10 + 8 + 3);
+  const rest = buildDailyPath({ ...base, plan: { restDay: true, listenMin: 0, listenDone: false, summaryDone: false, quizDone: false } });
+  assert.deepEqual(rest.steps.map((s) => s.id), ["cards"]);
+});

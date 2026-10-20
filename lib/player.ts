@@ -11,6 +11,7 @@ import { extractPdfPageText, getPreciseText } from "./pdfText";
 import { setLastPage, setLastSentence } from "./readerPrefs";
 import { focusEvery, getFocusLevel } from "./settings";
 import { recordActivity } from "./stats";
+import { markPageStudied } from "./studyTrack";
 import { splitForReading } from "./textUtils";
 import { closeReadingCard, nextSpeed, onReadingAction, syncReadingCard } from "./readingCard";
 import {
@@ -201,7 +202,10 @@ async function playFrom(p: number, i: number, my: number) {
 
   if (sents.length === 0 || i >= sents.length) {
     // صفحة منتهية أو بلا نص → التالية، أو نهاية الكتاب
-    if (sents.length > 0) recordActivity({ pages: 1 }).catch(() => {});
+    if (sents.length > 0) {
+      recordActivity({ pages: 1 }).catch(() => {});
+      markPageStudied(state.pdfPath, p); // صفحة سُمعت كاملة → تُحسب في تقدّم وحدتها وخطة الكتاب
+    }
     if (p < state.totalPages) {
       holdAudioSession(true); // يُبقي الصوت حيًّا بين الصفحات والجوال مقفل
       patch({ page: p + 1, idx: 0 });
