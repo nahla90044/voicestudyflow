@@ -39,27 +39,34 @@ const OWNER_EMAILS = new Set(["nahlah@hotmail.com", "nahla90044@gmail.com", "nah
 /** هل الحساب الحالي هو حساب المالك؟ القائمة الثابتة أولًا، ثم السيرفر (جدول app_owners) —
  *  فأي بريد يُضاف للسيرفر يُتعرَّف عليه فورًا بلا تحديث للتطبيق. النتيجة محفوظة لكل مستخدم. */
 let ownerCache: { uid: string; owner: boolean } | null = null;
+/**
+ * هل الحساب الحالي حساب المالكة؟ يرمي خطأ إن تعذّر التأكد (شبكة) — فلا يُعامَل التعثّر كأنه «لا».
+ * من الجلسة المحفوظة على الجهاز، ثم السيرفر (مرة لكل حساب)، وآخر نتيجة مؤكدة محفوظة.
+ */
+export async function checkOwner(): Promise<boolean> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
+  if (!user) return false;
+  if (OWNER_EMAILS.has(user.email?.trim().toLowerCase() ?? "")) return true;
+  if (ownerCache?.uid === user.id) return ownerCache.owner;
+  const KEY = `vsf:owner:${user.id}`;
+  const { data, error } = await supabase.rpc("am_i_owner");
+  if (error) {
+    const known = await AsyncStorage.getItem(KEY).catch(() => null);
+    if (known === "1" || known === "0") return known === "1";
+    throw new Error("OWNER_UNKNOWN");
+  }
+  ownerCache = { uid: user.id, owner: data === true };
+  await AsyncStorage.setItem(KEY, data === true ? "1" : "0").catch(() => {});
+  return ownerCache.owner;
+}
+
+/** نسخة لا ترمي (للمزايا غير الحساسة): التعثّر = آخر نتيجة معروفة أو «لا» */
 export async function isOwner(): Promise<boolean> {
   try {
-    // الجلسة المحفوظة على الجهاز (بلا شبكة). كانت getUser() تطلب السيرفر في كل فحص، فإن تعثّر الاتصال
-    // لحظة رجعت «ليست المالكة» فتظهر الباقة مجانية برصيد صفر حتى إعادة الفتح (بلاغ نهلة ٢٠ أكتوبر).
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) return false;
-    if (OWNER_EMAILS.has(user.email?.trim().toLowerCase() ?? "")) return true;
-    if (ownerCache?.uid === user.id) return ownerCache.owner;
-    const KEY = `vsf:owner:${user.id}`;
-    const { data, error } = await supabase.rpc("am_i_owner");
-    if (error) {
-      // بلا شبكة: آخر نتيجة مؤكدة لهذا الحساب على الجهاز، لا «ليست المالكة»
-      const known = await AsyncStorage.getItem(KEY).catch(() => null);
-      return known === "1";
-    }
-    ownerCache = { uid: user.id, owner: data === true };
-    await AsyncStorage.setItem(KEY, data === true ? "1" : "0").catch(() => {});
-    return ownerCache.owner;
+    return await checkOwner();
   } catch {
     return ownerCache?.owner ?? false;
   }

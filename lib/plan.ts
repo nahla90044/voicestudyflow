@@ -3,7 +3,10 @@
 // مصدر الحقيقة للحدود هو السيرفر (_shared/plan.ts)؛ هنا نعرضها ونوجّه للاشتراك فقط.
 import { router } from "expo-router";
 
-import { getUserId, isOwner } from "./auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { checkOwner, getUserId } from "./auth";
+import { recordPerf } from "./perf";
 import { purchasesAvailable, storeActivePlan } from "./purchases";
 import { supabase } from "./supabase";
 
@@ -27,31 +30,43 @@ export function planOf(planId: string): Exclude<Plan, "owner" | "free"> {
 }
 
 let cached: { plan: Plan; at: number } | null = null;
+const LAST_KEY = (uid: string) => `vsf:plan:last:${uid}`;
 
-/** الخطة الحالية: المالكة أولًا، ثم السيرفر (هو الذي يطبّق الحدود)، والمتجر احتياط بلا شبكة فقط.
- *  (كان المتجر أولًا: أي حساب على نفس الجهاز يظهر مدفوعًا بينما السيرفر يعامله مجانيًا) */
+/**
+ * الخطة الحالية: المالكة أولًا، ثم السيرفر (هو الذي يطبّق الحدود).
+ * المبدأ: الحساب لا يظهر «مجانيًا برصيد صفر» بسبب تعثّر الاتصال أبدًا (بلاغ نهلة ٢٠ أكتوبر، مرتين):
+ * كل نتيجة مؤكدة تُحفظ لكل حساب على الجهاز، وعند أي تعثّر تُعرض آخر نتيجة مؤكدة ويُعاد السؤال بعد ثوانٍ.
+ */
 export async function getPlan(force = false): Promise<Plan> {
   if (!force && cached && Date.now() - cached.at < 60_000) return cached.plan;
-  let plan: Plan = "free";
-  if (await isOwner()) plan = "owner";
-  else {
-    try {
-      const uid = await getUserId();
-      const { data, error } = await supabase.from("entitlements").select("plan_id,expires_at,trial").eq("user_id", uid).maybeSingle();
+  const uid = (await supabase.auth.getSession().catch(() => null))?.data.session?.user.id ?? "";
+  try {
+    let plan: Plan = "free";
+    let trial = false;
+    if (await checkOwner()) plan = "owner";
+    else {
+      const { data, error } = await supabase.from("entitlements").select("plan_id,expires_at,trial").eq("user_id", uid || (await getUserId())).maybeSingle();
       if (error) throw error;
       const active = !!data && (data.expires_at === null || new Date(data.expires_at).getTime() > Date.now());
       if (active) plan = planOf(String(data!.plan_id));
-      inTrial = active && !!(data as { trial?: boolean }).trial;
-    } catch {
-      // تعثّر الاتصال: آخر خطة مؤكدة تبقى كما هي (لا تنزل لحظيًا إلى «مجانية برصيد صفر»)،
-      // وإلا ما يقوله المتجر؛ ولا تُحفظ النتيجة طويلًا فتُعاد المحاولة قريبًا. السيرفر يقرّر عند الطلب.
-      const fallback = cached?.plan ?? (await storeActivePlan()) ?? "free";
-      if (cached) cached = { plan: fallback, at: Date.now() - 50_000 };
-      return fallback;
+      trial = active && !!(data as { trial?: boolean }).trial;
     }
+    inTrial = trial;
+    cached = { plan, at: Date.now() };
+    if (uid) AsyncStorage.setItem(LAST_KEY(uid), JSON.stringify({ plan, trial })).catch(() => {});
+    return plan;
+  } catch {
+    // تعثّر: آخر نتيجة مؤكدة لهذا الحساب، ثم ما في الذاكرة، ثم المتجر — ويُعاد التحقق بعد ~٥ ثوانٍ
+    recordPerf("plan.fallback", 0, false);
+    let last: { plan: Plan; trial: boolean } | null = null;
+    try {
+      last = uid ? JSON.parse((await AsyncStorage.getItem(LAST_KEY(uid))) || "null") : null;
+    } catch {}
+    const plan: Plan = last?.plan ?? cached?.plan ?? (await storeActivePlan()) ?? "free";
+    if (last) inTrial = last.trial;
+    cached = { plan, at: Date.now() - 55_000 };
+    return plan;
   }
-  cached = { plan, at: Date.now() };
-  return plan;
 }
 
 export function invalidatePlan(): void {
@@ -92,6 +107,7 @@ export function onUsageChange(fn: () => void): () => void {
 export type Usage = { pages: number; premium: number; ai: number; credits: number };
 
 /** استهلاك الفترة الحالية: الشهر (أو التجربة لمرة واحدة للمجانية) + رصيد الصفحات الإضافية */
+let lastUsage: Usage | null = null;
 export async function getUsage(): Promise<Usage> {
   try {
     const uid = await getUserId();
@@ -103,14 +119,17 @@ export async function getUsage(): Promise<Usage> {
       supabase.from("usage_monthly").select("ai_requests").eq("user_id", uid).eq("period", period).maybeSingle(),
       supabase.from("page_credits").select("balance").eq("user_id", uid).maybeSingle(),
     ]);
-    return {
+    if (std.error || prem.error || u.error || c.error) throw new Error("usage");
+    lastUsage = {
       pages: std.count ?? 0,
       premium: prem.count ?? 0,
       ai: Number(u.data?.ai_requests) || 0,
       credits: Number(c.data?.balance) || 0,
     };
+    return lastUsage;
   } catch {
-    return { pages: 0, premium: 0, ai: 0, credits: 0 };
+    // تعثّر الاتصال: آخر قراءة صحيحة (لا أصفار مضلّلة)
+    return lastUsage ?? { pages: 0, premium: 0, ai: 0, credits: 0 };
   }
 }
 

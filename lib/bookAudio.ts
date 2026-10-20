@@ -18,6 +18,29 @@ import { getPageImage } from "./pageImage";
 import { refreshUsage } from "./plan";
 import { splitForReading } from "./textUtils";
 import { cacheText } from "./voice";
+import { InteractionManager } from "react-native";
+import { recordPerf } from "./perf";
+
+/** ينتظر انتهاء أي لمسة/حركة جارية (أولوية الواجهة على الحفظ في الخلفية) */
+const yieldToUi = () => new Promise<void>((r) => InteractionManager.runAfterInteractions(() => r()));
+
+// مراقبة سلاسة الواجهة أثناء الحفظ: تأخر مؤقّت متكرر = خيط الواجهة مشغول → يُسجَّل (ui.lag) لكشف أي تراجع مستقبلًا
+let lagTimer: ReturnType<typeof setInterval> | null = null;
+function watchLag(on: boolean) {
+  if (!on) {
+    if (lagTimer) clearInterval(lagTimer);
+    lagTimer = null;
+    return;
+  }
+  if (lagTimer) return;
+  let last = Date.now();
+  lagTimer = setInterval(() => {
+    const now = Date.now();
+    const lag = now - last - 1000;
+    last = now;
+    if (lag > 250) recordPerf("ui.lag.bookAudio", lag, lag < 1000);
+  }, 1000);
+}
 
 export type BookAudioStatus = "idle" | "running" | "paused" | "done" | "quota";
 export type BookAudio = {
@@ -32,8 +55,10 @@ export type BookAudio = {
 
 const KEY = (pdfPath: string) => `vsf:bookaudio:v1:${pdfPath}`;
 const INDEX = "vsf:bookaudio:index";
-const PAGES_PARALLEL = 3;
-const SENTS_PARALLEL = 3;
+// طلبان في الوقت نفسه فقط (كانت ٩): الطلبات الكثيرة المتزامنة تحجز اتصالات الشبكة فتتأخر طلبات المستخدم نفسه
+// (فتح صفحة، سؤال، تشغيل). والحفظ يتنحّى لحظيًا متى لمس المستخدم الشاشة (runAfterInteractions).
+const PAGES_PARALLEL = 2;
+const SENTS_PARALLEL = 1;
 const KEEP_TAG = "vsf-book-audio";
 const t = (k: string, p: Record<string, string | number> = {}) =>
   (dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => String(p[x] ?? ""));
@@ -124,7 +149,10 @@ export function pauseBookAudio(pdfPath: string): void {
     emit(next);
     persist(next, true);
   }
-  if (!anyRunning()) deactivateKeepAwake(KEEP_TAG);
+  if (!anyRunning()) {
+    deactivateKeepAwake(KEEP_TAG);
+    watchLag(false);
+  }
 }
 
 /** عند فتح التطبيق: يكمل أي حفظ كان جاريًا قبل إغلاقه */
@@ -143,6 +171,7 @@ async function run(pdfPath: string): Promise<void> {
   tokens.set(pdfPath, my);
   const alive = () => tokens.get(pdfPath) === my;
   activateKeepAwakeAsync(KEEP_TAG).catch(() => {});
+  watchLag(true);
   const s0 = states.get(pdfPath)!;
   const savedSet = new Set(s0.saved);
   const seen = new Set<string>(); // الترويسة المتكررة تُقرأ أول مرة فقط (مثل القارئ)
@@ -160,8 +189,9 @@ async function run(pdfPath: string): Promise<void> {
     const txt = precise ? await getPreciseText(pdfPath, res.page, res.text, !!res.ocr) : res.text;
     // الكتاب يعمل بلا إنترنت كاملًا: صورة الصفحة ومواضع كلماتها (للتظليل) تُحفظ مع صوتها
     // (النص والنص الدقيق يُحفظان على الجهاز تلقائيًا عند جلبهما)
-    void getPageImage(pdfPath, res.page).catch(() => null);
-    void (res.ocr ? getPageWords(pdfPath, res.page) : getPageWordsFromText(pdfPath, res.page)).catch(() => null);
+    // بالتتابع لا بالتوازي (لا تتزاحم طلبات الشبكة مع الصوت وطلبات المستخدم)
+    await getPageImage(pdfPath, res.page).catch(() => null);
+    await (res.ocr ? getPageWords(pdfPath, res.page) : getPageWordsFromText(pdfPath, res.page)).catch(() => null);
     const { chunks, headerLines } = splitForReading(txt, { seenHeaders: seen, page: res.page });
     headerLines.forEach((h) => seen.add(h));
     const pageRef = { book: pdfPath, page: res.page };
@@ -177,6 +207,7 @@ async function run(pdfPath: string): Promise<void> {
   const worker = async () => {
     while (queue.length && alive() && !quota) {
       await whenActive(); // قفل الجوال يوقف الشبكة في iOS → نكمل عند الرجوع
+      await yieldToUi();
       const p = queue.shift()!;
       const r = await savePage(p).catch(() => "fail" as const);
       if (!alive()) return;
@@ -209,6 +240,9 @@ async function run(pdfPath: string): Promise<void> {
   emit(fin);
   persist(fin, true);
   refreshUsage();
-  if (!anyRunning()) deactivateKeepAwake(KEEP_TAG);
+  if (!anyRunning()) {
+    deactivateKeepAwake(KEEP_TAG);
+    watchLag(false);
+  }
   if (quota || complete) void notifyDone(fin, quota);
 }

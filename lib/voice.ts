@@ -20,6 +20,7 @@ import { requestPaywall } from "./plan";
 import { numbersToArabicWords } from "./arabicNumbers";
 import { detectSpeechLang, normalizeLatinDates } from "./speechLang";
 import { markUpdateRequired } from "./appVersion";
+import { InteractionManager } from "react-native";
 import { base64ToBytes } from "./base64";
 import { supabase } from "./supabase";
 import { recordPerf } from "./perf";
@@ -384,8 +385,19 @@ function timingFileFor(text: string, voiceId: string): File {
   return new File(cacheDir(), name);
 }
 
-/** يحذف أقدم الملفات إذا تجاوز التخزين السقف. */
+/**
+ * يحذف أقدم الملفات إذا تجاوز التخزين السقف.
+ * كان يُستدعى بعد كل جملة: سرد مجلد فيه آلاف الملفات وقراءة حجم كل ملف (نداءات متزامنة على خيط الواجهة)
+ * → أثناء حفظ صوت الكتاب يتجمّد التطبيق وتتأخر كل لمسة. الآن: مرة كل ١٥ دقيقة على الأكثر، بعد انتهاء التفاعل.
+ */
+let lastPrune = 0;
 function pruneCache() {
+  const now = Date.now();
+  if (now - lastPrune < 15 * 60_000) return;
+  lastPrune = now;
+  InteractionManager.runAfterInteractions(() => setTimeout(pruneNow, 2000));
+}
+function pruneNow() {
   try {
     const items = cacheDir().list();
     const files = items.filter((f): f is File => f instanceof File);
