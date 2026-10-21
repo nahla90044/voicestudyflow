@@ -85,7 +85,7 @@ export async function getOrMakeVideo(
 export async function videoRequestCost(pdfPath: string, src: SummarySource, unitTitle: string): Promise<{ pending: number; estimated: boolean }> {
   if (await getCachedVideo(pdfPath, src)) return { pending: 0, estimated: false };
   const { getCachedSummary, summaryRequestCost } = await import("./unitSummary");
-  const summary = await getCachedSummary(pdfPath, src);
+  const summary = (await getCachedSummary(pdfPath, src)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }));
   if (!summary) {
     const s = await summaryRequestCost(pdfPath, src);
     return { pending: s.pending + Math.max(1, s.total), estimated: true };

@@ -214,7 +214,8 @@ export default function HomeScreen() {
       if (id === "listen") return router.push({ pathname: "/reader/[id]", params: { id: study.bookId, title: study.title, pdf_path: study.pdfPath, page: String(study.resumePage) } });
       if (study.unit === null) return;
       const params = { pdf_path: study.pdfPath, unit: String(study.unit), title: study.unitTitle, book_title: study.title };
-      return router.push({ pathname: id === "quiz" ? "/unit-quiz" : "/unit-summary", params });
+      // «ملخص صوتي» في المسار = الملخّص المختصر (الصوت عليه فقط)
+      return router.push({ pathname: id === "quiz" ? "/unit-quiz" : "/unit-summary", params: id === "quiz" ? params : { ...params, level: "brief" } });
     }
     if (!cont) return;
     const unitParams = ready && ready.weakUnit !== null
@@ -228,7 +229,7 @@ export default function HomeScreen() {
       case "quiz":
         return unitParams && router.push({ pathname: "/unit-quiz", params: unitParams });
       case "summary":
-        return unitParams && router.push({ pathname: "/unit-summary", params: unitParams });
+        return unitParams && router.push({ pathname: "/unit-summary", params: { ...unitParams, level: "brief" } });
     }
   }
 

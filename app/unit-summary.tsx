@@ -14,10 +14,9 @@ import { useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToText, type StudySummary } from "../lib/studySummary";
-import { clearSummary, summaryCacheKey, summaryRange, summaryRequestCost, type SummarySource } from "../lib/unitSummary";
+import { clearSummary, getCachedSummary, SUMMARY_LEVELS, summaryCacheKey, summaryRange, summaryRequestCost, type SummaryLevel, type SummarySource } from "../lib/unitSummary";
 import { confirmCost } from "../lib/costConfirm";
 import { hasSummaryJob, startSummaryJob, summaryJobKey, watchSummaryJob } from "../lib/summaryJobs";
-import { getSummaryMode, setSummaryMode, type SummaryMode } from "../lib/summaryPrefs";
 import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
@@ -29,7 +28,9 @@ export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
-  const { pdf_path, unit, page, from, to, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title, level } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; level?: string }>();
+  // مستوى الملخّص: من المعامل، وإلا يُعرض اختيار المستويات الثلاثة (✓ للجاهز منها)
+  const [lvl, setLvl] = useState<SummaryLevel | null>(SUMMARY_LEVELS.includes(level as SummaryLevel) ? (level as SummaryLevel) : null);
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
@@ -38,7 +39,15 @@ export default function UnitSummaryScreen() {
   const fromN = Number(from);
   const toN = Number(to);
   const rangeMode = !pageMode && fromN > 0 && toN >= fromN;
-  const src: SummarySource = pageMode ? { kind: "page", page: pageNum } : rangeMode ? { kind: "range", from: fromN, to: toN } : { kind: "unit", unit: unitIdx };
+  const src: SummarySource = { ...(pageMode ? { kind: "page" as const, page: pageNum } : rangeMode ? { kind: "range" as const, from: fromN, to: toN } : { kind: "unit" as const, unit: unitIdx }), level: lvl ?? "strict" };
+  // أي المستويات جاهز لهذا المصدر (لعلامة ✓ في الاختيار)
+  const [readyLv, setReadyLv] = useState<SummaryLevel[]>([]);
+  useEffect(() => {
+    if (lvl) return;
+    void Promise.all(SUMMARY_LEVELS.map((l) => getCachedSummary(pdfPath, { ...src, level: l }).then((x) => (x ? l : null)))).then((r) => setReadyLv(r.filter(Boolean) as SummaryLevel[]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lvl, pdfPath]);
+  const savedKey = `summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}${lvl && lvl !== "strict" ? "|" + lvl : ""}`;
   const { id: srcId, kind } = summaryCacheKey(src);
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
@@ -63,7 +72,7 @@ export default function UnitSummaryScreen() {
     const m = Math.round(sec / 60);
     return sec < 60 ? t("summary.etaLess") : m <= 1 ? t("summary.etaMin", { n: 1 }) : t("summary.etaMins", { n: m });
   };
-  const docTitle = `${t("syllabus.summary.label")}${unitTitle ? ` — ${unitTitle}` : ""}`;
+  const docTitle = `${t("syllabus.summary.label")}${lvl ? ` (${t(`summary.level.${lvl}`)})` : ""}${unitTitle ? ` — ${unitTitle}` : ""}`;
 
   /** حفظ الملخّص في «محفوظات الكتاب» (تبويب المحفوظات في صفحة الكتاب) */
   async function onSave() {
@@ -83,8 +92,8 @@ export default function UnitSummaryScreen() {
       });
       setSaved(true);
       // صوت الملخّص يُحفظ على الجهاز معه (في الخلفية) — للاستماع لاحقًا من «المحفوظات» بلا انتظار ولا إنترنت
-      if (sum) void saveSummaryAudio(sum).catch(() => {});
-      Alert.alert(t("save.savedTitle"), t("summary.savedWithAudio"));
+      if (sum && lvl === "brief") void saveSummaryAudio(sum).catch(() => {});
+      Alert.alert(t("save.savedTitle"), lvl === "brief" ? t("summary.savedWithAudio") : t("save.savedBody"));
     } catch {
       Alert.alert(t("save.failedTitle"), t("save.failedBody"));
     } finally {
@@ -103,12 +112,13 @@ export default function UnitSummaryScreen() {
   // التلخيص مهمة خلفية (lib/summaryJobs): الخروج من هنا لا يوقفه، والعودة تتصل بنفس المهمة.
   // كل جزء يُحفظ فور اكتماله، فانقطاع الاتصال (قفل الشاشة) لا يضيّع ما ظهر.
   const [runId, setRunId] = useState(0);
-  const [needMode, setNeedMode] = useState(false); // اختيار أسلوب الملخّص قبل أول ملخّص للكتاب
-  async function pickMode(m: SummaryMode) {
-    await setSummaryMode(pdfPath, m);
-    setNeedMode(false);
+  function pickLevel(l: SummaryLevel) {
+    setSum(null);
+    setErr("");
+    setIncomplete(false);
+    setSaved(false);
     setLoading(true);
-    setRunId((n) => n + 1);
+    setLvl(l);
   }
   // صفحات الكتاب التي يغطيها الملخّص — ليعرف الطالب هل غطّى الدرس كله
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
@@ -133,10 +143,11 @@ export default function UnitSummaryScreen() {
     Alert.alert(t("summary.redo.title"), t("summary.redo.body"), [
       { text: t("summary.redo.same"), onPress: () => void restart() },
       {
-        text: t("summary.mode.change"),
-        onPress: async () => {
-          await setSummaryMode(pdfPath, null);
-          await restart();
+        text: t("summary.level.change"),
+        onPress: () => {
+          stopSummary();
+          setPlaying(false);
+          setLvl(null);
         },
       },
       {
@@ -151,7 +162,7 @@ export default function UnitSummaryScreen() {
               onPress: async () => {
                 stopSummary();
                 await clearSummary(pdfPath, src);
-                await removeSavedItem(`summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`);
+                await removeSavedItem(savedKey);
                 router.back();
               },
             },
@@ -171,7 +182,7 @@ export default function UnitSummaryScreen() {
               if (!(a > 0)) return;
               await clearSummary(pdfPath, { kind: "range", from: a, to: b });
               stopSummary();
-              router.replace({ pathname: "/unit-summary", params: { pdf_path: pdfPath, from: String(a), to: String(b), title: unitTitle, book_title: bookTitle } });
+              router.replace({ pathname: "/unit-summary", params: { pdf_path: pdfPath, from: String(a), to: String(b), title: unitTitle, book_title: bookTitle, level: lvl ?? "strict" } });
             },
             "plain-text",
             range ? `${range.from}-${range.to}` : "",
@@ -184,20 +195,16 @@ export default function UnitSummaryScreen() {
   useEffect(() => {
     let on = true;
     let unwatch: (() => void) | undefined;
+    if (!lvl) {
+      setLoading(false); // اختيار المستوى أولًا
+      return;
+    }
     (async () => {
       const cached = await getUnitContent<StudySummary>(pdfPath, srcId, kind);
       if (!on) return;
       if (cached?.sections?.length) {
         setSum(cached);
         setLoading(false);
-        return;
-      }
-      // أول ملخّص لهذا الكتاب: يُسأل الطالب عن الأسلوب (الالتزام بالكتاب أو التوسّع)
-      if (!(await getSummaryMode(pdfPath)) && !(await hasSummaryJob(pdfPath, src))) {
-        if (on) {
-          setNeedMode(true);
-          setLoading(false);
-        }
         return;
       }
       // المتابعة من لحظة فتح الشاشة (أيًّا كان من بدأ التوليد)، ثم عدد الطلبات، ثم البدء
@@ -250,14 +257,15 @@ export default function UnitSummaryScreen() {
       stopSummary();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfPath, srcId, kind, runId]);
+  }, [pdfPath, srcId, kind, runId, lvl]);
 
   // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → ملخّصات) متى توفّر المحتوى
   useEffect(() => {
     if (!text || !pdfPath) return;
     addSavedItem({
-      key: `summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`,
+      key: savedKey,
       kind: "summary",
+      level: lvl ?? undefined,
       pdfPath,
       bookTitle,
       label: unitTitle || (pageMode ? String(pageNum) : ""),
@@ -331,23 +339,24 @@ export default function UnitSummaryScreen() {
         }
       />
 
-      {needMode ? (
+      {!lvl ? (
+        // اختيار المستوى: مختصر (للاستماع) · شامل · موسّع — كل مستوى يُحفظ وحده، و✓ للجاهز
         <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={[styles.modeTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("summary.mode.title")}</Text>
-          <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("summary.mode.body")}</Text>
-          {(["strict", "expand"] as const).map((m) => (
+          <Text style={[styles.modeTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("summary.level.title")}</Text>
+          {SUMMARY_LEVELS.map((m) => (
             <Pressable
               key={m}
-              onPress={() => void pickMode(m)}
-              style={({ pressed }) => [styles.modeCard, { backgroundColor: pal.card, borderColor: pal.cardBorder, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
+              onPress={() => pickLevel(m)}
+              style={({ pressed }) => [styles.modeCard, { backgroundColor: pal.card, borderColor: readyLv.includes(m) ? "#15803D" : pal.cardBorder, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
             >
               <View style={[styles.modeIcon, { backgroundColor: pal.soft }]}>
-                <Ionicons name={m === "strict" ? "book-outline" : "layers-outline"} size={22} color={pal.accent} />
+                <Ionicons name={m === "brief" ? "headset-outline" : m === "strict" ? "book-outline" : "layers-outline"} size={22} color={pal.accent} />
               </View>
               <View style={{ flex: 1, gap: 4 }}>
-                <Text style={[styles.modeName, { color: pal.ink, textAlign: dir.textAlign }]}>{t(`summary.mode.${m}`)}</Text>
-                <Text style={[styles.modeDesc, { color: pal.dim, textAlign: dir.textAlign }]}>{t(`summary.mode.${m}Desc`)}</Text>
+                <Text style={[styles.modeName, { color: pal.ink, textAlign: dir.textAlign }]}>{t(`summary.level.${m}`)}</Text>
+                <Text style={[styles.modeDesc, { color: pal.dim, textAlign: dir.textAlign }]}>{t(`summary.level.${m}Desc`)}</Text>
               </View>
+              {readyLv.includes(m) ? <Ionicons name="checkmark-circle" size={22} color="#15803D" /> : null}
             </Pressable>
           ))}
         </ScrollView>
@@ -367,15 +376,24 @@ export default function UnitSummaryScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Pressable
-            onPress={togglePlay}
-            style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
-          >
-            <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
-            <Text style={[styles.playTxt, { color: pal.onAccent }]}>
-              {playing ? (listenWait ? t("summary.listenWait") : t("syllabus.summary.pause")) : t("syllabus.summary.listen")}
-            </Text>
+          {/* المستوى الحالي، وتغييره */}
+          <Pressable onPress={() => { stopSummary(); setPlaying(false); setLvl(null); }} style={[styles.levelChip, { flexDirection: dir.row, borderColor: pal.cardBorder, backgroundColor: pal.soft }]}>
+            <Ionicons name={lvl === "brief" ? "headset-outline" : lvl === "expand" ? "layers-outline" : "book-outline"} size={16} color={pal.accent} />
+            <Text style={[styles.levelTxt, { color: pal.ink }]}>{t(`summary.level.${lvl ?? "strict"}`)}</Text>
+            <Text style={[styles.levelChange, { color: pal.accent }]}>{t("summary.level.switch")}</Text>
           </Pressable>
+          {/* الصوت على «المختصر» فقط (قرار نهلة): الشامل والموسّع للقراءة والطباعة */}
+          {lvl === "brief" ? (
+            <Pressable
+              onPress={togglePlay}
+              style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
+              <Text style={[styles.playTxt, { color: pal.onAccent }]}>
+                {playing ? (listenWait ? t("summary.listenWait") : t("syllabus.summary.pause")) : t("syllabus.summary.listen")}
+              </Text>
+            </Pressable>
+          ) : null}
 
           {/* 🎬 ملخّص فيديو للوحدة نفسها (يُبنى من هذا الملخّص) */}
           <Pressable
@@ -457,6 +475,9 @@ export default function UnitSummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  levelChip: { alignSelf: "flex-start", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
+  levelTxt: { fontSize: 13.5, fontWeight: "900" },
+  levelChange: { fontSize: 13, fontWeight: "800" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 12 },
   errIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
   dim: { fontSize: 14, fontWeight: "600", textAlign: "center", lineHeight: 22 },

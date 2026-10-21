@@ -10,7 +10,7 @@ import { getCurrentLang } from "./i18n";
 import "./notify"; // يضبط عرض الإشعار والتطبيق مفتوح (القارئ مثلًا)
 import { dict } from "./i18n/strings";
 import type { StudySummary } from "./studySummary";
-import { getCachedSummary, getOrMakeSummary, summaryCacheKey, type SummaryProgress, type SummarySource } from "./unitSummary";
+import { getCachedSummary, getOrMakeSummary, summaryCacheKey, type SummaryProgress, type SummaryLevel, type SummarySource } from "./unitSummary";
 import { recordPerf } from "./perf";
 
 export type SummaryJob = SummaryProgress & {
@@ -130,7 +130,7 @@ export function isSummaryQueueRunning(pdfPath: string): boolean {
 export function isUnitQueued(pdfPath: string, unit: number): boolean {
   return !!waitingUnits.get(pdfPath)?.has(unit);
 }
-export function queueUnitSummaries(pdfPath: string, units: number[], metaFor: (unit: number) => Meta, last: Meta): void {
+export function queueUnitSummaries(pdfPath: string, units: number[], metaFor: (unit: number) => Meta, last: Meta, level: SummaryLevel = "strict"): void {
   if (!units.length || queues.has(pdfPath)) return;
   queues.add(pdfPath);
   waitingUnits.set(pdfPath, new Set(units));
@@ -143,7 +143,7 @@ export function queueUnitSummaries(pdfPath: string, units: number[], metaFor: (u
       void notifyDone(last, allOk);
       return;
     }
-    const src: SummarySource = { kind: "unit", unit: units[k] };
+    const src: SummarySource = { kind: "unit", unit: units[k], level };
     const key = startSummaryJob(pdfPath, src, metaFor(units[k]), false);
     let un: (() => void) | undefined;
     let settled = false;

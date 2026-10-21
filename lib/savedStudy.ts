@@ -17,6 +17,8 @@ export type SavedItem = {
   unit?: number; // وضع المنهج (وحدة)
   from?: number; // نطاق صفحات (وحدة من القارئ بلا منهج)
   to?: number;
+  /** مستوى الملخّص (مختصر/شامل/موسّع) — بلا قيمة = شامل */
+  level?: "brief" | "strict" | "expand";
   savedAt: number;
   studied?: boolean; // أُشِّر كمدروس من القائمة
   archived?: boolean; // منقول إلى الأرشيف

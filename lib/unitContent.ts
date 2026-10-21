@@ -7,7 +7,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCurrentLang } from "./i18n";
 
 // summary/quiz/mindmap: لوحدات المنهج · pagesummary/pagequiz: لصفحة القارئ الحالية
-export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz" | "glossary" | "studysummary" | "pagestudysummary" | "studysummarypart" | "video" | "videopart";
+// studysummary/pagestudysummary = المستوى «الشامل» (وما حُفظ قبل المستويات بأسلوب الكتاب)؛
+// expand*/brief* = المستويان «الموسّع» و«المختصر» (٢١ أكتوبر)
+export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz" | "glossary" | "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "studysummarypart" | "video" | "videopart";
 
 // تجزئة FNV-1a لاسم مفتاح ثابت قصير من مسار الـPDF
 function hashKey(s: string): string {
@@ -97,5 +99,15 @@ export async function remapUnitContent(pdfPath: string, kind: UnitContentKind, m
     if (sets.length) await AsyncStorage.multiSet(sets);
   } catch {
     // التخزين المحلي اختياري
+  }
+}
+
+/** أرقام كل ما حُفظ من نوعٍ لهذا الكتاب (بلغة الواجهة الحالية) */
+export async function listUnitContentCodes(pdfPath: string, kind: UnitContentKind): Promise<number[]> {
+  try {
+    const prefix = `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:`;
+    return (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(prefix)).map((k) => Number(k.slice(prefix.length))).filter(Number.isFinite);
+  } catch {
+    return [];
   }
 }

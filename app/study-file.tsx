@@ -17,10 +17,9 @@ import { mindmapSvg } from "../components/brand/mindmap";
 import { mindmapFromSummary, studyFileHtml, type StudySummary } from "../lib/studySummary";
 import { getSyllabus, type MindMap } from "../lib/syllabus";
 import { getUnitContent } from "../lib/unitContent";
-import { getCachedSummary, summaryRequestCost } from "../lib/unitSummary";
+import { getCachedSummary, SUMMARY_LEVELS, summaryRequestCost, type SummaryLevel } from "../lib/unitSummary";
 import { isSummaryQueueRunning, isUnitQueued, queueUnitSummaries, summaryJobKey, watchSummaryJob } from "../lib/summaryJobs";
 import { confirmCost } from "../lib/costConfirm";
-import { getSummaryMode, setSummaryMode } from "../lib/summaryPrefs";
 
 type UnitRow = { title: string; summary: StudySummary | null; state: "ready" | "missing" | "working" | "failed" };
 
@@ -38,6 +37,8 @@ export default function StudyFileScreen() {
   const [pdfBusy, setPdfBusy] = useState(false);
   // الوحدات المحددة للتوليد (فارغ = كل الناقصة)
   const [picked, setPicked] = useState<number[]>([]);
+  // مستوى الملخّصات في الملف: مختصر / شامل / موسّع (كل مستوى يُحفظ وحده)
+  const [level, setLevel] = useState<SummaryLevel>("strict");
 
   const load = useCallback(async () => {
     const syl = await getSyllabus(pdfPath).catch(() => null);
@@ -49,13 +50,14 @@ export default function StudyFileScreen() {
     }
     const out: UnitRow[] = [];
     for (let i = 0; i < units.length; i++) {
-      const s = await getCachedSummary(pdfPath, { kind: "unit", unit: i });
+      const s = await getCachedSummary(pdfPath, { kind: "unit", unit: i, level });
       out.push({ title: units[i].title, summary: s, state: s ? "ready" : "missing" });
     }
     setRows(out);
-  }, [pdfPath]);
+  }, [pdfPath, level]);
 
   useEffect(() => {
+    setPicked([]);
     void load();
   }, [load]);
 
@@ -66,7 +68,7 @@ export default function StudyFileScreen() {
     setRunning(isSummaryQueueRunning(pdfPath));
     const offs = Array.from({ length: unitCount }, (_, i) =>
       watchSummaryJob(
-        summaryJobKey(pdfPath, { kind: "unit", unit: i }),
+        summaryJobKey(pdfPath, { kind: "unit", unit: i, level }),
         (j) => {
           setRows((cur) =>
             cur?.map((r, k) =>
@@ -86,7 +88,7 @@ export default function StudyFileScreen() {
       )
     );
     return () => offs.forEach((f) => f());
-  }, [pdfPath, unitCount]);
+  }, [pdfPath, unitCount, level]);
 
   const missing = rows?.filter((r) => r.state !== "ready").length ?? 0;
   const ready = rows?.filter((r) => r.state === "ready").length ?? 0;
@@ -98,27 +100,21 @@ export default function StudyFileScreen() {
   async function generate() {
     if (!rows || running || !target.length) return;
     // عدد طلبات الوحدات المطلوبة كلها قبل البدء
-    const costs = await Promise.all(target.map((i) => summaryRequestCost(pdfPath, { kind: "unit", unit: i }).then((c) => c.pending).catch(() => 0)));
+    const costs = await Promise.all(target.map((i) => summaryRequestCost(pdfPath, { kind: "unit", unit: i, level }).then((c) => c.pending).catch(() => 0)));
     if (!(await confirmCost(costs.reduce((a, b) => a + b, 0), "studyfile", t, false, `studyfile:${pdfPath}`))) return;
-    const params = (i: number) => ({ pdf_path: pdfPath, unit: String(i), title: rows[i].title, book_title: bookTitle });
+    const params = (i: number) => ({ pdf_path: pdfPath, unit: String(i), title: rows[i].title, book_title: bookTitle, level });
     queueUnitSummaries(pdfPath, target, (i) => ({ title: rows[i].title, params: params(i) }), {
       title: `${t("studyFile.title")} — ${bookTitle}`,
       params: params(target[target.length - 1]),
-    });
+    }, level);
     setPicked([]);
     setRunning(true);
   }
 
+  // المستوى يُختار من الأعلى (مختصر/شامل/موسّع)، ثم عدد الطلبات، ثم البدء
   async function onCreate() {
     if (!target.length) return;
-    const go = () => void generate();
-    // أسلوب الملخّص لهذا الكتاب (مرة واحدة): الالتزام بالكتاب أو التوسّع
-    if (await getSummaryMode(pdfPath)) return go();
-    Alert.alert(t("summary.mode.title"), t("summary.mode.body"), [
-      { text: t("summary.mode.strict"), onPress: () => void setSummaryMode(pdfPath, "strict").then(go) },
-      { text: t("summary.mode.expand"), onPress: () => void setSummaryMode(pdfPath, "expand").then(go) },
-      { text: t("common.cancel"), style: "cancel" },
-    ]);
+    await generate();
   }
 
   async function onPdf() {
@@ -175,6 +171,17 @@ export default function StudyFileScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <Text style={[styles.intro, { color: pal.dim, textAlign: dir.textAlign }]}>{t("studyFile.intro")}</Text>
 
+          {/* مستوى الملخّصات في الملف */}
+          <View style={[styles.levels, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+            {SUMMARY_LEVELS.map((l) => (
+              <Pressable key={l} disabled={running} onPress={() => setLevel(l)} style={[styles.levelBtn, level === l && { backgroundColor: pal.accent }]}>
+                <Text style={[styles.levelTxt, { color: level === l ? pal.onAccent : pal.ink }]} numberOfLines={1}>
+                  {t(`summary.level.${l}`)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
           {/* التقدّم */}
           <SceneCard style={{ gap: 10 }}>
             <Text style={[styles.count, { color: pal.ink, textAlign: dir.textAlign }]}>
@@ -227,7 +234,7 @@ export default function StudyFileScreen() {
               disabled={r.state === "working" || running}
               onPress={() =>
                 r.state === "ready"
-                  ? router.push({ pathname: "/unit-summary", params: { pdf_path: pdfPath, unit: String(i), title: r.title, book_title: bookTitle } })
+                  ? router.push({ pathname: "/unit-summary", params: { pdf_path: pdfPath, unit: String(i), title: r.title, book_title: bookTitle, level } })
                   : togglePick(i)
               }
             >
@@ -277,6 +284,9 @@ const styles = StyleSheet.create({
   num: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   numTxt: { fontSize: 14, fontWeight: "900" },
   unitTitle: { flex: 1, fontSize: 15, lineHeight: 23, fontWeight: "800" },
+  levels: { borderRadius: Radius.pill, padding: 4, gap: 4, borderWidth: StyleSheet.hairlineWidth },
+  levelBtn: { flex: 1, height: 40, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" },
+  levelTxt: { fontSize: 14.5, fontWeight: "900" },
   pickRow: { alignItems: "center", justifyContent: "space-between", gap: 10, paddingHorizontal: 4 },
   pickHint: { flex: 1, fontSize: 13, fontWeight: "600" },
   pickAll: { fontSize: 14, fontWeight: "900" },

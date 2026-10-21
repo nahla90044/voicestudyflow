@@ -818,7 +818,7 @@ export default function SyllabusScreen() {
                     return (
                       <View style={styles.unitGrid}>
                         <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>
-                          {btn("sum", "headset-outline", t("syllabus.action.summary"), () => router.push({ pathname: "/unit-summary", params }))}
+                          {btn("sum", "document-text-outline", t("syllabus.action.summaryAll"), () => router.push({ pathname: "/unit-summary", params }))}
                           {btn("vid", "videocam-outline", t("video.open"), () => router.push({ pathname: "/unit-video", params }))}
                         </View>
                         <View style={[styles.unitGridRow, { flexDirection: dir.row }]}>

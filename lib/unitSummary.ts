@@ -13,16 +13,66 @@ import { getSyllabus } from "./syllabus";
 import { getUnitContent, removeUnitContent, removeUnitContentWhere, setUnitContent } from "./unitContent";
 import { unitTextParts } from "./unitScope";
 
-export type SummarySource = { kind: "page"; page: number } | { kind: "unit"; unit: number } | { kind: "range"; from: number; to: number };
+/**
+ * مستوى الملخّص: «مختصر» (للاستماع: أهم الأفكار والتعدادات كاملة)، «شامل» (الالتزام بالكتاب)،
+ * «موسّع» (أمثلة وتمارين إضافية). كل مستوى يُحفظ وحده، فيمكن أن تجتمع الثلاثة للوحدة نفسها.
+ */
+export type SummaryLevel = "brief" | "strict" | "expand";
+export const SUMMARY_LEVELS: SummaryLevel[] = ["brief", "strict", "expand"];
 
-/** مفتاح التخزين لكل مصدر (لا يتداخل: الصفحات والنطاقات بأرقام بعيدة عن أرقام الوحدات) */
-export function summaryCacheKey(src: SummarySource): { id: number; kind: "studysummary" | "pagestudysummary" } {
-  if (src.kind === "page") return { id: src.page, kind: "pagestudysummary" };
-  if (src.kind === "unit") return { id: src.unit, kind: "studysummary" };
-  return { id: 1_000_000 + src.from * 10_000 + src.to, kind: "studysummary" };
+export type SummarySource = ({ kind: "page"; page: number } | { kind: "unit"; unit: number } | { kind: "range"; from: number; to: number }) & {
+  /** بلا مستوى = «الشامل» (التوافق مع ما سبق) */
+  level?: SummaryLevel;
+};
+
+type SummaryKind = "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary";
+
+/** مفتاح التخزين لكل مصدر ومستوى (لا يتداخل: الصفحات والنطاقات بأرقام بعيدة عن أرقام الوحدات) */
+export function summaryCacheKey(src: SummarySource): { id: number; kind: SummaryKind } {
+  const lv = src.level ?? "strict";
+  const page = src.kind === "page";
+  const kind = (`${page ? "page" : ""}${lv === "brief" ? "brief" : lv === "expand" ? "expand" : "study"}summary`) as SummaryKind;
+  if (src.kind === "page") return { id: src.page, kind };
+  if (src.kind === "unit") return { id: src.unit, kind };
+  return { id: 1_000_000 + src.from * 10_000 + src.to, kind };
+}
+
+/** بادئة أرقام أجزاء الملخّص لكل مستوى (أجزاء المستويات لا تتداخل) */
+function partBase(src: SummarySource): number {
+  const k = summaryCacheKey(src);
+  const lv = src.level ?? "strict";
+  const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : 0);
+  return flag * 1e12 + k.id * 1e4;
+}
+
+/**
+ * ما حُفظ قبل المستويات كُتب بأسلوب الكتاب المختار: إن كان «التوسّع» يُنقل لمستوى «الموسّع»
+ * (فلا يظهر الموسّع على أنه «شامل»). مرة واحدة لكل كتاب.
+ */
+const migrated = new Set<string>();
+async function migrateLegacy(pdfPath: string): Promise<void> {
+  if (migrated.has(pdfPath)) return;
+  migrated.add(pdfPath);
+  try {
+    const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
+    const flag = `vsf:sumlevels:v1:${pdfPath}`;
+    if (await AsyncStorage.getItem(flag)) return;
+    if ((await getSummaryMode(pdfPath)) === "expand") {
+      const { listUnitContentCodes } = await import("./unitContent");
+      for (const [from, to] of [["studysummary", "expandsummary"], ["pagestudysummary", "pageexpandsummary"]] as const) {
+        for (const code of await listUnitContentCodes(pdfPath, from)) {
+          const v = await getUnitContent<StudySummary>(pdfPath, code, from);
+          if (v) await setUnitContent(pdfPath, code, to, v);
+          await removeUnitContent(pdfPath, code, from);
+        }
+      }
+    }
+    await AsyncStorage.setItem(flag, "1");
+  } catch {}
 }
 
 export async function getCachedSummary(pdfPath: string, src: SummarySource): Promise<StudySummary | null> {
+  await migrateLegacy(pdfPath);
   const k = summaryCacheKey(src);
   const c = await getUnitContent<StudySummary>(pdfPath, k.id, k.kind).catch(() => null);
   return c?.sections?.length ? c : null;
@@ -54,7 +104,7 @@ export async function summaryRange(pdfPath: string, src: SummarySource): Promise
 export async function clearSummary(pdfPath: string, src: SummarySource): Promise<void> {
   const k = summaryCacheKey(src);
   await removeUnitContent(pdfPath, k.id, k.kind);
-  const base = (k.kind === "pagestudysummary" ? 1 : 2) * 1e12 + k.id * 1e4;
+  const base = partBase(src);
   await removeUnitContentWhere(pdfPath, "studysummarypart", (u) => u >= base && u < base + 1e4);
   try {
     const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
@@ -137,8 +187,8 @@ const parseFullPart = (raw: string) => {
 
 /** معرّف حفظ الجزء i من ملخّص من n أجزاء */
 function summaryPartId(src: SummarySource, n: number): (i: number) => number {
-  const base = summaryCacheKey(src);
-  return (i) => (base.kind === "pagestudysummary" ? 1 : 2) * 1e12 + base.id * 1e4 + n * 100 + i;
+  const base = partBase(src);
+  return (i) => base + n * 100 + i;
 }
 
 /**
@@ -167,7 +217,7 @@ export async function getOrMakeSummary(
   const parts = await summaryParts(pdfPath, src);
   if (!parts.length) return null;
   const n = parts.length;
-  const mode = (await getSummaryMode(pdfPath)) ?? "strict";
+  const mode: SummaryLevel = src.level ?? (await getSummaryMode(pdfPath)) ?? "strict";
   const partId = summaryPartId(src, n);
   const results = await runParts<StudySummary, StudySummary>({
     parts,
@@ -180,7 +230,7 @@ export async function getOrMakeSummary(
     // وكيل الجودة: الجزء الفارغ/المقطوع/القصير جدًا قياسًا بنصه يُعاد توليده مرة واحدة مجانًا
     run: (ctx, i, onPartial) =>
       qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
-        jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: EXERCISE_RE.test(ctx), mode, qaRetryOf }), checkSummaryPart),
+        jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: mode !== "brief" && EXERCISE_RE.test(ctx), mode, qaRetryOf }), checkSummaryPart),
     merge: mergeSummaries,
     onProgress,
     parallel: Math.min(6, n),

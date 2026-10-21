@@ -106,7 +106,8 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
   (async () => {
     const t0 = Date.now();
     try {
-      const summary = (await getCachedSummary(pdfPath, src)) ?? (await summaryFor(pdfPath, src, meta, (p) =>
+      // الفيديو يُبنى من الشامل، أو الموسّع إن كان هو الجاهز (لا يُولَّد ملخّص ثانٍ بلا داعٍ)
+      const summary = (await getCachedSummary(pdfPath, src)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" })) ?? (await summaryFor(pdfPath, src, meta, (p) =>
           // أرقام التقدّم فقط من مهمة الملخّص — لا هويتها (key): نسخها كان يحوّل كل تحديثات الفيديو التالية
           // لعنوان الملخّص فلا تسمعها شاشة الفيديو أبدًا (تبقى متوقفة حتى يُعاد فتحها)
           emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, stage: "summary" }))

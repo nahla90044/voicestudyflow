@@ -150,7 +150,7 @@ export default function UnitQuizScreen() {
         } else {
           // محتوى الوحدة نفسه (لا عنوانها وأهدافها): الملخص الشامل إن وُجد، وإلا نص صفحاتها
           const src = { kind: "unit" as const, unit: unitIdx };
-          const sum = await getCachedSummary(pdfPath, src).catch(() => null);
+          const sum = (await getCachedSummary(pdfPath, src).catch(() => null)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }).catch(() => null));
           if (sum) ctx = summaryToSpeech(sum);
           if (ctx.trim().length < 1500) {
             const range = await summaryRange(pdfPath, src).catch(() => null);
