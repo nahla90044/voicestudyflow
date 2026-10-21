@@ -20,8 +20,10 @@ import { hasSummaryJob, startSummaryJob, summaryJobKey, watchSummaryJob } from "
 import { getUnitContent } from "../lib/unitContent";
 import { markSummaryHeard } from "../lib/readiness";
 import { useScene } from "../lib/scene";
-import { playSummary, saveSummaryAudio, stopSummary, summaryChunks } from "../lib/summaryAudio";
-import { markSeen } from "../lib/studyTrack";
+import { chunkSeconds, playSummary, saveSummaryAudio, shiftChunk, stopSummary, summaryChunks } from "../lib/summaryAudio";
+import { getListenPos, setListenPos } from "../lib/listenPos";
+import { speechCharsPerSec } from "../lib/voice";
+import { getListenAt, markSeen, setListenAt } from "../lib/studyTrack";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 
 export default function UnitSummaryScreen() {
@@ -289,27 +291,64 @@ export default function UnitSummaryScreen() {
     return { chunks: ready.slice(0, -1), final: false };
   }
 
+  // مكان الاستماع: المقطع الحالي، ويُحفظ عند كل انتقال (يكمل منه بعد الإيقاف أو الخروج، وعلى الأجهزة الأخرى)
+  const posKey = `${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`;
+  const [pos, setPos] = useState(0);
+  const posRef = useRef(0);
+  const seekW = useRef(0);
+  useEffect(() => {
+    if (lvl !== "brief") return;
+    void (async () => {
+      const local = await getListenPos(posKey);
+      const synced = src.kind === "unit" ? await getListenAt(pdfPath, unitIdx).catch(() => 0) : 0;
+      posRef.current = Math.max(local, synced);
+      setPos(posRef.current);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lvl, posKey]);
+  const total = sum ? summaryChunks(sum).length : 0;
+  const secs = sum ? chunkSeconds(summaryChunks(sum), speechCharsPerSec()) : [];
+  const fmtClock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+  const elapsedAt = (i: number) => secs.slice(0, i).reduce((a, b) => a + b, 0);
+  const totalSecs = elapsedAt(secs.length);
+  function savePos(i: number) {
+    posRef.current = i;
+    setPos(i);
+    setListenPos(posKey, i);
+    if (src.kind === "unit") setListenAt(pdfPath, unitIdx, i);
+  }
+
+  function playAt(i: number) {
+    if (!sum) return;
+    setPlaying(true);
+    void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
+    // مقطعًا مقطعًا بالترتيب: الملخّص الطويل يُسمع كاملًا
+    playSummary(liveChunks, Math.max(0, Math.min(i, Math.max(0, total - 1))), {
+      // «سُمع»: كل مقطع يُسجَّل لوحدته فيظهر في تقدّم الوحدة، ومكان الوقوف يُحفظ
+      onIndex: (k) => {
+        savePos(k);
+        if (src.kind === "unit") markSeen(pdfPath, unitIdx, "s", k, liveChunks().chunks.length);
+      },
+      onWaiting: setListenWait,
+      onDone: () => {
+        setPlaying(false);
+        setListenWait(false);
+        if (posRef.current >= total - 1) savePos(0); // انتهى كاملًا → التالي من البداية
+      },
+    });
+  }
   function togglePlay() {
     if (playing) {
       stopSummary();
       setPlaying(false);
       setListenWait(false);
-    } else if (sum) {
-      setPlaying(true);
-      void markSummaryHeard(pdfPath); // خطوة «ملخص صوتي» في مسار اليوم تُشطب
-      // مقطعًا مقطعًا بالترتيب: الملخّص الطويل يُسمع كاملًا (كان يُرسل دفعة واحدة فيُقص بعد ٥٠٠٠ حرف)
-      playSummary(liveChunks, 0, {
-        // «سُمع»: كل مقطع يُسجَّل لوحدته فيظهر في تقدّم الوحدة
-        onIndex: (i) => {
-          if (src.kind === "unit") markSeen(pdfPath, unitIdx, "s", i, liveChunks().chunks.length);
-        },
-        onWaiting: setListenWait,
-        onDone: () => {
-          setPlaying(false);
-          setListenWait(false);
-        },
-      });
-    }
+    } else playAt(posRef.current); // من مكان الوقوف (بعد الانتهاء كاملًا يكون ٠)
+  }
+  /** تقديم/إرجاع: إزاحة بالثواني، أو مقطع مباشر (شريط التقدّم والسابق/التالي) */
+  function jump(to: number) {
+    const k = Math.max(0, Math.min(to, Math.max(0, total - 1)));
+    savePos(k);
+    if (playing) playAt(k);
   }
 
   // 🎧 أصوات الأجواء أثناء المذاكرة (مطر، بحر، موسيقى…) — تُمزج مع صوت الملخّص
@@ -390,9 +429,62 @@ export default function UnitSummaryScreen() {
             >
               <Ionicons name={playing ? "pause" : "play"} size={20} color={pal.onAccent} />
               <Text style={[styles.playTxt, { color: pal.onAccent }]}>
-                {playing ? (listenWait ? t("summary.listenWait") : t("syllabus.summary.pause")) : t("syllabus.summary.listen")}
+                {playing
+                  ? listenWait
+                    ? t("summary.listenWait")
+                    : t("syllabus.summary.pause")
+                  : pos > 0
+                    ? t("summary.resumeAt", { t: fmtClock(elapsedAt(pos)) })
+                    : t("syllabus.summary.listen")}
               </Text>
             </Pressable>
+          ) : null}
+          {/* التحكم: السابق · ⏪١٥ · شريط التقدّم · ⏩١٥ · التالي */}
+          {lvl === "brief" && total > 1 ? (
+            <View style={[styles.ctrlCard, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+              <View
+                style={[styles.seekTrack, { backgroundColor: pal.track }]}
+                onStartShouldSetResponder={() => true}
+                onResponderRelease={(e) => {
+                  const w = seekW.current;
+                  if (!w) return;
+                  let x = e.nativeEvent.locationX / w;
+                  if (dir.isRTL) x = 1 - x;
+                  // اللحظة المختارة بالوقت → المقطع الذي تقع فيه
+                  const target = x * totalSecs;
+                  let acc = 0;
+                  let k = 0;
+                  while (k < secs.length - 1 && acc + secs[k] <= target) acc += secs[k++];
+                  jump(k);
+                }}
+                onLayout={(e) => (seekW.current = e.nativeEvent.layout.width)}
+              >
+                <View style={[styles.seekFill, { backgroundColor: pal.accent, width: `${totalSecs ? (elapsedAt(pos) / totalSecs) * 100 : 0}%`, alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]} />
+              </View>
+              <View style={[styles.timeRow, { flexDirection: dir.row }]}>
+                <Text style={[styles.timeTxt, { color: pal.dim }]}>{fmtClock(elapsedAt(pos))}</Text>
+                <Text style={[styles.timeTxt, { color: pal.dim }]}>{fmtClock(totalSecs)}</Text>
+              </View>
+              <View style={[styles.ctrlRow, { flexDirection: dir.row }]}>
+                {(
+                  [
+                    ["play-skip-forward", t("summary.ctrl.prev"), () => jump(pos - 1), dir.isRTL],
+                    ["play-forward", t("summary.ctrl.back15"), () => jump(shiftChunk(secs, pos, -15)), dir.isRTL],
+                    ["play-forward", t("summary.ctrl.fwd15"), () => jump(shiftChunk(secs, pos, 15)), !dir.isRTL],
+                    ["play-skip-forward", t("summary.ctrl.next"), () => jump(pos + 1), !dir.isRTL],
+                  ] as const
+                ).map(([icon, label, onPress, flipIcon], k) => (
+                  <Pressable key={k} onPress={onPress} hitSlop={6} accessibilityLabel={label} style={({ pressed }) => [styles.ctrlBtn, { backgroundColor: pal.soft, opacity: pressed ? 0.75 : 1 }]}>
+                    {k === 1 || k === 2 ? (
+                      // إشارة صريحة بدل اتجاه السهم (في العربية يلتبس اتجاه ⏩/⏪)
+                      <Text style={[styles.ctrlNum, { color: pal.ink }]}>{k === 1 ? t("summary.ctrl.minus15") : t("summary.ctrl.plus15")}</Text>
+                    ) : (
+                      <Ionicons name={icon} size={20} color={pal.ink} style={flipIcon ? undefined : { transform: [{ scaleX: -1 }] }} />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           ) : null}
 
           {/* 🎬 ملخّص فيديو للوحدة نفسها (يُبنى من هذا الملخّص) */}
@@ -475,6 +567,14 @@ export default function UnitSummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  ctrlCard: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, padding: 14, gap: 8 },
+  seekTrack: { height: 10, borderRadius: 5, overflow: "hidden", justifyContent: "center" },
+  seekFill: { height: 10, borderRadius: 5 },
+  timeRow: { justifyContent: "space-between" },
+  timeTxt: { fontSize: 12.5, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  ctrlRow: { justifyContent: "space-between", gap: 8 },
+  ctrlBtn: { flex: 1, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 4 },
+  ctrlNum: { fontSize: 16, fontWeight: "900", fontVariant: ["tabular-nums"] },
   levelChip: { alignSelf: "flex-start", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
   levelTxt: { fontSize: 13.5, fontWeight: "900" },
   levelChange: { fontSize: 13, fontWeight: "800" },

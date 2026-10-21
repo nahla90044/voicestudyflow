@@ -12,7 +12,7 @@ import { distribute, fitSchedule, type BookSchedule } from "./scheduleCore";
 import { supabase } from "./supabase";
 import type { UnitRange } from "./glossaryCore";
 
-type Seen = { s?: number[]; st?: number; v?: number[]; vt?: number; p?: number[] };
+type Seen = { s?: number[]; st?: number; v?: number[]; vt?: number; p?: number[]; at?: number; atT?: number }; // at: مكان الوقوف في صوت المختصر، atT: وقته
 /** مفاتيح الوحدات أرقام ("0", "1"…)؛ و"pages" للصفحات المذاكَرة من الكتاب كله */
 export type RawProgress = Record<string, Seen>;
 const PAGES = "pages";
@@ -34,7 +34,8 @@ function merge(a: RawProgress, b: RawProgress): RawProgress {
   const out: RawProgress = { ...a };
   for (const [k, v] of Object.entries(b)) {
     const o = out[k] ?? {};
-    out[k] = { s: union(o.s, v.s), st: Math.max(o.st ?? 0, v.st ?? 0), v: union(o.v, v.v), vt: Math.max(o.vt ?? 0, v.vt ?? 0), p: union(o.p, v.p) };
+    const newer = (v.atT ?? 0) >= (o.atT ?? 0) ? v : o; // مكان الوقوف: الأحدث من أي جهاز
+    out[k] = { s: union(o.s, v.s), st: Math.max(o.st ?? 0, v.st ?? 0), v: union(o.v, v.v), vt: Math.max(o.vt ?? 0, v.vt ?? 0), p: union(o.p, v.p), at: newer.at, atT: newer.atT };
   }
   return out;
 }
@@ -93,6 +94,18 @@ export function markSeen(pdfPath: string, unit: number, kind: "s" | "v", index: 
   cur[String(unit)] = kind === "s" ? { ...u, s: union(u.s, [index]), st: Math.max(u.st ?? 0, total) } : { ...u, v: union(u.v, [index]), vt: Math.max(u.vt ?? 0, total) };
   mem.set(pdfPath, cur);
   schedulePush(pdfPath);
+}
+
+/** مكان الوقوف في صوت ملخّص الوحدة المختصر (يتزامن بين الأجهزة) */
+export function setListenAt(pdfPath: string, unit: number, index: number): void {
+  if (!pdfPath || unit < 0) return;
+  const cur = mem.get(pdfPath) ?? {};
+  cur[String(unit)] = { ...(cur[String(unit)] ?? {}), at: Math.max(0, Math.floor(index)), atT: Date.now() };
+  mem.set(pdfPath, cur);
+  schedulePush(pdfPath);
+}
+export async function getListenAt(pdfPath: string, unit: number): Promise<number> {
+  return (await getRawProgress(pdfPath))[String(unit)]?.at ?? 0;
 }
 
 /** المشاهد المشاهَدة من فيديو وحدة (لعلامة «شوهد» على كل مشهد) */

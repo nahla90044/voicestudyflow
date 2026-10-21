@@ -82,3 +82,5 @@ export async function saveSummaryAudio(s: StudySummary, voiceId = DEFAULT_VOICE_
     onProgress?.(i + 1, chunks.length);
   }
 }
+
+export { chunkSeconds, shiftChunk } from "./seekCore";
