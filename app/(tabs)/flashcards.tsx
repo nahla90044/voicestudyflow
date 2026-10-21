@@ -2,12 +2,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { cachedCardImage, cardImageAvgSecs, cardImagesBlocked, getCardImage } from "../../lib/cardImage";
 
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { CardChoices } from "../../components/brand/card-choices";
+import { cardLook } from "../../lib/cardLook";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCards, removeCardsForBook, reviewCard, setCardFav, type Card, type Rating } from "../../lib/flashcards";
@@ -481,12 +482,32 @@ export default function FlashcardsScreen() {
     setIdx((i) => i + 1);
   }
 
+  // السحب يمينًا/يسارًا للتنقل السريع بين البطاقات (بالعربية: لليمين = التالية)
+  const goCardRef = useRef<(d: number) => void>(() => {});
+  const slide = useRef(new Animated.Value(0)).current;
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
+        onPanResponderTerminationRequest: () => false, // التمرير العمودي للصفحة لا يقطع سحب البطاقة
+        onPanResponderMove: (_, g) => slide.setValue(g.dx),
+        onPanResponderRelease: (_, g) => {
+          if (Math.abs(g.dx) > 70 || Math.abs(g.vx) > 0.6) goCardRef.current((g.dx > 0) === dir.isRTL ? 1 : -1);
+          Animated.spring(slide, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }).start();
+        },
+        onPanResponderTerminate: () => Animated.spring(slide, { toValue: 0, useNativeDriver: true }).start(),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dir.isRTL]
+  );
+
   // تنقّل حرّ بين البطاقات (بلا تقييم) — للأمام/الخلف
   function goCard(delta: number) {
     flip.setValue(0);
     setFlipped(false);
     setIdx((i) => Math.min(Math.max(0, i + delta), Math.max(0, queue.length - 1)));
   }
+  goCardRef.current = goCard;
 
   // المفضلة: تُحفظ فورًا وتنعكس على البطاقة المعروضة
   async function toggleFav() {
@@ -1057,15 +1078,23 @@ export default function FlashcardsScreen() {
             <View style={[styles.deck, styles.deck2, { backgroundColor: pal.track, borderColor: pal.cardBorder }]} />
             <View style={[styles.deck, styles.deck1, { backgroundColor: pal.soft, borderColor: pal.cardBorder, shadowColor: cardShadow }]} />
 
-            <Pressable {...studyCoach.bind("card")} onPress={card?.opts && !flipped ? undefined : toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
+            <Animated.View {...swipe.panHandlers} style={[styles.press, { transform: [{ translateX: slide }] }]}>
+            <Pressable {...studyCoach.bind("card")} onPress={card?.opts && !flipped ? undefined : toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={{ flex: 1 }}>
               <Animated.View
                 pointerEvents={flipped ? "none" : "box-none"}
                 style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: cardShadow }]}
               >
+                <View style={[styles.kindStrip, { backgroundColor: cardLook(card?.kind).color }]} />
                 <View style={styles.faceInner}>
-                  <View style={[styles.chip, { backgroundColor: pal.soft }]}>
-                    <Text style={[styles.chipTxt, { color: pal.accent }]} numberOfLines={1}>
-                      {card?.bookTitle || bookName || t("flashcards.question")}
+                  <View style={[styles.kindRow, { flexDirection: dir.row }]}>
+                    <View style={[styles.chip, { flexDirection: dir.row, gap: 5, backgroundColor: cardLook(card?.kind).color + "1A" }]}>
+                      <Ionicons name={cardLook(card?.kind).icon} size={13} color={cardLook(card?.kind).color} />
+                      <Text style={[styles.chipTxt, { color: cardLook(card?.kind).color }]} numberOfLines={1}>
+                        {t(cardLook(card?.kind).label)}
+                      </Text>
+                    </View>
+                    <Text style={[styles.chipTxt, { color: pal.dim, flexShrink: 1 }]} numberOfLines={1}>
+                      {card?.bookTitle || bookName}
                     </Text>
                   </View>
                   {/* صورة توضيحية للبطاقة (تسهيل الحفظ) — أول مرة تُجهَّز مع عدّاد ووقت متوقَّع */}
@@ -1125,6 +1154,7 @@ export default function FlashcardsScreen() {
                 </View>
               </Animated.View>
             </Pressable>
+            </Animated.View>
 
             {/* المفضلة: نجمة في الزاوية المقابلة */}
             {card ? (
@@ -1360,6 +1390,8 @@ const styles = StyleSheet.create({
   faceMid: { flex: 1, alignSelf: "stretch", alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 2 },
   chip: { maxWidth: "70%", paddingVertical: 5, paddingHorizontal: 12, borderRadius: Radius.pill },
   chipTxt: { fontSize: 12, fontWeight: "800" },
+  kindStrip: { position: "absolute", top: 0, left: 0, right: 0, height: 7, borderTopLeftRadius: 28, borderTopRightRadius: 28, zIndex: 2 },
+  kindRow: { alignSelf: "stretch", alignItems: "center", justifyContent: "space-between", gap: 8 },
   faceLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5 },
   faceText: { fontWeight: "800", textAlign: "center" },
   faceScroll: { flexGrow: 0, alignSelf: "stretch" },

@@ -5,12 +5,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { CARD_TYPES, generateFlashcards, type CardChoice } from "../lib/ai";
 import { CardChoices } from "../components/brand/card-choices";
+import { cardLook } from "../lib/cardLook";
 import { addCards, getCards, removeCard, reviewCard, setCardFav, type Card, type Rating } from "../lib/flashcards";
 import { getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
@@ -75,6 +76,7 @@ export default function UnitCardsScreen() {
   }, [load]);
 
   const card = cards?.[idx];
+  const look = cardLook(card?.kind);
   const title = unit !== null ? unitTitle || t("glossary.unitN", { n: unit + 1 }) : t("flashcards.bookAll");
 
   function resetFace() {
@@ -95,6 +97,27 @@ export default function UnitCardsScreen() {
     resetFace();
     setIdx((i) => Math.min(cards.length - 1, Math.max(0, i + d)));
   }
+  // السحب يمينًا/يسارًا للتنقل السريع (بالعربية: السحب لليمين = التالية، كتقليب الكتاب)
+  const isRTL = dir.isRTL;
+  const goRef = useRef(go);
+  goRef.current = go;
+  const slide = useRef(new Animated.Value(0)).current;
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
+        onPanResponderTerminationRequest: () => false, // التمرير العمودي للصفحة لا يقطع سحب البطاقة
+        onPanResponderMove: (_, g) => slide.setValue(g.dx),
+        onPanResponderRelease: (_, g) => {
+          const far = Math.abs(g.dx) > 70 || Math.abs(g.vx) > 0.6;
+          if (far) goRef.current((g.dx > 0) === isRTL ? 1 : -1);
+          Animated.spring(slide, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }).start();
+        },
+        onPanResponderTerminate: () => Animated.spring(slide, { toValue: 0, useNativeDriver: true }).start(),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
   async function rate(r: Rating) {
     if (!card) return;
     await reviewCard(card.id, r);
@@ -225,10 +248,24 @@ export default function UnitCardsScreen() {
           ) : card ? (
             <>
               {/* البطاقة */}
-              <View style={styles.cardArea}>
+              {/* التقدّم في المجموعة */}
+              <View style={[styles.progRow, { flexDirection: dir.row }]}>
+                <View style={[styles.progTrack, { backgroundColor: pal.track }]}>
+                  <View style={[styles.progFill, { backgroundColor: look.color, width: `${((idx + 1) / cards.length) * 100}%`, alignSelf: dir.isRTL ? "flex-end" : "flex-start" }]} />
+                </View>
+                <Text style={[styles.progTxt, { color: pal.dim }]}>{t("ucards.pos", { n: idx + 1, total: cards.length })}</Text>
+              </View>
+              <Animated.View {...swipe.panHandlers} style={[styles.cardArea, { transform: [{ translateX: slide }] }]}>
                 <Pressable onPress={card.opts && !flipped ? undefined : toggleFlip} style={{ flex: 1 }}>
                   <Animated.View pointerEvents={flipped ? "none" : "box-none"} style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
-                    <Text style={[styles.faceLbl, { color: pal.dim }]}>{t("flashcards.question")}</Text>
+                    <View style={[styles.strip, { backgroundColor: look.color }]} />
+                    <View style={[styles.badgeRow, { flexDirection: dir.row }]}>
+                      <View style={[styles.badge, { flexDirection: dir.row, backgroundColor: look.color + "1A" }]}>
+                        <Ionicons name={look.icon} size={14} color={look.color} />
+                        <Text style={[styles.badgeTxt, { color: look.color }]}>{t(look.label)}</Text>
+                      </View>
+                      {card.fav ? <Ionicons name="star" size={16} color="#E0A800" /> : null}
+                    </View>
                     <ScrollView contentContainerStyle={styles.faceIn} showsVerticalScrollIndicator={false}>
                       <Text style={[styles.faceTxt, { color: pal.ink }]}>{card.front}</Text>
                     </ScrollView>
@@ -246,8 +283,14 @@ export default function UnitCardsScreen() {
                     ) : null}
                     <Text style={[styles.hint, { color: pal.accent }]}>{card.opts ? t("flashcards.pickAnswer") : t("flashcards.tapToFlip")}</Text>
                   </Animated.View>
-                  <Animated.View pointerEvents={flipped ? "box-none" : "none"} style={[styles.face, backStyle, { backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
-                    <Text style={[styles.faceLbl, { color: pal.accent }]}>{t("flashcards.answer")}</Text>
+                  <Animated.View pointerEvents={flipped ? "box-none" : "none"} style={[styles.face, backStyle, { backgroundColor: pal.soft, borderColor: look.color + "66" }]}>
+                    <View style={[styles.strip, { backgroundColor: look.color }]} />
+                    <View style={[styles.badgeRow, { flexDirection: dir.row }]}>
+                      <View style={[styles.badge, { flexDirection: dir.row, backgroundColor: look.color + "1A" }]}>
+                        <Ionicons name="bulb-outline" size={14} color={look.color} />
+                        <Text style={[styles.badgeTxt, { color: look.color }]}>{t("flashcards.answer")}</Text>
+                      </View>
+                    </View>
                     <ScrollView contentContainerStyle={styles.faceIn} showsVerticalScrollIndicator={false}>
                       <Text style={[styles.faceTxt, { color: pal.ink }]}>{card.back}</Text>
                     </ScrollView>
@@ -258,9 +301,6 @@ export default function UnitCardsScreen() {
                   <Pressable onPress={listen} hitSlop={8} style={[styles.round, { backgroundColor: speaking ? pal.accent : pal.card }]} accessibilityLabel={t("ask.listen")}>
                     <Ionicons name={speaking ? "stop" : "volume-high"} size={17} color={speaking ? pal.onAccent : pal.accent} />
                   </Pressable>
-                  <Text style={[styles.pos, { color: pal.dim }]}>
-                    {idx + 1} / {cards.length}
-                  </Text>
                   <Pressable onPress={() => void toggleFav()} hitSlop={8} style={[styles.round, { backgroundColor: card.fav ? "#F6C445" : pal.card }]} accessibilityLabel={t("flashcards.fav")}>
                     <Ionicons name={card.fav ? "star" : "star-outline"} size={17} color={card.fav ? "#3A2A00" : pal.accent} />
                   </Pressable>
@@ -268,7 +308,7 @@ export default function UnitCardsScreen() {
                     <Ionicons name="trash-outline" size={17} color="#D9485A" />
                   </Pressable>
                 </View>
-              </View>
+              </Animated.View>
 
               {/* التنقل */}
               <View style={[styles.navRow, { flexDirection: dir.row }]}>
@@ -319,11 +359,33 @@ const styles = StyleSheet.create({
   genTxt: { fontSize: 14, fontWeight: "900" },
   emptyTitle: { fontSize: 16, fontWeight: "900" },
   emptyBody: { fontSize: 14, lineHeight: 22 },
-  cardArea: { height: 380, gap: 10 },
-  face: { ...StyleSheet.absoluteFillObject, borderRadius: 26, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.lg, alignItems: "center", backfaceVisibility: "hidden" },
+  cardArea: { height: 440, gap: 12 },
+  face: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.lg,
+    paddingTop: Spacing.lg + 6,
+    alignItems: "center",
+    gap: 10,
+    backfaceVisibility: "hidden",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  strip: { position: "absolute", top: 0, left: 0, right: 0, height: 7 },
+  badgeRow: { alignSelf: "stretch", alignItems: "center", justifyContent: "space-between" },
+  badge: { alignItems: "center", gap: 6, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 999 },
+  badgeTxt: { fontSize: 12.5, fontWeight: "900" },
+  progRow: { alignItems: "center", gap: 10 },
+  progTrack: { flex: 1, height: 6, borderRadius: 3, overflow: "hidden" },
+  progFill: { height: 6, borderRadius: 3 },
+  progTxt: { fontSize: 13, fontWeight: "800", fontVariant: ["tabular-nums"] },
   faceLbl: { fontSize: 12.5, fontWeight: "800" },
-  faceIn: { flexGrow: 1, justifyContent: "center" },
-  faceTxt: { fontSize: 21, lineHeight: 34, fontWeight: "800", textAlign: "center" },
+  faceIn: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 6 },
+  faceTxt: { fontSize: 24, lineHeight: 38, fontWeight: "900", textAlign: "center" },
   hint: { fontSize: 13, fontWeight: "800" },
   cardTools: { alignItems: "center", justifyContent: "center", gap: 14 },
   round: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
