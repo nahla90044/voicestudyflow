@@ -10,6 +10,7 @@ import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { CARD_TYPES, generateFlashcards, type CardType } from "../lib/ai";
+import { CardChoices } from "../components/brand/card-choices";
 import { addCards, getCards, removeCard, reviewCard, setCardFav, type Card, type Rating } from "../lib/flashcards";
 import { getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
@@ -40,6 +41,7 @@ export default function UnitCardsScreen() {
   const [cards, setCards] = useState<Card[] | null>(null);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [picked, setPicked] = useState<number | null>(null); // إجابة بطاقة صح/خطأ أو اختيار من متعدد
   const [busy, setBusy] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const flip = useRef(new Animated.Value(0)).current;
@@ -78,6 +80,7 @@ export default function UnitCardsScreen() {
   function resetFace() {
     flip.setValue(0);
     setFlipped(false);
+    setPicked(null);
     if (speaking) {
       void stopSpeaking();
       setSpeaking(false);
@@ -223,15 +226,27 @@ export default function UnitCardsScreen() {
             <>
               {/* البطاقة */}
               <View style={styles.cardArea}>
-                <Pressable onPress={toggleFlip} style={{ flex: 1 }}>
-                  <Animated.View style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
+                <Pressable onPress={card.opts && !flipped ? undefined : toggleFlip} style={{ flex: 1 }}>
+                  <Animated.View pointerEvents={flipped ? "none" : "box-none"} style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
                     <Text style={[styles.faceLbl, { color: pal.dim }]}>{t("flashcards.question")}</Text>
                     <ScrollView contentContainerStyle={styles.faceIn} showsVerticalScrollIndicator={false}>
                       <Text style={[styles.faceTxt, { color: pal.ink }]}>{card.front}</Text>
                     </ScrollView>
-                    <Text style={[styles.hint, { color: pal.accent }]}>{t("flashcards.tapToFlip")}</Text>
+                    {card.opts && card.ans !== undefined ? (
+                      <CardChoices
+                        opts={card.opts}
+                        ans={card.ans}
+                        picked={picked}
+                        row={card.kind === "tf"}
+                        onPick={(i) => {
+                          setPicked(i);
+                          setTimeout(() => !flipped && toggleFlip(), 900); // يرى التلوين ثم يُقلب للشرح
+                        }}
+                      />
+                    ) : null}
+                    <Text style={[styles.hint, { color: pal.accent }]}>{card.opts ? t("flashcards.pickAnswer") : t("flashcards.tapToFlip")}</Text>
                   </Animated.View>
-                  <Animated.View style={[styles.face, backStyle, { backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
+                  <Animated.View pointerEvents={flipped ? "box-none" : "none"} style={[styles.face, backStyle, { backgroundColor: pal.soft, borderColor: pal.accent + "55" }]}>
                     <Text style={[styles.faceLbl, { color: pal.accent }]}>{t("flashcards.answer")}</Text>
                     <ScrollView contentContainerStyle={styles.faceIn} showsVerticalScrollIndicator={false}>
                       <Text style={[styles.faceTxt, { color: pal.ink }]}>{card.back}</Text>

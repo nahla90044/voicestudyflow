@@ -5,6 +5,7 @@
 // - التشغيل يبدأ مع أول مشهد جاهز بينما يُكتب الباقي.
 // - السيناريو يُخزَّن، وصوت الراوي يُحفظ على الجهاز أثناء المشاهدة، فالعودة فورية وبلا إنترنت.
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { LinearGradient } from "expo-linear-gradient";
@@ -47,6 +48,18 @@ export default function UnitVideoScreen() {
   const src: SummarySource = pageMode ? { kind: "page", page: pageNum } : rangeMode ? { kind: "range", from: fromN, to: toN } : { kind: "unit", unit: unitIdx };
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
+
+  // دوائر المشاهد: ظاهرة أو مخفية حسب آخر اختيار
+  const [showDots, setShowDots] = useState(true);
+  useEffect(() => {
+    AsyncStorage.getItem("vsf:video:dots").then((v) => v === "0" && setShowDots(false)).catch(() => {});
+  }, []);
+  function toggleDots() {
+    setShowDots((v) => {
+      AsyncStorage.setItem("vsf:video:dots", v ? "0" : "1").catch(() => {});
+      return !v;
+    });
+  }
 
   // —— التجهيز ——
   const [job, setJob] = useState<VideoJob | null>(null);
@@ -556,9 +569,15 @@ export default function UnitVideoScreen() {
             {/* المشاهد: المشاهَد ✓ بلون واضح، والحالي بإطار — الضغط يشغّل من المشهد */}
             {src.kind === "unit" && scenes.length ? (
               <>
-                <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>
-                  {t("video.seenCount", { n: [...seen].filter((k) => k < scenes.length).length, total: scenes.length })}
-                </Text>
+                {/* إظهار/إخفاء دوائر المشاهد (طلب نهلة) — يُحفظ الاختيار */}
+                <Pressable onPress={toggleDots} hitSlop={8} style={[styles.dotsToggle, { flexDirection: dir.row }]} accessibilityRole="button">
+                  <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign, flex: 1 }]}>
+                    {t("video.seenCount", { n: [...seen].filter((k) => k < scenes.length).length, total: scenes.length })}
+                  </Text>
+                  <Text style={[styles.dotsToggleTxt, { color: pal.accent }]}>{showDots ? t("video.dotsHide") : t("video.dotsShow")}</Text>
+                  <Ionicons name={showDots ? "chevron-up" : "chevron-down"} size={16} color={pal.accent} />
+                </Pressable>
+                {showDots ? (
                 <View style={[styles.seenRow, { flexDirection: dir.row }]}>
                   {scenes.map((_, k) => {
                     const on = seen.has(k);
@@ -575,6 +594,7 @@ export default function UnitVideoScreen() {
                     );
                   })}
                 </View>
+                ) : null}
               </>
             ) : null}
             {complete ? (
@@ -657,6 +677,8 @@ export default function UnitVideoScreen() {
 
 const styles = StyleSheet.create({
   seenRow: { flexWrap: "wrap", gap: 6 },
+  dotsToggle: { alignItems: "center", gap: 6 },
+  dotsToggleTxt: { fontSize: 13, fontWeight: "800" },
   seenDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   seenNum: { fontSize: 10.5, fontWeight: "800" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: Spacing.xl, gap: 14 },

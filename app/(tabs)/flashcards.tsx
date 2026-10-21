@@ -7,6 +7,7 @@ import { Image } from "expo-image";
 import { cachedCardImage, cardImageAvgSecs, cardImagesBlocked, getCardImage } from "../../lib/cardImage";
 
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
+import { CardChoices } from "../../components/brand/card-choices";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCards, removeCardsForBook, reviewCard, setCardFav, type Card, type Rating } from "../../lib/flashcards";
@@ -388,6 +389,30 @@ export default function FlashcardsScreen() {
     setMode("review");
   }
 
+  /** 🔀 خلطة من كل البطاقات: كل الكتب والوحدات، المستحق للمراجعة أولًا ثم الباقي عشوائيًا */
+  function startMix() {
+    const today = todayISO();
+    const pool = all.filter((c) => inView(c));
+    if (!pool.length) return;
+    const shuffle = (a: Card[]) => {
+      const x = [...a];
+      for (let i = x.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [x[i], x[j]] = [x[j], x[i]];
+      }
+      return x;
+    };
+    const q = [...shuffle(pool.filter((c) => c.due <= today)), ...shuffle(pool.filter((c) => c.due > today))];
+    groupRef.current = (c: Card) => inView(c);
+    setReviewUnit(undefined);
+    setQueue(q);
+    setBookName(t("flashcards.mix"));
+    setIdx(0);
+    setFlipped(false);
+    flip.setValue(0);
+    setMode("review");
+  }
+
   function offerGenerate(key: string, unit: number, bu: BookUnits) {
     const r = bu.ranges[unit];
     Alert.alert(t("flashcards.unitEmptyTitle"), t("flashcards.unitEmptyBody", { from: r.from, to: r.to }), [
@@ -444,6 +469,9 @@ export default function FlashcardsScreen() {
     Animated.spring(flip, { toValue: flipped ? 0 : 180, useNativeDriver: true, friction: 9, tension: 12 }).start();
     setFlipped((f) => !f);
   }
+  // إجابة بطاقة صح/خطأ أو اختيار من متعدد (تُصفَّر مع كل بطاقة جديدة)
+  const [answer, setAnswer] = useState<number | null>(null);
+  useEffect(() => setAnswer(null), [idx, mode]);
 
   async function rate(r: Rating) {
     const card = queue[idx];
@@ -822,6 +850,17 @@ export default function FlashcardsScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.pickerWrap} showsVerticalScrollIndicator={false}>
+            {!selecting ? (
+              <Pressable onPress={startMix}>
+                <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: pal.accent + "1A", borderColor: pal.accent + "66" }]}>
+                  <Ionicons name="shuffle" size={22} color={pal.accent} />
+                  <View style={styles.bookInfo}>
+                    <Text style={[styles.bookTitle, { textAlign: dir.textAlign, color: pal.ink }]}>{t("flashcards.mix")}</Text>
+                    <Text style={[styles.bookSub, { textAlign: dir.textAlign, color: pal.dim }]}>{t("flashcards.mixSub")}</Text>
+                  </View>
+                </SceneCard>
+              </Pressable>
+            ) : null}
             {favCount > 0 && !selecting ? (
               <Pressable onPress={() => startBook(FAV, t("flashcards.favorites"))}>
                 <SceneCard style={[styles.bookRow, { flexDirection: dir.row, backgroundColor: "#F6C44522", borderColor: "#F6C44577" }]}>
@@ -1018,8 +1057,9 @@ export default function FlashcardsScreen() {
             <View style={[styles.deck, styles.deck2, { backgroundColor: pal.track, borderColor: pal.cardBorder }]} />
             <View style={[styles.deck, styles.deck1, { backgroundColor: pal.soft, borderColor: pal.cardBorder, shadowColor: cardShadow }]} />
 
-            <Pressable {...studyCoach.bind("card")} onPress={toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
+            <Pressable {...studyCoach.bind("card")} onPress={card?.opts && !flipped ? undefined : toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={styles.press}>
               <Animated.View
+                pointerEvents={flipped ? "none" : "box-none"}
                 style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder, shadowColor: cardShadow }]}
               >
                 <View style={styles.faceInner}>
@@ -1045,6 +1085,19 @@ export default function FlashcardsScreen() {
                     <ScrollView style={styles.faceScroll} contentContainerStyle={styles.faceScrollIn} showsVerticalScrollIndicator={false}>
                       <Text style={[styles.faceText, faceSize(card?.front, fontScale), { color: pal.ink }]}>{card?.front}</Text>
                     </ScrollView>
+                    {card?.opts && card.ans !== undefined ? (
+                      <CardChoices
+                        opts={card.opts}
+                        ans={card.ans}
+                        picked={answer}
+                        row={card.kind === "tf"}
+                        onPick={(i) => {
+                          setAnswer(i);
+                          setTimeout(() => !flipped && toggleFlip(), 900);
+                        }}
+                      />
+                    ) : null}
+
                   </View>
                   <View style={[styles.tapHintRow, { flexDirection: dir.row }]}>
                     <Ionicons name="sync" size={13} color={pal.accent} />
@@ -1053,6 +1106,7 @@ export default function FlashcardsScreen() {
                 </View>
               </Animated.View>
               <Animated.View
+                pointerEvents={flipped ? "box-none" : "none"}
                 style={[styles.face, backStyle, { backgroundColor: pal.card, borderColor: pal.accent + "55", shadowColor: cardShadow }]}
               >
                 <View style={[styles.faceInner, { backgroundColor: pal.soft }]}>

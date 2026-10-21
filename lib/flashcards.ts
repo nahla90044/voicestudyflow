@@ -17,7 +17,10 @@ export type Card = {
   due: string; // YYYY-MM-DD
   createdAt: string;
   archived?: boolean; // مؤرشفة → تُستثنى من المراجعة وتظهر في «المؤرشفة»
-  kind?: "words" | "definitions" | "qa" | "compare"; // نوع البطاقة (الصورة لمعاني الكلمات فقط)
+  kind?: "words" | "definitions" | "qa" | "compare" | "tf" | "fill" | "mcq"; // نوع البطاقة (الصورة لمعاني الكلمات فقط)
+  /** صح/خطأ واختيار من متعدد: الخيارات ورقم الصحيح منها (تُجاب بالضغط ثم يظهر الشرح) */
+  opts?: string[];
+  ans?: number;
   fav?: boolean; // في «المفضلة» (مجموعة خاصة للمراجعة وحدها)
   page?: number; // صفحة المصدر في الكتاب → وحدتها تُستنتج من صفحات الوحدات (تبقى صحيحة إن أُعيد إنشاء المنهج)
 };
@@ -56,7 +59,7 @@ async function save(cards: Card[]): Promise<void> {
 
 /** يضيف بطاقات جديدة (تستحق المراجعة اليوم). */
 export async function addCards(
-  items: { front: string; back: string; bookId?: string; bookTitle?: string; kind?: Card["kind"]; page?: number }[]
+  items: { front: string; back: string; bookId?: string; bookTitle?: string; kind?: Card["kind"]; page?: number; opts?: string[]; ans?: number }[]
 ): Promise<number> {
   const clean = items.filter((i) => i.front?.trim() && i.back?.trim());
   if (clean.length === 0) return 0;
@@ -70,6 +73,7 @@ export async function addCards(
       bookId: i.bookId,
       bookTitle: i.bookTitle,
       kind: i.kind,
+      ...(i.opts && i.opts.length >= 2 && Number.isInteger(i.ans) && i.ans! >= 0 && i.ans! < i.opts.length ? { opts: i.opts, ans: i.ans } : {}),
       ...(Number.isFinite(i.page) && (i.page as number) >= 1 ? { page: Math.floor(i.page as number) } : {}),
       box: 0,
       due: today,
