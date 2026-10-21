@@ -378,14 +378,17 @@ function shuffleCard(c: GenCard): GenCard {
 /** يولّد بطاقات مراجعة (سؤال/إجابة) من نص عبر الذكاء (بعدد اختياري). */
 /** نوع البطاقات المولّدة (يختاره الطالب). الصور التوضيحية لمعاني الكلمات فقط */
 export type CardType = "words" | "definitions" | "qa" | "compare" | "tf" | "fill" | "mcq";
-export const CARD_TYPES: CardType[] = ["words", "definitions", "qa", "compare", "tf", "fill", "mcq"];
+/** «منوّعة»: من كل الأنواع بطلب واحد (كل بطاقة تحمل نوعها) */
+export type CardChoice = CardType | "mixed";
+export const CARD_TYPES: CardChoice[] = ["mixed", "words", "definitions", "qa", "compare", "tf", "fill", "mcq"];
+const BASE_TYPES: CardType[] = ["words", "definitions", "qa", "compare", "tf", "fill", "mcq"];
 
-export type GenCard = { front: string; back: string; opts?: string[]; ans?: number };
+export type GenCard = { front: string; back: string; opts?: string[]; ans?: number; kind: CardType };
 
 export async function generateFlashcards(
   text: string,
   count?: number,
-  cardType?: CardType
+  cardType: CardChoice = "qa"
 ): Promise<GenCard[]> {
   const raw = await aiAssist("flashcards", text, undefined, undefined, count, undefined, cardType);
   // استخرج مصفوفة JSON حتى لو لفّها الموديل بنص أو ```json
@@ -396,15 +399,16 @@ export async function generateFlashcards(
     if (!Array.isArray(arr)) return [];
     return arr
       .map((c: any): GenCard => {
-        const card: GenCard = { front: String(c?.front ?? "").trim(), back: String(c?.back ?? "").trim() };
+        const kind: CardType = cardType === "mixed" ? (BASE_TYPES.includes(c?.kind) ? c.kind : "qa") : cardType;
+        const card: GenCard = { front: String(c?.front ?? "").trim(), back: String(c?.back ?? "").trim(), kind };
         const opts = Array.isArray(c?.opts) ? c.opts.map((o: unknown) => String(o).trim()).filter(Boolean) : [];
         const ans = Number(c?.ans);
-        if (cardType === "tf") return { ...card, opts: ["صح", "خطأ"], ans: ans === 1 ? 1 : 0 };
-        if (cardType === "mcq" && opts.length >= 2 && Number.isInteger(ans) && ans >= 0 && ans < opts.length) return shuffleCard({ ...card, opts, ans });
+        if (kind === "tf") return { ...card, opts: ["صح", "خطأ"], ans: ans === 1 ? 1 : 0 };
+        if (kind === "mcq" && opts.length >= 2 && Number.isInteger(ans) && ans >= 0 && ans < opts.length) return shuffleCard({ ...card, opts, ans });
         return card;
       })
       // اختيار من متعدد بلا خيارات صالحة لا يُحفظ (بطاقة ناقصة)
-      .filter((c) => c.front && c.back && (cardType !== "mcq" || !!c.opts));
+      .filter((c) => c.front && c.back && (c.kind !== "mcq" || !!c.opts));
   } catch {
     return [];
   }

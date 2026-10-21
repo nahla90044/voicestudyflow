@@ -36,7 +36,7 @@ import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
 import { getPlan, getUsage, planLimits, requestPaywall } from "../../lib/plan";
-import { aiAssist, CARD_TYPES, defineWord, generateFlashcards, type CardType, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
+import { aiAssist, CARD_TYPES, defineWord, generateFlashcards, type CardChoice, generateSlides, generateUnitSlides, type AiAction, type Slide } from "../../lib/ai";
 import { addSave, cardsHtml, sharePdf, slidesHtml, textHtml } from "../../lib/studySaves";
 import { unitForPage, unitText, type UnitScope } from "../../lib/unitScope";
 import { getBookAudio, pauseBookAudio, startBookAudio, watchBookAudio, type BookAudio } from "../../lib/bookAudio";
@@ -2283,7 +2283,7 @@ export default function ReaderScreen() {
     ]);
   }
 
-  async function makeFlashcards(cardType: CardType = "qa") {
+  async function makeFlashcards(cardType: CardChoice = "qa") {
     setAiOpen(true);
     setAiBusy(true);
     setAiResult("");
@@ -2300,7 +2300,7 @@ export default function ReaderScreen() {
         return;
       }
       const bookTitle = typeof title === "string" ? title : undefined;
-      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle, kind: cardType, page })));
+      const n = await addCards(cards.map((c) => ({ ...c, bookId, bookTitle, page })));
       setAiCards(cards);
       setAiResult(t("reader.ai.cardsSaved", { count: n }));
     } catch {

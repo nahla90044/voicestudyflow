@@ -9,7 +9,7 @@ import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, 
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
-import { CARD_TYPES, generateFlashcards, type CardType } from "../lib/ai";
+import { CARD_TYPES, generateFlashcards, type CardChoice } from "../lib/ai";
 import { CardChoices } from "../components/brand/card-choices";
 import { addCards, getCards, removeCard, reviewCard, setCardFav, type Card, type Rating } from "../lib/flashcards";
 import { getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
@@ -142,7 +142,7 @@ export default function UnitCardsScreen() {
       { text: t("common.cancel"), style: "cancel" as const },
     ]);
   }
-  async function generate(ct: CardType) {
+  async function generate(ct: CardChoice) {
     if (!range) return;
     setBusy(true);
     try {
@@ -150,7 +150,7 @@ export default function UnitCardsScreen() {
       if (!text.trim()) throw new Error("empty");
       const made = await generateFlashcards(text, 12, ct);
       if (!made.length) throw new Error("empty");
-      await addCards(made.map((c) => ({ ...c, bookId, bookTitle, kind: ct, page: range.from })));
+      await addCards(made.map((c) => ({ ...c, bookId, bookTitle, page: range.from })));
       setIdx(0);
       resetFace();
       await load();

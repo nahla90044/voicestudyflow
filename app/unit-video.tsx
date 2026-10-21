@@ -26,7 +26,7 @@ import type { SummarySource } from "../lib/unitSummary";
 import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoRequestCost, videoSeconds, type VideoScript } from "../lib/videoScript";
 import { confirmCost } from "../lib/costConfirm";
 import { hasVideoJob, startVideoJob, videoJobKey, watchVideoJob, type VideoJob } from "../lib/videoJobs";
-import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking } from "../lib/voice";
+import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking, VOICE_CATALOG } from "../lib/voice";
 
 const THINK_SECONDS = 5;
 const RATES = [1, 1.15, 1.3];
@@ -48,6 +48,21 @@ export default function UnitVideoScreen() {
   const src: SummarySource = pageMode ? { kind: "page", page: pageNum } : rangeMode ? { kind: "range", from: fromN, to: toN } : { kind: "unit", unit: unitIdx };
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
+
+  // صوت الراوي: يختاره الطالب من أصوات القارئ نفسها (يُحفظ للفيديوهات كلها)
+  const [voiceId, setVoiceId] = useState(DEFAULT_VOICE_ID);
+  const voiceRef = useRef(DEFAULT_VOICE_ID);
+  voiceRef.current = voiceId;
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem("vsf:video:voice").then((v) => v && VOICE_CATALOG.some((x) => x.voiceId === v) && setVoiceId(v)).catch(() => {});
+  }, []);
+  function pickVoice(v: string) {
+    setVoiceId(v);
+    voiceRef.current = v;
+    setVoiceOpen(false);
+    AsyncStorage.setItem("vsf:video:voice", v).catch(() => {});
+  }
 
   // دوائر المشاهد: ظاهرة أو مخفية حسب آخر اختيار
   const [showDots, setShowDots] = useState(true);
@@ -199,7 +214,7 @@ export default function UnitVideoScreen() {
   function say(text: string, my: number, then: () => void) {
     setProg(0);
     speakText(text, {
-      voiceId: DEFAULT_VOICE_ID,
+      voiceId: voiceRef.current,
       rate: rateRef.current,
       // تقدّم النطق الفعلي → تظهر النقاط والترجمة لحظة قولها
       onProgress: (f) => my === tokenRef.current && setProg(f),
@@ -240,7 +255,7 @@ export default function UnitVideoScreen() {
         setSeen((s) => (s.has(k) ? s : new Set(s).add(k)));
       }
       // المشهدان التاليان يُجهَّزان صوتيًا أثناء الحالي (بلا فجوات)
-      for (const j of [k + 1, k + 2]) if (scenes[j]) for (const line of sceneSpeech(scenes[j])) void prefetchText(line, { voiceId: DEFAULT_VOICE_ID });
+      for (const j of [k + 1, k + 2]) if (scenes[j]) for (const line of sceneSpeech(scenes[j])) void prefetchText(line, { voiceId: voiceRef.current });
       const s = scenes[k];
       const next = () => later(() => step(k + 1), 650);
       if (s.kind !== "check") return say(s.narration, my, next);
@@ -267,7 +282,7 @@ export default function UnitVideoScreen() {
     // حفظ صوت الفيديو كله على الجهاز في الخلفية (مرة واحدة): المشاهدة التالية فورية وبلا إنترنت
     if (!audioSave && scriptRef.current.complete && scriptRef.current.script) {
       setAudioSave({ done: 0, total: 1 });
-      void saveVideoAudio(scriptRef.current.script, DEFAULT_VOICE_ID, (d, n) => setAudioSave(d >= n ? "saved" : { done: d, total: n })).catch(() => setAudioSave(null));
+      void saveVideoAudio(scriptRef.current.script, voiceRef.current, (d, n) => setAudioSave(d >= n ? "saved" : { done: d, total: n })).catch(() => setAudioSave(null));
     }
   }
 
@@ -559,7 +574,37 @@ export default function UnitVideoScreen() {
             <Pressable onPress={() => setRateIdx((r) => (r + 1) % RATES.length)} hitSlop={8} style={[styles.small, { backgroundColor: pal.soft }]} accessibilityLabel={t("reader.tool.speed")}>
               <Text style={[styles.rateTxt, { color: pal.ink }]}>{RATES[rateIdx]}×</Text>
             </Pressable>
+            {/* 🎙 صوت الراوي */}
+            <Pressable onPress={() => setVoiceOpen(true)} hitSlop={8} style={[styles.small, { backgroundColor: pal.soft }]} accessibilityLabel={t("video.voice")}>
+              <Ionicons name="mic-outline" size={20} color={pal.ink} />
+            </Pressable>
           </View>
+          <Modal visible={voiceOpen} transparent animationType="slide" onRequestClose={() => setVoiceOpen(false)}>
+            <Pressable style={styles.voiceMask} onPress={() => setVoiceOpen(false)}>
+              <Pressable style={[styles.voiceSheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]} onPress={() => {}}>
+                <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.voice")}</Text>
+                <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("video.voiceHint")}</Text>
+                <ScrollView contentContainerStyle={[styles.voiceGrid, { flexDirection: dir.row }]}>
+                  {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === "ar").map((v) => {
+                    const on = v.voiceId === voiceId;
+                    return (
+                      <Pressable
+                        key={v.id}
+                        onPress={() => {
+                          pickVoice(v.voiceId);
+                          void speakText(t("video.voiceSample"), { voiceId: v.voiceId }).catch(() => {});
+                        }}
+                        style={[styles.voiceChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}
+                      >
+                        <Ionicons name={v.gender === "female" ? "woman-outline" : "man-outline"} size={15} color={on ? pal.onAccent : pal.dim} />
+                        <Text style={[styles.voiceTxt, { color: on ? pal.onAccent : pal.ink }]}>{v.name}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </Pressable>
+            </Pressable>
+          </Modal>
 
           {/* حالة التجهيز والحفظ */}
           <SceneCard style={{ gap: 8 }}>
@@ -678,6 +723,11 @@ export default function UnitVideoScreen() {
 const styles = StyleSheet.create({
   seenRow: { flexWrap: "wrap", gap: 6 },
   dotsToggle: { alignItems: "center", gap: 6 },
+  voiceMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  voiceSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 34, gap: 10, borderWidth: StyleSheet.hairlineWidth, maxHeight: "70%", maxWidth: 620, width: "100%", alignSelf: "center" },
+  voiceGrid: { flexWrap: "wrap", gap: 8 },
+  voiceChip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
+  voiceTxt: { fontSize: 14.5, fontWeight: "800" },
   dotsToggleTxt: { fontSize: 13, fontWeight: "800" },
   seenDot: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   seenNum: { fontSize: 10.5, fontWeight: "800" },

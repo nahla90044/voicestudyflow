@@ -8,7 +8,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
-import { aiAssist, generateFlashcards, CARD_TYPES, type CardType } from "../lib/ai";
+import { aiAssist, generateFlashcards, CARD_TYPES, type CardChoice } from "../lib/ai";
 import { getUserId } from "../lib/auth";
 import { addCards } from "../lib/flashcards";
 import { useDir, useI18n } from "../lib/i18n";
@@ -57,7 +57,7 @@ export default function GenerateStudyScreen() {
   const [from, setFrom] = useState("1");
   const [to, setTo] = useState("");
   const [type, setType] = useState<GenType>("cards");
-  const [cardType, setCardType] = useState<CardType>("qa");
+  const [cardType, setCardType] = useState<CardChoice>("mixed");
   const [count, setCount] = useState(10);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -123,7 +123,7 @@ export default function GenerateStudyScreen() {
         const cards = await generateFlashcards(text, count, cardType);
         if (cards.length === 0) throw new Error("empty");
         // نطاق محدد → البطاقات تُنسب لصفحته الأولى فتُجمَّع مع وحدتها
-        const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title, kind: cardType, page: whole ? undefined : f })));
+        const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title, page: whole ? undefined : f })));
         done(t("generate.done.cards", { count: n }));
       } else if (type === "quiz") {
         const qs = await generateUnitQuiz(text, count);
