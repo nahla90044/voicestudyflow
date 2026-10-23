@@ -2,13 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { cachedCardImage, cardImageAvgSecs, cardImagesBlocked, getCardImage } from "../../lib/cardImage";
 
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { CardChoices } from "../../components/brand/card-choices";
 import { cardLook } from "../../lib/cardLook";
+import { CardDeck } from "../../components/brand/card-deck";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../../components/brand/scene-screen";
 import { Radius, Spacing } from "../../constants/design";
 import { archiveCard, archiveCardsForBook, getCards, removeCard, removeCards, removeCardsForBook, reviewCard, setCardFav, type Card, type Rating } from "../../lib/flashcards";
@@ -472,6 +473,7 @@ export default function FlashcardsScreen() {
   }
   // إجابة بطاقة صح/خطأ أو اختيار من متعدد (تُصفَّر مع كل بطاقة جديدة)
   const [answer, setAnswer] = useState<number | null>(null);
+  const [cardH, setCardH] = useState(420); // ارتفاع مساحة البطاقة المقيس (للرصّة)
   useEffect(() => setAnswer(null), [idx, mode]);
 
   async function rate(r: Rating) {
@@ -482,24 +484,6 @@ export default function FlashcardsScreen() {
     setIdx((i) => i + 1);
   }
 
-  // السحب يمينًا/يسارًا للتنقل السريع بين البطاقات (بالعربية: لليمين = التالية)
-  const goCardRef = useRef<(d: number) => void>(() => {});
-  const slide = useRef(new Animated.Value(0)).current;
-  const swipe = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
-        onPanResponderTerminationRequest: () => false, // التمرير العمودي للصفحة لا يقطع سحب البطاقة
-        onPanResponderMove: (_, g) => slide.setValue(g.dx),
-        onPanResponderRelease: (_, g) => {
-          if (Math.abs(g.dx) > 70 || Math.abs(g.vx) > 0.6) goCardRef.current((g.dx > 0) === dir.isRTL ? 1 : -1);
-          Animated.spring(slide, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }).start();
-        },
-        onPanResponderTerminate: () => Animated.spring(slide, { toValue: 0, useNativeDriver: true }).start(),
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dir.isRTL]
-  );
 
   // تنقّل حرّ بين البطاقات (بلا تقييم) — للأمام/الخلف
   function goCard(delta: number) {
@@ -507,7 +491,6 @@ export default function FlashcardsScreen() {
     setFlipped(false);
     setIdx((i) => Math.min(Math.max(0, i + delta), Math.max(0, queue.length - 1)));
   }
-  goCardRef.current = goCard;
 
   // المفضلة: تُحفظ فورًا وتنعكس على البطاقة المعروضة
   async function toggleFav() {
@@ -1073,12 +1056,19 @@ export default function FlashcardsScreen() {
             </View>
           )}
 
-          <View style={styles.cardArea}>
-            {/* بطاقتان خلف البطاقة الحالية توحيان بالرزمة */}
-            <View style={[styles.deck, styles.deck2, { backgroundColor: pal.track, borderColor: pal.cardBorder }]} />
-            <View style={[styles.deck, styles.deck1, { backgroundColor: pal.soft, borderColor: pal.cardBorder, shadowColor: cardShadow }]} />
+          <View style={styles.cardArea} onLayout={(e) => setCardH(Math.max(260, e.nativeEvent.layout.height))}>
 
-            <Animated.View {...swipe.panHandlers} style={[styles.press, { transform: [{ translateX: slide }] }]}>
+            {/* رصّة البطاقات: تميل مع الإصبع وتطير عند الإفلات، والتي خلفها تصعد */}
+            <CardDeck
+              cardKey={card?.id ?? String(idx)}
+              canPrev={idx > 0}
+              canNext={idx < queue.length - 1}
+              onMove={(d) => goCard(d)}
+              isRTL={dir.isRTL}
+              height={cardH}
+              backColor={pal.soft}
+              borderColor={pal.cardBorder}
+            >
             <Pressable {...studyCoach.bind("card")} onPress={card?.opts && !flipped ? undefined : toggleFlip} onLongPress={cardMenu} delayLongPress={450} style={{ flex: 1 }}>
               <Animated.View
                 pointerEvents={flipped ? "none" : "box-none"}
@@ -1154,7 +1144,7 @@ export default function FlashcardsScreen() {
                 </View>
               </Animated.View>
             </Pressable>
-            </Animated.View>
+            </CardDeck>
 
             {/* المفضلة: نجمة في الزاوية المقابلة */}
             {card ? (

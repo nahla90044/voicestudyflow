@@ -5,13 +5,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { CARD_TYPES, generateFlashcards, type CardChoice } from "../lib/ai";
 import { CardChoices } from "../components/brand/card-choices";
 import { cardLook } from "../lib/cardLook";
+import { CardDeck } from "../components/brand/card-deck";
 import { addCards, getCards, removeCard, reviewCard, setCardFav, type Card, type Rating } from "../lib/flashcards";
 import { getCachedUnitRanges, getUnitRanges } from "../lib/glossary";
 import { useDir, useI18n } from "../lib/i18n";
@@ -97,27 +98,6 @@ export default function UnitCardsScreen() {
     resetFace();
     setIdx((i) => Math.min(cards.length - 1, Math.max(0, i + d)));
   }
-  // السحب يمينًا/يسارًا للتنقل السريع (بالعربية: السحب لليمين = التالية، كتقليب الكتاب)
-  const isRTL = dir.isRTL;
-  const goRef = useRef(go);
-  goRef.current = go;
-  const slide = useRef(new Animated.Value(0)).current;
-  const swipe = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4,
-        onPanResponderTerminationRequest: () => false, // التمرير العمودي للصفحة لا يقطع سحب البطاقة
-        onPanResponderMove: (_, g) => slide.setValue(g.dx),
-        onPanResponderRelease: (_, g) => {
-          const far = Math.abs(g.dx) > 70 || Math.abs(g.vx) > 0.6;
-          if (far) goRef.current((g.dx > 0) === isRTL ? 1 : -1);
-          Animated.spring(slide, { toValue: 0, useNativeDriver: true, friction: 8, tension: 60 }).start();
-        },
-        onPanResponderTerminate: () => Animated.spring(slide, { toValue: 0, useNativeDriver: true }).start(),
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
   async function rate(r: Rating) {
     if (!card) return;
     await reviewCard(card.id, r);
@@ -255,7 +235,17 @@ export default function UnitCardsScreen() {
                 </View>
                 <Text style={[styles.progTxt, { color: pal.dim }]}>{t("ucards.pos", { n: idx + 1, total: cards.length })}</Text>
               </View>
-              <Animated.View {...swipe.panHandlers} style={[styles.cardArea, { transform: [{ translateX: slide }] }]}>
+              <View style={styles.cardArea}>
+                <CardDeck
+                  cardKey={card.id}
+                  canPrev={idx > 0}
+                  canNext={idx < cards.length - 1}
+                  onMove={(d) => go(d)}
+                  isRTL={dir.isRTL}
+                  height={440}
+                  backColor={pal.card}
+                  borderColor={pal.cardBorder}
+                >
                 <Pressable onPress={card.opts && !flipped ? undefined : toggleFlip} style={{ flex: 1 }}>
                   <Animated.View pointerEvents={flipped ? "none" : "box-none"} style={[styles.face, frontStyle, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
                     <View style={[styles.strip, { backgroundColor: look.color }]} />
@@ -296,6 +286,7 @@ export default function UnitCardsScreen() {
                     </ScrollView>
                   </Animated.View>
                 </Pressable>
+                </CardDeck>
                 {/* أدوات البطاقة */}
                 <View style={[styles.cardTools, { flexDirection: dir.row }]}>
                   <Pressable onPress={listen} hitSlop={8} style={[styles.round, { backgroundColor: speaking ? pal.accent : pal.card }]} accessibilityLabel={t("ask.listen")}>
@@ -308,7 +299,7 @@ export default function UnitCardsScreen() {
                     <Ionicons name="trash-outline" size={17} color="#D9485A" />
                   </Pressable>
                 </View>
-              </Animated.View>
+              </View>
 
               {/* التنقل */}
               <View style={[styles.navRow, { flexDirection: dir.row }]}>
@@ -359,7 +350,7 @@ const styles = StyleSheet.create({
   genTxt: { fontSize: 14, fontWeight: "900" },
   emptyTitle: { fontSize: 16, fontWeight: "900" },
   emptyBody: { fontSize: 14, lineHeight: 22 },
-  cardArea: { height: 440, gap: 12 },
+  cardArea: { gap: 14 },
   face: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: 28,
