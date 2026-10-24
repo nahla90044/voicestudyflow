@@ -1,7 +1,7 @@
 // lib/syllabus.ts
 // منهج دراسي (syllabus) لكل كتاب: وحدات بعناوين ومواضيع ومخرجات تعلّم،
 // مع متابعة التقدّم (تشيك ليست). يُولَّد بالذكاء من نص الكتاب ويُخزّن.
-import { parseJsonLenient } from "./jsonRepair";
+import { parseArrayLenient, parseJsonLenient } from "./jsonRepair";
 import { recordPerf } from "./perf";
 import { verifiedQuestions } from "./qualityCore";
 import { aiAssist } from "./ai";
@@ -258,12 +258,11 @@ function normLevel(v: any): QuizLevel {
 
 /** يولّد كويز اختيار من متعدد متدرّج الصعوبة من محتوى وحدة (بعدد اختياري). */
 export async function generateUnitQuiz(context: string, count?: number): Promise<QuizQ[]> {
-  const raw = await aiAssist("unitquiz", context, undefined, undefined, count);
-  const m = raw.match(/\[[\s\S]*\]/);
-  if (!m) return [];
+  // الاختبار الكامل قد يأخذ أكثر من دقيقة: مهلة دقيقتين ونصف، والرد المقطوع تُحفظ أسئلته المكتملة
+  const raw = await aiAssist("unitquiz", context, undefined, undefined, count, 150000);
   try {
-    const arr = parseJsonLenient(m[0]) as any;
-    if (!Array.isArray(arr)) return [];
+    const arr = parseArrayLenient(raw) as any[];
+    if (!arr.length) return [];
     const qs: QuizQ[] = arr
       .map((x: any) => ({
         q: String(x?.q ?? "").trim(),

@@ -81,7 +81,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoscript: 12000, studysummary: 12000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 8000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoscript: 12000, studysummary: 12000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -310,6 +310,9 @@ Deno.serve(async (req: Request) => {
       } else if (action === "unitquiz") {
         systemPrompt += `\n\nحدّد عدد الأسئلة بحسب غنى المحتوى: من ١٠ إلى ٢٥ سؤالًا، بحيث تُغطّى كل فكرة مهمة في الوحدة بسؤال على الأقل.`;
       }
+      if (action === "unitquiz") {
+        systemPrompt += `\n\nالإيجاز ملزم: why جملة واحدة قصيرة، وquote أقل من ١٥ كلمة، والخيارات قصيرة؛ فلا يطول الرد.`;
+      }
     }
 
     // في طلبات المستخدم: نص الكتاب داخل حدود واضحة، والتذكير بالمهمة بعده (نص مدسوس لا يُحسب تعليمات)
@@ -328,7 +331,8 @@ Deno.serve(async (req: Request) => {
     // ميزانية المخرجات: تكبر مع العدد المطلوب (كل بطاقة/سؤال يحتاج مساحة)
     const baseTok = MAX_TOKENS[action] ?? 1500;
     const maxTok = count > 0 && (action === "flashcards" || action === "unitquiz")
-      ? Math.min(action === "unitquiz" ? 12000 : 8000, Math.max(baseTok, count * (action === "unitquiz" ? 450 : 320)))
+      // العربي يستهلك رموزًا أكثر مع النماذج الجديدة: سؤال ≈ ٩٠٠ رمز (كان السقف يقطع الاختبار فيفشل)
+      ? Math.min(action === "unitquiz" ? 24000 : 12000, Math.max(baseTok, count * (action === "unitquiz" ? 900 : 500)))
       : baseTok;
     const params: Record<string, unknown> = {
       model,

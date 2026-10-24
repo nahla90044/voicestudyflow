@@ -60,3 +60,8 @@ verify_jwt = false
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/ops-mail/index.ts"
+
+[functions.model-compare]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/model-compare/index.ts"

@@ -16,3 +16,12 @@ test("JSON السليم لا يُلمس، حتى لو احتوى نصًا ينت
 test("الخلل غير المعروف يرمي الخطأ", () => {
   assert.throws(() => parseJsonLenient("{bad"));
 });
+
+import { parseArrayLenient } from "../lib/jsonRepair.ts";
+
+test("المصفوفة المقطوعة في آخرها تُحفظ عناصرها المكتملة", () => {
+  const cut = '```json\n[{"q":"أ؟","options":["1","2"],"answer":0},{"q":"ب {مع قوس}؟","options":["x"],"answer":0},{"q":"ج؟","opti';
+  assert.deepEqual(parseArrayLenient(cut).map((x: any) => x.q), ["أ؟", "ب {مع قوس}؟"]);
+  assert.equal(parseArrayLenient('[{"q":"كامل"}]').length, 1);
+  assert.deepEqual(parseArrayLenient("لا شيء"), []);
+});
