@@ -157,7 +157,21 @@ export function mergeSummaries(list: StudySummary[]): StudySummary | null {
   const ok = list.filter((x) => x?.sections?.length);
   if (!ok.length) return null;
   if (ok.length === 1) return ok[0];
-  const sections: SummarySection[] = ok.flatMap((x) => x.sections);
+  // «مصطلحات الوحدة» يكتبها كل جزء: تُجمع في قسم واحد آخر الملخّص بلا تكرار المصطلح
+  const isGloss = (h: string) => /مصطلحات الوحدة|مسرد|glossary/i.test(h);
+  const gloss = ok.flatMap((x) => x.sections.filter((sec) => isGloss(sec.heading)));
+  const seenTerm = new Set<string>();
+  const glossBlocks = gloss.flatMap((sec) => sec.blocks).filter((b) => {
+    if (b.type !== "definition") return true;
+    const k = b.term.replace(/\s+/g, " ").trim();
+    if (seenTerm.has(k)) return false;
+    seenTerm.add(k);
+    return true;
+  });
+  const sections: SummarySection[] = [
+    ...ok.flatMap((x) => x.sections.filter((sec) => !isGloss(sec.heading))),
+    ...(glossBlocks.length ? [{ ...gloss[0], blocks: glossBlocks }] : []),
+  ];
   const seen = new Set<string>();
   const keypoints = ok
     .flatMap((x) => x.keypoints)

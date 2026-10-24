@@ -134,10 +134,12 @@ const OFF_VIDEO = /مراجع|مصادر|المصادر|أهداف|مخرجات|
 export function coreForVideo(s: StudySummary): StudySummary {
   return {
     ...s,
-    sections: s.sections.filter((sec) => !OFF_VIDEO.test(sec.heading)),
+    // «مصطلحات الوحدة» تُشرح داخل مشاهدها حيث ترد، فلا تُعاد في مشاهد مستقلة (كانت تتكرر مع كل جزء)
+    sections: s.sections.filter((sec) => !OFF_VIDEO.test(sec.heading) && !GLOSSARY_RE.test(sec.heading)),
     keypoints: s.keypoints.filter((k) => !OFF_VIDEO.test(k)),
   };
 }
+const GLOSSARY_RE = /مصطلحات الوحدة|مسرد|glossary/i;
 
 /** أجزاء السيناريو من الملخّص: أقسام كاملة متتالية (≤ ٩٠٠٠ حرف) مع سياق موضعها من الوحدة */
 export function videoParts(full: StudySummary, unitTitle: string): string[] {
@@ -161,7 +163,8 @@ export function videoParts(full: StudySummary, unitTitle: string): string[] {
     if (n === 1) return `${head}\n${g}${keys}`;
     const pos =
       `هذا الجزء ${i + 1} من ${n} من الوحدة؛ ستُعرض مشاهد الأجزاء متتالية في فيديو واحد. ` +
-      `اشرح كل فكرة وكل تعداد وكل نقطة في هذا الجزء بترتيبها دون أي قفز أو اختصار، وعدد المشاهد بحسب مادة هذا الجزء وحده (لا تتقيد بالعدد العام).` +
+      `اشرح كل فكرة وكل تعداد وكل نقطة في هذا الجزء بترتيبها دون أي قفز، ودون تكرار ما شُرح أو إعادة ربط مطوّل بما سبق (جملة ربط واحدة تكفي). ` +
+      `عدد المشاهد بحسب مادة هذا الجزء وحده: نحو ${Math.max(4, Math.round(g.length / 550))} مشاهد (لا تتقيد بالعدد العام)، ومشهد check واحد فقط في هذا الجزء، أو بلا check إن كان الجزء قصيرًا.` +
       (i === 0 ? " ابدأ بمشهد cover للوحدة كلها." : " لا تضع مشهد cover، وابدأ مباشرة بمشهد يربط بما سبق.") +
       (last ? " اختم بمشهد summary للوحدة كلها." : " لا تضع مشهد summary ختاميًا.");
     return `${head}${pos}\n\n${g}${keys}`;
