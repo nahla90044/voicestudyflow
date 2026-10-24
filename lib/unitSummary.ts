@@ -17,21 +17,22 @@ import { unitTextParts } from "./unitScope";
  * مستوى الملخّص: «مختصر» (للاستماع: أهم الأفكار والتعدادات كاملة)، «شامل» (الالتزام بالكتاب)،
  * «موسّع» (أمثلة وتمارين إضافية). كل مستوى يُحفظ وحده، فيمكن أن تجتمع الثلاثة للوحدة نفسها.
  */
-export type SummaryLevel = "brief" | "strict" | "expand";
-export const SUMMARY_LEVELS: SummaryLevel[] = ["brief", "strict", "expand"];
+export type SummaryLevel = "brief" | "strict" | "expand" | "final";
+/** «final» = مراجعة أخيرة قبل الاختبار: نقاط للحفظ في صفحة واحدة (٢٤ أكتوبر) */
+export const SUMMARY_LEVELS: SummaryLevel[] = ["brief", "strict", "expand", "final"];
 
 export type SummarySource = ({ kind: "page"; page: number } | { kind: "unit"; unit: number } | { kind: "range"; from: number; to: number }) & {
   /** بلا مستوى = «الشامل» (التوافق مع ما سبق) */
   level?: SummaryLevel;
 };
 
-type SummaryKind = "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary";
+type SummaryKind = "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary";
 
 /** مفتاح التخزين لكل مصدر ومستوى (لا يتداخل: الصفحات والنطاقات بأرقام بعيدة عن أرقام الوحدات) */
 export function summaryCacheKey(src: SummarySource): { id: number; kind: SummaryKind } {
   const lv = src.level ?? "strict";
   const page = src.kind === "page";
-  const kind = (`${page ? "page" : ""}${lv === "brief" ? "brief" : lv === "expand" ? "expand" : "study"}summary`) as SummaryKind;
+  const kind = (`${page ? "page" : ""}${lv === "brief" ? "brief" : lv === "expand" ? "expand" : lv === "final" ? "final" : "study"}summary`) as SummaryKind;
   if (src.kind === "page") return { id: src.page, kind };
   if (src.kind === "unit") return { id: src.unit, kind };
   return { id: 1_000_000 + src.from * 10_000 + src.to, kind };
@@ -41,7 +42,7 @@ export function summaryCacheKey(src: SummarySource): { id: number; kind: Summary
 function partBase(src: SummarySource): number {
   const k = summaryCacheKey(src);
   const lv = src.level ?? "strict";
-  const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : 0);
+  const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : lv === "final" ? 6 : 0);
   return flag * 1e12 + k.id * 1e4;
 }
 
@@ -244,7 +245,7 @@ export async function getOrMakeSummary(
     // وكيل الجودة: الجزء الفارغ/المقطوع/القصير جدًا قياسًا بنصه يُعاد توليده مرة واحدة مجانًا
     run: (ctx, i, onPartial) =>
       qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
-        jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: mode !== "brief" && EXERCISE_RE.test(ctx), mode, qaRetryOf }), checkSummaryPart),
+        jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf }), (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.02 : 0.08)),
     merge: mergeSummaries,
     onProgress,
     parallel: Math.min(6, n),

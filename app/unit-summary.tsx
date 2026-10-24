@@ -94,8 +94,8 @@ export default function UnitSummaryScreen() {
       });
       setSaved(true);
       // صوت الملخّص يُحفظ على الجهاز معه (في الخلفية) — للاستماع لاحقًا من «المحفوظات» بلا انتظار ولا إنترنت
-      if (sum && lvl === "brief") void saveSummaryAudio(sum).catch(() => {});
-      Alert.alert(t("save.savedTitle"), lvl === "brief" ? t("summary.savedWithAudio") : t("save.savedBody"));
+      if (sum && (lvl === "brief" || lvl === "final")) void saveSummaryAudio(sum).catch(() => {});
+      Alert.alert(t("save.savedTitle"), lvl === "brief" || lvl === "final" ? t("summary.savedWithAudio") : t("save.savedBody"));
     } catch {
       Alert.alert(t("save.failedTitle"), t("save.failedBody"));
     } finally {
@@ -292,12 +292,12 @@ export default function UnitSummaryScreen() {
   }
 
   // مكان الاستماع: المقطع الحالي، ويُحفظ عند كل انتقال (يكمل منه بعد الإيقاف أو الخروج، وعلى الأجهزة الأخرى)
-  const posKey = `${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`;
+  const posKey = `${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}${lvl === "final" ? "|f" : ""}`;
   const [pos, setPos] = useState(0);
   const posRef = useRef(0);
   const seekW = useRef(0);
   useEffect(() => {
-    if (lvl !== "brief") return;
+    if (lvl !== "brief" && lvl !== "final") return;
     void (async () => {
       const local = await getListenPos(posKey);
       const synced = src.kind === "unit" ? await getListenAt(pdfPath, unitIdx).catch(() => 0) : 0;
@@ -389,7 +389,7 @@ export default function UnitSummaryScreen() {
               style={({ pressed }) => [styles.modeCard, { backgroundColor: pal.card, borderColor: readyLv.includes(m) ? "#15803D" : pal.cardBorder, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
             >
               <View style={[styles.modeIcon, { backgroundColor: pal.soft }]}>
-                <Ionicons name={m === "brief" ? "headset-outline" : m === "strict" ? "book-outline" : "layers-outline"} size={22} color={pal.accent} />
+                <Ionicons name={m === "brief" ? "headset-outline" : m === "strict" ? "book-outline" : m === "final" ? "flash-outline" : "layers-outline"} size={22} color={pal.accent} />
               </View>
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={[styles.modeName, { color: pal.ink, textAlign: dir.textAlign }]}>{t(`summary.level.${m}`)}</Text>
@@ -417,12 +417,12 @@ export default function UnitSummaryScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* المستوى الحالي، وتغييره */}
           <Pressable onPress={() => { stopSummary(); setPlaying(false); setLvl(null); }} style={[styles.levelChip, { flexDirection: dir.row, borderColor: pal.cardBorder, backgroundColor: pal.soft }]}>
-            <Ionicons name={lvl === "brief" ? "headset-outline" : lvl === "expand" ? "layers-outline" : "book-outline"} size={16} color={pal.accent} />
+            <Ionicons name={lvl === "brief" ? "headset-outline" : lvl === "expand" ? "layers-outline" : lvl === "final" ? "flash-outline" : "book-outline"} size={16} color={pal.accent} />
             <Text style={[styles.levelTxt, { color: pal.ink }]}>{t(`summary.level.${lvl ?? "strict"}`)}</Text>
             <Text style={[styles.levelChange, { color: pal.accent }]}>{t("summary.level.switch")}</Text>
           </Pressable>
           {/* الصوت على «المختصر» فقط (قرار نهلة): الشامل والموسّع للقراءة والطباعة */}
-          {lvl === "brief" ? (
+          {lvl === "brief" || lvl === "final" ? (
             <Pressable
               onPress={togglePlay}
               style={({ pressed }) => [styles.playBtn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
@@ -440,7 +440,7 @@ export default function UnitSummaryScreen() {
             </Pressable>
           ) : null}
           {/* التحكم: السابق · ⏪١٥ · شريط التقدّم · ⏩١٥ · التالي */}
-          {lvl === "brief" && total > 1 ? (
+          {(lvl === "brief" || lvl === "final") && total > 1 ? (
             <View style={[styles.ctrlCard, { backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
               <View
                 style={[styles.seekTrack, { backgroundColor: pal.track }]}

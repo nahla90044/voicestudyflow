@@ -175,7 +175,7 @@ export default function StudyFileScreen() {
           <View style={[styles.levels, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
             {SUMMARY_LEVELS.map((l) => (
               <Pressable key={l} disabled={running} onPress={() => setLevel(l)} style={[styles.levelBtn, level === l && { backgroundColor: pal.accent }]}>
-                <Text style={[styles.levelTxt, { color: level === l ? pal.onAccent : pal.ink }]} numberOfLines={1}>
+                <Text style={[styles.levelTxt, { color: level === l ? pal.onAccent : pal.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                   {t(`summary.level.${l}`)}
                 </Text>
               </Pressable>

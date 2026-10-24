@@ -41,13 +41,13 @@ export function summaryChars(s: StudySummary): number {
 }
 
 /** سبب رفض جزء الملخّص، أو null إن كان سليمًا */
-export function checkSummaryPart(s: StudySummary, ctx: string): string | null {
+export function checkSummaryPart(s: StudySummary, ctx: string, minRatio = 0.08): string | null {
   if (!s.sections.length) return "empty";
   if (s.sections.some((x) => !x.blocks.length || x.blocks.every((b) => !blockText(b).trim()))) return "truncated";
   const src = sourceBody(ctx).replace(/\s+/g, " ").trim().length;
   const out = summaryChars(s);
   // الملخّص الشامل لا يقل عن ٨٪ من نص مادته (الفعلي عادة ٤٠٪ فأكثر)، ولا عن ٢٥٠ حرفًا لمادة معتبرة
-  if (src >= 1500 && (out < src * 0.08 || out < 250)) return "short";
+  if (src >= 1500 && (out < src * minRatio || out < 250)) return "short";
   return null;
 }
 
