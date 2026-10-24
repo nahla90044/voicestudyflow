@@ -81,7 +81,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoscript: 12000, studysummary: 12000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoscript: 24000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -346,7 +346,7 @@ Deno.serve(async (req: Request) => {
     } else if (action === "studysummary" && body.mode === "brief") {
       // المختصر (للاستماع): يتقدّم على طول «الشامل» في التعليمات العامة
       params.system = (params.system as string) + `\n\nأسلوب الطالب المختار: **المختصر** — هذا يتقدّم على أي تعليمات طول أو شمول سابقة. اكتب ملخّصًا مختصرًا يُسمع في دقائق قليلة: أهم الأفكار والمفاهيم والتعاريف الأساسية والأرقام والقواعد التي يكثر السؤال عنها فقط، بجمل قصيرة واضحة تُفهم بالسمع، بلا جداول مقارنة طويلة وبلا تمارين محلولة وبلا دراسة حالة وبلا قسم مصطلحات مستقل (اذكر التعريف المهم داخل نقطته). **التعدادات مهمة جدًا ولا تُختصر أبدًا**: كل تعداد (الأنواع، الشروط، الخصائص، المراحل، الأسباب، الآثار…) يُذكر كاملًا بعدده وكل عناصره كما في النص، كتلة list وفي عنوانها العدد (مثل «شروط التنفيذ الأربعة»)، ويُختصر شرح كل عنصر إلى كلمات قليلة. الطول نحو ربع الملخّص الشامل (بحد أقصى نحو ٦٠٠ كلمة للجزء)، و«أهم النقاط» من ٤ إلى ٨. لا تضف شيئًا من خارج النص.`;
-      params.max_tokens = Math.min(Number(params.max_tokens) || 4000, 5000);
+      params.max_tokens = Math.min(Number(params.max_tokens) || 8000, 8000);
     } else if (action === "studysummary" && body.mode === "strict") {
       params.system = (params.system as string) + `\n\nأسلوب الطالب المختار: الالتزام بالكتاب. لا تضف أمثلة أو تمارين من خارج النص؛ نظّم محتوى الكتاب نفسه ورتّبه وحلّ تمارينه فقط.`;
     }

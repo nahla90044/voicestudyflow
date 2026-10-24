@@ -39,3 +39,8 @@ test("الأسئلة بلا دليل تُحذف، وبلا اقتباس تبقى
   assert.equal(r.dropped, 1);
   assert.equal(r.kept.length, 2);
 });
+
+test("جزء الفيديو المقطوع قبل نهايته يُرفض (تضيع مشاهد آخره)", () => {
+  const sc = { kind: "slide" as const, emoji: "📌", title: "ع", bullets: ["نقطة"], narration: "شرح مفصل ".repeat(40) };
+  assert.equal(checkVideoPart({ title: "", scenes: [sc, sc, sc], truncated: true }, ctx), "truncated");
+});

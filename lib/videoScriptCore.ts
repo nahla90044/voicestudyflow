@@ -13,7 +13,8 @@ export type VideoScene = Slide & {
   question?: string;
   answer?: string;
 };
-export type VideoScript = { title: string; scenes: VideoScene[] };
+/** truncated: الرد قُطع قبل نهايته (بلغ سقف الطول) — مشاهد آخر الجزء ناقصة، فيُعاد توليده */
+export type VideoScript = { title: string; scenes: VideoScene[]; truncated?: boolean };
 
 const str = (v: unknown) => String(v ?? "").trim();
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
@@ -112,7 +113,9 @@ export function parseVideo(raw: string): VideoScript | null {
       if (scenes.length) return { title: str(o?.title), scenes };
     } catch {}
   }
-  return parsePartialVideo(raw); // ردّ مقطوع → ما اكتمل من المشاهد
+  // ردّ مقطوع → ما اكتمل من المشاهد، مع علامة القطع (لا يُقبل جزءًا نهائيًا: يُعاد توليده)
+  const part = parsePartialVideo(raw);
+  return part ? { ...part, truncated: true } : null;
 }
 
 export function mergeVideo(list: VideoScript[]): VideoScript | null {
@@ -121,7 +124,8 @@ export function mergeVideo(list: VideoScript[]): VideoScript | null {
   return { title: ok[0].title, scenes: ok.flatMap((x) => x.scenes) };
 }
 
-const PART_MAX = 9000;
+// أصغر من قبل (كان ٩٠٠٠): كل جزء يُكتب كاملًا تحت سقف الرد فلا تضيع مشاهد آخره (٢٤ أكتوبر)
+const PART_MAX = 5000;
 
 // ما ليس من صلب الوحدة فلا يضيع عليه وقت الفيديو (ملخصات قديمة محفوظة قد تحتويه). التمارين ودراسة الحالة تبقى.
 const OFF_VIDEO = /مراجع|مصادر|المصادر|أهداف|مخرجات|نواتج التعلم|نواتج التعلّم|أنشطة|نشاط|references|sources|objectives|outcomes|activit/i;
@@ -156,7 +160,8 @@ export function videoParts(full: StudySummary, unitTitle: string): string[] {
     const keys = last && s.keypoints.length ? `\n\nأهم النقاط للمراجعة:\n${s.keypoints.map((k) => "- " + k).join("\n")}` : "";
     if (n === 1) return `${head}\n${g}${keys}`;
     const pos =
-      `هذا الجزء ${i + 1} من ${n} من الوحدة؛ ستُعرض مشاهد الأجزاء متتالية في فيديو واحد.` +
+      `هذا الجزء ${i + 1} من ${n} من الوحدة؛ ستُعرض مشاهد الأجزاء متتالية في فيديو واحد. ` +
+      `اشرح كل فكرة وكل تعداد وكل نقطة في هذا الجزء بترتيبها دون أي قفز أو اختصار، وعدد المشاهد بحسب مادة هذا الجزء وحده (لا تتقيد بالعدد العام).` +
       (i === 0 ? " ابدأ بمشهد cover للوحدة كلها." : " لا تضع مشهد cover، وابدأ مباشرة بمشهد يربط بما سبق.") +
       (last ? " اختم بمشهد summary للوحدة كلها." : " لا تضع مشهد summary ختاميًا.");
     return `${head}${pos}\n\n${g}${keys}`;

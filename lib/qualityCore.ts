@@ -53,6 +53,7 @@ export function checkSummaryPart(s: StudySummary, ctx: string): string | null {
 
 /** سبب رفض جزء الفيديو، أو null */
 export function checkVideoPart(v: VideoScript, ctx: string): string | null {
+  if (v.truncated) return "truncated"; // قُطع قبل نهايته: آخر مادة الجزء لم تُشرح
   const scenes = v.scenes ?? [];
   const src = sourceBody(ctx).replace(/\s+/g, " ").trim().length;
   if (!scenes.length || (src >= 2500 && scenes.length < 2)) return "few";
