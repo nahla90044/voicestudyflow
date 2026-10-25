@@ -265,10 +265,12 @@ export default function UnitQuizScreen() {
   const total = quiz.length;
   const headLabel = mistakesMode
     ? t("quiz2.headMistakes", { step: step + 1, total })
+    : bankMode
+    ? t("quiz2.headBank", { step: step + 1, total })
     : pageMode
       ? t("quiz2.headPage", { page: pageNum, step: step + 1, total })
       : t("quiz2.headUnit", { unit: unitIdx + 1, step: step + 1, total });
-  const isWeakUnit = !mistakesMode && !pageMode && weak.unit === unitIdx && !weak.untested;
+  const isWeakUnit = !mistakesMode && !bankMode && !pageMode && weak.unit === unitIdx && !weak.untested;
 
   const levelTone = q ? (q.level === "easy" ? tone.good : q.level === "medium" ? tone.warm : tone.hard) : tone.good;
   const backIcon = dir.isRTL ? "chevron-forward" : "chevron-back";
