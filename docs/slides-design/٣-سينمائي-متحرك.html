@@ -1,0 +1,1601 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ضوء على المعنى</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Reem+Kufi:wght@400..700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --night0:#050816;--night1:#0C1440;--night2:#151049;--indigo:#2A2370;
+  --gold:#F5D38A;--gold2:#D9A54A;--gold3:#FFF1C9;
+  --ivory:#F6F0E1;--mist:#A8B3D6;--mist2:#6E7AA6;
+  --moon:#8DB7FF;--ember:#FF9B71;--violet:#A99BFF;--teal:#6FE3C8;--rose:#F59AB5;
+  --page:#04060E;--panel:rgba(14,19,46,.72);--line:rgba(245,211,138,.16);
+  --eo:cubic-bezier(.16,1,.3,1);--eio:cubic-bezier(.65,0,.35,1);
+  --kufi:'Reem Kufi','IBM Plex Sans Arabic',system-ui,sans-serif;
+  --sans:'IBM Plex Sans Arabic',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --naskh:'Amiri','Traditional Arabic',serif;
+}
+*{box-sizing:border-box}
+html{background:var(--page)}
+body{margin:0;background:var(--page);color:var(--ivory);font-family:var(--sans);line-height:1.75;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;background:radial-gradient(900px 520px at 85% -8%,rgba(42,35,112,.55),transparent 70%),radial-gradient(700px 420px at 5% 30%,rgba(245,211,138,.06),transparent 70%)}
+.wrap{position:relative;max-width:1400px;margin:0 auto;padding:56px 32px 120px}
+h1,h2,h3{margin:0;font-weight:600}
+a{color:var(--gold)}
+
+/* ============ رأس الصفحة ============ */
+.top{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:15px;color:var(--gold);padding:6px 16px;border:1px solid var(--line);border-radius:30px;background:rgba(245,211,138,.05)}
+.eyebrow::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold)}
+.top h1{font-family:var(--kufi);font-weight:700;font-size:clamp(44px,7vw,92px);line-height:1.15;margin:18px 0 10px;color:var(--gold);text-shadow:0 0 50px rgba(245,211,138,.25)}
+.lede{font-size:clamp(18px,2vw,22px);color:var(--ivory);max-width:640px;margin:0}
+.lede-2{color:var(--mist);font-size:16px;max-width:640px;margin:12px 0 0}
+.block{margin-top:36px}
+.lbl-s{font-size:13px;color:var(--mist2);margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.lbl-s::after{content:'';flex:1;height:1px;background:var(--line)}
+.pal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.sw{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:14px;background:var(--panel);border:1px solid rgba(255,255,255,.05)}
+.sw i{flex:0 0 38px;height:38px;border-radius:10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.sw b{display:block;font-size:14px;font-weight:600;line-height:1.3}
+.sw code{font-size:12px;color:var(--mist2);direction:ltr;display:block;text-align:right;font-family:ui-monospace,Menlo,monospace}
+.fonts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ft{padding:14px 16px;border-radius:16px;background:var(--panel);border:1px solid rgba(255,255,255,.05)}
+.ft .s{font-size:34px;line-height:1.3;color:var(--gold)}
+.ft b{display:block;font-size:14px;margin-top:6px}
+.ft span{font-size:13px;color:var(--mist)}
+.pr{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:10px}
+.pr div{padding:12px 16px;border-radius:14px;background:var(--panel);border-inline-start:3px solid var(--gold);font-size:15px;line-height:1.6}
+.pr div b{color:var(--gold);font-weight:600}
+
+/* ============ تشريح الإطار (الطبقات) ============ */
+.xpl{position:relative;height:520px}
+.xstack{position:absolute;inset:0;perspective:1600px}
+.pl{position:absolute;left:31%;top:66%;width:270px;height:152px;margin:-76px 0 0 -135px;border-radius:14px;transform:rotateX(58deg) rotateZ(-40deg) translateZ(calc(var(--i)*58px));overflow:hidden;box-shadow:0 0 0 1px rgba(245,211,138,.25)}
+.pl.l0{background:linear-gradient(165deg,#070B22,#0C1440 45%,#151049 75%,#050816)}
+.pl.l1{background:radial-gradient(closest-side at 30% 30%,rgba(110,80,220,.75),transparent),radial-gradient(closest-side at 75% 75%,rgba(245,190,110,.45),transparent);background-color:rgba(8,10,30,.15)}
+.pl.l2{background-color:rgba(8,10,30,.12);background-image:radial-gradient(1.5px 1.5px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 60% 20%,#fff,transparent),radial-gradient(2px 2px at 80% 60%,#fff,transparent),radial-gradient(1px 1px at 35% 75%,#fff,transparent),radial-gradient(1.5px 1.5px at 50% 50%,#fff,transparent),radial-gradient(1px 1px at 90% 15%,#fff,transparent),radial-gradient(1.2px 1.2px at 10% 85%,#fff,transparent),radial-gradient(2px 2px at 70% 90%,#fff,transparent)}
+.pl.l3{background:radial-gradient(ellipse 40% 90% at 50% 0%,rgba(245,211,138,.6),transparent 70%),radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.6));background-color:rgba(8,10,30,.1)}
+.pl.l4{background:rgba(8,10,30,.18);display:grid;place-items:center}
+.pl.l4 b{font-family:var(--kufi);font-size:46px;color:var(--gold);text-shadow:0 0 20px rgba(245,211,138,.6)}
+.pl.l5{background:rgba(8,10,30,.1)}
+.pl.l5::before{content:'';position:absolute;top:12px;right:12px;width:110px;height:22px;border-radius:12px;border:1.5px solid rgba(245,211,138,.7)}
+.pl.l5::after{content:'';position:absolute;bottom:14px;left:40px;right:40px;height:14px;border-radius:8px;background:rgba(246,240,225,.55)}
+.xlab{position:absolute;right:0;width:46%;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--mist);white-space:nowrap}
+.xlab b{color:var(--ivory);font-weight:600}
+.xlab i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:rgba(245,211,138,.12);color:var(--gold);font-size:12px;border:1px solid var(--line)}
+
+/* ============ الأقسام ============ */
+.sec{margin-top:96px}
+.sec-h{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+.sec-h h2{font-family:var(--kufi);font-size:clamp(28px,3.4vw,40px);color:var(--ivory)}
+.sec-h p{margin:0;color:var(--mist);font-size:16px}
+
+/* ============ معرض الشرائح ============ */
+.gal{display:grid;grid-template-columns:1fr;gap:64px 40px;justify-items:center}
+.card{display:flex;flex-direction:column;width:min-content}
+.dev{--z:.40;padding:12px;border-radius:46px;background:linear-gradient(150deg,#232A40,#0A0C14 40%,#151A2A);box-shadow:0 0 0 1px rgba(255,255,255,.07),0 40px 90px -20px rgba(0,0,0,.85),0 0 60px -10px rgba(42,35,112,.5)}
+.scr{position:relative;width:calc(1560px*var(--z));height:calc(720px*var(--z));border-radius:34px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center}
+.scr::before{content:'';position:absolute;left:calc(46px*var(--z));top:50%;width:calc(56px*var(--z));height:calc(200px*var(--z));transform:translateY(-50%);border-radius:40px;background:#0b0b0b;box-shadow:inset 0 0 0 1px #1a1a1a;z-index:20}
+@media (min-width:1000px) and (max-width:1399px){.dev{--z:.5}}
+@media (min-width:1400px){.card{flex-direction:row;align-items:center;gap:40px;width:auto}.dev{--z:.58}.card .info{width:360px}.card .meta{margin-top:0}}
+@media (max-width:999px){.dev{--z:.42}}
+@media (max-width:759px){
+  .wrap{padding:40px 16px 100px}
+  .top{grid-template-columns:1fr}
+  .dev{--z:.44;padding:8px;border-radius:30px}
+  .scr{width:calc(1280px*var(--z));border-radius:22px}
+  .scr::before{display:none}
+}
+@media (max-width:640px){.dev{--z:.36}}
+@media (max-width:540px){.dev{--z:.30}.fonts{grid-template-columns:1fr}}
+@media (max-width:460px){.dev{--z:.26}}
+@media (max-width:400px){.dev{--z:.24}}
+@media (max-width:360px){.dev{--z:.22}}
+.meta{display:flex;align-items:center;gap:12px;margin-top:20px;flex-wrap:wrap}
+.meta .no{font-family:var(--kufi);font-size:15px;color:var(--page);background:var(--gold);border-radius:10px;padding:0 10px;line-height:28px}
+.meta h3{font-family:var(--kufi);font-size:24px;color:var(--ivory)}
+.meta code{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--mist);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:1px 8px;direction:ltr}
+.card p{margin:8px 0 0;color:var(--ivory);font-size:16px;line-height:1.7}
+.card p.note{color:var(--mist2);font-size:13px;margin-top:4px}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tags span{font-size:12.5px;color:var(--mist);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:2px 10px}
+
+/* =====================================================================
+   مسرح الشريحة: مقاس تصميم ثابت ١٢٨٠×٧٢٠ يُحجَّم بـ zoom (كما يُحجَّم في التطبيق)
+   ===================================================================== */
+.cv{position:relative;flex:0 0 auto;width:1280px;height:720px;zoom:var(--z);overflow:hidden;isolation:isolate;direction:rtl;font-family:var(--sans);color:var(--ivory);background:var(--night0);line-height:1.4;
+  --g1:rgba(60,48,150,.55);--n1:rgba(66,52,170,.55);--n2:rgba(245,190,110,.2);--n3:rgba(141,183,255,.14);--beam:rgba(245,211,138,.2)}
+.cv *{box-sizing:border-box}
+.t-list{--g1:rgba(40,52,140,.5);--n1:rgba(40,60,160,.5);--n2:rgba(141,183,255,.2);--n3:rgba(245,211,138,.1);--beam:rgba(141,183,255,.15)}
+.t-def{--g1:rgba(130,90,40,.38);--n1:rgba(170,120,50,.34);--n2:rgba(245,211,138,.2);--n3:rgba(80,60,160,.26);--beam:rgba(245,211,138,.26)}
+.t-tree{--g1:rgba(80,60,180,.5);--n1:rgba(110,80,220,.44);--n2:rgba(169,155,255,.22);--n3:rgba(60,40,140,.3);--beam:rgba(169,155,255,.15)}
+.t-cmp{--g1:rgba(40,60,140,.4);--n1:rgba(255,140,100,.26);--n2:rgba(110,150,255,.34);--n3:rgba(245,211,138,.1);--beam:rgba(245,211,138,.16)}
+.t-stat{--g1:rgba(20,90,110,.42);--n1:rgba(40,140,150,.34);--n2:rgba(245,211,138,.2);--n3:rgba(111,227,200,.16);--beam:rgba(111,227,200,.15)}
+.t-grp{--g1:rgba(70,50,170,.45);--n1:rgba(90,70,200,.42);--n2:rgba(111,227,200,.18);--n3:rgba(169,155,255,.2);--beam:rgba(169,155,255,.13)}
+.t-seal{--g1:rgba(120,60,50,.36);--n1:rgba(170,90,70,.32);--n2:rgba(245,211,138,.22);--n3:rgba(240,127,166,.15);--beam:rgba(245,211,138,.22)}
+.t-chk{--g1:rgba(80,20,60,.42);--n1:rgba(120,30,90,.34);--n2:rgba(80,40,160,.32);--n3:rgba(245,211,138,.08);--beam:rgba(245,211,138,.1)}
+.t-sum{--g1:rgba(130,90,40,.4);--n1:rgba(190,130,60,.32);--n2:rgba(255,155,113,.2);--n3:rgba(245,211,138,.18);--beam:rgba(245,211,138,.24)}
+.t-end{--g1:rgba(120,50,90,.42);--n1:rgba(150,70,130,.32);--n2:rgba(245,170,120,.26);--n3:rgba(245,211,138,.2);--beam:rgba(255,226,160,.22)}
+
+/* --- الخلفية المستمرة (لا تُعاد مع تغيّر المشهد في التطبيق) --- */
+.bg{position:absolute;inset:0;overflow:hidden;z-index:0}
+.grad{position:absolute;inset:-30%;background:radial-gradient(60% 55% at 72% 22%,var(--g1),transparent 70%),linear-gradient(165deg,#070B22 0%,#0C1440 42%,#130F45 72%,#050816 100%);animation:graddrift 26s ease-in-out infinite alternate}
+@keyframes graddrift{from{translate:4% -3%}to{translate:-6% 4%}}
+.neb{position:absolute;border-radius:50%}
+.n1{width:980px;height:980px;left:-260px;top:-380px;background:radial-gradient(closest-side,var(--n1),transparent);animation:nd1 22s ease-in-out infinite alternate}
+.n2{width:860px;height:860px;right:-280px;bottom:-400px;background:radial-gradient(closest-side,var(--n2),transparent);animation:nd2 28s ease-in-out infinite alternate}
+.n3{width:560px;height:560px;left:40%;top:18%;background:radial-gradient(closest-side,var(--n3),transparent);animation:nd3 19s ease-in-out infinite alternate}
+@keyframes nd1{to{translate:140px 90px;scale:1.12}}
+@keyframes nd2{to{translate:-160px -70px;scale:.92}}
+@keyframes nd3{to{translate:-200px 60px;scale:1.2}}
+.px{position:absolute;inset:0;transform-origin:50% 50%}
+.px1{animation:push1 var(--T) var(--eo) infinite}
+.px2{animation:push2 var(--T) var(--eo) infinite}
+.px3{animation:push3 var(--T) var(--eo) infinite}
+@keyframes push1{0%{scale:1.03}9%,92%{scale:1}100%{scale:1.02}}
+@keyframes push2{0%{scale:1.07}9%,92%{scale:1}100%{scale:1.05}}
+@keyframes push3{0%{scale:1.15}9%,92%{scale:1}100%{scale:1.1}}
+.stars{position:absolute;top:0;left:0;width:2560px;height:720px}
+.s1{animation:drift 190s linear infinite}
+.s2{animation:drift 115s linear infinite}
+.s3{animation:drift 70s linear infinite}
+@keyframes drift{to{translate:-1280px 0}}
+.tw{animation:twinkle 3.2s ease-in-out infinite alternate}
+.tw1{animation-duration:4.1s}.tw2{animation-duration:5.3s;animation-delay:-2s}.tw3{animation-duration:2.6s;animation-delay:-1s}
+@keyframes twinkle{from{opacity:.25}to{opacity:1}}
+.beam{position:absolute;left:50%;top:-90px;width:1200px;height:960px;margin-left:-600px;background:radial-gradient(ellipse 30% 72% at 50% 0%,var(--beam),transparent 72%);transform-origin:50% 0;animation:sway 15s ease-in-out infinite alternate}
+@keyframes sway{from{rotate:-8deg}to{rotate:8deg}}
+.vig{position:absolute;inset:0;background:radial-gradient(ellipse 78% 74% at 50% 44%,transparent 52%,rgba(2,3,10,.78) 100%)}
+.floor{position:absolute;left:0;right:0;bottom:0;height:210px;background:linear-gradient(to top,rgba(3,5,14,.94),rgba(3,5,14,.55) 45%,rgba(3,5,14,0))}
+
+/* --- الواجهة الثابتة: شريط التقدّم + شارة الوحدة + نوع المشهد --- */
+.prog{position:absolute;top:0;left:0;right:0;height:3px;z-index:9;background:linear-gradient(to left,var(--gold),var(--gold3));box-shadow:0 0 14px rgba(245,211,138,.8);transform-origin:100% 50%;animation:progline var(--T) linear infinite}
+@keyframes progline{0%,4%{scale:0 1}92%,100%{scale:1 1}}
+.hud{position:absolute;top:24px;left:36px;right:36px;display:flex;justify-content:space-between;align-items:center;z-index:9}
+.chip{display:flex;align-items:center;gap:12px;padding:7px 10px;padding-inline-end:20px;border-radius:40px;background:rgba(8,11,30,.6);border:1px solid rgba(245,211,138,.2);font-size:21px;color:var(--mist)}
+.chip .mo{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:21px;background:radial-gradient(circle at 38% 32%,rgba(255,241,201,.4),rgba(245,211,138,.06) 70%);box-shadow:0 0 0 1px rgba(245,211,138,.4),0 0 18px rgba(245,211,138,.3)}
+.chip b{color:var(--ivory);font-weight:600}
+.chip i{width:5px;height:5px;border-radius:50%;background:var(--gold2)}
+.kindtag{display:flex;align-items:center;gap:12px;font-family:var(--kufi);font-size:22px;color:var(--gold)}
+.kindtag::after{content:'';width:34px;height:2px;background:linear-gradient(to right,transparent,var(--gold))}
+
+/* --- غلاف المشهد: دخول/خروج + تكبير بطيء (Ken Burns) --- */
+.scene{position:absolute;inset:0;z-index:3;animation:scene var(--T) linear infinite both}
+@keyframes scene{0%{opacity:0;scale:1.035;animation-timing-function:var(--eo)}5%{opacity:1;scale:1}92%{opacity:1;scale:1;animation-timing-function:var(--eio)}97%,100%{opacity:0;scale:.985}}
+.kb{position:absolute;inset:0;animation:kb var(--T) linear infinite}
+@keyframes kb{from{scale:1}to{scale:1.035}}
+.sweep{position:absolute;top:-25%;bottom:-25%;left:50%;width:460px;margin-left:-230px;z-index:8;rotate:14deg;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(245,211,138,.08) 25%,rgba(255,244,214,.6) 50%,rgba(245,211,138,.08) 75%,transparent);opacity:0;animation:sweep var(--T) linear infinite}
+@keyframes sweep{0%,90%{translate:1150px 0;opacity:0;animation-timing-function:var(--eio)}91%{opacity:1}99%{opacity:1;translate:-1150px 0}100%{opacity:0;translate:-1150px 0}}
+
+/* --- الترجمة: كاريوكي (الكلمة المنطوقة ذهبية، ما نُطق عاجي، ما لم يُنطق خافت) --- */
+.cap{position:absolute;left:130px;right:130px;bottom:30px;margin:0;text-align:center;font-size:30px;line-height:1.55;font-weight:500;z-index:7;color:#5B678F;text-shadow:0 2px 14px rgba(0,0,0,.75)}
+.cap.mute{color:var(--mist2);font-weight:400;font-size:26px}
+
+/* --- عناصر مشتركة --- */
+.w{display:inline-block}
+.kw{display:inline-block;position:relative;margin-inline:.12em}
+.ul{position:absolute;right:0;left:0;bottom:-.02em;height:4px;border-radius:3px;background:linear-gradient(to left,#FFE3A3,#D9A54A);box-shadow:0 0 12px rgba(245,211,138,.8);transform-origin:100% 50%}
+em{font-style:normal;color:var(--gold3);font-family:var(--kufi);font-weight:600}
+.dr{fill:none;stroke-dasharray:1;stroke-dashoffset:1}
+.orb{position:relative;display:grid;place-items:center;border-radius:50%;flex:0 0 auto}
+.orb .emo{position:relative;line-height:1}
+.orb.sm{width:66px;height:66px;background:radial-gradient(circle at 38% 32%,rgba(255,241,201,.32),rgba(245,211,138,.06) 70%);box-shadow:0 0 0 1px rgba(245,211,138,.4),0 0 26px rgba(245,211,138,.28)}
+.orb.sm .emo{font-size:34px}
+@keyframes spin{to{rotate:360deg}}
+@keyframes breathe{0%,100%{opacity:.55;scale:.94}50%{opacity:1;scale:1.06}}
+
+/* ---------- ١) الافتتاح ---------- */
+.cov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:92px}
+.orb.big{width:150px;height:150px;background:radial-gradient(circle at 40% 34%,rgba(255,241,201,.38),rgba(245,211,138,.08) 62%,transparent 72%)}
+.orb.big::before{content:'';position:absolute;inset:-46px;border-radius:50%;background:radial-gradient(closest-side,rgba(245,211,138,.3),transparent);animation:breathe 4.5s ease-in-out infinite}
+.orb.big .emo{font-size:78px}
+.orbit{position:absolute;inset:-16px;width:182px;height:182px;animation:spin 16s linear infinite}
+.orbit .ring{fill:none;stroke:rgba(245,211,138,.5);stroke-width:1.4;stroke-dasharray:2 7}
+.orbit .sat{fill:#FFF1C9;filter:drop-shadow(0 0 6px #F5D38A)}
+.kicker{display:flex;align-items:center;gap:16px;margin-top:20px;font-size:24px;color:var(--mist)}
+.kicker i{width:56px;height:1.5px;background:linear-gradient(to left,transparent,var(--gold2))}
+.kicker i:last-child{background:linear-gradient(to right,transparent,var(--gold2))}
+.ttl{position:relative;margin-top:2px}
+.mask{overflow:hidden;padding:0 26px}
+.cov-t{font-family:var(--kufi);font-weight:700;font-size:138px;line-height:1.18;color:var(--gold);text-shadow:0 0 44px rgba(245,211,138,.4);margin:0}
+.flare{position:absolute;left:50%;top:54%;width:1100px;height:16px;margin:-8px 0 0 -550px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,250,235,1),rgba(245,211,138,.55) 30%,transparent);pointer-events:none}
+.cov-s{font-size:40px;font-weight:500;color:var(--ivory);margin-top:0}
+.route{position:relative;display:flex;gap:54px;margin-top:38px}
+.rline{position:absolute;left:50px;right:50px;top:50%;height:2px;margin-top:-1px;background:linear-gradient(to left,var(--gold),var(--gold2));box-shadow:0 0 10px rgba(245,211,138,.6);transform-origin:100% 50%}
+.stop{position:relative;z-index:1;padding:9px 26px;border-radius:30px;background:rgba(10,14,40,.92);border:1px solid rgba(245,211,138,.4);font-size:26px;color:var(--gold);box-shadow:0 0 22px rgba(245,211,138,.12)}
+
+/* ---------- ٢) النقاط: عدسة التركيز ---------- */
+.lst-h{position:absolute;top:96px;right:96px;left:96px;display:flex;align-items:center;gap:20px}
+.lst-h h2{font-family:var(--kufi);font-weight:600;font-size:54px;color:var(--ivory)}
+.lst-h .cnt{margin-inline-start:auto;font-size:22px;color:var(--mist);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:4px 16px}
+.rows{position:absolute;top:196px;right:96px;left:96px;display:flex;flex-direction:column;gap:10px}
+.row{position:relative;display:flex;align-items:center;gap:26px;height:68px;padding-inline-start:4px}
+.med{flex:0 0 56px;height:56px;border-radius:50%;display:grid;place-items:center;font-family:var(--kufi);font-size:27px;color:var(--gold);background:#0A0E26;border:1.5px solid rgba(245,211,138,.6);box-shadow:0 0 18px rgba(245,211,138,.28);position:relative;z-index:1}
+.rtxt{font-size:31px;color:var(--ivory)}
+.rtxt .head{font-weight:600;color:var(--gold);margin-inline-end:16px}
+.rail-bg,.rail{position:absolute;top:230px;right:127px;width:2px;height:312px}
+.rail-bg{background:rgba(245,211,138,.12)}
+.rail{background:linear-gradient(var(--gold),var(--gold2));box-shadow:0 0 10px rgba(245,211,138,.7);transform-origin:50% 0;animation:rail5 var(--T) linear infinite}
+@keyframes rail5{0%,24%{scale:1 0;animation-timing-function:var(--eo)}28%,40%{scale:1 .25;animation-timing-function:var(--eo)}44%,56%{scale:1 .5;animation-timing-function:var(--eo)}60%,72%{scale:1 .75;animation-timing-function:var(--eo)}76%,100%{scale:1 1}}
+.band{position:absolute;right:64px;left:64px;top:196px;height:68px;border-radius:20px;background:linear-gradient(to left,rgba(245,211,138,.22),rgba(245,211,138,.06) 45%,transparent 85%);box-shadow:inset -3px 0 0 rgba(245,211,138,.85);animation:band5 var(--T) linear infinite}
+@keyframes band5{0%,7%{opacity:0;translate:0 0}10%{opacity:1;translate:0 0}24%{translate:0 0;animation-timing-function:var(--eio)}27%,40%{translate:0 78px;animation-timing-function:var(--eio)}43%,56%{translate:0 156px;animation-timing-function:var(--eio)}59%,72%{translate:0 234px;animation-timing-function:var(--eio)}75%,100%{translate:0 312px;opacity:1}}
+
+/* ---------- ٣) التعريف: المعجم المضيء ---------- */
+.ghost{position:absolute;top:10px;left:0;right:0;text-align:center;font-family:var(--naskh);font-weight:700;font-size:400px;line-height:1;color:rgba(245,211,138,.05);white-space:nowrap;animation:ghost 18s ease-in-out infinite alternate}
+@keyframes ghost{from{translate:70px 0}to{translate:-70px 0}}
+.def-w{position:absolute;top:84px;left:0;right:0;text-align:center;font-family:var(--naskh);font-weight:700;font-size:100px;line-height:1.25;color:var(--gold);text-shadow:0 0 40px rgba(245,211,138,.4)}
+.def-line{position:absolute;top:222px;left:50%;width:360px;margin-left:-180px;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);transform-origin:50% 50%}
+.defrow{position:absolute;right:120px;left:120px;display:flex;align-items:flex-start;gap:30px}
+.defrow.l{top:258px}
+.defrow.i{top:392px}
+.lbl{flex:0 0 150px;text-align:center;margin-top:10px;padding:7px 0;border-radius:30px;font-size:24px;font-weight:600}
+.l .lbl{color:var(--moon);border:1.5px solid rgba(141,183,255,.6);background:rgba(141,183,255,.08)}
+.i .lbl{color:#1A1405;background:linear-gradient(to left,#FFE3A3,#E2AF56);box-shadow:0 0 24px rgba(245,211,138,.45)}
+.l .dtx{font-family:var(--naskh);font-size:54px;line-height:1.3;color:var(--ivory)}
+.i .dtx{font-size:42px;line-height:1.6;font-weight:500;color:var(--ivory)}
+.def-link{position:absolute;left:1065px;top:322px;width:40px;height:72px;overflow:visible}
+.def-link path{stroke:var(--gold2);stroke-width:2}
+
+/* ---------- ٤) التفرّع: كوكبة الأنواع ---------- */
+.tl{position:absolute;inset:0;width:1280px;height:720px}
+.tl .halo path{stroke:rgba(169,155,255,.22);stroke-width:9;stroke-linecap:round}
+.tl .lines path{stroke:rgba(205,196,255,.9);stroke-width:2.4;stroke-linecap:round}
+.tl .hot path{fill:none;stroke:var(--gold);stroke-width:3.2;stroke-linecap:round}
+.tl .hot .h2{stroke:rgba(245,211,138,.28);stroke-width:11}
+.tk{position:absolute;top:96px;right:96px;font-family:var(--kufi);font-size:30px;color:var(--mist)}
+.nd{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;display:flex;align-items:center;gap:10px}
+.nd.root{padding:12px 40px;border-radius:40px;background:linear-gradient(to left,#FFE3A3,#E2AF56);color:#1A1405;font-family:var(--kufi);font-weight:700;font-size:44px;box-shadow:0 0 0 7px rgba(245,211,138,.12),0 0 46px rgba(245,211,138,.55)}
+.nd.crit{padding:9px 24px;border-radius:30px;background:rgba(22,17,62,.9);border:1.5px solid rgba(169,155,255,.75);color:#DCD5FF;font-size:26px;font-weight:600;box-shadow:0 0 24px rgba(169,155,255,.25)}
+.nd.typ{padding:9px 28px;border-radius:26px;background:rgba(9,12,34,.92);border:1.5px solid rgba(245,211,138,.55);color:var(--ivory);font-size:31px;font-weight:600}
+.nd.sub{padding:7px 22px;border-radius:22px;background:rgba(9,12,34,.92);border:1px solid rgba(245,211,138,.38);color:var(--ivory);font-size:26px}
+.focus{position:absolute;width:230px;height:88px;margin:-44px 0 0 -115px;border-radius:50px;border:2px solid var(--gold);box-shadow:0 0 30px rgba(245,211,138,.6),inset 0 0 20px rgba(245,211,138,.3)}
+
+/* ---------- ٥) المقارنة: الشاشة المنقسمة ---------- */
+.cmp-k{position:absolute;top:100px;left:0;right:0;text-align:center;font-family:var(--kufi);font-size:28px;color:var(--gold)}
+.pane{position:absolute;top:160px;height:410px;width:520px;border-radius:30px;padding:28px 34px}
+.pane.r{right:72px;background:linear-gradient(200deg,rgba(141,183,255,.17),rgba(141,183,255,.03) 62%);border:1px solid rgba(141,183,255,.3)}
+.pane.l{left:72px;background:linear-gradient(160deg,rgba(255,155,113,.17),rgba(255,155,113,.03) 62%);border:1px solid rgba(255,155,113,.32)}
+.ph{display:flex;align-items:center;gap:14px}
+.ph .pe{font-size:44px}
+.ph h3{font-family:var(--kufi);font-weight:600;font-size:42px}
+.r .ph h3{color:var(--moon)}
+.l .ph h3{color:var(--ember)}
+.cr{position:absolute;right:34px;left:34px;height:64px;display:flex;align-items:center;font-size:29px;color:var(--ivory);border-top:1px solid rgba(255,255,255,.08)}
+.seam{position:absolute;top:170px;height:390px;left:639px;width:2px;background:linear-gradient(transparent,var(--gold) 14%,var(--gold) 86%,transparent);box-shadow:0 0 18px 2px rgba(245,211,138,.55);transform-origin:50% 0}
+.medal{position:absolute;left:640px;top:214px;width:78px;height:78px;margin:-39px 0 0 -39px;border-radius:50%;display:grid;place-items:center;font-size:38px;background:radial-gradient(circle at 40% 34%,#2B2A55,#0B0E28);border:1.5px solid var(--gold);box-shadow:0 0 28px rgba(245,211,138,.5)}
+.crit{position:absolute;left:640px;transform:translate(-50%,-50%);padding:5px 14px;border-radius:20px;background:#0B1030;border:1px solid rgba(245,211,138,.6);color:var(--gold);font-size:20px;font-weight:600;white-space:nowrap;z-index:2}
+
+/* ---------- ٦) المدة: مسطرة الزمن ---------- */
+.st-h{position:absolute;top:94px;right:96px;left:96px;display:flex;align-items:center;gap:20px}
+.st-h h2{font-family:var(--kufi);font-weight:600;font-size:48px;color:var(--ivory)}
+.nums{position:absolute;top:150px;left:0;right:0;display:flex;justify-content:center;align-items:flex-end;gap:24px}
+.numcol{display:flex;flex-direction:column;align-items:center}
+.from{font-size:24px;color:var(--mist);margin-bottom:-8px}
+.roll{height:196px;overflow:hidden}
+.reel{display:flex;flex-direction:column}
+.reel span{display:block;height:196px;line-height:196px;text-align:center;font-family:var(--kufi);font-weight:700;font-size:176px;color:var(--gold)}
+.ra{animation:rollA var(--T) linear infinite}
+.rb{animation:rollB var(--T) linear infinite}
+@keyframes rollA{0%,8%{translate:0 0;animation-timing-function:var(--eio)}11%{translate:0 -196px;animation-timing-function:var(--eio)}14%{translate:0 -392px;animation-timing-function:var(--eo)}19%,100%{translate:0 -588px}}
+@keyframes rollB{0%,12%{translate:0 0;animation-timing-function:var(--eio)}15%{translate:0 -196px;animation-timing-function:var(--eio)}18%{translate:0 -392px;animation-timing-function:var(--eo)}23%,100%{translate:0 -588px}}
+.dash{font-family:var(--kufi);font-size:100px;color:var(--mist2);margin-bottom:46px}
+.unit{font-size:54px;font-weight:500;color:var(--ivory);margin-bottom:44px;margin-inline-start:6px}
+.nglow{position:absolute;top:130px;left:50%;width:900px;height:340px;margin-left:-450px;border-radius:50%;background:radial-gradient(closest-side,rgba(245,211,138,.34),rgba(245,211,138,.08) 60%,transparent)}
+.nflare{position:absolute;left:50%;top:268px;width:1000px;height:14px;margin-left:-500px;border-radius:50%;background:radial-gradient(closest-side,#FFFBEF,rgba(245,211,138,.5) 30%,transparent)}
+.ruler{position:absolute;left:90px;top:420px;width:1100px;height:130px}
+.ruler svg{position:absolute;inset:0;width:1100px;height:130px;overflow:visible}
+.ruler .base{stroke:rgba(246,240,225,.55);stroke-width:2}
+.ruler .ticks path{stroke:rgba(246,240,225,.45);stroke-width:2;stroke-linecap:round}
+.ruler .win{fill:rgba(111,227,200,.16);stroke:var(--teal);stroke-width:2;transform-box:fill-box;transform-origin:100% 50%}
+.ruler text{fill:var(--mist);font-size:22px;font-family:var(--sans);text-anchor:middle}
+.ruler text.g{fill:var(--gold);font-weight:600}
+.gavel{position:absolute;left:40px;top:50px;font-size:46px;line-height:1;transform:translate(-50%,-120%)}
+.gring{position:absolute;left:40px;top:50px;width:90px;height:90px;margin:-45px 0 0 -45px;border-radius:50%;border:2px solid var(--gold)}
+.marker{position:absolute;left:1060px;top:50px;animation:mark var(--T) linear infinite}
+.marker span{position:absolute;left:0;top:0;transform:translate(-50%,-130%);width:62px;height:62px;border-radius:50%;display:grid;place-items:center;font-size:30px;background:#0B1634;border:1.5px solid var(--teal);box-shadow:0 0 22px rgba(111,227,200,.5)}
+.marker::after{content:'';position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:var(--teal);box-shadow:0 0 14px var(--teal)}
+@keyframes mark{0%,38%{opacity:0;translate:0 0}41%{opacity:1;translate:0 0;animation-timing-function:var(--eio)}58%{translate:-510px 0;animation-timing-function:var(--eio)}74%{translate:0 0;animation-timing-function:var(--eio)}86%,100%{translate:-255px 0;opacity:1}}
+
+/* ---------- ٧) المجموعات: مجرّات الشروط ---------- */
+.g18{position:absolute;left:0;right:0;top:186px;display:flex;justify-content:center;align-items:center;gap:26px;transform-origin:50% 50%;animation:g18 var(--T) linear infinite both}
+.g18 b{font-family:var(--kufi);font-weight:700;font-size:230px;line-height:1.05;color:var(--gold);text-shadow:0 0 60px rgba(245,211,138,.5)}
+.g18 span{font-size:48px;font-weight:500;color:var(--ivory)}
+@keyframes g18{0%,3%{opacity:0;scale:.6;translate:0 0;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}8%{opacity:1;scale:1;translate:0 0}21%{opacity:1;scale:1;translate:0 0;animation-timing-function:var(--eio)}27%,100%{opacity:1;scale:.46;translate:0 -190px}}
+.gcards{position:absolute;top:262px;left:96px;right:96px;display:flex;gap:24px}
+.gc{flex:1;height:262px;border-radius:28px;padding:20px 22px;background:linear-gradient(180deg,rgba(22,20,64,.85),rgba(10,13,38,.85));border:1px solid rgba(169,155,255,.3);display:flex;flex-direction:column;align-items:center;text-align:center}
+.gdots{width:124px;height:112px;overflow:visible}
+.gdots path{stroke:rgba(169,155,255,.55);stroke-width:1.6}
+.gdots circle{fill:#FFF3D1;transform-box:fill-box;transform-origin:center;filter:drop-shadow(0 0 5px rgba(245,211,138,.95))}
+.gn{font-size:22px;color:var(--mist);margin-top:4px}
+.gn b{font-family:var(--kufi);font-size:46px;color:var(--gold);font-weight:700;margin-inline-end:6px}
+.gt{font-size:27px;font-weight:600;color:var(--ivory);margin-top:2px}
+.gsum{position:absolute;top:542px;left:0;right:0;text-align:center;font-family:var(--kufi);font-size:32px;color:var(--mist)}
+.gsum b{color:var(--gold);font-weight:700}
+
+/* ---------- ٨) المرجع: الختم ---------- */
+.qt{position:absolute;right:110px;top:150px;width:610px}
+.qmark{font-family:var(--naskh);font-size:190px;line-height:.62;height:96px;color:rgba(245,211,138,.4)}
+.qtx{font-family:var(--naskh);font-size:52px;line-height:1.5;color:var(--ivory)}
+.qby{display:flex;align-items:center;gap:14px;margin-top:22px;font-size:25px;color:var(--mist)}
+.qby::before{content:'';width:48px;height:2px;background:var(--gold2)}
+.sealw{position:absolute;left:140px;top:150px;width:350px;height:350px}
+.sflash{position:absolute;inset:-60px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,241,201,.55),rgba(245,211,138,.15) 55%,transparent)}
+.seal{position:absolute;inset:0}
+.sring{position:absolute;inset:0;width:350px;height:350px;animation:seal-sway 9s ease-in-out infinite alternate;overflow:visible}
+@keyframes seal-sway{from{rotate:-9deg}to{rotate:9deg}}
+.sring .sdots circle{fill:var(--gold)}
+.sring .o1{fill:rgba(42,30,12,.55);stroke:var(--gold2);stroke-width:2}
+.sring .o2{fill:none;stroke:rgba(245,211,138,.45);stroke-width:1.5;stroke-dasharray:3 6}
+.sring text{fill:var(--gold);font-family:var(--kufi);font-size:27px;letter-spacing:0}
+.score{position:absolute;left:50%;top:50%;width:212px;height:212px;margin:-106px 0 0 -106px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 40% 32%,#4A3A1C,#1A1308 72%);border:3px solid var(--gold);box-shadow:inset 0 0 0 6px rgba(26,19,8,.9),inset 0 0 0 8px rgba(245,211,138,.45),0 0 50px rgba(245,211,138,.35)}
+.score span{font-size:22px;color:var(--mist)}
+.score b{font-family:var(--kufi);font-weight:700;font-size:62px;color:var(--gold);line-height:1.2;text-shadow:0 0 20px rgba(245,211,138,.5)}
+
+/* ---------- ٩) سؤال الفهم: لحظة صمت ---------- */
+.dimmer{position:absolute;inset:0;background:rgba(2,3,10,.6);animation:chkdim var(--T) linear infinite}
+@keyframes chkdim{0%,1%{opacity:0;animation-timing-function:var(--eo)}6%,88%{opacity:1;animation-timing-function:var(--eio)}94%,100%{opacity:0}}
+.spot{position:absolute;left:50%;top:330px;width:1100px;height:620px;margin:-310px 0 0 -550px;border-radius:50%;background:radial-gradient(closest-side,rgba(245,211,138,.16),rgba(245,211,138,.04) 60%,transparent)}
+.lbx{position:absolute;left:0;right:0;background:#000;z-index:1}
+.lbx.t{top:0;height:84px;animation:lbxT var(--T) linear infinite}
+.lbx.b{bottom:0;height:116px;animation:lbxB var(--T) linear infinite}
+@keyframes lbxT{0%,1%{translate:0 -100%;animation-timing-function:var(--eo)}7%,88%{translate:0 0;animation-timing-function:var(--eio)}94%,100%{translate:0 -100%}}
+@keyframes lbxB{0%,1%{translate:0 100%;animation-timing-function:var(--eo)}7%,88%{translate:0 0;animation-timing-function:var(--eio)}94%,100%{translate:0 100%}}
+.ck-l{position:absolute;top:104px;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:14px;z-index:2}
+.ck-l b{font-family:var(--kufi);font-size:30px;color:var(--gold);font-weight:600}
+.ck-q{position:absolute;top:184px;left:150px;right:150px;text-align:center;font-size:44px;font-weight:600;line-height:1.5;z-index:2}
+.ck-o{position:absolute;top:338px;left:0;right:0;display:flex;justify-content:center;gap:28px;z-index:2}
+.ox{transform-origin:50% 50%}
+.opt{position:relative;width:300px;height:104px;border-radius:24px;display:flex;align-items:center;gap:18px;padding:0 24px;background:rgba(14,18,46,.9);border:1.5px solid rgba(246,240,225,.18);font-size:34px;font-weight:600}
+.ol{flex:0 0 52px;height:52px;border-radius:50%;display:grid;place-items:center;font-family:var(--kufi);font-size:26px;color:var(--gold);border:1.5px solid rgba(245,211,138,.55);background:rgba(245,211,138,.06)}
+.oglow{position:absolute;inset:-2px;border-radius:26px;border:2.5px solid var(--gold);background:linear-gradient(to left,rgba(245,211,138,.24),rgba(245,211,138,.06));box-shadow:0 0 40px rgba(245,211,138,.55)}
+.burst{position:absolute;left:50%;top:50%;width:560px;height:560px;margin:-280px 0 0 -280px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,246,222,.75),rgba(245,211,138,.25) 40%,transparent);z-index:-1;pointer-events:none}
+.otick{position:absolute;top:-16px;left:-14px;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:24px;font-weight:700;color:#1A1405;background:var(--gold);box-shadow:0 0 18px rgba(245,211,138,.9)}
+.opt>span:not(.ol){position:relative}
+.ck-r{position:absolute;left:50%;top:470px;width:120px;height:120px;margin-left:-60px;z-index:2}
+.beat{position:absolute;inset:0;animation:beat 1s ease-in-out infinite}
+@keyframes beat{0%,100%{scale:1}12%{scale:1.07}24%{scale:1}}
+.ck-r svg{position:absolute;inset:0;width:120px;height:120px;rotate:-90deg;overflow:visible}
+.ck-r .trk{fill:none;stroke:rgba(246,240,225,.12);stroke-width:6}
+.ck-r .fg{fill:none;stroke:var(--gold);stroke-width:6;stroke-linecap:round;stroke-dasharray:1;filter:drop-shadow(0 0 6px rgba(245,211,138,.9));animation:ringdown var(--T) linear infinite}
+@keyframes ringdown{0%,34%{stroke-dashoffset:0}65%,100%{stroke-dashoffset:1}}
+.dg{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--kufi);font-size:50px;font-weight:700;color:var(--gold)}
+.ck-a{position:absolute;top:478px;left:230px;right:230px;padding:16px 28px;border-radius:22px;text-align:center;font-size:29px;line-height:1.5;background:linear-gradient(to left,rgba(245,211,138,.16),rgba(245,211,138,.05));border:1px solid rgba(245,211,138,.5);z-index:2}
+.ck-a b{color:var(--gold)}
+.t-chk .cap{z-index:7}
+
+/* ---------- ١٠) الخلاصة: شريط العرض ---------- */
+.sm-h{position:absolute;top:88px;left:0;right:0;text-align:center}
+.sm-h span{display:block;font-family:var(--kufi);font-size:26px;color:var(--gold)}
+.sm-h h2{font-family:var(--kufi);font-weight:600;font-size:52px;color:var(--ivory);line-height:1.3}
+.stripw{position:absolute;top:214px;left:-60px;right:-60px;height:300px}
+.strip{position:absolute;inset:0;background:linear-gradient(180deg,#060818,#0B1028 50%,#060818);border-top:1px solid rgba(245,211,138,.2);border-bottom:1px solid rgba(245,211,138,.2);animation:pan var(--T) linear infinite;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+@keyframes pan{from{translate:18px 0}to{translate:-22px 0}}
+.spr{position:absolute;left:0;right:0;height:14px;background:repeating-linear-gradient(to left,rgba(246,240,225,.16) 0 22px,transparent 22px 46px)}
+.spr.a{top:11px}.spr.b{bottom:11px}
+.frames{position:absolute;top:40px;bottom:40px;left:0;right:0;display:flex;justify-content:center;gap:22px}
+.frm{position:relative;width:262px;border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;align-items:center;text-align:center;background:linear-gradient(180deg,#18205A,#0D1234);border:1px solid rgba(245,211,138,.28);overflow:visible}
+.frm .fe{font-size:46px;line-height:1.2}
+.frm b{font-family:var(--kufi);font-size:29px;color:var(--gold);font-weight:600;margin-top:4px}
+.frm span{font-size:23px;line-height:1.45;color:var(--ivory);margin-top:4px}
+.fflash{position:absolute;inset:-20px;border-radius:30px;background:radial-gradient(closest-side,rgba(255,248,230,.55),transparent);pointer-events:none}
+.fst{position:absolute;top:-17px;left:-15px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:22px;font-weight:700;color:#1A1405;background:var(--gold);box-shadow:0 0 16px rgba(245,211,138,.9);z-index:2}
+.thread{position:absolute;inset:0;width:100%;height:100%;overflow:visible;z-index:1}
+.thread path{stroke:var(--gold);stroke-width:2.5;filter:drop-shadow(0 0 6px rgba(245,211,138,.9))}
+.done{position:absolute;top:532px;left:50%;transform:translateX(-50%);padding:6px 24px;border-radius:30px;background:linear-gradient(to left,#FFE3A3,#E2AF56);color:#1A1405;font-weight:600;font-size:24px;white-space:nowrap;box-shadow:0 0 30px rgba(245,211,138,.5)}
+
+/* ---------- ١١) أسئلة النهاية: فجر الفهم ---------- */
+.sun{position:absolute;left:50%;bottom:-560px;width:1500px;height:860px;margin-left:-750px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,232,170,.9),rgba(250,170,120,.5) 38%,rgba(240,127,166,.18) 64%,transparent);animation:dawn var(--T) linear infinite both}
+@keyframes dawn{0%{translate:0 300px;opacity:.25;animation-timing-function:cubic-bezier(.22,.8,.3,1)}38%,100%{translate:0 0;opacity:1}}
+.sky{position:absolute;inset:0;background:linear-gradient(to top,rgba(240,127,166,.24),rgba(245,211,138,.08) 40%,transparent 72%);animation:dawnsky var(--T) linear infinite both}
+@keyframes dawnsky{0%{opacity:0}35%,100%{opacity:1}}
+.spark{position:absolute;bottom:60px;width:6px;height:6px;border-radius:50%;background:#FFE7B0;box-shadow:0 0 10px 2px rgba(245,211,138,.8);animation:rise 6s linear infinite}
+@keyframes rise{0%{translate:0 0;opacity:0}15%{opacity:1}100%{translate:30px -460px;opacity:0}}
+.en{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:84px}
+.orb.md{width:100px;height:100px;background:radial-gradient(circle at 40% 34%,rgba(255,241,201,.4),rgba(245,211,138,.08) 66%,transparent 74%);box-shadow:0 0 0 1px rgba(245,211,138,.4),0 0 40px rgba(245,211,138,.35)}
+.orb.md .emo{font-size:52px}
+.en .k{font-family:var(--kufi);font-size:26px;color:var(--gold);margin-top:14px}
+.en h2{font-family:var(--kufi);font-weight:600;font-size:50px;line-height:1.3}
+.qcs{display:flex;gap:30px;margin-top:26px}
+.qcf{animation:float 5s ease-in-out infinite alternate}
+.qcf.f2{animation-duration:6.2s;animation-delay:-2s}.qcf.f3{animation-duration:4.4s;animation-delay:-1s}
+@keyframes float{from{translate:0 -6px}to{translate:0 8px}}
+.qc{width:300px;height:150px;border-radius:22px;padding:18px 22px;display:flex;flex-direction:column;gap:6px;background:linear-gradient(180deg,rgba(26,24,70,.92),rgba(12,14,40,.92));border:1px solid rgba(245,211,138,.3);box-shadow:0 24px 50px rgba(0,0,0,.45);text-align:right}
+.qc i{font-style:normal;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-family:var(--kufi);font-size:19px;color:#1A1405;background:var(--gold)}
+.qc span{font-size:25px;line-height:1.45;font-weight:500}
+.btns{display:flex;gap:22px;margin-top:30px}
+.bt{position:relative;overflow:hidden;display:flex;align-items:center;gap:12px;padding:14px 34px;border-radius:40px;font-size:27px;font-weight:600}
+.bt.g{background:linear-gradient(to left,#FFE3A3,#E2AF56);color:#1A1405;box-shadow:0 0 34px rgba(245,211,138,.5)}
+.bt.g::after{content:'';position:absolute;top:-20px;bottom:-20px;width:70px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);rotate:18deg;animation:shine 3.4s var(--eio) infinite}
+@keyframes shine{0%,55%{left:110%}100%{left:-30%}}
+.bt.o{border:1.5px solid rgba(246,240,225,.4);color:var(--ivory);background:rgba(8,10,30,.5)}
+
+/* ============ الانتقالات ============ */
+.trs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.tr{border-radius:20px;background:var(--panel);border:1px solid rgba(255,255,255,.05);padding:12px}
+.mini{position:relative;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#050816}
+.mini .A,.mini .B{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--kufi);font-size:22px}
+.mini .A{background:linear-gradient(160deg,#0C1440,#151049);color:var(--gold)}
+.mini .B{background:linear-gradient(160deg,#1D1250,#0A1030);color:var(--violet)}
+.tr b{display:block;font-family:var(--kufi);font-size:19px;margin-top:10px;color:var(--ivory)}
+.tr p{margin:2px 0 0;font-size:14px;color:var(--mist);line-height:1.6}
+.m1 .A{animation:m1a 4s infinite}.m1 .B{animation:m1b 4s infinite}
+.m1 .sw2{position:absolute;top:-30%;bottom:-30%;width:70px;left:50%;rotate:14deg;background:linear-gradient(90deg,transparent,rgba(255,244,214,.75),transparent);animation:m1s 4s infinite}
+@keyframes m1a{0%,40%{opacity:1;scale:1}55%,100%{opacity:0;scale:1.03}}
+@keyframes m1b{0%,45%{opacity:0;scale:.97}60%,92%{opacity:1;scale:1}100%{opacity:0}}
+@keyframes m1s{0%,38%{translate:220px 0;opacity:0}40%{opacity:1}58%{translate:-260px 0;opacity:1}60%,100%{opacity:0;translate:-260px 0}}
+.m2 .B{animation:m2b 4s infinite}
+.m2 .iris{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:50%;box-shadow:0 0 0 400px #000;animation:m2i 4s infinite}
+.m2 .bar{position:absolute;left:0;right:0;height:14%;background:#000;animation:m2bar 4s infinite}
+.m2 .bar.t{top:0}.m2 .bar.b{bottom:0;--d:1}
+@keyframes m2i{0%,20%{scale:6}45%{scale:1.3}55%,100%{scale:9}}
+@keyframes m2b{0%,48%{opacity:0}58%,100%{opacity:1}}
+@keyframes m2bar{0%,45%{opacity:0}58%,95%{opacity:1}100%{opacity:0}}
+.m3 .A{animation:m3a 4s infinite}.m3 .B{animation:m3b 4s infinite}
+@keyframes m3a{0%,35%{opacity:1;scale:1}60%,100%{opacity:0;scale:1.6}}
+@keyframes m3b{0%,40%{opacity:0;scale:.8}65%,95%{opacity:1;scale:1}100%{opacity:0}}
+.m4 .A{background:linear-gradient(160deg,#0C1440,#151049)}
+.m4 .sunm{position:absolute;left:-20%;right:-20%;bottom:-120%;height:200%;border-radius:50%;background:radial-gradient(closest-side,rgba(255,232,170,.95),rgba(250,170,120,.5) 40%,transparent);animation:m4 4s infinite}
+.m4 .A span{position:relative;z-index:2;color:#FFF1C9}
+@keyframes m4{0%{translate:0 40%}60%,100%{translate:0 0}}
+
+/* ============ الثيمات ============ */
+.ths{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.th{border-radius:18px;background:var(--panel);padding:10px;border:1px solid rgba(255,255,255,.05)}
+.th-s{position:relative;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:linear-gradient(165deg,var(--b1),var(--b2) 50%,var(--b3));display:flex;flex-direction:column;align-items:center;justify-content:center}
+.th-s::before,.th-s::after{content:'';position:absolute;border-radius:50%}
+.th-s::before{width:70%;height:120%;left:-20%;top:-40%;background:radial-gradient(closest-side,var(--q1),transparent);opacity:.5}
+.th-s::after{width:60%;height:110%;right:-20%;bottom:-50%;background:radial-gradient(closest-side,var(--q2),transparent);opacity:.45}
+.th-s b{position:relative;z-index:1;font-family:var(--kufi);font-size:28px;color:var(--ac);text-shadow:0 0 18px var(--ac)}
+.th-s i{position:relative;z-index:1;width:60px;height:2px;margin-top:4px;background:var(--ac);box-shadow:0 0 8px var(--ac)}
+.th span{display:block;font-size:14px;margin-top:8px;color:var(--ivory)}
+.th code{font-size:11.5px;color:var(--mist2);direction:ltr;font-family:ui-monospace,Menlo,monospace}
+
+/* ============ التنفيذ في React Native ============ */
+.rn{width:100%;border-collapse:separate;border-spacing:0 8px;font-size:15px}
+.rn th{text-align:right;font-weight:600;color:var(--gold);font-size:14px;padding:0 14px}
+.rn td{background:var(--panel);padding:12px 14px;vertical-align:top;line-height:1.65}
+.rn td:first-child{border-radius:0 14px 14px 0;font-weight:600;width:22%}
+.rn td:last-child{border-radius:14px 0 0 14px}
+.rn code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--gold3);background:rgba(245,211,138,.08);border-radius:6px;padding:1px 6px;direction:ltr;unicode-bidi:isolate}
+@media (max-width:759px){.rn,.rn tbody,.rn tr,.rn td{display:block;width:100%}.rn thead{display:none}.rn td:first-child{border-radius:14px 14px 0 0;width:100%}.rn td:last-child{border-radius:0 0 14px 14px}.rn tr{margin-bottom:10px}}
+.foot{margin-top:72px;color:var(--mist2);font-size:14px;border-top:1px solid var(--line);padding-top:20px}
+
+@media (max-width:1100px){.top{grid-template-columns:1fr}.xpl{height:440px}}
+@media (max-width:759px){
+  .xpl{height:auto;overflow:hidden}
+  .xstack{position:relative;height:390px}
+  .pl{left:50%;top:72%;width:210px;height:118px;margin:-59px 0 0 -105px;transform:rotateX(58deg) rotateZ(-40deg) translateZ(calc(var(--i)*40px))}
+  .pl.l4 b{font-size:34px}
+  .xlab{position:static;width:auto;white-space:normal;margin-top:8px}
+}
+@media (prefers-reduced-motion:reduce){.stars,.beam,.neb,.grad{animation:none!important}}
+
+@keyframes k-act-24-40{0%{opacity:0;translate:0 22px;scale:1}24%{opacity:0;translate:0 22px;scale:1;animation-timing-function:cubic-bezier(.16,1,.3,1)}27%{opacity:1;translate:0 0;scale:1}40%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}43%{opacity:.46;scale:.985}100%{opacity:.46;scale:.985}}
+.a-act-24-40{animation:k-act-24-40 var(--T,14s) linear infinite both}
+@keyframes k-act-40-56{0%{opacity:0;translate:0 22px;scale:1}40%{opacity:0;translate:0 22px;scale:1;animation-timing-function:cubic-bezier(.16,1,.3,1)}43%{opacity:1;translate:0 0;scale:1}56%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}59%{opacity:.46;scale:.985}100%{opacity:.46;scale:.985}}
+.a-act-40-56{animation:k-act-40-56 var(--T,14s) linear infinite both}
+@keyframes k-act-56-72{0%{opacity:0;translate:0 22px;scale:1}56%{opacity:0;translate:0 22px;scale:1;animation-timing-function:cubic-bezier(.16,1,.3,1)}59%{opacity:1;translate:0 0;scale:1}72%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}75%{opacity:.46;scale:.985}100%{opacity:.46;scale:.985}}
+.a-act-56-72{animation:k-act-56-72 var(--T,14s) linear infinite both}
+@keyframes k-act-72-99{0%{opacity:0;translate:0 22px;scale:1}72%{opacity:0;translate:0 22px;scale:1;animation-timing-function:cubic-bezier(.16,1,.3,1)}75%{opacity:1;translate:0 0;scale:1}100%{opacity:1;translate:0 0;scale:1}}
+.a-act-72-99{animation:k-act-72-99 var(--T,14s) linear infinite both}
+@keyframes k-act-8-24{0%{opacity:0;translate:0 22px;scale:1}8%{opacity:0;translate:0 22px;scale:1;animation-timing-function:cubic-bezier(.16,1,.3,1)}11%{opacity:1;translate:0 0;scale:1}24%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}27%{opacity:.46;scale:.985}100%{opacity:.46;scale:.985}}
+.a-act-8-24{animation:k-act-8-24 var(--T,14s) linear infinite both}
+@keyframes k-dm-67{0%{opacity:1}67%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}70%{opacity:.3}100%{opacity:.3}}
+.a-dm-67{animation:k-dm-67 var(--T,14s) linear infinite both}
+@keyframes k-dmr-34-80{0%{opacity:1}34%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}37%{opacity:.38}80%{opacity:.38;animation-timing-function:cubic-bezier(.65,0,.35,1)}83%{opacity:1}100%{opacity:1}}
+.a-dmr-34-80{animation:k-dmr-34-80 var(--T,14s) linear infinite both}
+@keyframes k-dr-10-15{0%{stroke-dashoffset:1}10%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}15%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-10-15{animation:k-dr-10-15 var(--T,14s) linear infinite both}
+@keyframes k-dr-20-25{0%{stroke-dashoffset:1}20%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}25%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-20-25{animation:k-dr-20-25 var(--T,14s) linear infinite both}
+@keyframes k-dr-24-32{0%{stroke-dashoffset:1}24%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}32%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-24-32{animation:k-dr-24-32 var(--T,14s) linear infinite both}
+@keyframes k-dr-31-37{0%{stroke-dashoffset:1}31%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}37%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-31-37{animation:k-dr-31-37 var(--T,14s) linear infinite both}
+@keyframes k-dr-32-37{0%{stroke-dashoffset:1}32%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}37%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-32-37{animation:k-dr-32-37 var(--T,14s) linear infinite both}
+@keyframes k-dr-36-41{0%{stroke-dashoffset:1}36%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}41%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-36-41{animation:k-dr-36-41 var(--T,14s) linear infinite both}
+@keyframes k-dr-37-43{0%{stroke-dashoffset:1}37%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}43%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-37-43{animation:k-dr-37-43 var(--T,14s) linear infinite both}
+@keyframes k-dr-43-48{0%{stroke-dashoffset:1}43%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}48%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-43-48{animation:k-dr-43-48 var(--T,14s) linear infinite both}
+@keyframes k-dr-49-54{0%{stroke-dashoffset:1}49%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}54%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-49-54{animation:k-dr-49-54 var(--T,14s) linear infinite both}
+@keyframes k-dr-54-59{0%{stroke-dashoffset:1}54%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}59%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-54-59{animation:k-dr-54-59 var(--T,14s) linear infinite both}
+@keyframes k-dr-64-69{0%{stroke-dashoffset:1}64%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}69%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-64-69{animation:k-dr-64-69 var(--T,14s) linear infinite both}
+@keyframes k-dr-64-74{0%{stroke-dashoffset:1}64%{stroke-dashoffset:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}74%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}
+.a-dr-64-74{animation:k-dr-64-74 var(--T,14s) linear infinite both}
+@keyframes k-fi-10{0%{opacity:0}10%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}14%{opacity:1}100%{opacity:1}}
+.a-fi-10{animation:k-fi-10 var(--T,14s) linear infinite both}
+@keyframes k-fi-20{0%{opacity:0}20%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}24%{opacity:1}100%{opacity:1}}
+.a-fi-20{animation:k-fi-20 var(--T,14s) linear infinite both}
+@keyframes k-fi-27{0%{opacity:0}27%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}31%{opacity:1}100%{opacity:1}}
+.a-fi-27{animation:k-fi-27 var(--T,14s) linear infinite both}
+@keyframes k-fi-3{0%{opacity:0}3%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}7%{opacity:1}100%{opacity:1}}
+.a-fi-3{animation:k-fi-3 var(--T,14s) linear infinite both}
+@keyframes k-fi-30{0%{opacity:0}30%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}34%{opacity:1}100%{opacity:1}}
+.a-fi-30{animation:k-fi-30 var(--T,14s) linear infinite both}
+@keyframes k-fi-4{0%{opacity:0}4%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}8%{opacity:1}100%{opacity:1}}
+.a-fi-4{animation:k-fi-4 var(--T,14s) linear infinite both}
+@keyframes k-fi-48{0%{opacity:0}48%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}52%{opacity:1}100%{opacity:1}}
+.a-fi-48{animation:k-fi-48 var(--T,14s) linear infinite both}
+@keyframes k-fi-5{0%{opacity:0}5%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}9%{opacity:1}100%{opacity:1}}
+.a-fi-5{animation:k-fi-5 var(--T,14s) linear infinite both}
+@keyframes k-fi-62{0%{opacity:0}62%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}66%{opacity:1}100%{opacity:1}}
+.a-fi-62{animation:k-fi-62 var(--T,14s) linear infinite both}
+@keyframes k-fi-8{0%{opacity:0}8%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}12%{opacity:1}100%{opacity:1}}
+.a-fi-8{animation:k-fi-8 var(--T,14s) linear infinite both}
+@keyframes k-fi-80{0%{opacity:0}80%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}84%{opacity:1}100%{opacity:1}}
+.a-fi-80{animation:k-fi-80 var(--T,14s) linear infinite both}
+@keyframes k-fi-9{0%{opacity:0}9%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}13%{opacity:1}100%{opacity:1}}
+.a-fi-9{animation:k-fi-9 var(--T,14s) linear infinite both}
+@keyframes k-fl-23{0%{opacity:0;translate:-70px 0}23%{opacity:0;translate:-70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}27%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fl-23{animation:k-fl-23 var(--T,14s) linear infinite both}
+@keyframes k-fl-41{0%{opacity:0;translate:-70px 0}41%{opacity:0;translate:-70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}45%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fl-41{animation:k-fl-41 var(--T,14s) linear infinite both}
+@keyframes k-fl-5{0%{opacity:0;translate:-70px 0}5%{opacity:0;translate:-70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}9%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fl-5{animation:k-fl-5 var(--T,14s) linear infinite both}
+@keyframes k-fl-59{0%{opacity:0;translate:-70px 0}59%{opacity:0;translate:-70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}63%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fl-59{animation:k-fl-59 var(--T,14s) linear infinite both}
+@keyframes k-flash-12{0%{opacity:0;scale:.3}12%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}14%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}21%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-12{animation:k-flash-12 var(--T,14s) linear infinite both}
+@keyframes k-flash-15{0%{opacity:0;scale:.3}15%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}17%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}24%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-15{animation:k-flash-15 var(--T,14s) linear infinite both}
+@keyframes k-flash-22{0%{opacity:0;scale:.3}22%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}24%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}31%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-22{animation:k-flash-22 var(--T,14s) linear infinite both}
+@keyframes k-flash-26{0%{opacity:0;scale:.3}26%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}28%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}35%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-26{animation:k-flash-26 var(--T,14s) linear infinite both}
+@keyframes k-flash-40{0%{opacity:0;scale:.3}40%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}42%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}49%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-40{animation:k-flash-40 var(--T,14s) linear infinite both}
+@keyframes k-flash-48{0%{opacity:0;scale:.3}48%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}50%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}57%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-48{animation:k-flash-48 var(--T,14s) linear infinite both}
+@keyframes k-flash-54{0%{opacity:0;scale:.3}54%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}56%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}63%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-54{animation:k-flash-54 var(--T,14s) linear infinite both}
+@keyframes k-flash-66{0%{opacity:0;scale:.3}66%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}68%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}75%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-66{animation:k-flash-66 var(--T,14s) linear infinite both}
+@keyframes k-flash-7{0%{opacity:0;scale:.3}7%{opacity:0;scale:.3;animation-timing-function:cubic-bezier(.16,1,.3,1)}9%{opacity:1;scale:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}16%{opacity:0;scale:1.7}100%{opacity:0;scale:1.7}}
+.a-flash-7{animation:k-flash-7 var(--T,14s) linear infinite both}
+@keyframes k-fr-18{0%{opacity:0;translate:70px 0}18%{opacity:0;translate:70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}22%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fr-18{animation:k-fr-18 var(--T,14s) linear infinite both}
+@keyframes k-fr-3{0%{opacity:0;translate:70px 0}3%{opacity:0;translate:70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}7%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fr-3{animation:k-fr-3 var(--T,14s) linear infinite both}
+@keyframes k-fr-36{0%{opacity:0;translate:70px 0}36%{opacity:0;translate:70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}40%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fr-36{animation:k-fr-36 var(--T,14s) linear infinite both}
+@keyframes k-fr-5{0%{opacity:0;translate:70px 0}5%{opacity:0;translate:70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}9%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fr-5{animation:k-fr-5 var(--T,14s) linear infinite both}
+@keyframes k-fr-54{0%{opacity:0;translate:70px 0}54%{opacity:0;translate:70px 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}58%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fr-54{animation:k-fr-54 var(--T,14s) linear infinite both}
+@keyframes k-fu-12{0%{opacity:0;translate:0 26px}12%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}16%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-12{animation:k-fu-12 var(--T,14s) linear infinite both}
+@keyframes k-fu-20{0%{opacity:0;translate:0 26px}20%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}24%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-20{animation:k-fu-20 var(--T,14s) linear infinite both}
+@keyframes k-fu-24{0%{opacity:0;translate:0 26px}24%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}28%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-24{animation:k-fu-24 var(--T,14s) linear infinite both}
+@keyframes k-fu-28{0%{opacity:0;translate:0 26px}28%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}32%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-28{animation:k-fu-28 var(--T,14s) linear infinite both}
+@keyframes k-fu-3{0%{opacity:0;translate:0 26px}3%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}7%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-3{animation:k-fu-3 var(--T,14s) linear infinite both}
+@keyframes k-fu-34{0%{opacity:0;translate:0 26px}34%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}38%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-34{animation:k-fu-34 var(--T,14s) linear infinite both}
+@keyframes k-fu-4{0%{opacity:0;translate:0 26px}4%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}8%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-4{animation:k-fu-4 var(--T,14s) linear infinite both}
+@keyframes k-fu-40{0%{opacity:0;translate:0 26px}40%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}44%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-40{animation:k-fu-40 var(--T,14s) linear infinite both}
+@keyframes k-fu-46{0%{opacity:0;translate:0 26px}46%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}50%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-46{animation:k-fu-46 var(--T,14s) linear infinite both}
+@keyframes k-fu-5{0%{opacity:0;translate:0 26px}5%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}9%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-5{animation:k-fu-5 var(--T,14s) linear infinite both}
+@keyframes k-fu-71{0%{opacity:0;translate:0 26px}71%{opacity:0;translate:0 26px;animation-timing-function:cubic-bezier(.16,1,.3,1)}75%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-fu-71{animation:k-fu-71 var(--T,14s) linear infinite both}
+@keyframes k-glo-22{0%{opacity:0;scale:.6}22%{opacity:0;scale:.6;animation-timing-function:cubic-bezier(.16,1,.3,1)}25%{opacity:1;scale:1.1;animation-timing-function:cubic-bezier(.65,0,.35,1)}29%{opacity:.8;scale:1}100%{opacity:.8;scale:1}}
+.a-glo-22{animation:k-glo-22 var(--T,14s) linear infinite both}
+@keyframes k-glo-66{0%{opacity:0;scale:.6}66%{opacity:0;scale:.6;animation-timing-function:cubic-bezier(.16,1,.3,1)}69%{opacity:1;scale:1.1;animation-timing-function:cubic-bezier(.65,0,.35,1)}73%{opacity:.8;scale:1}100%{opacity:.8;scale:1}}
+.a-glo-66{animation:k-glo-66 var(--T,14s) linear infinite both}
+@keyframes k-glo-80{0%{opacity:0;scale:.6}80%{opacity:0;scale:.6;animation-timing-function:cubic-bezier(.16,1,.3,1)}83%{opacity:1;scale:1.1;animation-timing-function:cubic-bezier(.65,0,.35,1)}87%{opacity:.8;scale:1}100%{opacity:.8;scale:1}}
+.a-glo-80{animation:k-glo-80 var(--T,14s) linear infinite both}
+@keyframes k-lift-66{0%{scale:1}66%{scale:1;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}70%{scale:1.07}100%{scale:1.07}}
+.a-lift-66{animation:k-lift-66 var(--T,14s) linear infinite both}
+@keyframes k-lt-12{0%{opacity:.2;scale:.97}12%{opacity:.2;scale:.97;animation-timing-function:cubic-bezier(.16,1,.3,1)}15%{opacity:1;scale:1.03;animation-timing-function:cubic-bezier(.65,0,.35,1)}18%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-lt-12{animation:k-lt-12 var(--T,14s) linear infinite both}
+@keyframes k-lt-26{0%{opacity:.2;scale:.97}26%{opacity:.2;scale:.97;animation-timing-function:cubic-bezier(.16,1,.3,1)}29%{opacity:1;scale:1.03;animation-timing-function:cubic-bezier(.65,0,.35,1)}32%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-lt-26{animation:k-lt-26 var(--T,14s) linear infinite both}
+@keyframes k-lt-40{0%{opacity:.2;scale:.97}40%{opacity:.2;scale:.97;animation-timing-function:cubic-bezier(.16,1,.3,1)}43%{opacity:1;scale:1.03;animation-timing-function:cubic-bezier(.65,0,.35,1)}46%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-lt-40{animation:k-lt-40 var(--T,14s) linear infinite both}
+@keyframes k-lt-54{0%{opacity:.2;scale:.97}54%{opacity:.2;scale:.97;animation-timing-function:cubic-bezier(.16,1,.3,1)}57%{opacity:1;scale:1.03;animation-timing-function:cubic-bezier(.65,0,.35,1)}60%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-lt-54{animation:k-lt-54 var(--T,14s) linear infinite both}
+@keyframes k-mi-11{0%{translate:-100% 0}11%{translate:-100% 0;animation-timing-function:cubic-bezier(.65,0,.35,1)}18%{translate:0 0}100%{translate:0 0}}
+.a-mi-11{animation:k-mi-11 var(--T,14s) linear infinite both}
+@keyframes k-mo-11{0%{translate:100% 0}11%{translate:100% 0;animation-timing-function:cubic-bezier(.65,0,.35,1)}18%{translate:0 0}100%{translate:0 0}}
+.a-mo-11{animation:k-mo-11 var(--T,14s) linear infinite both}
+@keyframes k-pop-15{0%{opacity:0;scale:.35}15%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}19%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-15{animation:k-pop-15 var(--T,14s) linear infinite both}
+@keyframes k-pop-16{0%{opacity:0;scale:.35}16%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}20%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-16{animation:k-pop-16 var(--T,14s) linear infinite both}
+@keyframes k-pop-25{0%{opacity:0;scale:.35}25%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}29%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-25{animation:k-pop-25 var(--T,14s) linear infinite both}
+@keyframes k-pop-26{0%{opacity:0;scale:.35}26%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}30%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-26{animation:k-pop-26 var(--T,14s) linear infinite both}
+@keyframes k-pop-28{0%{opacity:0;scale:.35}28%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}32%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-28{animation:k-pop-28 var(--T,14s) linear infinite both}
+@keyframes k-pop-29{0%{opacity:0;scale:.35}29%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}33%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-29{animation:k-pop-29 var(--T,14s) linear infinite both}
+@keyframes k-pop-3{0%{opacity:0;scale:.35}3%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}7%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-3{animation:k-pop-3 var(--T,14s) linear infinite both}
+@keyframes k-pop-30{0%{opacity:0;scale:.35}30%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}34%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-30{animation:k-pop-30 var(--T,14s) linear infinite both}
+@keyframes k-pop-31{0%{opacity:0;scale:.35}31%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}35%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-31{animation:k-pop-31 var(--T,14s) linear infinite both}
+@keyframes k-pop-32{0%{opacity:0;scale:.35}32%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}36%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-32{animation:k-pop-32 var(--T,14s) linear infinite both}
+@keyframes k-pop-33{0%{opacity:0;scale:.35}33%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}37%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-33{animation:k-pop-33 var(--T,14s) linear infinite both}
+@keyframes k-pop-35{0%{opacity:0;scale:.35}35%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}39%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-35{animation:k-pop-35 var(--T,14s) linear infinite both}
+@keyframes k-pop-36{0%{opacity:0;scale:.35}36%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}40%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-36{animation:k-pop-36 var(--T,14s) linear infinite both}
+@keyframes k-pop-37{0%{opacity:0;scale:.35}37%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}41%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-37{animation:k-pop-37 var(--T,14s) linear infinite both}
+@keyframes k-pop-38{0%{opacity:0;scale:.35}38%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}42%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-38{animation:k-pop-38 var(--T,14s) linear infinite both}
+@keyframes k-pop-39{0%{opacity:0;scale:.35}39%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}43%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-39{animation:k-pop-39 var(--T,14s) linear infinite both}
+@keyframes k-pop-40{0%{opacity:0;scale:.35}40%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}44%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-40{animation:k-pop-40 var(--T,14s) linear infinite both}
+@keyframes k-pop-41{0%{opacity:0;scale:.35}41%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}45%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-41{animation:k-pop-41 var(--T,14s) linear infinite both}
+@keyframes k-pop-42{0%{opacity:0;scale:.35}42%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}46%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-42{animation:k-pop-42 var(--T,14s) linear infinite both}
+@keyframes k-pop-43{0%{opacity:0;scale:.35}43%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}47%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-43{animation:k-pop-43 var(--T,14s) linear infinite both}
+@keyframes k-pop-44{0%{opacity:0;scale:.35}44%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}48%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-44{animation:k-pop-44 var(--T,14s) linear infinite both}
+@keyframes k-pop-46{0%{opacity:0;scale:.35}46%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}50%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-46{animation:k-pop-46 var(--T,14s) linear infinite both}
+@keyframes k-pop-47{0%{opacity:0;scale:.35}47%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}51%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-47{animation:k-pop-47 var(--T,14s) linear infinite both}
+@keyframes k-pop-48{0%{opacity:0;scale:.35}48%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}52%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-48{animation:k-pop-48 var(--T,14s) linear infinite both}
+@keyframes k-pop-49{0%{opacity:0;scale:.35}49%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}53%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-49{animation:k-pop-49 var(--T,14s) linear infinite both}
+@keyframes k-pop-50{0%{opacity:0;scale:.35}50%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}54%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-50{animation:k-pop-50 var(--T,14s) linear infinite both}
+@keyframes k-pop-51{0%{opacity:0;scale:.35}51%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}55%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-51{animation:k-pop-51 var(--T,14s) linear infinite both}
+@keyframes k-pop-58{0%{opacity:0;scale:.35}58%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}62%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-58{animation:k-pop-58 var(--T,14s) linear infinite both}
+@keyframes k-pop-59{0%{opacity:0;scale:.35}59%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}63%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-59{animation:k-pop-59 var(--T,14s) linear infinite both}
+@keyframes k-pop-6{0%{opacity:0;scale:.35}6%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}10%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-6{animation:k-pop-6 var(--T,14s) linear infinite both}
+@keyframes k-pop-68{0%{opacity:0;scale:.35}68%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}72%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-68{animation:k-pop-68 var(--T,14s) linear infinite both}
+@keyframes k-pop-69{0%{opacity:0;scale:.35}69%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}73%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-69{animation:k-pop-69 var(--T,14s) linear infinite both}
+@keyframes k-pop-72{0%{opacity:0;scale:.35}72%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}76%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-72{animation:k-pop-72 var(--T,14s) linear infinite both}
+@keyframes k-pop-76{0%{opacity:0;scale:.35}76%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}80%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-76{animation:k-pop-76 var(--T,14s) linear infinite both}
+@keyframes k-pop-8{0%{opacity:0;scale:.35}8%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}12%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-8{animation:k-pop-8 var(--T,14s) linear infinite both}
+@keyframes k-pop-9{0%{opacity:0;scale:.35}9%{opacity:0;scale:.35;animation-timing-function:cubic-bezier(.34,1.56,.64,1)}13%{opacity:1;scale:1}100%{opacity:1;scale:1}}
+.a-pop-9{animation:k-pop-9 var(--T,14s) linear infinite both}
+@keyframes k-sb-10-16{0%{color:#5B678F}10%{color:#5B678F}11%{color:#F5D38A}16%{color:#F5D38A}17%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-10-16{animation:k-sb-10-16 var(--T,14s) linear infinite both}
+@keyframes k-sb-10-17{0%{color:#5B678F}10%{color:#5B678F}11%{color:#F5D38A}17%{color:#F5D38A}18%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-10-17{animation:k-sb-10-17 var(--T,14s) linear infinite both}
+@keyframes k-sb-11-13{0%{color:#5B678F}11%{color:#5B678F}12%{color:#F5D38A}13%{color:#F5D38A}14%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-11-13{animation:k-sb-11-13 var(--T,14s) linear infinite both}
+@keyframes k-sb-11-18{0%{color:#5B678F}11%{color:#5B678F}12%{color:#F5D38A}18%{color:#F5D38A}19%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-11-18{animation:k-sb-11-18 var(--T,14s) linear infinite both}
+@keyframes k-sb-12-19{0%{color:#5B678F}12%{color:#5B678F}13%{color:#F5D38A}19%{color:#F5D38A}20%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-12-19{animation:k-sb-12-19 var(--T,14s) linear infinite both}
+@keyframes k-sb-13-15{0%{color:#5B678F}13%{color:#5B678F}14%{color:#F5D38A}15%{color:#F5D38A}16%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-13-15{animation:k-sb-13-15 var(--T,14s) linear infinite both}
+@keyframes k-sb-13-21{0%{color:#5B678F}13%{color:#5B678F}14%{color:#F5D38A}21%{color:#F5D38A}22%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-13-21{animation:k-sb-13-21 var(--T,14s) linear infinite both}
+@keyframes k-sb-14-23{0%{color:#5B678F}14%{color:#5B678F}15%{color:#F5D38A}23%{color:#F5D38A}24%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-14-23{animation:k-sb-14-23 var(--T,14s) linear infinite both}
+@keyframes k-sb-15-18{0%{color:#5B678F}15%{color:#5B678F}16%{color:#F5D38A}18%{color:#F5D38A}19%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-15-18{animation:k-sb-15-18 var(--T,14s) linear infinite both}
+@keyframes k-sb-16-21{0%{color:#5B678F}16%{color:#5B678F}17%{color:#F5D38A}21%{color:#F5D38A}22%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-16-21{animation:k-sb-16-21 var(--T,14s) linear infinite both}
+@keyframes k-sb-17-23{0%{color:#5B678F}17%{color:#5B678F}18%{color:#F5D38A}23%{color:#F5D38A}24%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-17-23{animation:k-sb-17-23 var(--T,14s) linear infinite both}
+@keyframes k-sb-18-20{0%{color:#5B678F}18%{color:#5B678F}19%{color:#F5D38A}20%{color:#F5D38A}21%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-18-20{animation:k-sb-18-20 var(--T,14s) linear infinite both}
+@keyframes k-sb-18-24{0%{color:#5B678F}18%{color:#5B678F}19%{color:#F5D38A}24%{color:#F5D38A}25%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-18-24{animation:k-sb-18-24 var(--T,14s) linear infinite both}
+@keyframes k-sb-18-31{0%{color:#5B678F}18%{color:#5B678F}19%{color:#F5D38A}31%{color:#F5D38A}32%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-18-31{animation:k-sb-18-31 var(--T,14s) linear infinite both}
+@keyframes k-sb-19-25{0%{color:#5B678F}19%{color:#5B678F}20%{color:#F5D38A}25%{color:#F5D38A}26%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-19-25{animation:k-sb-19-25 var(--T,14s) linear infinite both}
+@keyframes k-sb-19-26{0%{color:#5B678F}19%{color:#5B678F}20%{color:#F5D38A}26%{color:#F5D38A}27%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-19-26{animation:k-sb-19-26 var(--T,14s) linear infinite both}
+@keyframes k-sb-20-22{0%{color:#5B678F}20%{color:#5B678F}21%{color:#F5D38A}22%{color:#F5D38A}23%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-20-22{animation:k-sb-20-22 var(--T,14s) linear infinite both}
+@keyframes k-sb-21-27{0%{color:#5B678F}21%{color:#5B678F}22%{color:#F5D38A}27%{color:#F5D38A}28%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-21-27{animation:k-sb-21-27 var(--T,14s) linear infinite both}
+@keyframes k-sb-21-29{0%{color:#5B678F}21%{color:#5B678F}22%{color:#F5D38A}29%{color:#F5D38A}30%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-21-29{animation:k-sb-21-29 var(--T,14s) linear infinite both}
+@keyframes k-sb-22-24{0%{color:#5B678F}22%{color:#5B678F}23%{color:#F5D38A}24%{color:#F5D38A}25%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-22-24{animation:k-sb-22-24 var(--T,14s) linear infinite both}
+@keyframes k-sb-23-30{0%{color:#5B678F}23%{color:#5B678F}24%{color:#F5D38A}30%{color:#F5D38A}31%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-23-30{animation:k-sb-23-30 var(--T,14s) linear infinite both}
+@keyframes k-sb-23-31{0%{color:#5B678F}23%{color:#5B678F}24%{color:#F5D38A}31%{color:#F5D38A}32%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-23-31{animation:k-sb-23-31 var(--T,14s) linear infinite both}
+@keyframes k-sb-24-26{0%{color:#5B678F}24%{color:#5B678F}25%{color:#F5D38A}26%{color:#F5D38A}27%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-24-26{animation:k-sb-24-26 var(--T,14s) linear infinite both}
+@keyframes k-sb-24-30{0%{color:#5B678F}24%{color:#5B678F}25%{color:#F5D38A}30%{color:#F5D38A}31%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-24-30{animation:k-sb-24-30 var(--T,14s) linear infinite both}
+@keyframes k-sb-24-31{0%{color:#5B678F}24%{color:#5B678F}25%{color:#F5D38A}31%{color:#F5D38A}32%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-24-31{animation:k-sb-24-31 var(--T,14s) linear infinite both}
+@keyframes k-sb-25-32{0%{color:#5B678F}25%{color:#5B678F}26%{color:#F5D38A}32%{color:#F5D38A}33%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-25-32{animation:k-sb-25-32 var(--T,14s) linear infinite both}
+@keyframes k-sb-26-28{0%{color:#5B678F}26%{color:#5B678F}27%{color:#F5D38A}28%{color:#F5D38A}29%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-26-28{animation:k-sb-26-28 var(--T,14s) linear infinite both}
+@keyframes k-sb-26-32{0%{color:#5B678F}26%{color:#5B678F}27%{color:#F5D38A}32%{color:#F5D38A}33%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-26-32{animation:k-sb-26-32 var(--T,14s) linear infinite both}
+@keyframes k-sb-27-32{0%{color:#5B678F}27%{color:#5B678F}28%{color:#F5D38A}32%{color:#F5D38A}33%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-27-32{animation:k-sb-27-32 var(--T,14s) linear infinite both}
+@keyframes k-sb-28-32{0%{color:#5B678F}28%{color:#5B678F}29%{color:#F5D38A}32%{color:#F5D38A}33%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-28-32{animation:k-sb-28-32 var(--T,14s) linear infinite both}
+@keyframes k-sb-29-38{0%{color:#5B678F}29%{color:#5B678F}30%{color:#F5D38A}38%{color:#F5D38A}39%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-29-38{animation:k-sb-29-38 var(--T,14s) linear infinite both}
+@keyframes k-sb-30-36{0%{color:#5B678F}30%{color:#5B678F}31%{color:#F5D38A}36%{color:#F5D38A}37%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-30-36{animation:k-sb-30-36 var(--T,14s) linear infinite both}
+@keyframes k-sb-31-37{0%{color:#5B678F}31%{color:#5B678F}32%{color:#F5D38A}37%{color:#F5D38A}38%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-31-37{animation:k-sb-31-37 var(--T,14s) linear infinite both}
+@keyframes k-sb-31-40{0%{color:#5B678F}31%{color:#5B678F}32%{color:#F5D38A}40%{color:#F5D38A}41%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-31-40{animation:k-sb-31-40 var(--T,14s) linear infinite both}
+@keyframes k-sb-31-43{0%{color:#5B678F}31%{color:#5B678F}32%{color:#F5D38A}43%{color:#F5D38A}44%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-31-43{animation:k-sb-31-43 var(--T,14s) linear infinite both}
+@keyframes k-sb-32-37{0%{color:#5B678F}32%{color:#5B678F}33%{color:#F5D38A}37%{color:#F5D38A}38%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-32-37{animation:k-sb-32-37 var(--T,14s) linear infinite both}
+@keyframes k-sb-32-39{0%{color:#5B678F}32%{color:#5B678F}33%{color:#F5D38A}39%{color:#F5D38A}40%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-32-39{animation:k-sb-32-39 var(--T,14s) linear infinite both}
+@keyframes k-sb-36-42{0%{color:#5B678F}36%{color:#5B678F}37%{color:#F5D38A}42%{color:#F5D38A}43%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-36-42{animation:k-sb-36-42 var(--T,14s) linear infinite both}
+@keyframes k-sb-36-43{0%{color:#5B678F}36%{color:#5B678F}37%{color:#F5D38A}43%{color:#F5D38A}44%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-36-43{animation:k-sb-36-43 var(--T,14s) linear infinite both}
+@keyframes k-sb-37-43{0%{color:#5B678F}37%{color:#5B678F}38%{color:#F5D38A}43%{color:#F5D38A}44%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-37-43{animation:k-sb-37-43 var(--T,14s) linear infinite both}
+@keyframes k-sb-38-46{0%{color:#5B678F}38%{color:#5B678F}39%{color:#F5D38A}46%{color:#F5D38A}47%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-38-46{animation:k-sb-38-46 var(--T,14s) linear infinite both}
+@keyframes k-sb-39-46{0%{color:#5B678F}39%{color:#5B678F}40%{color:#F5D38A}46%{color:#F5D38A}47%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-39-46{animation:k-sb-39-46 var(--T,14s) linear infinite both}
+@keyframes k-sb-4-10{0%{color:#5B678F}4%{color:#5B678F}5%{color:#F5D38A}10%{color:#F5D38A}11%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-4-10{animation:k-sb-4-10 var(--T,14s) linear infinite both}
+@keyframes k-sb-40-49{0%{color:#5B678F}40%{color:#5B678F}41%{color:#F5D38A}49%{color:#F5D38A}50%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-40-49{animation:k-sb-40-49 var(--T,14s) linear infinite both}
+@keyframes k-sb-42-49{0%{color:#5B678F}42%{color:#5B678F}43%{color:#F5D38A}49%{color:#F5D38A}50%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-42-49{animation:k-sb-42-49 var(--T,14s) linear infinite both}
+@keyframes k-sb-43-48{0%{color:#5B678F}43%{color:#5B678F}44%{color:#F5D38A}48%{color:#F5D38A}49%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-43-48{animation:k-sb-43-48 var(--T,14s) linear infinite both}
+@keyframes k-sb-43-49{0%{color:#5B678F}43%{color:#5B678F}44%{color:#F5D38A}49%{color:#F5D38A}50%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-43-49{animation:k-sb-43-49 var(--T,14s) linear infinite both}
+@keyframes k-sb-43-50{0%{color:#5B678F}43%{color:#5B678F}44%{color:#F5D38A}50%{color:#F5D38A}51%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-43-50{animation:k-sb-43-50 var(--T,14s) linear infinite both}
+@keyframes k-sb-43-55{0%{color:#5B678F}43%{color:#5B678F}44%{color:#F5D38A}55%{color:#F5D38A}56%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-43-55{animation:k-sb-43-55 var(--T,14s) linear infinite both}
+@keyframes k-sb-46-53{0%{color:#5B678F}46%{color:#5B678F}47%{color:#F5D38A}53%{color:#F5D38A}54%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-46-53{animation:k-sb-46-53 var(--T,14s) linear infinite both}
+@keyframes k-sb-46-54{0%{color:#5B678F}46%{color:#5B678F}47%{color:#F5D38A}54%{color:#F5D38A}55%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-46-54{animation:k-sb-46-54 var(--T,14s) linear infinite both}
+@keyframes k-sb-48-54{0%{color:#5B678F}48%{color:#5B678F}49%{color:#F5D38A}54%{color:#F5D38A}55%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-48-54{animation:k-sb-48-54 var(--T,14s) linear infinite both}
+@keyframes k-sb-49-55{0%{color:#5B678F}49%{color:#5B678F}50%{color:#F5D38A}55%{color:#F5D38A}56%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-49-55{animation:k-sb-49-55 var(--T,14s) linear infinite both}
+@keyframes k-sb-49-56{0%{color:#5B678F}49%{color:#5B678F}50%{color:#F5D38A}56%{color:#F5D38A}57%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-49-56{animation:k-sb-49-56 var(--T,14s) linear infinite both}
+@keyframes k-sb-49-58{0%{color:#5B678F}49%{color:#5B678F}50%{color:#F5D38A}58%{color:#F5D38A}59%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-49-58{animation:k-sb-49-58 var(--T,14s) linear infinite both}
+@keyframes k-sb-5-10{0%{color:#5B678F}5%{color:#5B678F}6%{color:#F5D38A}10%{color:#F5D38A}11%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-5-10{animation:k-sb-5-10 var(--T,14s) linear infinite both}
+@keyframes k-sb-5-11{0%{color:#5B678F}5%{color:#5B678F}6%{color:#F5D38A}11%{color:#F5D38A}12%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-5-11{animation:k-sb-5-11 var(--T,14s) linear infinite both}
+@keyframes k-sb-5-12{0%{color:#5B678F}5%{color:#5B678F}6%{color:#F5D38A}12%{color:#F5D38A}13%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-5-12{animation:k-sb-5-12 var(--T,14s) linear infinite both}
+@keyframes k-sb-5-13{0%{color:#5B678F}5%{color:#5B678F}6%{color:#F5D38A}13%{color:#F5D38A}14%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-5-13{animation:k-sb-5-13 var(--T,14s) linear infinite both}
+@keyframes k-sb-5-14{0%{color:#5B678F}5%{color:#5B678F}6%{color:#F5D38A}14%{color:#F5D38A}15%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-5-14{animation:k-sb-5-14 var(--T,14s) linear infinite both}
+@keyframes k-sb-5-7{0%{color:#5B678F}5%{color:#5B678F}6%{color:#F5D38A}7%{color:#F5D38A}8%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-5-7{animation:k-sb-5-7 var(--T,14s) linear infinite both}
+@keyframes k-sb-50-56{0%{color:#5B678F}50%{color:#5B678F}51%{color:#F5D38A}56%{color:#F5D38A}57%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-50-56{animation:k-sb-50-56 var(--T,14s) linear infinite both}
+@keyframes k-sb-53-60{0%{color:#5B678F}53%{color:#5B678F}54%{color:#F5D38A}60%{color:#F5D38A}61%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-53-60{animation:k-sb-53-60 var(--T,14s) linear infinite both}
+@keyframes k-sb-54-59{0%{color:#5B678F}54%{color:#5B678F}55%{color:#F5D38A}59%{color:#F5D38A}60%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-54-59{animation:k-sb-54-59 var(--T,14s) linear infinite both}
+@keyframes k-sb-54-62{0%{color:#5B678F}54%{color:#5B678F}55%{color:#F5D38A}62%{color:#F5D38A}63%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-54-62{animation:k-sb-54-62 var(--T,14s) linear infinite both}
+@keyframes k-sb-55-61{0%{color:#5B678F}55%{color:#5B678F}56%{color:#F5D38A}61%{color:#F5D38A}62%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-55-61{animation:k-sb-55-61 var(--T,14s) linear infinite both}
+@keyframes k-sb-55-68{0%{color:#5B678F}55%{color:#5B678F}56%{color:#F5D38A}68%{color:#F5D38A}69%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-55-68{animation:k-sb-55-68 var(--T,14s) linear infinite both}
+@keyframes k-sb-56-62{0%{color:#5B678F}56%{color:#5B678F}57%{color:#F5D38A}62%{color:#F5D38A}63%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-56-62{animation:k-sb-56-62 var(--T,14s) linear infinite both}
+@keyframes k-sb-58-66{0%{color:#5B678F}58%{color:#5B678F}59%{color:#F5D38A}66%{color:#F5D38A}67%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-58-66{animation:k-sb-58-66 var(--T,14s) linear infinite both}
+@keyframes k-sb-59-64{0%{color:#5B678F}59%{color:#5B678F}60%{color:#F5D38A}64%{color:#F5D38A}65%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-59-64{animation:k-sb-59-64 var(--T,14s) linear infinite both}
+@keyframes k-sb-6-18{0%{color:#5B678F}6%{color:#5B678F}7%{color:#F5D38A}18%{color:#F5D38A}19%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-6-18{animation:k-sb-6-18 var(--T,14s) linear infinite both}
+@keyframes k-sb-60-64{0%{color:#5B678F}60%{color:#5B678F}61%{color:#F5D38A}64%{color:#F5D38A}65%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-60-64{animation:k-sb-60-64 var(--T,14s) linear infinite both}
+@keyframes k-sb-60-66{0%{color:#5B678F}60%{color:#5B678F}61%{color:#F5D38A}66%{color:#F5D38A}67%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-60-66{animation:k-sb-60-66 var(--T,14s) linear infinite both}
+@keyframes k-sb-61-68{0%{color:#5B678F}61%{color:#5B678F}62%{color:#F5D38A}68%{color:#F5D38A}69%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-61-68{animation:k-sb-61-68 var(--T,14s) linear infinite both}
+@keyframes k-sb-62-69{0%{color:#5B678F}62%{color:#5B678F}63%{color:#F5D38A}69%{color:#F5D38A}70%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-62-69{animation:k-sb-62-69 var(--T,14s) linear infinite both}
+@keyframes k-sb-62-70{0%{color:#5B678F}62%{color:#5B678F}63%{color:#F5D38A}70%{color:#F5D38A}71%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-62-70{animation:k-sb-62-70 var(--T,14s) linear infinite both}
+@keyframes k-sb-64-70{0%{color:#5B678F}64%{color:#5B678F}65%{color:#F5D38A}70%{color:#F5D38A}71%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-64-70{animation:k-sb-64-70 var(--T,14s) linear infinite both}
+@keyframes k-sb-66-73{0%{color:#5B678F}66%{color:#5B678F}67%{color:#F5D38A}73%{color:#F5D38A}74%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-66-73{animation:k-sb-66-73 var(--T,14s) linear infinite both}
+@keyframes k-sb-66-75{0%{color:#5B678F}66%{color:#5B678F}67%{color:#F5D38A}75%{color:#F5D38A}76%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-66-75{animation:k-sb-66-75 var(--T,14s) linear infinite both}
+@keyframes k-sb-68-74{0%{color:#5B678F}68%{color:#5B678F}69%{color:#F5D38A}74%{color:#F5D38A}75%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-68-74{animation:k-sb-68-74 var(--T,14s) linear infinite both}
+@keyframes k-sb-68-80{0%{color:#5B678F}68%{color:#5B678F}69%{color:#F5D38A}80%{color:#F5D38A}81%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-68-80{animation:k-sb-68-80 var(--T,14s) linear infinite both}
+@keyframes k-sb-69-74{0%{color:#5B678F}69%{color:#5B678F}70%{color:#F5D38A}74%{color:#F5D38A}75%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-69-74{animation:k-sb-69-74 var(--T,14s) linear infinite both}
+@keyframes k-sb-69-75{0%{color:#5B678F}69%{color:#5B678F}70%{color:#F5D38A}75%{color:#F5D38A}76%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-69-75{animation:k-sb-69-75 var(--T,14s) linear infinite both}
+@keyframes k-sb-7-9{0%{color:#5B678F}7%{color:#5B678F}8%{color:#F5D38A}9%{color:#F5D38A}10%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-7-9{animation:k-sb-7-9 var(--T,14s) linear infinite both}
+@keyframes k-sb-70-74{0%{color:#5B678F}70%{color:#5B678F}71%{color:#F5D38A}74%{color:#F5D38A}75%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-70-74{animation:k-sb-70-74 var(--T,14s) linear infinite both}
+@keyframes k-sb-70-75{0%{color:#5B678F}70%{color:#5B678F}71%{color:#F5D38A}75%{color:#F5D38A}76%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-70-75{animation:k-sb-70-75 var(--T,14s) linear infinite both}
+@keyframes k-sb-73-80{0%{color:#5B678F}73%{color:#5B678F}74%{color:#F5D38A}80%{color:#F5D38A}81%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-73-80{animation:k-sb-73-80 var(--T,14s) linear infinite both}
+@keyframes k-sb-74-78{0%{color:#5B678F}74%{color:#5B678F}75%{color:#F5D38A}78%{color:#F5D38A}79%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-74-78{animation:k-sb-74-78 var(--T,14s) linear infinite both}
+@keyframes k-sb-74-80{0%{color:#5B678F}74%{color:#5B678F}75%{color:#F5D38A}80%{color:#F5D38A}81%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-74-80{animation:k-sb-74-80 var(--T,14s) linear infinite both}
+@keyframes k-sb-75-81{0%{color:#5B678F}75%{color:#5B678F}76%{color:#F5D38A}81%{color:#F5D38A}82%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-75-81{animation:k-sb-75-81 var(--T,14s) linear infinite both}
+@keyframes k-sb-75-82{0%{color:#5B678F}75%{color:#5B678F}76%{color:#F5D38A}82%{color:#F5D38A}83%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-75-82{animation:k-sb-75-82 var(--T,14s) linear infinite both}
+@keyframes k-sb-75-84{0%{color:#5B678F}75%{color:#5B678F}76%{color:#F5D38A}84%{color:#F5D38A}85%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-75-84{animation:k-sb-75-84 var(--T,14s) linear infinite both}
+@keyframes k-sb-78-83{0%{color:#5B678F}78%{color:#5B678F}79%{color:#F5D38A}83%{color:#F5D38A}84%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-78-83{animation:k-sb-78-83 var(--T,14s) linear infinite both}
+@keyframes k-sb-80-84{0%{color:#5B678F}80%{color:#5B678F}81%{color:#F5D38A}84%{color:#F5D38A}85%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-80-84{animation:k-sb-80-84 var(--T,14s) linear infinite both}
+@keyframes k-sb-81-86{0%{color:#5B678F}81%{color:#5B678F}82%{color:#F5D38A}86%{color:#F5D38A}87%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-81-86{animation:k-sb-81-86 var(--T,14s) linear infinite both}
+@keyframes k-sb-82-88{0%{color:#5B678F}82%{color:#5B678F}83%{color:#F5D38A}88%{color:#F5D38A}89%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-82-88{animation:k-sb-82-88 var(--T,14s) linear infinite both}
+@keyframes k-sb-83-88{0%{color:#5B678F}83%{color:#5B678F}84%{color:#F5D38A}88%{color:#F5D38A}89%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-83-88{animation:k-sb-83-88 var(--T,14s) linear infinite both}
+@keyframes k-sb-84-88{0%{color:#5B678F}84%{color:#5B678F}85%{color:#F5D38A}88%{color:#F5D38A}89%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-84-88{animation:k-sb-84-88 var(--T,14s) linear infinite both}
+@keyframes k-sb-86-90{0%{color:#5B678F}86%{color:#5B678F}87%{color:#F5D38A}90%{color:#F5D38A}91%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-86-90{animation:k-sb-86-90 var(--T,14s) linear infinite both}
+@keyframes k-sb-88-92{0%{color:#5B678F}88%{color:#5B678F}89%{color:#F5D38A}92%{color:#F5D38A}93%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-88-92{animation:k-sb-88-92 var(--T,14s) linear infinite both}
+@keyframes k-sb-9-11{0%{color:#5B678F}9%{color:#5B678F}10%{color:#F5D38A}11%{color:#F5D38A}12%{color:#F6F0E1}100%{color:#F6F0E1}}
+.a-sb-9-11{animation:k-sb-9-11 var(--T,14s) linear infinite both}
+@keyframes k-stamp-4{0%{opacity:0;scale:1.8;rotate:-14deg}4%{opacity:0;scale:1.8;rotate:-14deg;animation-timing-function:cubic-bezier(.55,0,1,.45)}7%{opacity:1;scale:.92;rotate:0deg;animation-timing-function:cubic-bezier(.16,1,.3,1)}10%{opacity:1;scale:1;rotate:0deg}100%{opacity:1;scale:1;rotate:0deg}}
+.a-stamp-4{animation:k-stamp-4 var(--T,14s) linear infinite both}
+@keyframes k-sx-32-40{0%{scale:0 1}32%{scale:0 1;animation-timing-function:cubic-bezier(.16,1,.3,1)}40%{scale:1 1}100%{scale:1 1}}
+.a-sx-32-40{animation:k-sx-32-40 var(--T,14s) linear infinite both}
+@keyframes k-sx-35-52{0%{scale:0 1}35%{scale:0 1;animation-timing-function:cubic-bezier(.16,1,.3,1)}52%{scale:1 1}100%{scale:1 1}}
+.a-sx-35-52{animation:k-sx-35-52 var(--T,14s) linear infinite both}
+@keyframes k-sx-42{0%{scale:0 1}42%{scale:0 1;animation-timing-function:cubic-bezier(.16,1,.3,1)}47%{scale:1 1}100%{scale:1 1}}
+.a-sx-42{animation:k-sx-42 var(--T,14s) linear infinite both}
+@keyframes k-sx-6-12{0%{scale:0 1}6%{scale:0 1;animation-timing-function:cubic-bezier(.16,1,.3,1)}12%{scale:1 1}100%{scale:1 1}}
+.a-sx-6-12{animation:k-sx-6-12 var(--T,14s) linear infinite both}
+@keyframes k-sx-68{0%{scale:0 1}68%{scale:0 1;animation-timing-function:cubic-bezier(.16,1,.3,1)}73%{scale:1 1}100%{scale:1 1}}
+.a-sx-68{animation:k-sx-68 var(--T,14s) linear infinite both}
+@keyframes k-sy-3-10{0%{scale:1 0}3%{scale:1 0;animation-timing-function:cubic-bezier(.16,1,.3,1)}10%{scale:1 1}100%{scale:1 1}}
+.a-sy-3-10{animation:k-sy-3-10 var(--T,14s) linear infinite both}
+@keyframes k-w-10{0%{opacity:0;translate:0 .42em}10%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}12.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-10{animation:k-w-10 var(--T,14s) linear infinite both}
+@keyframes k-w-11{0%{opacity:0;translate:0 .42em}11%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}13.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-11{animation:k-w-11 var(--T,14s) linear infinite both}
+@keyframes k-w-12{0%{opacity:0;translate:0 .42em}12%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}14.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-12{animation:k-w-12 var(--T,14s) linear infinite both}
+@keyframes k-w-14{0%{opacity:0;translate:0 .42em}14%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}16.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-14{animation:k-w-14 var(--T,14s) linear infinite both}
+@keyframes k-w-15{0%{opacity:0;translate:0 .42em}15%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}17.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-15{animation:k-w-15 var(--T,14s) linear infinite both}
+@keyframes k-w-16{0%{opacity:0;translate:0 .42em}16%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}18.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-16{animation:k-w-16 var(--T,14s) linear infinite both}
+@keyframes k-w-17{0%{opacity:0;translate:0 .42em}17%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}19.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-17{animation:k-w-17 var(--T,14s) linear infinite both}
+@keyframes k-w-19{0%{opacity:0;translate:0 .42em}19%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}21.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-19{animation:k-w-19 var(--T,14s) linear infinite both}
+@keyframes k-w-21{0%{opacity:0;translate:0 .42em}21%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}23.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-21{animation:k-w-21 var(--T,14s) linear infinite both}
+@keyframes k-w-22{0%{opacity:0;translate:0 .42em}22%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}24.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-22{animation:k-w-22 var(--T,14s) linear infinite both}
+@keyframes k-w-24{0%{opacity:0;translate:0 .42em}24%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}26.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-24{animation:k-w-24 var(--T,14s) linear infinite both}
+@keyframes k-w-25{0%{opacity:0;translate:0 .42em}25%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}27.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-25{animation:k-w-25 var(--T,14s) linear infinite both}
+@keyframes k-w-26{0%{opacity:0;translate:0 .42em}26%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}28.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-26{animation:k-w-26 var(--T,14s) linear infinite both}
+@keyframes k-w-27{0%{opacity:0;translate:0 .42em}27%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}29.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-27{animation:k-w-27 var(--T,14s) linear infinite both}
+@keyframes k-w-28{0%{opacity:0;translate:0 .42em}28%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}30.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-28{animation:k-w-28 var(--T,14s) linear infinite both}
+@keyframes k-w-29{0%{opacity:0;translate:0 .42em}29%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}31.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-29{animation:k-w-29 var(--T,14s) linear infinite both}
+@keyframes k-w-30{0%{opacity:0;translate:0 .42em}30%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}32.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-30{animation:k-w-30 var(--T,14s) linear infinite both}
+@keyframes k-w-31{0%{opacity:0;translate:0 .42em}31%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}33.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-31{animation:k-w-31 var(--T,14s) linear infinite both}
+@keyframes k-w-32{0%{opacity:0;translate:0 .42em}32%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}34.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-32{animation:k-w-32 var(--T,14s) linear infinite both}
+@keyframes k-w-34{0%{opacity:0;translate:0 .42em}34%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}36.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-34{animation:k-w-34 var(--T,14s) linear infinite both}
+@keyframes k-w-39{0%{opacity:0;translate:0 .42em}39%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}41.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-39{animation:k-w-39 var(--T,14s) linear infinite both}
+@keyframes k-w-42{0%{opacity:0;translate:0 .42em}42%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}44.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-42{animation:k-w-42 var(--T,14s) linear infinite both}
+@keyframes k-w-43{0%{opacity:0;translate:0 .42em}43%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}45.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-43{animation:k-w-43 var(--T,14s) linear infinite both}
+@keyframes k-w-44{0%{opacity:0;translate:0 .42em}44%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}46.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-44{animation:k-w-44 var(--T,14s) linear infinite both}
+@keyframes k-w-46{0%{opacity:0;translate:0 .42em}46%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}48.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-46{animation:k-w-46 var(--T,14s) linear infinite both}
+@keyframes k-w-47{0%{opacity:0;translate:0 .42em}47%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}49.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-47{animation:k-w-47 var(--T,14s) linear infinite both}
+@keyframes k-w-50{0%{opacity:0;translate:0 .42em}50%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}52.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-50{animation:k-w-50 var(--T,14s) linear infinite both}
+@keyframes k-w-53{0%{opacity:0;translate:0 .42em}53%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}55.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-53{animation:k-w-53 var(--T,14s) linear infinite both}
+@keyframes k-w-56{0%{opacity:0;translate:0 .42em}56%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}58.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-56{animation:k-w-56 var(--T,14s) linear infinite both}
+@keyframes k-w-58{0%{opacity:0;translate:0 .42em}58%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}60.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-58{animation:k-w-58 var(--T,14s) linear infinite both}
+@keyframes k-w-59{0%{opacity:0;translate:0 .42em}59%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}61.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-59{animation:k-w-59 var(--T,14s) linear infinite both}
+@keyframes k-w-60{0%{opacity:0;translate:0 .42em}60%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}62.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-60{animation:k-w-60 var(--T,14s) linear infinite both}
+@keyframes k-w-61{0%{opacity:0;translate:0 .42em}61%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}63.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-61{animation:k-w-61 var(--T,14s) linear infinite both}
+@keyframes k-w-62{0%{opacity:0;translate:0 .42em}62%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}64.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-62{animation:k-w-62 var(--T,14s) linear infinite both}
+@keyframes k-w-63{0%{opacity:0;translate:0 .42em}63%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}65.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-63{animation:k-w-63 var(--T,14s) linear infinite both}
+@keyframes k-w-64{0%{opacity:0;translate:0 .42em}64%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}66.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-64{animation:k-w-64 var(--T,14s) linear infinite both}
+@keyframes k-w-65{0%{opacity:0;translate:0 .42em}65%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}67.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-65{animation:k-w-65 var(--T,14s) linear infinite both}
+@keyframes k-w-74{0%{opacity:0;translate:0 .42em}74%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}76.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-74{animation:k-w-74 var(--T,14s) linear infinite both}
+@keyframes k-w-75{0%{opacity:0;translate:0 .42em}75%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}77.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-75{animation:k-w-75 var(--T,14s) linear infinite both}
+@keyframes k-w-76{0%{opacity:0;translate:0 .42em}76%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}78.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-76{animation:k-w-76 var(--T,14s) linear infinite both}
+@keyframes k-w-78{0%{opacity:0;translate:0 .42em}78%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}80.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-78{animation:k-w-78 var(--T,14s) linear infinite both}
+@keyframes k-w-79{0%{opacity:0;translate:0 .42em}79%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}81.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-79{animation:k-w-79 var(--T,14s) linear infinite both}
+@keyframes k-w-9{0%{opacity:0;translate:0 .42em}9%{opacity:0;translate:0 .42em;animation-timing-function:cubic-bezier(.16,1,.3,1)}11.5%{opacity:1;translate:0 0}100%{opacity:1;translate:0 0}}
+.a-w-9{animation:k-w-9 var(--T,14s) linear infinite both}
+@keyframes k-win-3-31{0%{opacity:0}3%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}5%{opacity:1}31%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}33%{opacity:0}100%{opacity:0}}
+.a-win-3-31{animation:k-win-3-31 var(--T,14s) linear infinite both}
+@keyframes k-win-32-64{0%{opacity:0}32%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}34%{opacity:1}64%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}66%{opacity:0}100%{opacity:0}}
+.a-win-32-64{animation:k-win-32-64 var(--T,14s) linear infinite both}
+@keyframes k-win-34-39{0%{opacity:0}34%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}36%{opacity:1}39%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}41%{opacity:0}100%{opacity:0}}
+.a-win-34-39{animation:k-win-34-39 var(--T,14s) linear infinite both}
+@keyframes k-win-34-63{0%{opacity:0}34%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}36%{opacity:1}63%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}65%{opacity:0}100%{opacity:0}}
+.a-win-34-63{animation:k-win-34-63 var(--T,14s) linear infinite both}
+@keyframes k-win-41-45{0%{opacity:0}41%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}43%{opacity:1}45%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}47%{opacity:0}100%{opacity:0}}
+.a-win-41-45{animation:k-win-41-45 var(--T,14s) linear infinite both}
+@keyframes k-win-47-51{0%{opacity:0}47%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}49%{opacity:1}51%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}53%{opacity:0}100%{opacity:0}}
+.a-win-47-51{animation:k-win-47-51 var(--T,14s) linear infinite both}
+@keyframes k-win-53-57{0%{opacity:0}53%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}55%{opacity:1}57%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}59%{opacity:0}100%{opacity:0}}
+.a-win-53-57{animation:k-win-53-57 var(--T,14s) linear infinite both}
+@keyframes k-win-59-63{0%{opacity:0}59%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}61%{opacity:1}63%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}65%{opacity:0}100%{opacity:0}}
+.a-win-59-63{animation:k-win-59-63 var(--T,14s) linear infinite both}
+@keyframes k-win-67-94{0%{opacity:0}67%{opacity:0;animation-timing-function:cubic-bezier(.16,1,.3,1)}69%{opacity:1}94%{opacity:1;animation-timing-function:cubic-bezier(.65,0,.35,1)}96%{opacity:0}100%{opacity:0}}
+.a-win-67-94{animation:k-win-67-94 var(--T,14s) linear infinite both}
+@keyframes k-zm-40{0%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0)}40%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0);animation-timing-function:cubic-bezier(.16,1,.3,1)}43%{scale:1.16;color:#FFF1C9;text-shadow:0 0 30px rgba(245,211,138,.95);animation-timing-function:cubic-bezier(.65,0,.35,1)}48%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}100%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}}
+.a-zm-40{animation:k-zm-40 var(--T,14s) linear infinite both}
+@keyframes k-zm-62{0%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0)}62%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0);animation-timing-function:cubic-bezier(.16,1,.3,1)}65%{scale:1.16;color:#FFF1C9;text-shadow:0 0 30px rgba(245,211,138,.95);animation-timing-function:cubic-bezier(.65,0,.35,1)}70%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}100%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}}
+.a-zm-62{animation:k-zm-62 var(--T,14s) linear infinite both}
+@keyframes k-zm-66{0%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0)}66%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0);animation-timing-function:cubic-bezier(.16,1,.3,1)}69%{scale:1.16;color:#FFF1C9;text-shadow:0 0 30px rgba(245,211,138,.95);animation-timing-function:cubic-bezier(.65,0,.35,1)}74%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}100%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}}
+.a-zm-66{animation:k-zm-66 var(--T,14s) linear infinite both}
+@keyframes k-zm-70{0%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0)}70%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0);animation-timing-function:cubic-bezier(.16,1,.3,1)}73%{scale:1.16;color:#FFF1C9;text-shadow:0 0 30px rgba(245,211,138,.95);animation-timing-function:cubic-bezier(.65,0,.35,1)}78%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}100%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}}
+.a-zm-70{animation:k-zm-70 var(--T,14s) linear infinite both}
+@keyframes k-zm-74{0%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0)}74%{scale:1;color:var(--zc,#F6F0E1);text-shadow:0 0 0 rgba(245,211,138,0);animation-timing-function:cubic-bezier(.16,1,.3,1)}77%{scale:1.16;color:#FFF1C9;text-shadow:0 0 30px rgba(245,211,138,.95);animation-timing-function:cubic-bezier(.65,0,.35,1)}82%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}100%{scale:1.06;color:#F5D38A;text-shadow:0 0 18px rgba(245,211,138,.55)}}
+.a-zm-74{animation:k-zm-74 var(--T,14s) linear infinite both}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="sf" viewBox="0 0 2560 720"><circle cx="933" cy="680" r="0.7" fill="#FFF6E0" opacity="0.33"/><circle cx="2213" cy="680" r="0.7" fill="#FFF6E0" opacity="0.33"/><circle cx="473" cy="26" r="0.5" fill="#FFF6E0" opacity="0.38"/><circle cx="1753" cy="26" r="0.5" fill="#FFF6E0" opacity="0.38"/><circle cx="84" cy="329" r="1.0" fill="#FFF6E0" opacity="0.47"/><circle cx="1364" cy="329" r="1.0" fill="#FFF6E0" opacity="0.47"/><circle cx="590" cy="48" r="0.8" fill="#FFF6E0" opacity="0.54"/><circle cx="1870" cy="48" r="0.8" fill="#FFF6E0" opacity="0.54"/><circle cx="1258" cy="537" r="0.6" fill="#FFF6E0" opacity="0.28"/><circle cx="2538" cy="537" r="0.6" fill="#FFF6E0" opacity="0.28"/><circle cx="1085" cy="198" r="0.7" fill="#FFF6E0" opacity="0.40"/><circle cx="2365" cy="198" r="0.7" fill="#FFF6E0" opacity="0.40"/><circle cx="228" cy="249" r="0.6" fill="#FFF6E0" opacity="0.53"/><circle cx="1508" cy="249" r="0.6" fill="#FFF6E0" opacity="0.53"/><circle cx="1030" cy="370" r="0.9" fill="#FFF6E0" opacity="0.48"/><circle cx="2310" cy="370" r="0.9" fill="#FFF6E0" opacity="0.48"/><circle cx="388" cy="619" r="0.6" fill="#FFF6E0" opacity="0.40"/><circle cx="1668" cy="619" r="0.6" fill="#FFF6E0" opacity="0.40"/><circle cx="959" cy="604" r="1.0" fill="#FFF6E0" opacity="0.28"/><circle cx="2239" cy="604" r="1.0" fill="#FFF6E0" opacity="0.28"/><circle cx="1266" cy="348" r="1.1" fill="#FFF6E0" opacity="0.56"/><circle cx="2546" cy="348" r="1.1" fill="#FFF6E0" opacity="0.56"/><circle cx="1020" cy="207" r="0.6" fill="#FFF6E0" opacity="0.40"/><circle cx="2300" cy="207" r="0.6" fill="#FFF6E0" opacity="0.40"/><circle cx="84" cy="510" r="1.0" fill="#FFF6E0" opacity="0.36"/><circle cx="1364" cy="510" r="1.0" fill="#FFF6E0" opacity="0.36"/><circle cx="1046" cy="271" r="1.1" fill="#FFF6E0" opacity="0.27"/><circle cx="2326" cy="271" r="1.1" fill="#FFF6E0" opacity="0.27"/><circle cx="893" cy="623" r="0.6" fill="#FFF6E0" opacity="0.33"/><circle cx="2173" cy="623" r="0.6" fill="#FFF6E0" opacity="0.33"/><circle cx="830" cy="532" r="0.6" fill="#FFF6E0" opacity="0.35"/><circle cx="2110" cy="532" r="0.6" fill="#FFF6E0" opacity="0.35"/><circle cx="723" cy="138" r="1.0" fill="#FFF6E0" opacity="0.58"/><circle cx="2003" cy="138" r="1.0" fill="#FFF6E0" opacity="0.58"/><circle cx="848" cy="473" r="0.6" fill="#FFF6E0" opacity="0.51"/><circle cx="2128" cy="473" r="0.6" fill="#FFF6E0" opacity="0.51"/><circle cx="1234" cy="8" r="0.8" fill="#FFF6E0" opacity="0.44"/><circle cx="2514" cy="8" r="0.8" fill="#FFF6E0" opacity="0.44"/><circle cx="867" cy="514" r="0.5" fill="#FFF6E0" opacity="0.41"/><circle cx="2147" cy="514" r="0.5" fill="#FFF6E0" opacity="0.41"/><circle cx="198" cy="470" r="0.7" fill="#FFF6E0" opacity="0.34"/><circle cx="1478" cy="470" r="0.7" fill="#FFF6E0" opacity="0.34"/><circle cx="202" cy="507" r="1.0" fill="#FFF6E0" opacity="0.52"/><circle cx="1482" cy="507" r="1.0" fill="#FFF6E0" opacity="0.52"/><circle cx="1101" cy="387" r="0.9" fill="#FFF6E0" opacity="0.55"/><circle cx="2381" cy="387" r="0.9" fill="#FFF6E0" opacity="0.55"/><circle cx="705" cy="485" r="0.7" fill="#FFF6E0" opacity="0.41"/><circle cx="1985" cy="485" r="0.7" fill="#FFF6E0" opacity="0.41"/><circle cx="1002" cy="167" r="1.1" fill="#FFF6E0" opacity="0.51"/><circle cx="2282" cy="167" r="1.1" fill="#FFF6E0" opacity="0.51"/><circle cx="241" cy="475" r="0.6" fill="#FFF6E0" opacity="0.38"/><circle cx="1521" cy="475" r="0.6" fill="#FFF6E0" opacity="0.38"/><circle cx="1240" cy="323" r="0.5" fill="#FFF6E0" opacity="0.46"/><circle cx="2520" cy="323" r="0.5" fill="#FFF6E0" opacity="0.46"/><circle cx="348" cy="355" r="1.1" fill="#FFF6E0" opacity="0.53"/><circle cx="1628" cy="355" r="1.1" fill="#FFF6E0" opacity="0.53"/><circle cx="1269" cy="213" r="0.6" fill="#FFF6E0" opacity="0.49"/><circle cx="2549" cy="213" r="0.6" fill="#FFF6E0" opacity="0.49"/><circle cx="960" cy="628" r="0.9" fill="#FFF6E0" opacity="0.47"/><circle cx="2240" cy="628" r="0.9" fill="#FFF6E0" opacity="0.47"/><circle cx="812" cy="592" r="1.0" fill="#FFF6E0" opacity="0.36"/><circle cx="2092" cy="592" r="1.0" fill="#FFF6E0" opacity="0.36"/><circle cx="225" cy="379" r="1.0" fill="#FFF6E0" opacity="0.47"/><circle cx="1505" cy="379" r="1.0" fill="#FFF6E0" opacity="0.47"/><circle cx="90" cy="665" r="1.0" fill="#FFF6E0" opacity="0.52"/><circle cx="1370" cy="665" r="1.0" fill="#FFF6E0" opacity="0.52"/><circle cx="1073" cy="670" r="0.7" fill="#FFF6E0" opacity="0.59"/><circle cx="2353" cy="670" r="0.7" fill="#FFF6E0" opacity="0.59"/><circle cx="1212" cy="135" r="0.9" fill="#FFF6E0" opacity="0.36"/><circle cx="2492" cy="135" r="0.9" fill="#FFF6E0" opacity="0.36"/><circle cx="727" cy="286" r="0.9" fill="#FFF6E0" opacity="0.59"/><circle cx="2007" cy="286" r="0.9" fill="#FFF6E0" opacity="0.59"/><circle cx="2" cy="638" r="1.1" fill="#FFF6E0" opacity="0.28"/><circle cx="1282" cy="638" r="1.1" fill="#FFF6E0" opacity="0.28"/><circle cx="698" cy="409" r="0.6" fill="#FFF6E0" opacity="0.58"/><circle cx="1978" cy="409" r="0.6" fill="#FFF6E0" opacity="0.58"/><circle cx="677" cy="66" r="0.9" fill="#FFF6E0" opacity="0.35"/><circle cx="1957" cy="66" r="0.9" fill="#FFF6E0" opacity="0.35"/><circle cx="135" cy="372" r="1.0" fill="#FFF6E0" opacity="0.44"/><circle cx="1415" cy="372" r="1.0" fill="#FFF6E0" opacity="0.44"/><circle cx="151" cy="607" r="0.9" fill="#FFF6E0" opacity="0.54"/><circle cx="1431" cy="607" r="0.9" fill="#FFF6E0" opacity="0.54"/><circle cx="870" cy="153" r="1.0" fill="#FFF6E0" opacity="0.50"/><circle cx="2150" cy="153" r="1.0" fill="#FFF6E0" opacity="0.50"/><circle cx="961" cy="450" r="0.6" fill="#FFF6E0" opacity="0.28"/><circle cx="2241" cy="450" r="0.6" fill="#FFF6E0" opacity="0.28"/><circle cx="18" cy="329" r="0.7" fill="#FFF6E0" opacity="0.55"/><circle cx="1298" cy="329" r="0.7" fill="#FFF6E0" opacity="0.55"/><circle cx="840" cy="611" r="0.8" fill="#FFF6E0" opacity="0.52"/><circle cx="2120" cy="611" r="0.8" fill="#FFF6E0" opacity="0.52"/><circle cx="516" cy="151" r="1.1" fill="#FFF6E0" opacity="0.42"/><circle cx="1796" cy="151" r="1.1" fill="#FFF6E0" opacity="0.42"/><circle cx="289" cy="387" r="0.7" fill="#FFF6E0" opacity="0.31"/><circle cx="1569" cy="387" r="0.7" fill="#FFF6E0" opacity="0.31"/><circle cx="867" cy="641" r="0.5" fill="#FFF6E0" opacity="0.56"/><circle cx="2147" cy="641" r="0.5" fill="#FFF6E0" opacity="0.56"/><circle cx="562" cy="335" r="0.8" fill="#FFF6E0" opacity="0.51"/><circle cx="1842" cy="335" r="0.8" fill="#FFF6E0" opacity="0.51"/><circle cx="930" cy="320" r="0.9" fill="#FFF6E0" opacity="0.45"/><circle cx="2210" cy="320" r="0.9" fill="#FFF6E0" opacity="0.45"/><circle cx="735" cy="350" r="0.9" fill="#FFF6E0" opacity="0.47"/><circle cx="2015" cy="350" r="0.9" fill="#FFF6E0" opacity="0.47"/><circle cx="830" cy="449" r="1.0" fill="#FFF6E0" opacity="0.26"/><circle cx="2110" cy="449" r="1.0" fill="#FFF6E0" opacity="0.26"/><circle cx="1145" cy="283" r="0.6" fill="#FFF6E0" opacity="0.41"/><circle cx="2425" cy="283" r="0.6" fill="#FFF6E0" opacity="0.41"/><circle cx="141" cy="276" r="0.9" fill="#FFF6E0" opacity="0.50"/><circle cx="1421" cy="276" r="0.9" fill="#FFF6E0" opacity="0.50"/><circle cx="1108" cy="534" r="0.5" fill="#FFF6E0" opacity="0.45"/><circle cx="2388" cy="534" r="0.5" fill="#FFF6E0" opacity="0.45"/><circle cx="295" cy="336" r="0.7" fill="#FFF6E0" opacity="0.55"/><circle cx="1575" cy="336" r="0.7" fill="#FFF6E0" opacity="0.55"/><circle cx="1046" cy="262" r="0.9" fill="#FFF6E0" opacity="0.60"/><circle cx="2326" cy="262" r="0.9" fill="#FFF6E0" opacity="0.60"/><circle cx="628" cy="77" r="1.0" fill="#FFF6E0" opacity="0.54"/><circle cx="1908" cy="77" r="1.0" fill="#FFF6E0" opacity="0.54"/><circle cx="597" cy="254" r="1.0" fill="#FFF6E0" opacity="0.56"/><circle cx="1877" cy="254" r="1.0" fill="#FFF6E0" opacity="0.56"/><circle cx="674" cy="719" r="1.0" fill="#FFF6E0" opacity="0.27"/><circle cx="1954" cy="719" r="1.0" fill="#FFF6E0" opacity="0.27"/><circle cx="483" cy="354" r="0.5" fill="#FFF6E0" opacity="0.48"/><circle cx="1763" cy="354" r="0.5" fill="#FFF6E0" opacity="0.48"/><circle cx="184" cy="168" r="0.6" fill="#FFF6E0" opacity="0.25"/><circle cx="1464" cy="168" r="0.6" fill="#FFF6E0" opacity="0.25"/><circle cx="832" cy="330" r="0.7" fill="#FFF6E0" opacity="0.58"/><circle cx="2112" cy="330" r="0.7" fill="#FFF6E0" opacity="0.58"/><circle cx="689" cy="414" r="0.6" fill="#FFF6E0" opacity="0.39"/><circle cx="1969" cy="414" r="0.6" fill="#FFF6E0" opacity="0.39"/><circle cx="1094" cy="488" r="0.5" fill="#FFF6E0" opacity="0.38"/><circle cx="2374" cy="488" r="0.5" fill="#FFF6E0" opacity="0.38"/><circle cx="1083" cy="54" r="1.1" fill="#FFF6E0" opacity="0.25"/><circle cx="2363" cy="54" r="1.1" fill="#FFF6E0" opacity="0.25"/><circle cx="1023" cy="373" r="0.9" fill="#FFF6E0" opacity="0.33"/><circle cx="2303" cy="373" r="0.9" fill="#FFF6E0" opacity="0.33"/><circle cx="662" cy="573" r="1.0" fill="#FFF6E0" opacity="0.27"/><circle cx="1942" cy="573" r="1.0" fill="#FFF6E0" opacity="0.27"/><circle cx="399" cy="263" r="0.8" fill="#FFF6E0" opacity="0.56"/><circle cx="1679" cy="263" r="0.8" fill="#FFF6E0" opacity="0.56"/><circle cx="499" cy="39" r="1.0" fill="#FFF6E0" opacity="0.46"/><circle cx="1779" cy="39" r="1.0" fill="#FFF6E0" opacity="0.46"/><circle cx="282" cy="701" r="0.7" fill="#FFF6E0" opacity="0.32"/><circle cx="1562" cy="701" r="0.7" fill="#FFF6E0" opacity="0.32"/><circle cx="77" cy="586" r="0.6" fill="#FFF6E0" opacity="0.50"/><circle cx="1357" cy="586" r="0.6" fill="#FFF6E0" opacity="0.50"/><circle cx="238" cy="661" r="0.9" fill="#FFF6E0" opacity="0.50"/><circle cx="1518" cy="661" r="0.9" fill="#FFF6E0" opacity="0.50"/><circle cx="488" cy="443" r="0.6" fill="#FFF6E0" opacity="0.39"/><circle cx="1768" cy="443" r="0.6" fill="#FFF6E0" opacity="0.39"/><circle cx="273" cy="389" r="0.7" fill="#FFF6E0" opacity="0.34"/><circle cx="1553" cy="389" r="0.7" fill="#FFF6E0" opacity="0.34"/><circle cx="352" cy="338" r="0.7" fill="#FFF6E0" opacity="0.55"/><circle cx="1632" cy="338" r="0.7" fill="#FFF6E0" opacity="0.55"/><circle cx="100" cy="119" r="1.0" fill="#FFF6E0" opacity="0.31"/><circle cx="1380" cy="119" r="1.0" fill="#FFF6E0" opacity="0.31"/><circle cx="980" cy="277" r="0.8" fill="#FFF6E0" opacity="0.29"/><circle cx="2260" cy="277" r="0.8" fill="#FFF6E0" opacity="0.29"/><circle cx="1066" cy="609" r="1.0" fill="#FFF6E0" opacity="0.56"/><circle cx="2346" cy="609" r="1.0" fill="#FFF6E0" opacity="0.56"/><circle cx="623" cy="161" r="0.9" fill="#FFF6E0" opacity="0.45"/><circle cx="1903" cy="161" r="0.9" fill="#FFF6E0" opacity="0.45"/><circle cx="1026" cy="256" r="1.1" fill="#FFF6E0" opacity="0.44"/><circle cx="2306" cy="256" r="1.1" fill="#FFF6E0" opacity="0.44"/><circle cx="684" cy="304" r="0.8" fill="#FFF6E0" opacity="0.27"/><circle cx="1964" cy="304" r="0.8" fill="#FFF6E0" opacity="0.27"/><circle cx="772" cy="368" r="1.0" fill="#FFF6E0" opacity="0.25"/><circle cx="2052" cy="368" r="1.0" fill="#FFF6E0" opacity="0.25"/><circle cx="1186" cy="427" r="0.8" fill="#FFF6E0" opacity="0.37"/><circle cx="2466" cy="427" r="0.8" fill="#FFF6E0" opacity="0.37"/><circle cx="1199" cy="610" r="0.8" fill="#FFF6E0" opacity="0.43"/><circle cx="2479" cy="610" r="0.8" fill="#FFF6E0" opacity="0.43"/><circle cx="941" cy="231" r="0.6" fill="#FFF6E0" opacity="0.46"/><circle cx="2221" cy="231" r="0.6" fill="#FFF6E0" opacity="0.46"/><circle cx="799" cy="191" r="0.6" fill="#FFF6E0" opacity="0.27"/><circle cx="2079" cy="191" r="0.6" fill="#FFF6E0" opacity="0.27"/><circle cx="969" cy="321" r="0.6" fill="#FFF6E0" opacity="0.30"/><circle cx="2249" cy="321" r="0.6" fill="#FFF6E0" opacity="0.30"/><circle cx="1111" cy="658" r="0.9" fill="#FFF6E0" opacity="0.45"/><circle cx="2391" cy="658" r="0.9" fill="#FFF6E0" opacity="0.45"/><circle cx="79" cy="557" r="0.8" fill="#FFF6E0" opacity="0.54"/><circle cx="1359" cy="557" r="0.8" fill="#FFF6E0" opacity="0.54"/><circle cx="24" cy="707" r="0.6" fill="#FFF6E0" opacity="0.45"/><circle cx="1304" cy="707" r="0.6" fill="#FFF6E0" opacity="0.45"/><circle cx="661" cy="233" r="0.7" fill="#FFF6E0" opacity="0.33"/><circle cx="1941" cy="233" r="0.7" fill="#FFF6E0" opacity="0.33"/><circle cx="1140" cy="667" r="0.7" fill="#FFF6E0" opacity="0.35"/><circle cx="2420" cy="667" r="0.7" fill="#FFF6E0" opacity="0.35"/><circle cx="50" cy="312" r="0.9" fill="#FFF6E0" opacity="0.39"/><circle cx="1330" cy="312" r="0.9" fill="#FFF6E0" opacity="0.39"/><circle cx="362" cy="149" r="0.9" fill="#FFF6E0" opacity="0.41"/><circle cx="1642" cy="149" r="0.9" fill="#FFF6E0" opacity="0.41"/><circle cx="742" cy="709" r="1.0" fill="#FFF6E0" opacity="0.37"/><circle cx="2022" cy="709" r="1.0" fill="#FFF6E0" opacity="0.37"/><circle cx="908" cy="359" r="0.6" fill="#FFF6E0" opacity="0.56"/><circle cx="2188" cy="359" r="0.6" fill="#FFF6E0" opacity="0.56"/><circle cx="165" cy="365" r="0.9" fill="#FFF6E0" opacity="0.33"/><circle cx="1445" cy="365" r="0.9" fill="#FFF6E0" opacity="0.33"/><circle cx="625" cy="510" r="0.9" fill="#FFF6E0" opacity="0.25"/><circle cx="1905" cy="510" r="0.9" fill="#FFF6E0" opacity="0.25"/><circle cx="916" cy="24" r="1.0" fill="#FFF6E0" opacity="0.48"/><circle cx="2196" cy="24" r="1.0" fill="#FFF6E0" opacity="0.48"/><circle cx="208" cy="115" r="0.7" fill="#FFF6E0" opacity="0.34"/><circle cx="1488" cy="115" r="0.7" fill="#FFF6E0" opacity="0.34"/><circle cx="1007" cy="395" r="1.1" fill="#FFF6E0" opacity="0.60"/><circle cx="2287" cy="395" r="1.1" fill="#FFF6E0" opacity="0.60"/><circle cx="1241" cy="396" r="0.7" fill="#FFF6E0" opacity="0.27"/><circle cx="2521" cy="396" r="0.7" fill="#FFF6E0" opacity="0.27"/><circle cx="291" cy="698" r="0.7" fill="#FFF6E0" opacity="0.57"/><circle cx="1571" cy="698" r="0.7" fill="#FFF6E0" opacity="0.57"/><circle cx="1084" cy="164" r="0.5" fill="#FFF6E0" opacity="0.29"/><circle cx="2364" cy="164" r="0.5" fill="#FFF6E0" opacity="0.29"/><circle cx="63" cy="349" r="1.1" fill="#FFF6E0" opacity="0.40"/><circle cx="1343" cy="349" r="1.1" fill="#FFF6E0" opacity="0.40"/><circle cx="1216" cy="533" r="0.7" fill="#FFF6E0" opacity="0.59"/><circle cx="2496" cy="533" r="0.7" fill="#FFF6E0" opacity="0.59"/><circle cx="63" cy="421" r="0.9" fill="#FFF6E0" opacity="0.40"/><circle cx="1343" cy="421" r="0.9" fill="#FFF6E0" opacity="0.40"/><circle cx="262" cy="493" r="0.8" fill="#FFF6E0" opacity="0.32"/><circle cx="1542" cy="493" r="0.8" fill="#FFF6E0" opacity="0.32"/><circle cx="1111" cy="144" r="0.8" fill="#FFF6E0" opacity="0.55"/><circle cx="2391" cy="144" r="0.8" fill="#FFF6E0" opacity="0.55"/></symbol><symbol id="sm" viewBox="0 0 2560 720"><circle cx="1051" cy="568" r="1.2" fill="#FFF6E0" opacity="0.79"/><circle cx="2331" cy="568" r="1.2" fill="#FFF6E0" opacity="0.79"/><circle cx="243" cy="711" r="1.5" fill="#FFF6E0" opacity="0.77"/><circle cx="1523" cy="711" r="1.5" fill="#FFF6E0" opacity="0.77"/><circle cx="969" cy="451" r="1.3" fill="#FFF6E0" opacity="0.49"/><circle cx="2249" cy="451" r="1.3" fill="#FFF6E0" opacity="0.49"/><circle cx="488" cy="262" r="1.2" fill="#FFF6E0" opacity="0.68"/><circle cx="1768" cy="262" r="1.2" fill="#FFF6E0" opacity="0.68"/><circle cx="227" cy="225" r="1.3" fill="#FFF6E0" opacity="0.52"/><circle cx="1507" cy="225" r="1.3" fill="#FFF6E0" opacity="0.52"/><circle cx="974" cy="382" r="1.6" fill="#FFF6E0" opacity="0.55"/><circle cx="2254" cy="382" r="1.6" fill="#FFF6E0" opacity="0.55"/><circle cx="44" cy="249" r="1.6" fill="#FFF6E0" opacity="0.42"/><circle cx="1324" cy="249" r="1.6" fill="#FFF6E0" opacity="0.42"/><circle cx="574" cy="687" r="1.2" fill="#FFF6E0" opacity="0.57"/><circle cx="1854" cy="687" r="1.2" fill="#FFF6E0" opacity="0.57"/><circle cx="442" cy="387" r="1.7" fill="#FFF6E0" opacity="0.60"/><circle cx="1722" cy="387" r="1.7" fill="#FFF6E0" opacity="0.60"/><circle cx="706" cy="647" r="1.4" fill="#FFF6E0" opacity="0.63"/><circle cx="1986" cy="647" r="1.4" fill="#FFF6E0" opacity="0.63"/><circle cx="613" cy="679" r="1.2" fill="#FFF6E0" opacity="0.64"/><circle cx="1893" cy="679" r="1.2" fill="#FFF6E0" opacity="0.64"/><circle cx="1073" cy="242" r="1.2" fill="#FFF6E0" opacity="0.51"/><circle cx="2353" cy="242" r="1.2" fill="#FFF6E0" opacity="0.51"/><circle cx="387" cy="445" r="1.1" fill="#FFF6E0" opacity="0.72"/><circle cx="1667" cy="445" r="1.1" fill="#FFF6E0" opacity="0.72"/><circle cx="1067" cy="166" r="1.5" fill="#FFF6E0" opacity="0.50"/><circle cx="2347" cy="166" r="1.5" fill="#FFF6E0" opacity="0.50"/><circle cx="421" cy="230" r="1.5" fill="#FFF6E0" opacity="0.42"/><circle cx="1701" cy="230" r="1.5" fill="#FFF6E0" opacity="0.42"/><circle cx="231" cy="687" r="1.1" fill="#FFF6E0" opacity="0.61"/><circle cx="1511" cy="687" r="1.1" fill="#FFF6E0" opacity="0.61"/><circle cx="377" cy="403" r="1.6" fill="#FFF6E0" opacity="0.59"/><circle cx="1657" cy="403" r="1.6" fill="#FFF6E0" opacity="0.59"/><circle cx="1221" cy="102" r="1.2" fill="#FFF6E0" opacity="0.50"/><circle cx="2501" cy="102" r="1.2" fill="#FFF6E0" opacity="0.50"/><circle cx="139" cy="183" r="1.6" fill="#FFF6E0" opacity="0.76"/><circle cx="1419" cy="183" r="1.6" fill="#FFF6E0" opacity="0.76"/><circle cx="739" cy="640" r="1.3" fill="#FFF6E0" opacity="0.68"/><circle cx="2019" cy="640" r="1.3" fill="#FFF6E0" opacity="0.68"/><circle cx="828" cy="368" r="1.3" fill="#FFF6E0" opacity="0.74"/><circle cx="2108" cy="368" r="1.3" fill="#FFF6E0" opacity="0.74"/><circle cx="628" cy="343" r="1.3" fill="#FFF6E0" opacity="0.79"/><circle cx="1908" cy="343" r="1.3" fill="#FFF6E0" opacity="0.79"/><circle cx="961" cy="410" r="1.5" fill="#FFF6E0" opacity="0.76"/><circle cx="2241" cy="410" r="1.5" fill="#FFF6E0" opacity="0.76"/><circle cx="87" cy="343" r="1.2" fill="#FFF6E0" opacity="0.45"/><circle cx="1367" cy="343" r="1.2" fill="#FFF6E0" opacity="0.45"/><circle cx="857" cy="618" r="1.3" fill="#FFF6E0" opacity="0.75"/><circle cx="2137" cy="618" r="1.3" fill="#FFF6E0" opacity="0.75"/><circle cx="1140" cy="561" r="1.4" fill="#FFF6E0" opacity="0.67"/><circle cx="2420" cy="561" r="1.4" fill="#FFF6E0" opacity="0.67"/><circle cx="471" cy="514" r="1.3" fill="#FFF6E0" opacity="0.42"/><circle cx="1751" cy="514" r="1.3" fill="#FFF6E0" opacity="0.42"/><circle cx="443" cy="78" r="1.5" fill="#FFF6E0" opacity="0.60"/><circle cx="1723" cy="78" r="1.5" fill="#FFF6E0" opacity="0.60"/><circle cx="37" cy="16" r="1.2" fill="#FFF6E0" opacity="0.73"/><circle cx="1317" cy="16" r="1.2" fill="#FFF6E0" opacity="0.73"/><circle cx="985" cy="178" r="1.2" fill="#FFF6E0" opacity="0.55"/><circle cx="2265" cy="178" r="1.2" fill="#FFF6E0" opacity="0.55"/><circle cx="842" cy="614" r="1.2" fill="#FFF6E0" opacity="0.68"/><circle cx="2122" cy="614" r="1.2" fill="#FFF6E0" opacity="0.68"/><circle cx="856" cy="272" r="1.2" fill="#FFF6E0" opacity="0.47"/><circle cx="2136" cy="272" r="1.2" fill="#FFF6E0" opacity="0.47"/><circle cx="602" cy="77" r="1.1" fill="#FFF6E0" opacity="0.69"/><circle cx="1882" cy="77" r="1.1" fill="#FFF6E0" opacity="0.69"/><circle cx="1167" cy="587" r="1.7" fill="#FFF6E0" opacity="0.60"/><circle cx="2447" cy="587" r="1.7" fill="#FFF6E0" opacity="0.60"/><circle cx="775" cy="58" r="1.3" fill="#FFF6E0" opacity="0.79"/><circle cx="2055" cy="58" r="1.3" fill="#FFF6E0" opacity="0.79"/><circle cx="57" cy="7" r="1.5" fill="#FFF6E0" opacity="0.40"/><circle cx="1337" cy="7" r="1.5" fill="#FFF6E0" opacity="0.40"/><circle cx="127" cy="354" r="1.5" fill="#FFF6E0" opacity="0.47"/><circle cx="1407" cy="354" r="1.5" fill="#FFF6E0" opacity="0.47"/><circle cx="283" cy="664" r="1.5" fill="#FFF6E0" opacity="0.44"/><circle cx="1563" cy="664" r="1.5" fill="#FFF6E0" opacity="0.44"/><circle cx="367" cy="690" r="1.6" fill="#FFF6E0" opacity="0.71"/><circle cx="1647" cy="690" r="1.6" fill="#FFF6E0" opacity="0.71"/><circle cx="370" cy="42" r="1.5" fill="#FFF6E0" opacity="0.70"/><circle cx="1650" cy="42" r="1.5" fill="#FFF6E0" opacity="0.70"/><circle cx="181" cy="224" r="1.4" fill="#FFF6E0" opacity="0.52"/><circle cx="1461" cy="224" r="1.4" fill="#FFF6E0" opacity="0.52"/><circle cx="997" cy="175" r="1.4" fill="#FFF6E0" opacity="0.61"/><circle cx="2277" cy="175" r="1.4" fill="#FFF6E0" opacity="0.61"/></symbol><symbol id="sn" viewBox="0 0 2560 720"><circle cx="1166" cy="524" r="2.0" fill="#FFF6E0" opacity="0.75" class="tw tw0"/><circle cx="2446" cy="524" r="2.0" fill="#FFF6E0" opacity="0.75" class="tw tw0"/><circle cx="1036" cy="466" r="2.6" fill="#FFF6E0" opacity="0.90" class="tw tw1"/><circle cx="2316" cy="466" r="2.6" fill="#FFF6E0" opacity="0.90" class="tw tw1"/><circle cx="1039" cy="628" r="2.6" fill="#FFF6E0" opacity="0.71" class="tw tw2"/><circle cx="2319" cy="628" r="2.6" fill="#FFF6E0" opacity="0.71" class="tw tw2"/><circle cx="1272" cy="51" r="2.2" fill="#FFF6E0" opacity="0.93" class="tw tw3"/><circle cx="2552" cy="51" r="2.2" fill="#FFF6E0" opacity="0.93" class="tw tw3"/><circle cx="12" cy="173" r="1.8" fill="#FFF6E0" opacity="0.98" class="tw tw0"/><circle cx="1292" cy="173" r="1.8" fill="#FFF6E0" opacity="0.98" class="tw tw0"/><circle cx="382" cy="553" r="2.0" fill="#FFF6E0" opacity="0.85" class="tw tw1"/><circle cx="1662" cy="553" r="2.0" fill="#FFF6E0" opacity="0.85" class="tw tw1"/><circle cx="161" cy="504" r="2.3" fill="#FFF6E0" opacity="0.87" class="tw tw2"/><circle cx="1441" cy="504" r="2.3" fill="#FFF6E0" opacity="0.87" class="tw tw2"/><circle cx="1175" cy="71" r="2.1" fill="#FFF6E0" opacity="0.77" class="tw tw3"/><circle cx="2455" cy="71" r="2.1" fill="#FFF6E0" opacity="0.77" class="tw tw3"/><circle cx="344" cy="523" r="2.0" fill="#FFF6E0" opacity="1.00" class="tw tw0"/><circle cx="1624" cy="523" r="2.0" fill="#FFF6E0" opacity="1.00" class="tw tw0"/><circle cx="976" cy="250" r="1.9" fill="#FFF6E0" opacity="0.91" class="tw tw1"/><circle cx="2256" cy="250" r="1.9" fill="#FFF6E0" opacity="0.91" class="tw tw1"/><circle cx="515" cy="200" r="1.8" fill="#FFF6E0" opacity="0.91" class="tw tw2"/><circle cx="1795" cy="200" r="1.8" fill="#FFF6E0" opacity="0.91" class="tw tw2"/><circle cx="788" cy="504" r="2.5" fill="#FFF6E0" opacity="0.84" class="tw tw3"/><circle cx="2068" cy="504" r="2.5" fill="#FFF6E0" opacity="0.84" class="tw tw3"/><circle cx="456" cy="30" r="2.1" fill="#FFF6E0" opacity="0.96" class="tw tw0"/><circle cx="1736" cy="30" r="2.1" fill="#FFF6E0" opacity="0.96" class="tw tw0"/><circle cx="605" cy="618" r="2.5" fill="#FFF6E0" opacity="0.81" class="tw tw1"/><circle cx="1885" cy="618" r="2.5" fill="#FFF6E0" opacity="0.81" class="tw tw1"/></symbol></defs></svg>
+<div class="wrap">
+
+<!-- ======================= الرأس ======================= -->
+<header class="top">
+  <div>
+    <span class="eyebrow">الاتجاه الثالث · سينمائي</span>
+    <h1>ضوءٌ على المعنى</h1>
+    <p class="lede">كل مشهد لقطة سينمائية في ليلٍ نجمي: الخلفية تتنفّس ببطء بطبقات متباينة العمق، والضوء الذهبي يلاحق الكلمة التي ينطقها الراوي، والسؤال لحظة صمت تُطفأ فيها الأنوار، وينتهي الفيديو بفجر.</p>
+    <p class="lede-2">كل ما يتحرك هنا مرسوم على مقاس ١٢٨٠×٧٢٠ نفسه الذي يرسم عليه التطبيق، ولا يستعمل إلا تحويلات الحركة والشفافية وخطوط SVG، فكله قابل للتنفيذ بالمكتبات المثبتة.</p>
+
+    <div class="block">
+      <div class="lbl-s">لوحة الألوان</div>
+      <div class="pal">
+        <div class="sw"><i style="background:#050816"></i><div><b>ليل عميق</b><code>#050816</code></div></div>
+        <div class="sw"><i style="background:#0C1440"></i><div><b>كحلي نجمي</b><code>#0C1440</code></div></div>
+        <div class="sw"><i style="background:#2A2370"></i><div><b>نيلي السُّدُم</b><code>#2A2370</code></div></div>
+        <div class="sw"><i style="background:#F5D38A"></i><div><b>ذهب الضوء</b><code>#F5D38A</code></div></div>
+        <div class="sw"><i style="background:#D9A54A"></i><div><b>ذهب الخطوط</b><code>#D9A54A</code></div></div>
+        <div class="sw"><i style="background:#F6F0E1"></i><div><b>عاجي النص</b><code>#F6F0E1</code></div></div>
+        <div class="sw"><i style="background:#A8B3D6"></i><div><b>ضباب ثانوي</b><code>#A8B3D6</code></div></div>
+        <div class="sw"><i style="background:#8DB7FF"></i><div><b>قمري</b><code>#8DB7FF</code></div></div>
+        <div class="sw"><i style="background:#FF9B71"></i><div><b>جمري</b><code>#FF9B71</code></div></div>
+        <div class="sw"><i style="background:#A99BFF"></i><div><b>بنفسج الكوكبة</b><code>#A99BFF</code></div></div>
+        <div class="sw"><i style="background:#6FE3C8"></i><div><b>فيروز المدد</b><code>#6FE3C8</code></div></div>
+        <div class="sw"><i style="background:#F59AB5"></i><div><b>وردي الفجر</b><code>#F59AB5</code></div></div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="lbl-s">الخطوط</div>
+      <div class="fonts">
+        <div class="ft"><div class="s" style="font-family:var(--kufi);font-weight:700">التنفيذ ١٨</div><b>Reem Kufi</b><span>العناوين والأرقام الكبيرة</span></div>
+        <div class="ft"><div class="s" style="font-family:var(--sans);font-weight:500;color:var(--ivory)">النقاط والترجمة</div><b>IBM Plex Sans Arabic</b><span>النص والنقاط والترجمة</span></div>
+        <div class="ft"><div class="s" style="font-family:var(--naskh)">إمضاءُ الأمر</div><b>Amiri</b><span>التعريف اللغوي والاقتباس</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="lbl-s">تشريح الإطار: ست طبقات بعمق</div>
+    <div class="xpl">
+      <div class="xstack">
+        <div class="pl l0" style="--i:0"></div>
+        <div class="pl l1" style="--i:1"></div>
+        <div class="pl l2" style="--i:2"></div>
+        <div class="pl l3" style="--i:3"></div>
+        <div class="pl l4" style="--i:4"><b>التنفيذ</b></div>
+        <div class="pl l5" style="--i:5"></div>
+      </div>
+      <div class="xlab" style="top:calc(66% - 6px)"><i>١</i><b>تدرّج عميق</b> ينجرف ببطء</div>
+      <div class="xlab" style="top:calc(66% - 56px)"><i>٢</i><b>سُدُم ملوّنة</b> بلون نوع المشهد</div>
+      <div class="xlab" style="top:calc(66% - 106px)"><i>٣</i><b>نجوم بثلاث سرعات</b> تصنع العمق</div>
+      <div class="xlab" style="top:calc(66% - 156px)"><i>٤</i><b>شعاع ضوء</b> يتمايل + تظليل الحواف</div>
+      <div class="xlab" style="top:calc(66% - 206px)"><i>٥</i><b>المحتوى</b> يتغير مع المشهد</div>
+      <div class="xlab" style="top:calc(66% - 256px)"><i>٦</i><b>الواجهة والترجمة</b> ثابتة</div>
+    </div>
+  </div>
+</header>
+
+<section class="block">
+  <div class="lbl-s">مبادئ النظام</div>
+  <div class="pr">
+    <div><b>خلفية لا تنقطع:</b> الطبقات الأربع الخلفية تبقى بين المشاهد، ويتبدل لون السُّدُم فقط، فيبدو الفيديو لقطة واحدة متصلة.</div>
+    <div><b>اللون للمعنى:</b> لكل نوع مشهد إضاءته (التعريف كهرماني، والتفرّع بنفسجي، والمدة فيروزي)، لا ألوان تتقافز بحسب رقم المشهد.</div>
+    <div><b>الكلمة حين تُنطق:</b> النص يظهر كلمة كلمة مع الراوي، وكلمة مفتاحية واحدة في كل مشهد تتوهج وتكبر ويُخط تحتها.</div>
+    <div><b>الإيموجي بطل:</b> حقل <code style="direction:ltr">emoji</code> يُرسم أخيرًا داخل هالة ضوء في الواجهة وفي المشهد، بدل الأيقونات العامة.</div>
+    <div><b>قالب لكل بنية:</b> تعريف، وتفرّع، ومدة، ومجموعات، ومرجع، ولكلٍّ شكله، بدل قالب الصفوف المرقّمة الواحد.</div>
+    <div><b>تدرّج طباعي:</b> كوفي للعناوين، ونسخ للتعريف، وخط واضح للنقاط، وأوزان ٤٠٠–٧٠٠ بدل ٩٠٠ في كل مكان، ولا خلفيات بيضاء.</div>
+  </div>
+</section>
+
+<!-- ======================= الشرائح ======================= -->
+<section class="sec">
+  <div class="sec-h"><h2>الشرائح</h2><p>كل شريحة تعيد دورتها: دخول، ثم ظهور مع الراوي، ثم كلمة مفتاحية، ثم انتقال ضوئي إلى المشهد التالي.</p></div>
+  <div class="gal">
+
+<!-- ١ الافتتاح -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-cover" style="--T:13s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">⚖️</span><b>التنفيذ</b><i></i><span>المشهد ١</span></div><div class="kindtag">افتتاح</div></div>
+   <div class="scene">
+    <div class="kb"><div class="cov">
+     <div class="orb big a-pop-3"><svg class="orbit" viewBox="0 0 200 200"><circle class="ring" cx="100" cy="100" r="94"/><circle class="sat" cx="100" cy="6" r="5"/></svg><span class="emo">⚖️</span></div>
+     <div class="kicker a-fi-8"><i></i>ملخّص الفيديو · الوحدة الدراسية<i></i></div>
+     <div class="ttl"><div class="mask a-mo-11"><div class="a-mi-11"><h1 class="cov-t">التنفيذ</h1></div></div><div class="flare a-flash-15"></div></div>
+     <div class="cov-s" data-w="22-31"><span class="w a-w-22">معنى</span> <span class="w a-w-25">التنفيذ</span> <span class="w a-w-28">وأنواعه</span> <span class="w a-w-31">وشروطه</span></div>
+     <div class="route">
+      <i class="rline a-sx-35-52"></i>
+      <span class="stop a-pop-36">المعنى</span><span class="stop a-pop-40">الأنواع</span><span class="stop a-pop-44">الشروط</span><span class="stop a-pop-48">المدد</span>
+     </div>
+    </div></div>
+    <p class="cap" data-c="6-80"><span class="a-sb-6-18">نبدأ</span> <span class="a-sb-18-31">مع</span> <span class="a-sb-31-43">التنفيذ:</span> <span class="a-sb-43-55">معناه،</span> <span class="a-sb-55-68">وأنواعه،</span> <span class="a-sb-68-80">وشروطه،</span> <span class="a-sb-80-84">ومدده.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠١</span><h3>بوابة الضوء</h3><code>cover</code></div>
+ <p>العنوان ينكشف من اليمين كأن ستارًا يُزاح، وتعبره ومضة عدسة أفقية، ثم تُرسم خريطة الفيديو محطةً محطة تحت إيموجي الوحدة الدائر في مداره.</p>
+ <div class="tags"><span>كشف بقناع منزلق</span><span>ومضة عدسة</span><span>رسم مسار</span><span>مدار يدور</span><span>دفع بالعمق عند الدخول</span></div>
+ </div>
+</div>
+
+<!-- ٢ النقاط -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-list" style="--T:16s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">🧭</span><b>التنفيذ</b><i></i><span>المشهد ٢</span></div><div class="kindtag">محاور</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="lst-h a-fu-3"><span class="orb sm"><span class="emo">🧭</span></span><h2>محاور الوحدة</h2><span class="cnt">٥ محاور</span></div>
+     <div class="rail-bg"></div><div class="rail"></div>
+     <div class="band"></div>
+     <div class="rows">
+      <div class="row a-act-8-24"><span class="med">١</span><div class="rtxt"><b class="head">المعنى</b><span data-w="10-15"><span class="w a-w-10">التنفيذ</span> <span class="w a-w-11">في</span> <span class="w a-w-12">اللغة</span> <span class="w a-w-14">وفي</span> <span class="w a-w-15">الاصطلاح</span></span></div></div>
+      <div class="row a-act-24-40"><span class="med">٢</span><div class="rtxt"><b class="head">الأنواع</b><span data-w="26-32"><span class="w a-w-26">من</span> <span class="w a-w-27">حيث</span> <span class="w a-w-28">القيام</span> <span class="w a-w-29">به،</span> <span class="w a-w-30">ومن</span> <span class="w a-w-31">حيث</span> <span class="w a-w-32">وقته</span></span></div></div>
+      <div class="row a-act-40-56"><span class="med">٣</span><div class="rtxt"><b class="head">الشروط</b><span data-w="42-47"><span class="w a-w-42"><em>١٨</em></span> <span class="w a-w-43">شرطًا</span> <span class="w a-w-44">في</span> <span class="w a-w-46">أربع</span> <span class="w a-w-47">مجموعات</span></span></div></div>
+      <div class="row a-act-56-72"><span class="med">٤</span><div class="rtxt"><b class="head">المدد</b><span data-w="58-65"><span class="w a-w-58">الإعلان</span> <span class="w a-w-59">قبل</span> <span class="w a-w-60">المزاد</span> <span class="w a-w-61">من</span> <span class="w a-w-62"><em>١٥</em></span> <span class="w a-w-63">إلى</span> <span class="w a-w-64"><em>٣٠</em></span> <span class="w a-w-65">يومًا</span></span></div></div>
+      <div class="row a-act-72-99"><span class="med">٥</span><div class="rtxt"><b class="head">المرجع</b><span data-w="74-79"><span class="w a-w-74">نظام</span> <span class="w a-w-75">التنفيذ</span> <span class="w a-w-76">الصادر</span> <span class="w a-w-78">عام</span> <span class="w a-w-79"><em>١٤٣٣هـ</em></span></span></div></div>
+     </div>
+    </div>
+    <p class="cap" data-c="5-84"><span class="a-sb-5-14">للوحدة</span> <span class="a-sb-14-23">خمسة</span> <span class="a-sb-23-31">محاور:</span> <span class="a-sb-31-40">المعنى،</span> <span class="a-sb-40-49">والأنواع،</span> <span class="a-sb-49-58">والشروط،</span> <span class="a-sb-58-66">والمدد،</span> <span class="a-sb-66-75">ثم</span> <span class="a-sb-75-84">المرجع</span> <span class="a-sb-84-88">النظامي.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٢</span><h3>عدسة التركيز</h3><code>list · steps</code></div>
+ <p>النقطة التي يقرؤها الراوي في بؤرة شريط ضوء ينزلق إليها، والسابقة تخفت ولا تختفي، والمسار الجانبي يمتلئ ذهبًا بقدر التقدّم.</p>
+ <div class="tags"><span>شريط ضوء ينزلق</span><span>تخفيت السابق</span><span>ظهور كلمة كلمة</span><span>مسار يمتلئ</span><span>الأرقام بخط مختلف</span></div>
+ </div>
+</div>
+
+<!-- ٣ التعريف -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-def" style="--T:16s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">📖</span><b>التنفيذ</b><i></i><span>المشهد ٣</span></div><div class="kindtag">تعريف</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="ghost">التنفيذ</div>
+     <div class="def-w a-fi-3">التنفيذ</div>
+     <div class="def-line a-sx-6-12"></div>
+     <div class="defrow l a-dmr-34-80"><span class="lbl a-pop-9">لغةً</span><div class="dtx" data-w="11-19"><span class="w a-w-11">إمضاءُ</span> <span class="w a-w-15">الأمرِ</span> <span class="w a-w-19">وإنفاذُه</span></div></div>
+     <svg class="def-link" viewBox="0 0 40 72"><path class="dr a-dr-32-37" pathLength="1" d="M20 0 C 20 24, 20 48, 20 72"/></svg>
+     <div class="defrow i"><span class="lbl a-pop-36">اصطلاحًا</span><div class="dtx" data-w="39-60" data-kz="66"><span class="w a-w-39">إنزال</span> <span class="w a-w-42">الحكم</span> <span class="w a-w-46">القضائي</span> <span class="w a-w-50">المنظوم</span> <span class="w a-w-53">بإعلام</span> <span class="w a-w-56">ليكون</span> <span class="w a-w-60"><span class="kw a-zm-66">واقعًا ملموسًا<i class="ul a-sx-68"></i></span></span></div></div>
+    </div>
+    <p class="cap" data-c="4-88"><span class="a-sb-4-10">التنفيذ</span> <span class="a-sb-10-17">لغةً</span> <span class="a-sb-17-23">إمضاء</span> <span class="a-sb-23-30">الأمر</span> <span class="a-sb-30-36">وإنفاذه،</span> <span class="a-sb-36-43">واصطلاحًا</span> <span class="a-sb-43-49">إنزال</span> <span class="a-sb-49-56">الحكم</span> <span class="a-sb-56-62">القضائي</span> <span class="a-sb-62-69">المنظوم</span> <span class="a-sb-69-75">بإعلام</span> <span class="a-sb-75-82">ليكون</span> <span class="a-sb-82-88">واقعًا</span> <span class="a-sb-88-92">ملموسًا.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٣</span><h3>المعجم المضيء</h3><code>definition · جديد</code></div>
+ <p>«لغةً» بخط نسخي كأنه من معجم، ثم ينتقل الضوء إلى «اصطلاحًا» كلمةً كلمة، فتتوهج العبارة المفتاحية ويُخط تحتها، ويعود السطران مضاءين للمراجعة.</p>
+ <div class="tags"><span>كلمة شبحية خلفية بعمق</span><span>نقل البؤرة</span><span>تكبير الكلمة المفتاحية</span><span>خط تحتها يُرسم</span></div>
+ </div>
+</div>
+
+<!-- ٤ التفرّع -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-tree" style="--T:18s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">🌌</span><b>التنفيذ</b><i></i><span>المشهد ٤</span></div><div class="kindtag">تفرّع</div></div>
+   <div class="scene">
+    <div class="kb">
+     <svg class="tl" viewBox="0 0 1280 720">
+      <g class="halo">
+       <path class="dr a-dr-10-15" pathLength="1" d="M640 160 C640 200 930 190 930 212"/>
+       <path class="dr a-dr-20-25" pathLength="1" d="M930 260 C930 300 1060 300 1060 322"/>
+       <path class="dr a-dr-20-25" pathLength="1" d="M930 260 C930 300 800 300 800 322"/>
+       <path class="dr a-dr-36-41" pathLength="1" d="M800 370 C800 410 920 410 920 434"/>
+       <path class="dr a-dr-36-41" pathLength="1" d="M800 370 C800 410 680 410 680 434"/>
+       <path class="dr a-dr-54-59" pathLength="1" d="M640 160 C640 200 350 190 350 212"/>
+       <path class="dr a-dr-64-69" pathLength="1" d="M350 260 C350 300 470 300 470 322"/>
+       <path class="dr a-dr-64-69" pathLength="1" d="M350 260 C350 300 230 300 230 322"/>
+      </g>
+      <g class="lines">
+       <path class="dr a-dr-10-15" pathLength="1" d="M640 160 C640 200 930 190 930 212"/>
+       <path class="dr a-dr-20-25" pathLength="1" d="M930 260 C930 300 1060 300 1060 322"/>
+       <path class="dr a-dr-20-25" pathLength="1" d="M930 260 C930 300 800 300 800 322"/>
+       <path class="dr a-dr-36-41" pathLength="1" d="M800 370 C800 410 920 410 920 434"/>
+       <path class="dr a-dr-36-41" pathLength="1" d="M800 370 C800 410 680 410 680 434"/>
+       <path class="dr a-dr-54-59" pathLength="1" d="M640 160 C640 200 350 190 350 212"/>
+       <path class="dr a-dr-64-69" pathLength="1" d="M350 260 C350 300 470 300 470 322"/>
+       <path class="dr a-dr-64-69" pathLength="1" d="M350 260 C350 300 230 300 230 322"/>
+      </g>
+      <g class="hot a-fi-80">
+       <path class="h2" d="M930 260 C930 300 800 300 800 322"/><path class="h2" d="M800 370 C800 410 920 410 920 434"/><path class="h2" d="M800 370 C800 410 680 410 680 434"/>
+       <path d="M930 260 C930 300 800 300 800 322"/><path d="M800 370 C800 410 920 410 920 434"/><path d="M800 370 C800 410 680 410 680 434"/>
+      </g>
+     </svg>
+     <div class="nd root a-pop-3" style="left:640px;top:132px">✦ التنفيذ</div>
+     <div class="nd crit a-pop-15" style="left:930px;top:236px"><span>👤</span>من حيث القيام به</div>
+     <div class="nd typ a-pop-25" style="left:1060px;top:346px">🤝 اختياري</div>
+     <div class="focus a-glo-80" style="left:800px;top:346px"></div>
+     <div class="nd typ a-pop-28" style="left:800px;top:346px">🏛️ جبري</div>
+     <div class="nd sub a-pop-41" style="left:920px;top:458px">مباشر</div>
+     <div class="nd sub a-pop-44" style="left:680px;top:458px">غير مباشر</div>
+     <div class="nd crit a-pop-59" style="left:350px;top:236px"><span>⏱️</span>من حيث وقته</div>
+     <div class="nd typ a-pop-69" style="left:470px;top:346px">عادي</div>
+     <div class="nd typ a-pop-72" style="left:230px;top:346px">معجّل</div>
+    </div>
+    <p class="cap" data-c="5-80"><span class="a-sb-5-11">للتنفيذ</span> <span class="a-sb-11-18">تقسيمان:</span> <span class="a-sb-18-24">بالقيام</span> <span class="a-sb-24-30">به</span> <span class="a-sb-30-36">اختياري</span> <span class="a-sb-36-42">وجبري،</span> <span class="a-sb-42-49">والجبري</span> <span class="a-sb-49-55">مباشر</span> <span class="a-sb-55-61">وغير</span> <span class="a-sb-61-68">مباشر،</span> <span class="a-sb-68-74">وبوقته</span> <span class="a-sb-74-80">عادي</span> <span class="a-sb-80-84">ومعجّل.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٤</span><h3>كوكبة الأنواع</h3><code>tree · جديد</code></div>
+ <p>التقسيم يُرسم كوكبةً في السماء: كل فرع خط ضوء يمتد ثم تولد عند طرفه عقدة، وفي آخر المشهد يُضاء الفرع الذي فيه التفصيل (الجبري) بالذهب.</p>
+ <div class="tags"><span>رسم الخطوط</span><span>ولادة العقد بارتداد</span><span>إضاءة الفرع الأهم</span><span>بنفسجي التفرّع</span></div>
+ </div>
+</div>
+
+<!-- ٥ المقارنة -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-cmp" style="--T:16s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">⏳</span><b>التنفيذ</b><i></i><span>المشهد ٥</span></div><div class="kindtag">مقارنة</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="cmp-k a-fi-3">من حيث وقته</div>
+     <div class="pane r a-fr-5">
+      <div class="ph"><span class="pe">🕰️</span><h3>تنفيذ عادي</h3></div>
+      <div class="cr a-fr-18" style="top:116px"><span><span class="kw a-zm-70">بعد</span> أن يصير الحكم نهائيًا</span></div>
+      <div class="cr a-fr-36" style="top:204px">هو الأصل العام في التنفيذ</div>
+      <div class="cr a-fr-54" style="top:292px">استقرار الحق المحكوم به</div>
+     </div>
+     <div class="pane l a-fl-5">
+      <div class="ph"><span class="pe">⚡</span><h3>تنفيذ معجّل</h3></div>
+      <div class="cr a-fl-23" style="top:116px"><span><span class="kw a-zm-74">قبل</span> أن يصير الحكم نهائيًا</span></div>
+      <div class="cr a-fl-41" style="top:204px">استثناء من الأصل</div>
+      <div class="cr a-fl-59" style="top:292px">دفع ضرر التأخير</div>
+     </div>
+     <div class="seam a-sy-3-10"></div>
+     <div class="medal a-pop-8">⏳</div>
+     <div class="crit a-pop-15" style="top:308px">الوقت</div>
+     <div class="crit a-pop-33" style="top:396px">الأصل</div>
+     <div class="crit a-pop-51" style="top:484px">الغاية</div>
+    </div>
+    <p class="cap" data-c="5-86"><span class="a-sb-5-10">من</span> <span class="a-sb-10-16">حيث</span> <span class="a-sb-16-21">الوقت:</span> <span class="a-sb-21-27">العادي</span> <span class="a-sb-27-32">بعد</span> <span class="a-sb-32-37">أن</span> <span class="a-sb-37-43">يصير</span> <span class="a-sb-43-48">الحكم</span> <span class="a-sb-48-54">نهائيًا،</span> <span class="a-sb-54-59">والمعجّل</span> <span class="a-sb-59-64">قبل</span> <span class="a-sb-64-70">ذلك</span> <span class="a-sb-70-75">استثناءً</span> <span class="a-sb-75-81">لدفع</span> <span class="a-sb-81-86">ضرر</span> <span class="a-sb-86-90">التأخير.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٥</span><h3>الشاشة المنقسمة</h3><code>compare</code></div>
+ <p>فاصل ضوئي يشق الشاشة من أعلى، والجانبان يتقاربان نحوه (قمري وجمري)، والمعيار على الفاصل يربط كل سطر بنظيره، ثم تتوهج «بعد» و«قبل»: جوهر الفرق.</p>
+ <div class="tags"><span>شقّ ضوئي</span><span>دخول متقابل</span><span>إيقاع ذهاب وإياب</span><span>معيار على الفاصل</span><span>كلمتان مفتاحيتان</span></div>
+ </div>
+</div>
+
+<!-- ٦ المدة -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-stat" style="--T:14s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">📢</span><b>التنفيذ</b><i></i><span>المشهد ٦</span></div><div class="kindtag">مدة</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="st-h a-fu-3"><span class="orb sm"><span class="emo">📢</span></span><h2>مدة الإعلان <span class="kw a-zm-62">قبل المزاد</span></h2></div>
+     <div class="nglow a-glo-22"></div>
+     <div class="nums">
+      <div class="numcol a-fi-5"><span class="from">من</span><div class="roll"><div class="reel ra"><span>٠</span><span>٥</span><span>١٠</span><span>١٥</span></div></div></div>
+      <span class="dash a-fi-10">–</span>
+      <div class="numcol a-fi-9"><span class="from">إلى</span><div class="roll"><div class="reel rb"><span>١٥</span><span>٢٠</span><span>٢٥</span><span>٣٠</span></div></div></div>
+      <span class="unit a-fi-20">يومًا</span>
+     </div>
+     <div class="nflare a-flash-22"></div>
+     <div class="ruler">
+      <svg viewBox="0 0 1100 130">
+       <path class="base dr a-dr-24-32" pathLength="1" d="M1060 50 L40 50"/>
+       <g class="ticks a-fi-27"><path d="M40 26 V74 M74 44 V56 M108 44 V56 M142 44 V56 M176 44 V56 M210 38 V62 M244 44 V56 M278 44 V56 M312 44 V56 M346 44 V56 M380 38 V62 M414 44 V56 M448 44 V56 M482 44 V56 M516 44 V56 M550 26 V74 M584 44 V56 M618 44 V56 M652 44 V56 M686 44 V56 M720 38 V62 M754 44 V56 M788 44 V56 M822 44 V56 M856 44 V56 M890 38 V62 M924 44 V56 M958 44 V56 M992 44 V56 M1026 44 V56 M1060 26 V74"/></g>
+       <rect class="win a-sx-32-40" x="550" y="34" width="510" height="32" rx="16"/>
+       <g class="a-fi-30"><text x="1060" y="112">٣٠ يومًا قبل</text><text x="550" y="112">١٥ يومًا قبل</text><text class="g" x="40" y="112">يوم المزاد</text></g>
+      </svg>
+      <div class="gring a-flash-48"></div>
+      <div class="gavel a-pop-46">🔨</div>
+      <div class="marker"><span>📢</span></div>
+     </div>
+    </div>
+    <p class="cap" data-c="5-80"><span class="a-sb-5-12">الإعلان</span> <span class="a-sb-12-19">عن</span> <span class="a-sb-19-25">المزاد</span> <span class="a-sb-25-32">يسبق</span> <span class="a-sb-32-39">موعده</span> <span class="a-sb-39-46">بمدة</span> <span class="a-sb-46-53">بين</span> <span class="a-sb-53-60">خمسة</span> <span class="a-sb-60-66">عشر</span> <span class="a-sb-66-73">يومًا</span> <span class="a-sb-73-80">وثلاثين</span> <span class="a-sb-80-84">يومًا.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٦</span><h3>مسطرة الزمن</h3><code>stat · range</code></div>
+ <p>الرقمان يدوران كعدّاد حتى يستقرا ﺑ«١٥–٣٠»، ثم تمتد مسطرة الأيام وتُضاء عليها نافذة المدة، ويتنقّل فيها رمز الإعلان حتى مطرقة المزاد.</p>
+ <div class="tags"><span>عدّاد دوّار</span><span>ومضة على الرقم</span><span>مسطرة تُرسم</span><span>نافذة تمتد</span><span>علامة تتنقل</span></div>
+ </div>
+</div>
+
+<!-- ٧ المجموعات -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-grp" style="--T:16s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">📋</span><b>التنفيذ</b><i></i><span>المشهد ٧</span></div><div class="kindtag">مجموعات</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="g18"><b>١٨</b><span>شرطًا للتنفيذ الجبري</span></div>
+     <div class="gcards">
+      <div class="gc a-fu-28">
+       <svg class="gdots" viewBox="0 0 120 110"><path class="dr a-dr-31-37" pathLength="1" d="M60 17 L96.1 43.3 L82.3 85.7 L37.7 85.7 L23.9 43.3 Z"/>
+        <circle class="a-pop-29" cx="60" cy="17" r="7"/><circle class="a-pop-30" cx="96.1" cy="43.3" r="7"/><circle class="a-pop-31" cx="82.3" cy="85.7" r="7"/><circle class="a-pop-32" cx="37.7" cy="85.7" r="7"/><circle class="a-pop-33" cx="23.9" cy="43.3" r="7"/></svg>
+       <div class="gn"><b>٥</b>شروط</div><div class="gt">السند التنفيذي</div>
+      </div>
+      <div class="gc a-fu-34">
+       <svg class="gdots" viewBox="0 0 120 110"><path class="dr a-dr-37-43" pathLength="1" d="M60 17 L96.1 43.3 L82.3 85.7 L37.7 85.7 L23.9 43.3 Z"/>
+        <circle class="a-pop-35" cx="60" cy="17" r="7"/><circle class="a-pop-36" cx="96.1" cy="43.3" r="7"/><circle class="a-pop-37" cx="82.3" cy="85.7" r="7"/><circle class="a-pop-38" cx="37.7" cy="85.7" r="7"/><circle class="a-pop-39" cx="23.9" cy="43.3" r="7"/></svg>
+       <div class="gn"><b>٥</b>شروط</div><div class="gt">الحق المنفَّذ به</div>
+      </div>
+      <div class="gc a-fu-40">
+       <svg class="gdots" viewBox="0 0 120 110"><path class="dr a-dr-43-48" pathLength="1" d="M60 17 L98 55 L60 93 L22 55 Z"/>
+        <circle class="a-pop-41" cx="60" cy="17" r="7"/><circle class="a-pop-42" cx="98" cy="55" r="7"/><circle class="a-pop-43" cx="60" cy="93" r="7"/><circle class="a-pop-44" cx="22" cy="55" r="7"/></svg>
+       <div class="gn"><b>٤</b>شروط</div><div class="gt">أطراف التنفيذ</div>
+      </div>
+      <div class="gc a-fu-46">
+       <svg class="gdots" viewBox="0 0 120 110"><path class="dr a-dr-49-54" pathLength="1" d="M60 17 L98 55 L60 93 L22 55 Z"/>
+        <circle class="a-pop-47" cx="60" cy="17" r="7"/><circle class="a-pop-48" cx="98" cy="55" r="7"/><circle class="a-pop-49" cx="60" cy="93" r="7"/><circle class="a-pop-50" cx="22" cy="55" r="7"/></svg>
+       <div class="gn"><b>٤</b>شروط</div><div class="gt">محل التنفيذ</div>
+      </div>
+     </div>
+     <div class="gsum a-fi-62">٥ + ٥ + ٤ + ٤ = <b>١٨</b></div>
+    </div>
+    <p class="cap" data-c="5-60"><span class="a-sb-5-12">للتنفيذ</span> <span class="a-sb-12-19">الجبري</span> <span class="a-sb-19-26">ثمانية</span> <span class="a-sb-26-32">عشر</span> <span class="a-sb-32-39">شرطًا،</span> <span class="a-sb-39-46">تنتظم</span> <span class="a-sb-46-53">في</span> <span class="a-sb-53-60">أربع</span> <span class="a-sb-60-64">مجموعات.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٧</span><h3>مجرّات الشروط</h3><code>groups · cards</code></div>
+ <p>الرقم الكبير يُعلن العدد ثم يصعد ليصير عنوانًا، والشروط نجوم تولد في أربع مجموعات متصلة بخطوط، ثم يُكتب المجموع ليُحفظ بالنظر.</p>
+ <p class="note">أسماء المجموعات وأعدادها هنا للتوضيح فقط، وفي التطبيق تُؤخذ من نص الوحدة.</p>
+ <div class="tags"><span>رقم يصعد عنوانًا</span><span>نجوم تولد متتابعة</span><span>خطوط الكوكبة</span><span>معادلة للحفظ</span></div>
+ </div>
+</div>
+
+<!-- ٨ المرجع -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-seal" style="--T:14s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">📜</span><b>التنفيذ</b><i></i><span>المشهد ٨</span></div><div class="kindtag">مرجع</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="qt">
+      <div class="qmark a-fi-10">❝</div>
+      <div class="qtx" data-w="14-34" data-kz="40"><span class="w a-w-14">يُرجَع</span> <span class="w a-w-17">في</span> <span class="w a-w-21">أحكام</span> <span class="w a-w-24">التنفيذ</span> <span class="w a-w-27">وإجراءاته</span> <span class="w a-w-31">إلى</span> <span class="w a-w-34"><span class="kw a-zm-40">نظام التنفيذ<i class="ul a-sx-42"></i></span></span></div>
+      <div class="qby a-fi-48">المرجع النظامي للوحدة</div>
+     </div>
+     <div class="sealw">
+      <div class="sflash a-flash-7"></div>
+      <div class="seal a-stamp-4">
+       <svg class="sring" viewBox="0 0 350 350"><defs><path id="sp" d="M33 175 A142 142 0 0 1 317 175"/></defs>
+        <circle cx="175" cy="175" r="170" class="o1"/><circle cx="175" cy="175" r="118" class="o2"/>
+        <text text-anchor="middle"><textPath href="#sp" startOffset="50%">نظام التنفيذ ✦ المرجع النظامي</textPath></text><g class="sdots"><circle cx="175" cy="317" r="4"/><circle cx="134" cy="311" r="3"/><circle cx="216" cy="311" r="3"/><circle cx="97" cy="294" r="2.5"/><circle cx="253" cy="294" r="2.5"/><circle cx="66" cy="267" r="2"/><circle cx="284" cy="267" r="2"/></g></svg>
+       <div class="score"><span>صدر عام</span><b>١٤٣٣هـ</b></div>
+      </div>
+     </div>
+    </div>
+    <p class="cap" data-c="5-88"><span class="a-sb-5-11">والمرجع</span> <span class="a-sb-11-18">في</span> <span class="a-sb-18-24">أحكام</span> <span class="a-sb-24-31">التنفيذ</span> <span class="a-sb-31-37">وإجراءاته</span> <span class="a-sb-37-43">نظام</span> <span class="a-sb-43-50">التنفيذ</span> <span class="a-sb-50-56">الصادر</span> <span class="a-sb-56-62">عام</span> <span class="a-sb-62-69">ألف</span> <span class="a-sb-69-75">وأربعمئة</span> <span class="a-sb-75-82">وثلاثة</span> <span class="a-sb-82-88">وثلاثين</span> <span class="a-sb-88-92">للهجرة.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٨</span><h3>الختم</h3><code>quote · seal</code></div>
+ <p>الختم يُطبع على الشاشة بارتداد وومضة، واسم النظام على قوسه العلوي يتمايل ببطء، والنص المرجعي بخط نسخي بجواره حتى تتوهج «نظام التنفيذ».</p>
+ <div class="tags"><span>طبعة ختم</span><span>قوس نص يتمايل</span><span>ظهور كلمة كلمة</span><span>للتواريخ والمراجع</span></div>
+ </div>
+</div>
+
+<!-- ٩ سؤال الفهم -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-chk" style="--T:18s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">🤔</span><b>التنفيذ</b><i></i><span>المشهد ٩</span></div><div class="kindtag">سؤال</div></div>
+   <div class="scene">
+    <div class="dimmer"></div>
+    <div class="spot a-fi-4"></div>
+    <div class="lbx t"></div><div class="lbx b"></div>
+    <div class="ck-l a-fu-5"><span class="orb sm"><span class="emo">🤔</span></span><b>لحظة تفكير</b></div>
+    <div class="ck-q" data-w="9-24"><span class="w a-w-9">حين</span> <span class="w a-w-11">لا</span> <span class="w a-w-12">يبادر</span> <span class="w a-w-14">المحكوم</span> <span class="w a-w-16">عليه</span> <span class="w a-w-17">إلى</span> <span class="w a-w-19">التنفيذ</span> <span class="w a-w-21">طوعًا،</span> <span class="w a-w-22">يكون</span> <span class="w a-w-24">التنفيذ:</span></div>
+    <div class="ck-o">
+     <div class="a-pop-26"><div class="ox a-dm-67"><div class="opt"><span class="ol">أ</span><span>اختياريًا</span></div></div></div>
+     <div class="a-pop-28"><div class="ox a-lift-66"><div class="opt"><i class="burst a-flash-66"></i><i class="oglow a-glo-66"></i><span class="ol">ب</span><span>جبريًا</span><i class="otick a-pop-68">✓</i></div></div></div>
+     <div class="a-pop-30"><div class="ox a-dm-67"><div class="opt"><span class="ol">ج</span><span>معجّلًا</span></div></div></div>
+    </div>
+    <div class="ck-r a-win-32-64"><div class="beat">
+     <svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="fg" cx="60" cy="60" r="52" pathLength="1"/></svg>
+     <div class="dg a-win-34-39">٥</div><div class="dg a-win-41-45">٤</div><div class="dg a-win-47-51">٣</div><div class="dg a-win-53-57">٢</div><div class="dg a-win-59-63">١</div>
+    </div></div>
+    <div class="ck-a a-fu-71"><b>الإجابة: جبريًا</b>، فتتولاه السلطة العامة عند امتناع المحكوم عليه.</div>
+    <p class="cap a-win-3-31" data-c="5-28"><span class="a-sb-5-7">سؤال</span> <span class="a-sb-7-9">سريع:</span> <span class="a-sb-9-11">حين</span> <span class="a-sb-11-13">لا</span> <span class="a-sb-13-15">يبادر</span> <span class="a-sb-15-18">المحكوم</span> <span class="a-sb-18-20">عليه</span> <span class="a-sb-20-22">إلى</span> <span class="a-sb-22-24">التنفيذ</span> <span class="a-sb-24-26">طوعًا،</span> <span class="a-sb-26-28">يكون</span> <span class="a-sb-28-32">التنفيذ؟</span></p>
+    <p class="cap mute a-win-34-63">٥ ثوانٍ للتفكير…</p>
+    <p class="cap a-win-67-94" data-c="69-88"><span class="a-sb-69-74">الإجابة:</span> <span class="a-sb-74-78">جبريًا،</span> <span class="a-sb-78-83">فتتولاه</span> <span class="a-sb-83-88">السلطة</span> <span class="a-sb-88-92">العامة.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">٠٩</span><h3>لحظة صمت</h3><code>check</code></div>
+ <p>أشرطة السينما السوداء تنزل، والأنوار تخفت حول السؤال، وحلقة ذهبية تتناقص خمس ثوانٍ بنبض خفيف، ثم ومضة تكشف الإجابة الصحيحة وتُخفت غيرها.</p>
+ <div class="tags"><span>أشرطة سينمائية</span><span>تعتيم وبقعة ضوء</span><span>حلقة تتناقص</span><span>نبض</span><span>ومضة الكشف</span><span>لمسة اهتزاز اختيارية</span></div>
+ </div>
+</div>
+
+<!-- ١٠ الخلاصة -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-sum" style="--T:16s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="beam"></div><div class="vig"></div><div class="floor"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">🎞️</span><b>التنفيذ</b><i></i><span>المشهد ١٠</span></div><div class="kindtag">خلاصة</div></div>
+   <div class="scene">
+    <div class="kb">
+     <div class="sm-h"><span class="a-fi-3">الخلاصة</span><h2 class="a-fu-4">أهم ما في الوحدة</h2></div>
+     <div class="stripw a-fr-3"><div class="strip">
+      <div class="spr a"></div><div class="spr b"></div>
+      <svg class="thread" viewBox="0 0 1400 300" preserveAspectRatio="none"><path class="dr a-dr-64-74" pathLength="1" d="M995 40 L143 40"/></svg>
+      <div class="frames">
+       <div class="frm a-lt-12"><i class="fflash a-flash-12"></i><span class="fe">🎯</span><b>المعنى</b><span>إنزال الحكم واقعًا ملموسًا</span><i class="fst a-pop-16">✓</i></div>
+       <div class="frm a-lt-26"><i class="fflash a-flash-26"></i><span class="fe">🧩</span><b>بالقيام به</b><span>اختياري وجبري: مباشر وغير مباشر</span><i class="fst a-pop-30">✓</i></div>
+       <div class="frm a-lt-40"><i class="fflash a-flash-40"></i><span class="fe">⏱️</span><b>بالوقت</b><span>عادي بعد نهائية الحكم، ومعجّل قبلها</span><i class="fst a-pop-44">✓</i></div>
+       <div class="frm a-lt-54"><i class="fflash a-flash-54"></i><span class="fe">📋</span><b>الشروط</b><span>١٨ شرطًا في أربع مجموعات</span><i class="fst a-pop-58">✓</i></div>
+      </div>
+     </div></div>
+     <div class="done a-pop-76">اكتملت الخلاصة ✓</div>
+    </div>
+    <p class="cap" data-c="5-86"><span class="a-sb-5-10">الخلاصة:</span> <span class="a-sb-10-16">التنفيذ</span> <span class="a-sb-16-21">إنزال</span> <span class="a-sb-21-27">الحكم</span> <span class="a-sb-27-32">واقعًا،</span> <span class="a-sb-32-37">وأنواعه</span> <span class="a-sb-37-43">بحسب</span> <span class="a-sb-43-48">القيام</span> <span class="a-sb-48-54">به</span> <span class="a-sb-54-59">ووقته،</span> <span class="a-sb-59-64">وشروطه</span> <span class="a-sb-64-70">ثمانية</span> <span class="a-sb-70-75">عشر</span> <span class="a-sb-75-81">في</span> <span class="a-sb-81-86">أربع</span> <span class="a-sb-86-90">مجموعات.</span></p>
+   </div>
+   <div class="sweep"></div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">١٠</span><h3>شريط العرض</h3><code>summary</code></div>
+ <p>الأفكار إطارات في شريط سينمائي ينساب ببطء، تضيء واحدًا بعد آخر كأن ضوء جهاز العرض يمر عليها، ثم يجمعها خيط ذهبي وختم «اكتملت الخلاصة».</p>
+ <div class="tags"><span>شريط ينساب</span><span>إضاءة متتابعة</span><span>ختم صح</span><span>خيط يربط</span><span>٦ نقاط = صفّان من ٣</span></div>
+ </div>
+</div>
+
+<!-- ١١ أسئلة النهاية -->
+<div class="card">
+ <div class="dev"><div class="scr">
+  <div class="cv t-end" style="--T:16s">
+   <div class="bg"><div class="grad"></div><div class="neb n1"></div><div class="neb n2"></div><div class="neb n3"></div>
+    <div class="px px1"><svg class="stars s1" viewBox="0 0 2560 720"><use href="#sf"/></svg></div>
+    <div class="px px2"><svg class="stars s2" viewBox="0 0 2560 720"><use href="#sm"/></svg></div>
+    <div class="px px3"><svg class="stars s3" viewBox="0 0 2560 720"><use href="#sn"/></svg></div>
+    <div class="sky"></div><div class="sun"></div>
+    <i class="spark" style="left:18%;animation-delay:-1s"></i><i class="spark" style="left:30%;animation-delay:-3.4s;animation-duration:7s"></i><i class="spark" style="left:44%;animation-delay:-2.2s"></i><i class="spark" style="left:57%;animation-delay:-4.8s;animation-duration:8s"></i><i class="spark" style="left:69%;animation-delay:-.6s;animation-duration:6.6s"></i><i class="spark" style="left:82%;animation-delay:-5.5s"></i><i class="spark" style="left:10%;animation-delay:-2.9s;animation-duration:7.4s"></i><i class="spark" style="left:91%;animation-delay:-1.7s;animation-duration:5.4s"></i>
+    <div class="beam"></div><div class="vig"></div></div>
+   <div class="prog"></div>
+   <div class="hud"><div class="chip"><span class="mo">🎓</span><b>التنفيذ</b><i></i><span>النهاية</span></div><div class="kindtag">أسئلة النهاية</div></div>
+   <div class="scene">
+    <div class="kb"><div class="en">
+     <div class="orb md a-pop-6"><span class="emo">🎓</span></div>
+     <div class="k a-fi-10">اكتمل الملخّص</div>
+     <h2 class="a-fu-12">ثلاثة أسئلة قبل الاختبار</h2>
+     <div class="qcs">
+      <div class="a-fu-20"><div class="qcf"><div class="qc" style="transform:rotate(3deg)"><i>١</i><span>ما الفرق بين التنفيذ العادي والمعجّل؟</span></div></div></div>
+      <div class="a-fu-24"><div class="qcf f2"><div class="qc"><i>٢</i><span>متى يكون التنفيذ جبريًا؟</span></div></div></div>
+      <div class="a-fu-28"><div class="qcf f3"><div class="qc" style="transform:rotate(-3deg)"><i>٣</i><span>كم مدة الإعلان قبل المزاد؟</span></div></div></div>
+     </div>
+     <div class="btns"><div class="bt g a-pop-40">🎯 بدء اختبار الوحدة</div><div class="bt o a-pop-43">↻ إعادة المشاهدة</div></div>
+    </div></div>
+    <p class="cap" data-c="5-70"><span class="a-sb-5-13">اكتمل</span> <span class="a-sb-13-21">الملخّص،</span> <span class="a-sb-21-29">وهذه</span> <span class="a-sb-29-38">ثلاثة</span> <span class="a-sb-38-46">أسئلة</span> <span class="a-sb-46-54">تثبّت</span> <span class="a-sb-54-62">الفهم</span> <span class="a-sb-62-70">قبل</span> <span class="a-sb-70-74">الاختبار.</span></p>
+   </div>
+  </div>
+ </div></div>
+ <div class="info"><div class="meta"><span class="no">١١</span><h3>فجر الفهم</h3><code>end card</code></div>
+ <p>الليل الذي رافق الفيديو ينتهي بفجر ذهبي يطلع من الأفق وشرر يصعد، وأسئلة المراجعة بطاقات تطفو بأعماق مختلفة، وزر الاختبار يلمع.</p>
+ <div class="tags"><span>شمس تطلع</span><span>شرر صاعد</span><span>بطاقات تطفو</span><span>لمعة على الزر</span><span>نصوص محايدة</span></div>
+ </div>
+</div>
+
+  </div>
+</section>
+
+<!-- ======================= الانتقالات ======================= -->
+<section class="sec">
+  <div class="sec-h"><h2>الانتقالات بين المشاهد</h2><p>تُنفَّذ في فاصل الصمت الموجود (٦٥٠ ملّي ثانية)، فلا تضيف وقتًا للفيديو.</p></div>
+  <div class="trs">
+    <div class="tr"><div class="mini m1"><div class="A">مشهد</div><div class="B">التالي</div><i class="sw2"></i></div><b>مسح ضوئي</b><p>الانتقال الافتراضي: شعاع ذهبي مائل يعبر، والقديم يكبر ويخفت، والجديد يستقر.</p></div>
+    <div class="tr"><div class="mini m2"><div class="A">مشهد</div><div class="B">سؤال</div><i class="iris"></i><i class="bar t"></i><i class="bar b"></i></div><b>انغلاق القزحية</b><p>قبل سؤال الفهم: الصورة تضيق في دائرة ثم تنفتح على الأشرطة السينمائية.</p></div>
+    <div class="tr"><div class="mini m3"><div class="A">التنفيذ</div><div class="B">الأنواع</div></div><b>دفع بالعمق</b><p>إلى مشهد يفصّل ما قبله (تفرّع، مجموعات): كأن الكاميرا تعبر داخل الفكرة.</p></div>
+    <div class="tr"><div class="mini m4"><div class="A"><span>الخلاصة</span></div><i class="sunm"></i></div><b>طلوع الفجر</b><p>إلى البطاقة الختامية: الأفق يضيء من الأسفل ويدفئ الليل.</p></div>
+  </div>
+</section>
+
+<!-- ======================= الثيمات ======================= -->
+<section class="sec">
+  <div class="sec-h"><h2>مع ثيمات التطبيق</h2><p>البنية والحركة ثابتتان، والذهبي يُستبدل باللون المميز للثيم، والسُّدُم من توهجاته.</p></div>
+  <div class="ths">
+    <div class="th" style="--b1:#050816;--b2:#0C1440;--b3:#151049;--q1:#2A2370;--q2:#8DB7FF;--ac:#F5D38A"><div class="th-s"><b>التنفيذ</b><i></i></div><span>ليلي نجمي · الأساسي</span><code>accent #F5D38A</code></div>
+    <div class="th" style="--b1:#07080D;--b2:#0A0B12;--b3:#07080D;--q1:#7C6CFF;--q2:#3FD0FF;--ac:#B9AFFF"><div class="th-s"><b>التنفيذ</b><i></i></div><span>الشفق</span><code>accent #B9AFFF</code></div>
+    <div class="th" style="--b1:#1a0b14;--b2:#26101c;--b3:#180a10;--q1:#ff7a59;--q2:#ec4899;--ac:#ff6b9d"><div class="th-s"><b>التنفيذ</b><i></i></div><span>غروب</span><code>accent #ff6b9d</code></div>
+    <div class="th" style="--b1:#08160f;--b2:#0c2018;--b3:#07130d;--q1:#2ecc71;--q2:#14b8a6;--ac:#2ecc71"><div class="th-s"><b>التنفيذ</b><i></i></div><span>غابة</span><code>accent #2ecc71</code></div>
+    <div class="th" style="--b1:#06121f;--b2:#0a1c2e;--b3:#05101a;--q1:#22d3ee;--q2:#3b82f6;--ac:#38bdf8"><div class="th-s"><b>التنفيذ</b><i></i></div><span>محيط</span><code>accent #38bdf8</code></div>
+    <div class="th" style="--b1:#16110a;--b2:#211810;--b3:#130e08;--q1:#f59e0b;--q2:#d97706;--ac:#f5a623"><div class="th-s"><b>التنفيذ</b><i></i></div><span>رملي دافئ</span><code>accent #f5a623</code></div>
+  </div>
+</section>
+
+<!-- ======================= التنفيذ في React Native ======================= -->
+<section class="sec">
+  <div class="sec-h"><h2>التنفيذ في React Native</h2><p>كل حركة هنا لها مقابل بالمكتبات المثبتة، بلا Skia ولا Lottie، وكلها على خيط الواجهة (UI thread).</p></div>
+  <table class="rn">
+    <thead><tr><th>العنصر</th><th>التقنية</th></tr></thead>
+    <tbody>
+      <tr><td>محرّك التوقيت</td><td>قيمة مشتركة واحدة <code>p</code> (٠..١) من <code>speakText.onProgress</code> عبر <code>useSharedValue</code>، وكل عنصر يحسب ظهوره بـ<code>interpolate(p, [t0, t0+δ], [0, 1], CLAMP)</code>. النسب المئوية في هذا النموذج هي قيم <code>p</code> نفسها، وعند الإيقاف <code>p = 1</code> فيظهر كل شيء كما الآن.</td></tr>
+      <tr><td>الخلفية المستمرة</td><td>مكوّن <code>CinemaBackdrop</code> يُرسم مرة واحدة خارج <code>VideoStage</code>، فلا يُعاد إنشاؤه مع <code>index</code>. التدرج <code>expo-linear-gradient</code> بحجم ١٦٠٪ ينجرف بـ<code>translate</code>، والسُّدُم دوائر <code>RadialGradient</code> من <code>react-native-svg</code> داخل <code>Animated.View</code>. تبدّل اللون بحسب النوع = طبقتان تتقاطعان بالشفافية.</td></tr>
+      <tr><td>النجوم والعمق</td><td>ثلاث طبقات SVG بعرض ٢٥٦٠ (نسختان متطابقتان) تتحرك بـ<code>withRepeat(withTiming(-1280, {duration, easing: linear}))</code> بسرعات ٧٠/١١٥/١٩٠ ثانية. الدفع بالعمق عند دخول المشهد: <code>scale</code> مختلف لكل طبقة (١٫٠٣ و١٫٠٧ و١٫١٥ إلى ١).</td></tr>
+      <tr><td>الكلمة كلمة</td><td>تقسيم النص إلى كلمات، وكل كلمة <code>Animated.View</code> فيه <code>Text</code> داخل صف <code>flexDirection: dir.row, flexWrap: "wrap"</code>. لا تُقسَّم الكلمة نفسها، ولا <code>letterSpacing</code> للعربية. توقيت الكلمة من مطابقة كلماتها مع كلمات الراوي بـ<code>lib/alignWords.ts</code> الموجود، وإلا فتوزيع خطي داخل نافذة النقطة.</td></tr>
+      <tr><td>الكلمة المفتاحية</td><td>نسختان فوق بعض: عاجية، وذهبية لها <code>textShadow</code> ثابت. التبديل بالشفافية مع <code>scale</code> ١ ثم ١٫١٦ ثم ١٫٠٦، والخط تحتها <code>View</code> بـ<code>scaleX</code> من اليمين.</td></tr>
+      <tr><td>كشف العنوان</td><td>قناع منزلق: <code>View</code> خارجي <code>overflow: hidden</code> يتحرك <code>translateX</code> من العرض إلى ٠، وداخلي يتحرك من سالب العرض إلى ٠، وكلاهما على المشغّل الأصلي. ومضة العدسة <code>Ellipse</code> بتدرج قطري تكبر وتخفت.</td></tr>
+      <tr><td>رسم الخطوط</td><td><code>Path</code> بـ<code>strokeDasharray = L</code> و<code>strokeDashoffset</code> متحرك عبر <code>useAnimatedProps</code> من reanimated. الطول <code>L</code> يُحسب مسبقًا (تقسيم المنحنى إلى قطع)، والتوهج مسار ثانٍ أعرض وشفاف تحته بدل <code>filter</code>.</td></tr>
+      <tr><td>العدّاد الدوّار</td><td>عمود أرقام داخل <code>View</code> بارتفاع سطر و<code>overflow: hidden</code>، يتحرك <code>translateY</code> بخطوات <code>withSequence(withTiming…)</code>.</td></tr>
+      <tr><td>لحظة الصمت</td><td>الأشرطة <code>View</code> سوداء بـ<code>translateY</code>، والتعتيم طبقة بشفافية. الحلقة <code>Circle</code> بـ<code>strokeDashoffset</code> عبر <code>useAnimatedProps</code> مدة ٥٠٠٠ ملّي ثانية خطيًا، والنبض <code>withRepeat</code> على <code>scale</code>. لمسة <code>expo-haptics</code> (مثبّت) خفيفة عند الكشف اختيارية.</td></tr>
+      <tr><td>الختم</td><td>طبعة الختم <code>scale</code> من ١٫٨ مع <code>rotate</code> ثم ارتداد. اسم النظام <code>TextPath</code> على القوس العلوي فقط داخل <code>Animated.View</code> يتمايل ±٩ درجات، فيبقى النص قائمًا مقروءًا. إن تقطّعت الحروف العربية على المسار في iOS، تُوزَّع الكلمات (لا الحروف) على القوس بـ<code>rotate</code>.</td></tr>
+      <tr><td>الانتقال</td><td>المشهدان السابق واللاحق يُرسمان معًا خلال فاصل ٦٥٠ ملّي ثانية: السابق <code>opacity → 0</code> و<code>scale → 1.03</code>، واللاحق من ٠٫٩٧، وشعاع <code>LinearGradient</code> مائل يعبر بـ<code>translateX</code>. القزحية دائرة بحدّ سميك أسود تتحجّم.</td></tr>
+      <tr><td>الخطوط</td><td>ملفات TTF لخطوط Reem Kufi وIBM Plex Sans Arabic وAmiri في <code>assets/fonts</code> تُحمّل بـ<code>useFonts</code> (<code>expo-font</code> مثبّت)، فلا تحتاج بناءً أصليًا جديدًا. النص المتدرج يحتاج masked-view غير المثبتة، فيُستعاض عنه بالذهبي المصمت مع توهج.</td></tr>
+      <tr><td>الأداء</td><td>كل الحركة <code>transform</code> و<code>opacity</code> أو خصائص SVG عبر <code>useAnimatedProps</code>، ولا تحريك للعرض أو الارتفاع. الخلفية الثابتة بـ<code>shouldRasterizeIOS</code> و<code>renderToHardwareTextureAndroid</code>. نحو ٦٠ كلمة متحركة في المشهد كحد أعلى.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<p class="foot">نموذج تصميمي حي لـ«ملخّص الفيديو». الأمثلة من وحدة «التنفيذ: معنى التنفيذ وأنواعه وشروطه». كل الحركة CSS وSVG فقط، ومدة كل دورة بين ١٣ و١٨ ثانية لتوضيح التتابع (في التطبيق تتبع طول كلام الراوي).</p>
+</div>
+</body>
+</html>
