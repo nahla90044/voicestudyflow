@@ -11,7 +11,7 @@ type T = (key: string, vars?: Record<string, string | number>) => string;
 // فإن فُتحت الشاشة نفسها مرتين يشتركان في جواب واحد.
 const pending = new Map<string, Promise<boolean>>();
 
-export function confirmCost(n: number, what: "summary" | "video" | "studyfile", t: T, estimated = false, key = `${what}:${n}`): Promise<boolean> {
+export function confirmCost(n: number, what: "summary" | "video" | "studyfile" | "qfile", t: T, estimated = false, key = `${what}:${n}`): Promise<boolean> {
   const cur = pending.get(key);
   if (cur) return cur;
   const p = ask(n, what, t, estimated).finally(() => pending.delete(key));
@@ -19,7 +19,7 @@ export function confirmCost(n: number, what: "summary" | "video" | "studyfile", 
   return p;
 }
 
-async function ask(n: number, what: "summary" | "video" | "studyfile", t: T, estimated: boolean): Promise<boolean> {
+async function ask(n: number, what: "summary" | "video" | "studyfile" | "qfile", t: T, estimated: boolean): Promise<boolean> {
   if (n <= 1) return true;
   const plan = await getPlan().catch(() => null);
   if (!plan || plan === "owner") return true;

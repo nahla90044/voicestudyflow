@@ -21,6 +21,8 @@ export type AiAction =
   | "translate"
   | "mindmap"
   | "mindtree"
+  | "qextract"
+  | "qsolve"
   | "tashkeel"
   | "ocrtashkeel"
   | "slides"

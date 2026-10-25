@@ -20,6 +20,8 @@ import { computeReadiness } from "../lib/readinessCore";
 import { addSavedItem } from "../lib/savedStudy";
 import { generateUnitQuiz, type QuizQ } from "../lib/syllabus";
 import { summaryToSpeech } from "../lib/studySummary";
+import { bookQuestions } from "../lib/questionFiles";
+import { pickForQuiz } from "../lib/questionFilesCore";
 import { getCachedSummary, summaryRange } from "../lib/unitSummary";
 import { unitTextParts } from "../lib/unitScope";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
@@ -43,7 +45,10 @@ export default function UnitQuizScreen() {
   const dir = useDir();
   const { pal } = useScene();
   const tone = tones(pal);
-  const { pdf_path, unit, page, title, book_title, mode } = useLocalSearchParams<{
+  const { pdf_path, unit, page, title, book_title, mode, book_id, units, count: countParam } = useLocalSearchParams<{
+    book_id?: string;
+    units?: string;
+    count?: string;
     pdf_path?: string;
     unit?: string;
     page?: string;
@@ -53,9 +58,11 @@ export default function UnitQuizScreen() {
   }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const mistakesMode = mode === "mistakes";
+  // اختبار من ملفات الأسئلة الجاهزة (٢٥ أكتوبر): وحدات مختارة وعدد، بلا توليد
+  const bankMode = mode === "qbank";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
-  const pageMode = !mistakesMode && Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة)
+  const pageMode = !mistakesMode && !bankMode && Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة)
   const srcId = pageMode ? pageNum : unitIdx;
   const kind = pageMode ? "pagequiz" : "quiz";
   const unitTitle = typeof title === "string" ? title : "";
@@ -125,6 +132,29 @@ export default function UnitQuizScreen() {
           setBookId(r.bookId);
         });
 
+        if (bankMode) {
+          const all = await bookQuestions(String(book_id ?? ""));
+          const us = typeof units === "string" && units !== "all" ? units.split(",").map(Number).filter(Number.isFinite) : null;
+          const picked = pickForQuiz(all, us, Number(countParam) > 0 ? Number(countParam) : null);
+          if (on)
+            setQuiz(
+              picked.map((q) => ({
+                q: q.q,
+                options: q.options,
+                answer: q.answer,
+                level: "medium" as const,
+                type: q.type === "essay" ? ("def" as const) : q.type,
+                // مصدر الجواب ظاهر: من الملف، أو حلّه من الكتاب (وغير المؤكد منبَّه)
+                why: [q.from === "book" ? t("qfile.fromBook") : t("qfile.fromFile"), q.sure === false ? t("qfile.unsure") : "", q.why ?? ""].filter(Boolean).join(" "),
+                quote: q.quote,
+                unit: q.unit >= 0 ? q.unit : null,
+                page: null,
+              }))
+            );
+          if (!picked.length && on) setErr(t("qfile.noQuestions"));
+          return;
+        }
+
         if (mistakesMode) {
           const due = await getDueMistakes(pdfPath);
           if (on) setQuiz(due.slice(0, 10).map((s) => ({ ...s.item, unit: s.unit, page: s.page })));
@@ -178,11 +208,11 @@ export default function UnitQuizScreen() {
     return () => {
       on = false;
     };
-  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, mistakesMode, t]);
+  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, mistakesMode, bankMode, book_id, units, countParam, t]);
 
   // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → اختبارات) متى توفّرت الأسئلة
   useEffect(() => {
-    if (!quiz.length || !pdfPath || mistakesMode) return;
+    if (!quiz.length || !pdfPath || mistakesMode || bankMode) return;
     addSavedItem({
       key: `quiz|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`,
       kind: "quiz",

@@ -280,6 +280,8 @@ export default function BookHubScreen() {
     { key: "ask", labelKey: "book.tool.ask", icon: "chatbubble-ellipses", go: () => router.push({ pathname: "/ask/[id]", params: { id: book.id } }) },
     { key: "glossary", labelKey: "book.tool.glossary", icon: "book", go: () => (units.length ? openGlossary(0) : openSyllabus()) },
     { key: "cards", labelKey: "book.tool.cards", icon: "albums", badge: cards ? String(cards) : undefined, go: () => router.push({ pathname: "/unit-cards", params: { book_id: book.id, pdf_path: book.pdf_path, book_title: book.title } }) },
+    // ملفات الأسئلة الجاهزة (قرار نهلة ٢٥ أكتوبر)
+    { key: "qfile", labelKey: "book.tool.qfile", icon: "document-attach", go: () => router.push({ pathname: "/question-files", params: { book_id: book.id, pdf_path: book.pdf_path, book_title: book.title } }) },
     { key: "notes", labelKey: "notes.title", icon: "create", go: () => router.push({ pathname: "/notes", params: { book_id: book.id, book_title: book.title } }) },
     { key: "focus", labelKey: "book.tool.focus", icon: "timer", go: () => router.push("/pomodoro") },
   ];
