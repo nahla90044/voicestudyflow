@@ -33,6 +33,7 @@ import { SlideView } from "../../components/brand/slide-view";
 import { UsageBar } from "../../components/brand/usage-chip";
 import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
 import { MindTree } from "../../components/brand/mind-tree";
+import { isFlatMindmap, makeUnitMindmap, mindmapFromTable } from "../../lib/unitMindmap";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
@@ -2585,14 +2586,18 @@ export default function ReaderScreen() {
       const key = sc.unitIndex ?? 2_000_000 + sc.from * 10000 + sc.to;
       setMmTitle(sc.title ?? t("reader.mindmap.pages", { from: sc.from, to: sc.to }));
       let map = await getUnitContent<MindMap>(pdfPath, key, "mindmap");
-      if (!map) {
-        let ctx = "";
-        if (sc.unitIndex !== null) {
-          const u = (await getSyllabus(pdfPath).catch(() => null))?.data.units[sc.unitIndex];
-          if (u?.topics?.length) ctx = `الفكرة المركزية: ${u.title}\nالفروع الرئيسية:\n${u.topics.map((x) => "- " + x).join("\n")}`;
+      const msrc = sc.unitIndex !== null ? { kind: "unit" as const, unit: sc.unitIndex } : { kind: "range" as const, from: sc.from, to: sc.to };
+      // خريطة قديمة بلا تفرّع + مختصر جدولي محفوظ → تُحدَّث متفرعة مجانًا
+      if (map && isFlatMindmap(map)) {
+        const up = await mindmapFromTable(pdfPath, msrc, sc.title ?? "");
+        if (up) {
+          map = up;
+          await setUnitContent(pdfPath, key, "mindmap", up);
         }
-        if (!ctx) ctx = (await unitText(pdfPath, sc.from, sc.to)).slice(0, 9000);
-        map = ctx.trim() ? await generateMindmap(ctx) : null;
+      }
+      if (!map) {
+        // من المختصر الجدولي إن وُجد (مجانًا)، وإلا من نص الوحدة/الصفحات كاملًا — خريطة متفرعة
+        map = await makeUnitMindmap(pdfPath, msrc, sc.title ?? "");
         if (map) await setUnitContent(pdfPath, key, "mindmap", map);
       }
       setMmMap(map);

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BuzanMindMap, MM_COLORS, mindmapPrintHtml } from "../../components/brand/mindmap";
 import { MindTree } from "../../components/brand/mind-tree";
+import { isFlatMindmap, makeUnitMindmap, mindmapFromTable } from "../../lib/unitMindmap";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
 import { printBranded } from "../../lib/pdfBrand";
@@ -379,14 +380,14 @@ export default function SyllabusScreen() {
       // مخزَّن مسبقًا لهذه الوحدة؟ اعرضه فورًا بلا استهلاك ذكاء
       const cached = await getUnitContent<MindMap>(pdfPath, i, "mindmap");
       if (cached) {
-        setMm(cached);
+        // خريطة قديمة بلا تفرّع + مختصر جدولي محفوظ → تُحدَّث متفرعة مجانًا
+        const up = isFlatMindmap(cached) ? await mindmapFromTable(pdfPath, { kind: "unit", unit: i }, u.title) : null;
+        if (up) setUnitContent(pdfPath, i, "mindmap", up);
+        setMm(up ?? cached);
         return;
       }
-      // محتوى الوحدة المختصر = توليد سريع (الوحدات أصلًا مستخرَجة من الكتاب)
-      const ctx = `الفكرة المركزية: ${u.title}\nالفروع الرئيسية:\n${u.topics
-        .map((t) => "- " + t)
-        .join("\n")}`;
-      const map = await generateMindmap(ctx);
+      // من المختصر الجدولي إن وُجد (مجانًا)، وإلا من نص الوحدة كاملًا — فتتفرع الخريطة حتى ٤ مستويات
+      const map = await makeUnitMindmap(pdfPath, { kind: "unit", unit: i }, u.title);
       if (!map) {
         setMmUnit(null);
         setErr(t("syllabus.err.mindmap"));
