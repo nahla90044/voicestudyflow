@@ -23,14 +23,14 @@ import { useScene } from "../lib/scene";
 import { chunkSeconds, playSummary, saveSummaryAudio, shiftChunk, stopSummary, summaryChunks } from "../lib/summaryAudio";
 import { getListenPos, setListenPos } from "../lib/listenPos";
 import { speechCharsPerSec } from "../lib/voice";
-import { getListenAt, markSeen, setListenAt } from "../lib/studyTrack";
+import { getListenAt, markListenDone, markSeen, setListenAt } from "../lib/studyTrack";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 
 export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
-  const { pdf_path, unit, page, from, to, title, book_title, level } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; level?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title, level, autoplay } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; level?: string; autoplay?: string }>();
   // مستوى الملخّص: من المعامل، وإلا يُعرض اختيار المستويات الثلاثة (✓ للجاهز منها)
   const [lvl, setLvl] = useState<SummaryLevel | null>(SUMMARY_LEVELS.includes(level as SummaryLevel) ? (level as SummaryLevel) : null);
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
@@ -270,6 +270,7 @@ export default function UnitSummaryScreen() {
       if (!on) return;
       const params: Record<string, string> = { pdf_path: pdfPath };
       for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
+      if (lvl) params.level = lvl; // إشعار الاكتمال يفتح المستوى نفسه (لا اختيار المستويات)
       startSummaryJob(pdfPath, src, { title: unitTitle || bookTitle, params });
       setIncomplete(false);
       setErr("");
@@ -317,13 +318,17 @@ export default function UnitSummaryScreen() {
   const [pos, setPos] = useState(0);
   const posRef = useRef(0);
   const seekW = useRef(0);
+  const [posReady, setPosReady] = useState(false); // مكان الوقوف قُرئ (للتشغيل التلقائي منه)
   useEffect(() => {
     if (lvl !== "brief" && lvl !== "final") return;
     void (async () => {
       const local = await getListenPos(posKey);
-      const synced = src.kind === "unit" ? await getListenAt(pdfPath, unitIdx).catch(() => 0) : 0;
+      // مكان الوقوف من الأجهزة الأخرى بمهلة ٥ ثوانٍ (لا يعلّق التشغيل التلقائي إن تأخر السيرفر)
+      const synced =
+        src.kind === "unit" ? await Promise.race([getListenAt(pdfPath, unitIdx).catch(() => 0), new Promise<number>((r) => setTimeout(() => r(0), 5000))]) : 0;
       posRef.current = Math.max(local, synced);
       setPos(posRef.current);
+      setPosReady(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lvl, posKey]);
@@ -354,10 +359,24 @@ export default function UnitSummaryScreen() {
       onDone: () => {
         setPlaying(false);
         setListenWait(false);
-        if (posRef.current >= total - 1) savePos(0); // انتهى كاملًا → التالي من البداية
+        if (posRef.current >= total - 1) {
+          // انتهى كاملًا → التالي من البداية، ويُسجَّل وقت الانتهاء (خطوة «الاستماع» في الاستعداد السريع تُكمَل به)
+          if (src.kind === "unit") markListenDone(pdfPath, unitIdx);
+          savePos(0);
+        }
       },
     });
   }
+  // خطوة «الاستماع» في الاستعداد السريع تفتح الشاشة بـ autoplay=1: يبدأ الصوت مرة واحدة من مكان الوقوف
+  // (أو من البداية إن سُمع كاملًا) متى جهز الملخّص
+  const autoplayRef = useRef(autoplay === "1");
+  useEffect(() => {
+    if (!autoplayRef.current || (lvl !== "brief" && lvl !== "final") || !sum || loading || !posReady || total <= 0) return;
+    autoplayRef.current = false;
+    playAt(posRef.current >= total - 1 ? 0 : posRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lvl, sum, loading, posReady, total]);
+
   function togglePlay() {
     if (playing) {
       stopSummary();

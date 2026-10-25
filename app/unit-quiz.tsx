@@ -15,13 +15,14 @@ import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
 import { extractPdfPageText } from "../lib/pdfText";
 import { setLastPage } from "../lib/readerPrefs";
-import { getBookReadiness, getDueMistakes, markQuizDone, recordAnswer } from "../lib/readiness";
+import { getAnswered, getBookReadiness, getDueMistakes, markQuizDone, recordAnswer } from "../lib/readiness";
 import { computeReadiness } from "../lib/readinessCore";
 import { addSavedItem } from "../lib/savedStudy";
 import { generateUnitQuiz, type QuizQ } from "../lib/syllabus";
 import { summaryToSpeech } from "../lib/studySummary";
 import { bookQuestions } from "../lib/questionFiles";
 import { pickForQuiz } from "../lib/questionFilesCore";
+import { pickMix, pickSubset, wrongFor } from "../lib/quickPrepCore";
 import { getCachedSummary, summaryRange } from "../lib/unitSummary";
 import { unitTextParts } from "../lib/unitScope";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
@@ -60,9 +61,11 @@ export default function UnitQuizScreen() {
   const mistakesMode = mode === "mistakes";
   // اختبار من ملفات الأسئلة الجاهزة (٢٥ أكتوبر): وحدات مختارة وعدد، بلا توليد
   const bankMode = mode === "qbank";
+  // الاختبار الشامل للاستعداد السريع (٢٥ أكتوبر): من الأسئلة المحفوظة لوحدات مختارة، الأضعف أكثر، بلا توليد
+  const mixMode = mode === "mix";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
-  const pageMode = !mistakesMode && !bankMode && Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة)
+  const pageMode = !mistakesMode && !bankMode && !mixMode && Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة)
   const srcId = pageMode ? pageNum : unitIdx;
   const kind = pageMode ? "pagequiz" : "quiz";
   const unitTitle = typeof title === "string" ? title : "";
@@ -155,6 +158,33 @@ export default function UnitQuizScreen() {
           return;
         }
 
+        // وحدات المعامل units ("0,2,5")
+        const unitList = typeof units === "string" && units !== "all" && units ? units.split(",").map(Number).filter(Number.isFinite) : null;
+
+        if (mixMode) {
+          const answered = await getAnswered(pdfPath).catch(() => []);
+          const us = unitList ?? [];
+          const r = computeReadiness({ questions: answered, unitCount: Math.max(-1, ...us) + 1, readFraction: 0 });
+          const pools = await Promise.all(
+            us.map(async (u) => {
+              const qs = await getUnitContent<QuizQ[]>(pdfPath, u, "quiz").catch(() => null);
+              return { unit: u, qs: qs && qs.some((q) => q.type) ? qs : [], mastery: r.perUnit.find((p) => p.unit === u)?.mastery ?? 0 };
+            })
+          );
+          const picked = pickMix(pools, Number(countParam) || 20, answered);
+          if (on) setQuiz(picked.map((q) => ({ ...q, unit: q.unit, page: null })));
+          if (!picked.length && on) setErr(t("quiz.mix.empty"));
+          return;
+        }
+
+        // مراجعة أخطاء وحدات محددة (الاستعداد السريع): آخر إجابة خاطئة بلا انتظار موعد المراجعة
+        if (mistakesMode && unitList) {
+          const wrong = wrongFor(await getAnswered(pdfPath).catch(() => []), unitList).slice(0, Number(countParam) || 10);
+          if (on) setQuiz(wrong.map((s) => ({ ...s.item, unit: s.unit, page: s.page })));
+          if (!wrong.length && on) setErr(t("quiz2.noMistakes"));
+          return;
+        }
+
         if (mistakesMode) {
           const due = await getDueMistakes(pdfPath);
           if (on) setQuiz(due.slice(0, 10).map((s) => ({ ...s.item, unit: s.unit, page: s.page })));
@@ -163,14 +193,17 @@ export default function UnitQuizScreen() {
         }
 
         const where = { unit: pageMode ? null : unitIdx, page: pageMode ? pageNum : null };
+        // عدد محدد من خطة الاستعداد السريع: يُعرض جزء من أسئلة الوحدة (الخاطئ ثم الجديد أولًا) دون تغيير المحفوظ
+        const want = pageMode ? 0 : Number(countParam) || 0;
         const cached = await getUnitContent<QuizQ[]>(pdfPath, srcId, kind);
         // اختبارات بالصيغة القديمة (من عنوان الوحدة وأهدافها فقط) تُعاد بالصيغة الجديدة من محتوى الوحدة
         if (cached && cached.length && cached.some((q) => q.type)) {
-          if (on) setQuiz(cached.map((q) => ({ ...q, ...where })));
+          const list = want > 0 ? pickSubset(cached, await getAnswered(pdfPath).catch(() => []), want) : cached;
+          if (on) setQuiz(list.map((q) => ({ ...q, ...where })));
           return;
         }
-        // عدد الأسئلة: يختاره الطالب أولًا (أو «تلقائي» حسب حجم الوحدة)
-        const count = pageMode ? 6 : await askCount(); // الصفحة الواحدة: ٦ أسئلة مباشرة
+        // عدد الأسئلة: يختاره الطالب أولًا (أو «تلقائي» حسب حجم الوحدة)، وعدد الخطة يُولَّد منه ١٠ على الأقل للحفظ
+        const count = pageMode ? 6 : want > 0 ? Math.max(10, want) : await askCount(); // الصفحة الواحدة: ٦ أسئلة مباشرة
         if (!on || count === null) return;
         if (on) setLoading(true);
         let ctx = "";
@@ -198,7 +231,8 @@ export default function UnitQuizScreen() {
           return;
         }
         setUnitContent(pdfPath, srcId, kind, qs);
-        if (on) setQuiz(qs.map((q) => ({ ...q, ...where })));
+        const shown = want > 0 ? pickSubset(qs, await getAnswered(pdfPath).catch(() => []), want) : qs;
+        if (on) setQuiz(shown.map((q) => ({ ...q, ...where })));
       } catch (e) {
         if (on) setErr((e as Error).message === "USER_QUOTA" ? t("pay.reason.ai") : t("syllabus.err.quiz"));
       } finally {
@@ -208,11 +242,11 @@ export default function UnitQuizScreen() {
     return () => {
       on = false;
     };
-  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, mistakesMode, bankMode, book_id, units, countParam, t]);
+  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, mistakesMode, bankMode, mixMode, book_id, units, countParam, t]);
 
   // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → اختبارات) متى توفّرت الأسئلة
   useEffect(() => {
-    if (!quiz.length || !pdfPath || mistakesMode || bankMode) return;
+    if (!quiz.length || !pdfPath || mistakesMode || bankMode || mixMode) return;
     addSavedItem({
       key: `quiz|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`,
       kind: "quiz",
@@ -267,10 +301,12 @@ export default function UnitQuizScreen() {
     ? t("quiz2.headMistakes", { step: step + 1, total })
     : bankMode
     ? t("quiz2.headBank", { step: step + 1, total })
+    : mixMode
+    ? t("quiz2.headMix", { step: step + 1, total })
     : pageMode
       ? t("quiz2.headPage", { page: pageNum, step: step + 1, total })
       : t("quiz2.headUnit", { unit: unitIdx + 1, step: step + 1, total });
-  const isWeakUnit = !mistakesMode && !bankMode && !pageMode && weak.unit === unitIdx && !weak.untested;
+  const isWeakUnit = !mistakesMode && !bankMode && !mixMode && !pageMode && weak.unit === unitIdx && !weak.untested;
 
   const levelTone = q ? (q.level === "easy" ? tone.good : q.level === "medium" ? tone.warm : tone.hard) : tone.good;
   const backIcon = dir.isRTL ? "chevron-forward" : "chevron-back";

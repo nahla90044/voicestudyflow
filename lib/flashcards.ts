@@ -23,6 +23,7 @@ export type Card = {
   ans?: number;
   fav?: boolean; // في «المفضلة» (مجموعة خاصة للمراجعة وحدها)
   page?: number; // صفحة المصدر في الكتاب → وحدتها تُستنتج من صفحات الوحدات (تبقى صحيحة إن أُعيد إنشاء المنهج)
+  reviewedAt?: number; // وقت آخر مراجعة (ms) — «مرة أخرى» على بطاقة جديدة لا يغيّر صندوقها ولا موعدها، فهذا ما يدل أنها رُوجعت
 };
 
 export type Rating = "again" | "good" | "easy";
@@ -106,6 +107,7 @@ export async function reviewCard(id: string, rating: Rating): Promise<void> {
 
   const interval = INTERVALS[c.box] ?? 1;
   c.due = addDays(todayISO(), Math.max(rating === "again" ? 0 : 1, interval));
+  c.reviewedAt = Date.now();
   await save(cards);
   await AsyncStorage.setItem(LAST_REVIEW_KEY, todayISO()).catch(() => {});
 }

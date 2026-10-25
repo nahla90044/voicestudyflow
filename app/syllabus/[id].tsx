@@ -679,6 +679,18 @@ export default function SyllabusScreen() {
             <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("studyFile.open")}</Text>
           </Pressable>
 
+          {/* الاستعداد السريع (قرار نهلة ٢٥ أكتوبر): خطة بالدقائق تمر على كل الوحدات قبل الاختبار */}
+          <Pressable
+            onPress={() => router.push({ pathname: "/quick-prep", params: { book_id: bookId, pdf_path: pdfPath, book_title: bookTitle } })}
+            style={({ pressed }) => [
+              styles.cta,
+              { backgroundColor: pal.soft, borderWidth: 1, borderColor: pal.cardBorder, flexDirection: dir.row, opacity: pressed ? 0.9 : 1 },
+            ]}
+          >
+            <Ionicons name="alarm-outline" size={18} color={pal.accent} />
+            <Text style={[styles.ctaTxt, { color: pal.ink }]}>{t("book.tool.quickprep")}</Text>
+          </Pressable>
+
           {/* وضع التحديد: تلميح أعلى الوحدات */}
           {selecting && <Text style={[styles.selectHint, { color: pal.dim, textAlign: dir.textAlign }]}>{t("syllabus.select.hint")}</Text>}
 

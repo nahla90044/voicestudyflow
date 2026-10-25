@@ -15,6 +15,7 @@ import { accountLocked, onSecurity } from "../lib/security";
 import { checkMinVersion, onUpdateRequired } from "../lib/appVersion";
 import { rescueCachedMusic } from "../lib/sfx";
 import { resumeBookAudioIfRunning } from "../lib/bookAudio";
+import { resumeQuickPreps } from "../lib/quickPrep";
 import { Palette } from "../constants/design";
 import { getSession, isOwner } from "../lib/auth";
 import { applyUpdateOnLaunch } from "../lib/otaUpdate";
@@ -70,6 +71,8 @@ export default function RootLayout() {
     void isOwner().then((own) => (own ? rescueCachedMusic() : undefined)).catch(() => {});
     // حفظ صوت كتاب كان جاريًا قبل إغلاق التطبيق → يكمل تلقائيًا من حيث وقف
     setTimeout(() => void resumeBookAudioIfRunning(), 4000);
+    // «الاستعداد السريع»: تجهيز ملخصات خطة جارية يكمل بعد فتح التطبيق من حيث توقف
+    setTimeout(() => void resumeQuickPreps(), 6000);
     return () => {
       off();
     };

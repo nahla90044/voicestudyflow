@@ -21,6 +21,7 @@ import { Radius, Spacing } from "../../constants/design";
 import { getUserId } from "../../lib/auth";
 import { getCards } from "../../lib/flashcards";
 import { useDir, useI18n } from "../../lib/i18n";
+import { hasActivePrep } from "../../lib/quickPrep";
 import { getLastPage } from "../../lib/readerPrefs";
 import { useScene } from "../../lib/scene";
 import { getBookReadiness, setExamDate, type BookReadiness } from "../../lib/readiness";
@@ -99,10 +100,14 @@ export default function BookHubScreen() {
   const [noteCount, setNoteCount] = useState(0); // صفحات الملاحظات المكتوبة لهذا الكتاب
   const [examOpen, setExamOpen] = useState(false);
   const [ranges, setRanges] = useState<UnitRange[] | null>(null);
+  const [prepOn, setPrepOn] = useState(false); // خطة «الاستعداد السريع» جارية (شارة على الأداة)
 
   useFocusEffect(
     useCallback(() => {
       let on = true;
+      hasActivePrep(bookId)
+        .then((v) => on && setPrepOn(v))
+        .catch(() => {});
       (async () => {
         try {
           const uid = await getUserId();
@@ -282,6 +287,18 @@ export default function BookHubScreen() {
     { key: "cards", labelKey: "book.tool.cards", icon: "albums", badge: cards ? String(cards) : undefined, go: () => router.push({ pathname: "/unit-cards", params: { book_id: book.id, pdf_path: book.pdf_path, book_title: book.title } }) },
     // ملفات الأسئلة الجاهزة (قرار نهلة ٢٥ أكتوبر)
     { key: "qfile", labelKey: "book.tool.qfile", icon: "document-attach", go: () => router.push({ pathname: "/question-files", params: { book_id: book.id, pdf_path: book.pdf_path, book_title: book.title } }) },
+    // الاستعداد السريع (قرار نهلة ٢٥ أكتوبر)
+    {
+      key: "quickprep",
+      labelKey: "book.tool.quickprep",
+      icon: "alarm",
+      badge: prepOn ? t("qprep.badge") : undefined,
+      go: () =>
+        router.push({
+          pathname: "/quick-prep",
+          params: { book_id: book.id, pdf_path: book.pdf_path, book_title: book.title, page_count: String(book.page_count ?? "") },
+        }),
+    },
     { key: "notes", labelKey: "notes.title", icon: "create", go: () => router.push({ pathname: "/notes", params: { book_id: book.id, book_title: book.title } }) },
     { key: "focus", labelKey: "book.tool.focus", icon: "timer", go: () => router.push("/pomodoro") },
   ];
