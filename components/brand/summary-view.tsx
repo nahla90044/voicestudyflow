@@ -9,10 +9,17 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useDir, useI18n } from "../../lib/i18n";
 import { useScene } from "../../lib/scene";
 import type { StudySummary, SummaryBlock } from "../../lib/studySummary";
+import { TableSummaryView } from "./table-summary-view";
 
 const COLORS = ["#5B4BF5", "#0E8F7E", "#E07A1F", "#2563EB", "#B8338C", "#15803D"];
 
 export function SummaryView({ summary, bookTitle }: { summary: StudySummary; bookTitle?: string }) {
+  // المختصر/المراجعة الأخيرة بالشكل الجدولي
+  if (summary.table) return <TableSummaryView table={summary.table} badge={bookTitle} />;
+  return <ClassicSummaryView summary={summary} bookTitle={bookTitle} />;
+}
+
+function ClassicSummaryView({ summary, bookTitle }: { summary: StudySummary; bookTitle?: string }) {
   const dir = useDir();
   const { t } = useI18n();
   const { pal } = useScene();

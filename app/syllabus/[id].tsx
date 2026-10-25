@@ -8,6 +8,7 @@ import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Tex
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BuzanMindMap, MM_COLORS, mindmapPrintHtml } from "../../components/brand/mindmap";
+import { MindTree } from "../../components/brand/mind-tree";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { stopSpeaking } from "../../lib/voice";
 import { printBranded } from "../../lib/pdfBrand";
@@ -970,24 +971,8 @@ export default function SyllabusScreen() {
               </View>
               <View style={[styles.mmStem, { backgroundColor: pal.track }]} />
 
-              {/* الفروع */}
-              {mm?.branches.map((b, bi) => {
-                const c = MM_COLORS[bi % MM_COLORS.length];
-                return (
-                  <View key={bi} style={[styles.mmBranch2, { borderColor: c + "66", backgroundColor: pal.card }]}>
-                    <View style={[styles.mmBranchHead, { backgroundColor: c + "22", flexDirection: dir.row }]}>
-                      <View style={[styles.mmDot, { backgroundColor: c }]} />
-                      <Text style={[styles.mmBranchLabel, { color: pal.ink, textAlign: dir.textAlign }]}>{b.label}</Text>
-                    </View>
-                    {b.points.map((p, pi) => (
-                      <View key={pi} style={[styles.mmPointRow, { flexDirection: dir.row }]}>
-                        <Text style={[styles.mmPointDash, { color: c }]}>—</Text>
-                        <Text style={[styles.mmPointTxt, { color: pal.dim, textAlign: dir.textAlign }]}>{p}</Text>
-                      </View>
-                    ))}
-                  </View>
-                );
-              })}
+              {/* الفروع بتفرّعاتها: الضغط يفتح شجرة الفرع، و＋ يفتح ما يتفرع من النقطة */}
+              {mm ? <MindTree map={mm} /> : null}
             </ScrollView>
           </View>
         </View>

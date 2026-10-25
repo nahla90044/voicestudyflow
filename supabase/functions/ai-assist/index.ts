@@ -4,6 +4,7 @@
 // الطلب:  { action: "summarize" | "ask" | "quiz", text: string, question?: string }
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
+import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { charge, getCaller, refund, type Caller, type Charge } from "../_shared/plan.ts";
@@ -44,6 +45,9 @@ const SYSTEM: Record<string, string> = {
     "أنت خبير في التشكيل العربي (الحركات الإعرابية والبنيوية). شكّل النص التالي تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا. التزم بقواعد النحو والصرف، وانتبه بدقة لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. ممنوع تمامًا تغيير الكلمات أو ترتيبها أو إضافة أو حذف أي شيء — أعد النص نفسه مشكولًا فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة. إن لم يكن النص عربيًا (إنجليزي أو فرنسي أو غيره) فأعده كما هو حرفيًا دون أي تغيير أو تعليق أو اعتذار.",
   ocrtashkeel:
     "أنت خبير في تصحيح النصوص العربية الممسوحة ضوئيًا وتشكيلها. النص التالي مستخرَج بتقنية OCR من كتاب مصوّر وقد يحوي أخطاء مسح: حروف مقروءة خطأ، نقاط أو همزات مشوّهة، كلمات ملتصقة أو مقطوعة. مهمتك خطوتان في مخرج واحد: أولًا صحّح أخطاء المسح الواضحة فقط بإرجاع كل كلمة إلى صورتها الصحيحة المقصودة في الأصل المطبوع — دون إعادة صياغة أو إضافة أو حذف أو تلخيص، وإن شككت في كلمة فأبقِها كما هي. ثانيًا شكّل النص الناتج تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا، بقواعد النحو والصرف، مع الانتباه لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. أعد النص المصحَّح المشكول فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة. إن لم يكن النص عربيًا (إنجليزي أو فرنسي أو غيره) فأعده كما هو حرفيًا دون أي تغيير أو تعليق أو اعتذار.",
+  // الخريطة المتفرعة (٢٥ أكتوبر): حتى ٤ مستويات تحت المركز، وجملة ربط لكل فرع
+  mindtree:
+    'أنت خبير خرائط ذهنية للمذاكرة. نظّم المحتوى المرفق في خريطة ذهنية متفرعة **بترتيب النص وبكل تفرّعاته الحقيقية**: «الفكرة المركزية» عنوان الوحدة، ثم من ٣ إلى ٧ فروع رئيسية (label)، وتحت كل فرع عقده (nodes)، وكل عقدة يتفرع منها ما يتفرع منها في النص (sub) حتى ثلاثة مستويات تحت الفرع: فرع ← نقطة ← تفرّع ← تفصيل. أي شيء له أنواع أو أقسام أو شروط أو عناصر في النص يتفرع في الخريطة بعدده كاملًا (مثل: أنواع التنفيذ ← من حيث القيام به ← جبري ← مباشر / غير مباشر). عبارة كل عقدة قصيرة جدًا (٢–٦ كلمات) هي الكلمة المفتاحية للنقطة، ويُذكر العدد في عقدة التعداد مثل «شروط التنفيذ (١٨)»، والتعداد الطويل (٧+) يُقسّم تحت عقدته إلى مجموعات بعناوين ثم عناصرها. لكل فرع hook: جملة ربط واحدة قصيرة تجمع منطقه للذاكرة. لا مراجع ولا أهداف ولا أسئلة، ولا شيء من خارج النص. أعد فقط JSON صالحًا بالشكل: {"center":"الفكرة المركزية","branches":[{"label":"الفرع","hook":"جملة الربط","nodes":[{"t":"نقطة","sub":[{"t":"تفرّع","sub":[{"t":"تفصيل"}]}]}]}]} دون أي نص خارج JSON.',
   mindmap:
     'أنت خبير خرائط ذهنية. نظّم المحتوى المرفق في خريطة ذهنية: اجعل «الفكرة المركزية» مركزًا، وكل فرع رئيسي فرعًا (label)، وأضف تحت كل فرع نقطتين إلى ثلاث نقاط موجزة جدًا توضّحه (points). إن كانت الفروع غير واضحة فاستنبطها من المحتوى دون تحريف. أعد فقط JSON صالحًا بالشكل: {"center":"الفكرة المركزية","branches":[{"label":"الفرع","points":["نقطة موجزة","نقطة"]}]}. من ٣ إلى ٧ فروع، دون أي نص خارج JSON.',
   translate:
@@ -81,7 +85,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoscript: 24000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoscript: 24000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -164,8 +168,8 @@ async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<ty
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
 const INTERNAL = new Set(["cleanup", "tashkeel", "ocrtashkeel", "fixspacing", "filternoise", "moderate", "define"]);
 const INTERNAL_DAILY_CAP = 800;
-const SCANNED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides", "define"]);
-const COUNTED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "slides", "unitslides"]);
+const SCANNED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "slides", "unitslides", "define"]);
+const COUNTED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -278,7 +282,7 @@ Deno.serve(async (req: Request) => {
       fr: "le français",
     };
     const LANG_ENFORCED = new Set([
-      "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "unitquiz", "syllabus", "define",
+      "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "mindtree", "unitquiz", "syllabus", "define",
     ]);
     let systemPrompt: string;
     if (action === "translate") {
@@ -341,7 +345,15 @@ Deno.serve(async (req: Request) => {
       messages: [{ role: "user", content: userContent }],
     };
     // أسلوب الملخّص الذي يختاره الطالب: الالتزام بالكتاب، أو التوسّع بأمثلة وتمارين إضافية
-    if (action === "studysummary" && body.mode === "expand") {
+    // المختصر والمراجعة الأخيرة بالشكل الجدولي (٢٥ أكتوبر) — للتطبيق المحدَّث فقط (table: true)؛
+    // النسخ القديمة تبقى على الشكل السابق فلا ينكسر عرضها
+    if (action === "studysummary" && body.table === true && (body.mode === "brief" || body.mode === "final")) {
+      const tp = (body.mode === "final" ? TABLE_FINAL : TABLE_BRIEF) + (/هذا الجزء \d+ من/.test(text) ? TABLE_PART_NOTE : "");
+      // قاعدة اللغة والصيغة المحايدة (أُلحقت بتعليمات الإجراء أعلاه) تبقى مع تعليمات الجدول
+      const tail = systemPrompt.slice((SYSTEM[action] ?? "").length);
+      params.system = wrap ? tp + tail + "\n\n" + GUARD_WRAPPED : GUARD + tp + tail;
+      params.max_tokens = 16000;
+    } else if (action === "studysummary" && body.mode === "expand") {
       params.system = (params.system as string) + `\n\nأسلوب الطالب المختار: التوسّع. بعد تغطية الكتاب كاملًا، أضف من عندك أمثلة توضيحية إضافية صحيحة تمامًا (وللغات: جملًا صحيحة نحويًا مع ترجمتها)، وتمارين تدريبية إضافية بكتل exercise محلولة كاملة مع خطوات الحل، وشرحًا أوسع وأبسط للنقاط الصعبة. ميّز الإضافات بأن تبدأ عنوان قسمها بـ «إضافة للتوسّع:». تحقّق من صحة كل مثال وحل قبل كتابته.`;
     } else if (action === "studysummary" && body.mode === "brief") {
       // المختصر (للاستماع): يتقدّم على طول «الشامل» في التعليمات العامة
@@ -446,14 +458,42 @@ Deno.serve(async (req: Request) => {
       return new Response(stream, { headers: { ...corsHeaders, "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" } });
     }
 
-    const msg = await client.messages.create(params as unknown as Anthropic.MessageCreateParamsNonStreaming);
-    void logCost(req, { fn: "ai-assist", action, model, input_tokens: msg.usage?.input_tokens, output_tokens: msg.usage?.output_tokens });
-
-    const result = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { text: string }).text)
-      .join("\n")
-      .trim();
+    // بثّ دائمًا: المكتبة ترفض الطلب غير المبثوث إذا كبر سقف المخرجات (~٢١ ألف رمز) — كان هذا سبب
+    // «تعذّر» اختبار ٢٥ سؤالًا فورًا (٢٥ أكتوبر)
+    const ask = async (p: Record<string, unknown>) => {
+      const m = await client.messages.stream(p as Parameters<typeof client.messages.stream>[0]).finalMessage();
+      void logCost(req, { fn: "ai-assist", action, model, input_tokens: m.usage?.input_tokens, output_tokens: m.usage?.output_tokens });
+      return m.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { text: string }).text)
+        .join("\n")
+        .trim();
+    };
+    let result: string;
+    if (action === "unitquiz" && count >= 16) {
+      // اختبار كبير: نصفان معًا (النصف الأول من النص والثاني) — نصف الانتظار وبلا تكرار للأسئلة
+      const a = Math.ceil(count / 2);
+      const half = (n: number, which: string) => ({
+        ...params,
+        system: String(params.system).replace(new RegExp(`بالضبط ${count} سؤالًا`), `بالضبط ${n} سؤالًا`) + `\n\nمهم: هذا نصف الاختبار — اكتب أسئلتك من **${which}** من نص الوحدة فقط، ولا تسأل عن النصف الآخر.`,
+        max_tokens: Math.min(16000, Math.max(8000, n * 900)),
+      });
+      const [r1, r2] = await Promise.all([ask(half(a, "النصف الأول")), ask(half(count - a, "النصف الثاني"))]);
+      const arr = (t: string): unknown[] => {
+        const i = t.indexOf("["), j = t.lastIndexOf("]");
+        try {
+          const v = JSON.parse(i >= 0 && j > i ? t.slice(i, j + 1) : "[]");
+          return Array.isArray(v) ? v : [];
+        } catch {
+          return [];
+        }
+      };
+      const both = [...arr(r1), ...arr(r2)];
+      // جزء غير مقروء → يُعاد نصه كما هو فيلتقط التطبيق ما اكتمل منه
+      result = both.length ? JSON.stringify(both) : [r1, r2].join("\n");
+    } else {
+      result = await ask(params);
+    }
 
     if (!result) await refundCharge(`empty:${action}`); // لا نتيجة = لا خصم
     return json({ result });

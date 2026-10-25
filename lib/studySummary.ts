@@ -4,6 +4,7 @@
 // يُعرض في التطبيق (components/brand/summary-view) ويُسمع (summaryToSpeech) ويُطبع PDF (summaryHtml).
 // الـPDF بألوان مُصمتة فقط: طباعة آيفون تحوّل الشفافية/التدرّج إلى سواد.
 import { parseJsonLenient } from "./jsonRepair.ts";
+import { TABLE_CSS, tableBodyHtml, tableSummaryHtml, tableToSpeech } from "./tableSummary.ts";
 
 export type SummaryBlock =
   | { type: "text"; text: string }
@@ -18,7 +19,14 @@ export type SummaryBlock =
   | { type: "case"; title?: string; text: string; analysis: string; qa: { q: string; a: string }[] };
 
 export type SummarySection = { emoji: string; heading: string; blocks: SummaryBlock[] };
-export type StudySummary = { title: string; intro: string; sections: SummarySection[]; keypoints: string[] };
+export type StudySummary = {
+  title: string;
+  intro: string;
+  sections: SummarySection[];
+  keypoints: string[];
+  /** المختصر والمراجعة الأخيرة بالشكل الجدولي (٢٥ أكتوبر): يُعرض ويُطبع ويُسمع هو، والأقسام مشتقة منه */
+  table?: import("./tableSummary").TableSummary;
+};
 
 /** عبارة قصيرة (≤ max حرفًا بكلمات كاملة) لنقطة في الخريطة */
 function shortPhrase(s: string, max = 40): string {
@@ -36,7 +44,25 @@ const OFF_CORE = /مراجع|مصادر|أنشطة|نشاط|مخرجات|أهد�
  * والفروع أقسام الملخّص، والنقاط أهم ما فيها (المصطلحات، رؤوس التعدادات، العمود الأول من الجداول).
  * التمارين ودراسة الحالة لا تصير فروعًا.
  */
-export function mindmapFromSummary(s: StudySummary, center: string): { center: string; branches: { label: string; points: string[] }[] } | null {
+export function mindmapFromSummary(s: StudySummary, center: string): { center: string; branches: import("./syllabus").MindBranch[] } | null {
+  // المختصر الجدولي: الخريطة متفرعة منه مباشرة (موضوع ← عنوان فرعي ← نقاطه/مجموعاته ← عناصرها)
+  if (s.table?.topics.length) {
+    const clean = (x: string) => shortPhrase(x.replace(/\*\*/g, "").replace(/^(?:[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]|\s)+/u, ""), 48);
+    type N = import("./syllabus").MindNode;
+    const branches = s.table.topics.slice(0, 7).map((tp) => {
+      const tree: N[] = tp.rows.map((r) => {
+        const sub: N[] = [
+          ...(r.lines ?? []).map((l) => ({ t: clean(l) })),
+          ...(r.items ?? []).map((x) => ({ t: clean(x) })),
+          ...(r.groups ?? []).map((g) => ({ t: clean(g.title), sub: g.items.map((x) => ({ t: clean(x) })) })),
+        ].filter((n) => n.t);
+        return sub.length ? { t: clean(r.label), sub } : { t: clean(r.label) };
+      });
+      return { label: shortPhrase(tp.topic, 44), points: tree.map((n) => n.t), tree, ...(tp.hook ? { hook: tp.hook.replace(/\*\*/g, "") } : {}) };
+    });
+    const c0 = (center || s.table.title).replace(/\s*[(（][^)）]*[)）]/g, "").trim();
+    return branches.length >= 2 ? { center: shortPhrase(c0, 44), branches } : null;
+  }
   const branches = s.sections
     .map((sec) => {
       const pts: string[] = [];
@@ -198,6 +224,7 @@ export function parseStudySummary(raw: string): StudySummary | null {
 }
 /** نص للاستماع (بلا جداول مرسومة: كل صف جملة) */
 export function summaryToSpeech(s: StudySummary): string {
+  if (s.table) return tableToSpeech(s.table);
   const out: string[] = [];
   if (s.title) out.push(s.title);
   if (s.intro) out.push(s.intro);
@@ -373,6 +400,7 @@ function summaryCss(rtl: boolean): string {
 }
 
 export function summaryHtml(opts: { bookTitle: string; title: string; summary: StudySummary; rtl: boolean }): string {
+  if (opts.summary.table) return tableSummaryHtml({ bookTitle: opts.bookTitle, title: opts.title, table: opts.summary.table });
   const dir = opts.rtl ? "rtl" : "ltr";
   return `<!doctype html><html dir="${dir}" lang="${opts.rtl ? "ar" : "en"}"><head><meta charset="utf-8"><style>${summaryCss(opts.rtl)}</style></head><body>
     ${summaryBody(opts)}
@@ -386,6 +414,18 @@ export function summaryHtml(opts: { bookTitle: string; title: string; summary: S
  */
 export function studyFileHtml(opts: { bookTitle: string; units: { title: string; summary: StudySummary; mindmapSvg?: string }[]; rtl: boolean }): string {
   const { rtl } = opts;
+  // كل الوحدات بالشكل الجدولي → ملف عرضي: غلاف، ثم صفحة جدول لكل وحدة (مثل مذكّرة نهلة)
+  if (opts.units.length && opts.units.every((u) => u.summary.table)) {
+    const L2 = rtl ? { file: "ملف المذاكرة", unit: "الوحدة", n: "عدد الوحدات" } : { file: "Study file", unit: "Unit", n: "Units" };
+    const pages = opts.units
+      .map((u, i) => `<div class="tpage">${tableBodyHtml(u.summary.table!, { badge: `${L2.unit} ${i + 1}`, title: u.title })}</div>`)
+      .join("");
+    return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>${TABLE_CSS}
+      .cover { background: #312E81; color: #fff; border-radius: 22px; padding: 70px 40px; text-align: center; margin-top: 90px; page-break-after: always; }
+      .cover .k { font-size: 15px; color: #C7D2FE; font-weight: 800; } .cover h1 { font-size: 32px; margin: 12px 0; color: #fff; } .cover .s { font-size: 15px; color: #E0E7FF; }
+      .tpage { page-break-after: always; } .tpage:last-of-type { page-break-after: auto; }
+    </style></head><body><div class="cover"><div class="k">${L2.file}</div><h1>${esc(opts.bookTitle)}</h1><div class="s">${L2.n}: ${opts.units.length}</div></div>${pages}<div class="foot">VoiceStudyFlow</div></body></html>`;
+  }
   const dir = rtl ? "rtl" : "ltr";
   const start = rtl ? "right" : "left";
   const L = rtl
@@ -394,7 +434,7 @@ export function studyFileHtml(opts: { bookTitle: string; units: { title: string;
   const toc = opts.units.map((u, i) => `<li><span class="un">${i + 1}</span>${esc(u.title)}</li>`).join("");
   const units = opts.units
     .map(
-      (u, i) => `<div class="unit"><div class="ubar"><span class="unum">${L.unit} ${i + 1}</span><span class="ut">${esc(u.title)}</span></div>${summaryBody({
+      (u, i) => `<div class="unit"><div class="ubar"><span class="unum">${L.unit} ${i + 1}</span><span class="ut">${esc(u.title)}</span></div>${u.summary.table ? `<style>${TABLE_CSS.replace(/@page[^}]*}/, "")}</style>${tableBodyHtml(u.summary.table, { title: u.title })}` : summaryBody({
         bookTitle: opts.bookTitle,
         title: u.title,
         summary: u.summary,

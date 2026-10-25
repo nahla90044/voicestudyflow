@@ -10,7 +10,7 @@ const SYSTEM = 'أنت أستاذ خبير ومصمّم مذكّرات دراس�
 
 Deno.serve(async () => {
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: job } = await admin.from("model_compare").select("id,source,models").eq("status", "requested").limit(1).maybeSingle();
+  const { data: job } = await admin.from("model_compare").select("id,source,models,system").eq("status", "requested").limit(1).maybeSingle();
   if (!job) return new Response(JSON.stringify({ ok: false, reason: "no request" }));
   await admin.from("model_compare").update({ status: "running" }).eq("id", job.id);
   const client = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
@@ -22,8 +22,8 @@ Deno.serve(async () => {
         try {
           const msg = await client.messages.stream({
             model,
-            max_tokens: model.includes("haiku") ? 32000 : 12000,
-            system: GUARD + SYSTEM,
+            max_tokens: model.includes("haiku") ? 32000 : 24000,
+            system: GUARD + ((job as { system?: string }).system || SYSTEM),
             messages: [{ role: "user", content: String(job.source) }],
           }).finalMessage();
           const text = msg.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("\n");

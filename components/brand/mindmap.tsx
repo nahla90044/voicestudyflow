@@ -8,6 +8,7 @@ import { Animated } from "react-native";
 import Svg, { Circle, Defs, G, LinearGradient, Path, RadialGradient, Rect, Stop, Text as SvgText } from "react-native-svg";
 
 import type { MindMap } from "../../lib/syllabus";
+import { MIND_TREE_CSS, mindTreePrintHtml } from "./mind-tree";
 
 export const MM_COLORS = ["#7C5CFF", "#00B4D8", "#2EB872", "#F59E0B", "#EF5DA8", "#4F8CFF", "#A855F7", "#14B8A6"];
 
@@ -302,6 +303,7 @@ export function mindmapPrintHtml(
       .dot { width: 10px; height: 10px; border-radius: 5px; display: inline-block; }
       ul { list-style: none; margin: 0; padding: 6px 12px 10px; }
       li { font-size: 13.5px; line-height: 1.8; display: flex; gap: 8px; align-items: baseline; }
+      ${MIND_TREE_CSS}
       .pd { width: 6px; height: 6px; border-radius: 3px; flex: none; display: inline-block; transform: translateY(-2px); }
     </style></head><body>
     <h1>${esc(o.heading)}</h1>
@@ -309,5 +311,6 @@ export function mindmapPrintHtml(
     <h2>${esc(o.outlineTitle)}</h2>
     <div class="center">${esc(mm.center)}</div>
     <div class="grid">${outline}</div>
+    ${mindTreePrintHtml(mm)}
   </body></html>`;
 }

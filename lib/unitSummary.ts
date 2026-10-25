@@ -10,6 +10,7 @@ import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
 import { extractPdfPageText } from "./pdfText";
 import { parsePartialSummary, parseStudySummary, type StudySummary, type SummarySection } from "./studySummary";
 import { getSyllabus } from "./syllabus";
+import { mergeTables, parseTableSummary, parsePartialTable, tableAsSummary } from "./tableSummary";
 import { getUnitContent, removeUnitContent, removeUnitContentWhere, setUnitContent } from "./unitContent";
 import { unitTextParts } from "./unitScope";
 
@@ -157,6 +158,11 @@ export async function summaryParts(pdfPath: string, src: SummarySource): Promise
 export function mergeSummaries(list: StudySummary[]): StudySummary | null {
   const ok = list.filter((x) => x?.sections?.length);
   if (!ok.length) return null;
+  // الشكل الجدولي (المختصر/المراجعة الأخيرة): تُدمج الجداول نفسها
+  if (ok.every((x) => x.table)) {
+    const t = mergeTables(ok.map((x) => x.table!));
+    return t ? tableAsSummary(t) : null;
+  }
   if (ok.length === 1) return ok[0];
   // «مصطلحات الوحدة» يكتبها كل جزء: تُجمع في قسم واحد آخر الملخّص بلا تكرار المصطلح
   const isGloss = (h: string) => /مصطلحات الوحدة|مسرد|glossary/i.test(h);
@@ -199,6 +205,16 @@ const parseFullPart = (raw: string) => {
   const s = parseStudySummary(raw);
   return s?.sections.length ? s : null;
 };
+/** المختصر والمراجعة الأخيرة: جدول (٢٥ أكتوبر) */
+const isTableLevel = (lv: SummaryLevel) => lv === "brief" || lv === "final";
+const parsePartialTablePart = (raw: string) => {
+  const t = parsePartialTable(raw);
+  return t ? tableAsSummary(t) : null;
+};
+const parseFullTablePart = (raw: string) => {
+  const t = parseTableSummary(raw);
+  return t ? tableAsSummary(t) : null;
+};
 
 /** معرّف حفظ الجزء i من ملخّص من n أجزاء */
 function summaryPartId(src: SummarySource, n: number): (i: number) => number {
@@ -238,14 +254,19 @@ export async function getOrMakeSummary(
     parts,
     speedKey: "vsf:summary:speed",
     defaultSpeed: { chars: 5000, rate: 40 },
-    load: (i) => getUnitContent<StudySummary>(pdfPath, partId(i), "studysummarypart").then((x) => (x?.sections?.length ? x : undefined)),
+    // جزء محفوظ بالشكل القديم لا يُخلط بالجدول (يُكتب من جديد)
+    load: (i) => getUnitContent<StudySummary>(pdfPath, partId(i), "studysummarypart").then((x) => (x?.sections?.length && (!isTableLevel(mode) || x.table) ? x : undefined)),
     save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p),
     // مهمة سيرفر لكل جزء: تكمل وتُحفظ حتى لو قُفلت الشاشة أو أُغلق التطبيق
     // جزء فيه تمارين/مسائل/دراسة حالة → تفكير موسّع على السيرفر (يحلّ ويتحقق قبل الكتابة)
     // وكيل الجودة: الجزء الفارغ/المقطوع/القصير جدًا قياسًا بنصه يُعاد توليده مرة واحدة مجانًا
     run: (ctx, i, onPartial) =>
       qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
-        jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf }), (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.02 : 0.08)),
+        isTableLevel(mode)
+          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true })
+          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf }),
+        // الجدول مكثّف عمدًا: عتبة «قصير» أدنى (يُرفض الفارغ تقريبًا فقط)
+        (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.015 : mode === "brief" ? 0.03 : 0.08)),
     merge: mergeSummaries,
     onProgress,
     parallel: Math.min(6, n),

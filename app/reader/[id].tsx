@@ -32,6 +32,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SlideView } from "../../components/brand/slide-view";
 import { UsageBar } from "../../components/brand/usage-chip";
 import { BuzanMindMap, mindmapPrintHtml } from "../../components/brand/mindmap";
+import { MindTree } from "../../components/brand/mind-tree";
 import { getUnitContent, setUnitContent } from "../../lib/unitContent";
 import { generateMindmap, getSyllabus, type MindMap } from "../../lib/syllabus";
 import { StatusBar } from "expo-status-bar";
@@ -4636,6 +4637,10 @@ export default function ReaderScreen() {
             >
               <BuzanMindMap map={mmMap} size={Math.min(screenW, 1100) - 16} theme={{ dark: false, bg: "#FFFFFF", ink: "#14233a", dim: "#5B6B82" }} />
               <Text style={styles.mmMsg}>{t("reader.mindmap.hint")}</Text>
+              {/* الفروع بتفرّعاتها (حتى ٤ مستويات) */}
+              <View style={{ width: Math.min(screenW, 1100) - 32, paddingTop: 12 }}>
+                <MindTree map={mmMap} />
+              </View>
             </ScrollView>
           ) : mmFailed ? (
             <View style={styles.mmCenterBox}>

@@ -129,6 +129,27 @@ export default function UnitSummaryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfPath, srcId, kind]);
 
+  /** مختصر/مراجعة محفوظ بالشكل القديم → يُكتب بالشكل الجدولي الجديد (بموافقة الطالب: يستهلك طلبات) */
+  function onUpgrade() {
+    Alert.alert(t("summary.upgrade.title"), t("summary.upgrade.body"), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("summary.upgrade.btn"),
+        onPress: async () => {
+          stopSummary();
+          setPlaying(false);
+          await clearSummary(pdfPath, src);
+          setSum(null);
+          setSaved(false);
+          setIncomplete(false);
+          setErr("");
+          setLoading(true);
+          setRunId((n) => n + 1);
+        },
+      },
+    ]);
+  }
+
   /** إعادة التلخيص: نفس الصفحات، أو صفحات يحددها الطالب (إن كانت حدود الدرس ناقصة) */
   function onRedo() {
     const restart = async () => {
@@ -523,6 +544,18 @@ export default function UnitSummaryScreen() {
           {range && range.from !== range.to ? (
             <Text style={[styles.dim, { color: pal.dim }]}>{t("summary.coverage", { from: range.from, to: range.to, n: range.to - range.from + 1 })}</Text>
           ) : null}
+          {sum && !sum.table && !streaming && (lvl === "brief" || lvl === "final") ? (
+            <Pressable
+              onPress={onUpgrade}
+              style={({ pressed }) => [styles.upgrade, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}
+            >
+              <Ionicons name="grid-outline" size={20} color={pal.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.upgradeTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("summary.upgrade.banner")}</Text>
+                <Text style={[styles.upgradeSub, { color: pal.dim, textAlign: dir.textAlign }]}>{t("summary.upgrade.bannerSub")}</Text>
+              </View>
+            </Pressable>
+          ) : null}
           {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} /> : null}
           {sum && !streaming ? (
             <Pressable
@@ -567,6 +600,9 @@ export default function UnitSummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  upgrade: { borderWidth: 1.5, borderRadius: 16, padding: 12, gap: 10, alignItems: "center" },
+  upgradeTitle: { fontSize: 15, fontWeight: "900" },
+  upgradeSub: { fontSize: 12.5, lineHeight: 19, marginTop: 2 },
   ctrlCard: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, padding: 14, gap: 8 },
   seekTrack: { height: 10, borderRadius: 5, overflow: "hidden", justifyContent: "center" },
   seekFill: { height: 10, borderRadius: 5 },

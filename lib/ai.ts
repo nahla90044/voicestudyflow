@@ -20,6 +20,7 @@ export type AiAction =
   | "unitquiz"
   | "translate"
   | "mindmap"
+  | "mindtree"
   | "tashkeel"
   | "ocrtashkeel"
   | "slides"

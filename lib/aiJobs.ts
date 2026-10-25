@@ -19,7 +19,7 @@ const MAX_AGE_MS = 9 * 60 * 1000; // مهمة «قيد التشغيل» أقدم
 const jobKey = (k: string) => `vsf:aijob:${k}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string };
+type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string; table?: boolean };
 
 /** آخر مهمة اكتملت لكل جزء (لإعادة توليد مجانية إن رفض وكيل الجودة نتيجتها) */
 const lastDone = new Map<string, string>();

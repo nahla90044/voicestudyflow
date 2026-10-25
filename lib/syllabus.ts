@@ -308,7 +308,10 @@ function shuffleOptions(q: QuizQ): QuizQ {
   return { ...q, options: opts, answer: opts.indexOf(correct) };
 }
 
-export type MindBranch = { label: string; points: string[] };
+/** عقدة في الخريطة المتفرعة: عبارة قصيرة وما يتفرع منها (حتى ٣ مستويات تحت الفرع) */
+export type MindNode = { t: string; sub?: MindNode[] };
+/** points = النقاط الأولى (للخريطة الشعاعية)، tree = التفرعات كاملة (٢٥ أكتوبر)، hook = جملة ربط للذاكرة */
+export type MindBranch = { label: string; points: string[]; hook?: string; tree?: MindNode[] };
 export type MindMap = { center: string; branches: MindBranch[] };
 
 /** يجمع نص الكتاب الفعلي من الصفحات المخزّنة (للخريطة الذهنية المطابقة للكتاب). */
@@ -326,26 +329,39 @@ export async function getBookText(pdfPath: string, maxChars = 16000): Promise<st
     .slice(0, maxChars);
 }
 
-/** يولّد خريطة ذهنية من محتوى وحدة (بالذكاء). */
-export async function generateMindmap(context: string): Promise<MindMap | null> {
-  const raw = await aiAssist("mindmap", context);
+function mindNode(x: any, depth: number): MindNode | null {
+  const t = String(x?.t ?? x?.text ?? x ?? "").replace(/\*\*/g, "").trim();
+  if (!t) return null;
+  const sub = depth < 3 && Array.isArray(x?.sub) ? (x.sub.map((y: any) => mindNode(y, depth + 1)).filter(Boolean) as MindNode[]) : [];
+  return sub.length ? { t, sub } : { t };
+}
+
+/** يقرأ ردّ الخريطة: المتفرعة (nodes) أو القديمة (points) */
+export function parseMindmap(raw: string): MindMap | null {
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) return null;
   try {
     const obj = parseJsonLenient(m[0]) as any;
-    const branches: MindBranch[] = Array.isArray(obj.branches)
-      ? obj.branches
-          .map((b: any) => ({
-            label: String(b?.label ?? "").trim(),
-            points: Array.isArray(b?.points) ? b.points.map((p: any) => String(p).trim()).filter(Boolean) : [],
-          }))
-          .filter((b: MindBranch) => b.label)
-      : [];
+    const branches: MindBranch[] = (Array.isArray(obj.branches) ? obj.branches : [])
+      .map((b: any) => {
+        const tree = (Array.isArray(b?.nodes) ? b.nodes : []).map((x: any) => mindNode(x, 1)).filter(Boolean) as MindNode[];
+        const points = tree.length ? tree.map((n) => n.t) : Array.isArray(b?.points) ? b.points.map((p: any) => String(p).trim()).filter(Boolean) : [];
+        const out: MindBranch = { label: String(b?.label ?? "").trim(), points };
+        if (tree.some((n) => n.sub?.length)) out.tree = tree;
+        if (String(b?.hook ?? "").trim()) out.hook = String(b.hook).trim();
+        return out;
+      })
+      .filter((b: MindBranch) => b.label);
     if (branches.length === 0) return null;
     return { center: String(obj.center ?? "").trim() || "الفكرة المركزية", branches };
   } catch {
     return null;
   }
+}
+
+/** يولّد خريطة ذهنية متفرعة من محتوى وحدة (بالذكاء). */
+export async function generateMindmap(context: string): Promise<MindMap | null> {
+  return parseMindmap(await aiAssist("mindtree", context, undefined, undefined, undefined, 120000));
 }
 
 /** يحدّث حالة إنجاز وحدة. */
