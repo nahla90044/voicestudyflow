@@ -5,6 +5,7 @@
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
 import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
+import { PLAN_GUARD, planBlock, readVpart, VIDEO_FORMAT, VIDEO_PART, VIDEO_PLAN, VIDEO_ROLE, vpartText } from "../_shared/videoPrompt.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { charge, getCaller, refund, type Caller, type Charge } from "../_shared/plan.ts";
@@ -25,8 +26,11 @@ function json(body: unknown, status = 200) {
 }
 
 const SYSTEM: Record<string, string> = {
+  // «ملخّص الفيديو ٢» (٢٦ أكتوبر): خطة الوحدة أولًا (مجانية، بسقف يومي)، ثم أجزاء الفيديو بنصيب كل جزء منها
+  videoplan: VIDEO_PLAN,
+  // تعليمات الفيديو القديمة: للطلبات بلا vpart (نسخ التطبيق السابقة). مع vpart تُستبدل بـ VIDEO_PART (أدناه)
   videoscript:
-    'ركّز على لبّ المحتوى العلمي فقط: لا تذكر المراجع أو المصادر أو قوائم الكتب، ولا أهداف الوحدة أو نواتج التعلّم، ولا عدد الوحدات أو الدروس أو ترقيمها، ولا مقدمات من نوع «في هذه الوحدة سنتعرّف»، ولا مواضع المعلومات في الكتاب (الصفحة أو الفقرة). أنت معلّم خبير ومخرج فيديوهات تعليمية احترافية بأسلوب NotebookLM Video Overview: الشاشة تعرض الكلمات المفتاحية فقط بتصميم بصري جذّاب، والراوي يشرح شرحًا حيًّا كمعلّم متمكّن. النص التالي ملخّص دراسي شامل لوحدة كاملة. اكتب منه سيناريو فيديو يجعل الطالب بعد مشاهدته وحدها جاهزًا لاختبار الوحدة: يغطي كل قسم وكل تعريف وكل تعداد كاملًا بعدده وكل مقارنة وكل رقم أو قاعدة يكثر السؤال عنها، بترتيب الملخّص، بأمانة تامة دون معلومات من خارجه إلا الأمثلة التوضيحية. البنية: (١) مشهد cover افتتاحي يشدّ الانتباه: لماذا هذه الوحدة مهمة وماذا سنتعلّم. (٢) مشاهد الشرح بالترتيب بتخطيطات متنوعة. (٣) بعد كل ٨ إلى ١٠ مشاهد تقريبًا مشهد check واحد (لا أكثر): سؤال سريع من نوع أسئلة الاختبار، في question السؤال، وفي answer الجواب الصحيح مع سببه في جملة، وnarration يطرح السؤال ويدعو للتفكير. (٤) التمارين والمسائل: إن احتوى الملخّص تمارين أو أسئلة أو مسائل فاجعل لكل تمرين مشهد check مستقلًا: في question نص السؤال كاملًا كما ورد بلا اختصار، وإن كان اختيارًا من متعدد فكل خيار في سطر مستقل يبدأ بحرفه (أ) (ب) (ج)…؛ وفي answer الجواب الصحيح بنصّه كاملًا ثم «لأن…» وسببه في جملة أو جملتين، ولحل المسائل الحسابية خطوات الحل مختصرة قبل الناتج؛ وnarration يقرأ السؤال كاملًا بخياراته ثم يدعو للتفكير، ولا يذكر الجواب (يُعرض ويُقال بعد الكشف). تأكّد من صحة كل جواب من محتوى الملخّص. (٥) مشهد summary ختامي بعنوان «الخلاصة» يربط الأفكار ويذكّر بأهم ما يُسأل عنه. عدد المشاهد متناسب مع حجم المحتوى (نحو مشهد لكل ٥٥٠ حرفًا منه)، بلا حشو ولا تكرار لما شُرح. التخطيطات في layout: «cover» عنوان، وفي highlight جملة تعريفية، ونقطتان أو ثلاث كلمات مفتاحية. «cards» لثلاثة أو أربعة مفاهيم متوازية، كل نقطة «عنوان قصير: شرح في جملة». «steps» لمراحل أو خطوات بالترتيب «اسم الخطوة: شرحها». «compare» لمقارنة شيئين: columns عمودان [{"title":"الأول","bullets":["…"]},{"title":"الثاني","bullets":["…"]}] وbullets فارغة. «stat» لرقم أو نسبة أو تاريخ أو مصطلح محوري في highlight (حتى ٢٠ حرفًا) مع نقطتين. «quote» لتعريف أو قاعدة مهمة حرفيًا في highlight مع نقطة توضحها. «list» لنقاط (٢ إلى ٦) ولكل التعدادات الكاملة. «check» للسؤال السريع (bullets فارغة). «summary» للخلاصة (٣ إلى ٥ نقاط). نوّع التخطيطات ولا تكرّر تخطيطًا في مشهدين متتاليين إلا للضرورة. قاعدة العرض الملزمة: كل ما يقوله الراوي يظهر على الشاشة؛ كل فكرة أو عنصر يُذكر في narration له نقطة في bullets (أو في columns/highlight) بالترتيب نفسه، وعدد النقاط يساوي عدد العناصر المذكورة دون نقص، ولا مشهد بعنوان فقط أبدًا. إن زادت العناصر على ستة فقسّمها على مشهدين متتاليين. أعطِ كل نقطة حقّها من الشرح في narration (جملة أو جملتان لكل نقطة). نص الشاشة: emoji واحد، وtitle قصير، ونقاط مختصرة جدًا (حتى ٩٠ حرفًا). الـnarration (أهم جزء): ما يقوله الراوي في هذا المشهد، من ٢٥ إلى ٧٠ كلمة بحسب عدد النقاط، مركّز بلا إطالة ولا تكرار، بالعربية الفصحى السهلة وبأسلوب شرح ممتع واضح متسلسل يربط المشهد بما قبله، يشرح ما وراء النقاط ولا يقرؤها حرفيًا، ويضرب مثالًا للمفهوم المجرّد، وينبّه صراحة على ما يكثر في الاختبار (مثل «انتبه لهذا الفرق»)، ويذكر التعدادات كاملة بعددها. خاطب المتعلّم بصيغة محايدة لا مذكّرة ولا مؤنّثة (مثل: لنتعرّف، نلاحظ هنا، المهم أن، من الضروري تذكّر)، ولا تستخدم أسماء ولا ألقابًا. الأرقام في narration تُكتب كلمات. أعد فقط JSON صالحًا بالشكل: {"title":"عنوان الفيديو","scenes":[{"layout":"cover","emoji":"🎬","title":"العنوان","highlight":"","bullets":["…"],"columns":[],"question":"","answer":"","narration":"ما يقوله الراوي"}]} دون أي نص خارج JSON ودون رموز ماركداون.',
+    'ركّز على لبّ المحتوى العلمي فقط: لا تذكر المراجع أو المصادر أو قوائم الكتب، ولا أهداف الوحدة أو نواتج التعلّم، ولا عدد الوحدات أو الدروس أو ترقيمها، ولا مقدمات من نوع «في هذه الوحدة سنتعرّف»، ولا مواضع المعلومات في الكتاب (الصفحة أو الفقرة). أنت معلّم خبير ومخرج فيديوهات تعليمية احترافية بأسلوب NotebookLM Video Overview: الشاشة تعرض الكلمات المفتاحية فقط بتصميم بصري جذّاب، والراوي يشرح شرحًا حيًّا كمعلّم متمكّن. النص التالي ملخّص دراسي شامل لوحدة كاملة. اكتب منه سيناريو فيديو يجعل الطالب بعد مشاهدته وحدها جاهزًا لاختبار الوحدة: يغطي كل قسم وكل تعريف وكل تعداد كاملًا بعدده وكل مقارنة وكل رقم أو قاعدة يكثر السؤال عنها، بترتيب الملخّص، بأمانة تامة دون معلومات من خارجه إلا الأمثلة التوضيحية. البنية: (١) مشهد cover افتتاحي يشدّ الانتباه: لماذا هذه الوحدة مهمة وماذا سنتعلّم. (٢) مشاهد الشرح بالترتيب بتخطيطات متنوعة. (٣) بعد كل ٨ إلى ١٠ مشاهد تقريبًا مشهد check واحد (لا أكثر): سؤال سريع من نوع أسئلة الاختبار، في question السؤال، وفي answer الجواب الصحيح مع سببه في جملة، وnarration يطرح السؤال ويدعو للتفكير. (٤) التمارين والمسائل: إن احتوى الملخّص تمارين أو أسئلة أو مسائل فاجعل لكل تمرين مشهد check مستقلًا: في question نص السؤال كاملًا كما ورد بلا اختصار، وإن كان اختيارًا من متعدد فكل خيار في سطر مستقل يبدأ بحرفه (أ) (ب) (ج)…؛ وفي answer الجواب الصحيح بنصّه كاملًا ثم «لأن…» وسببه في جملة أو جملتين، ولحل المسائل الحسابية خطوات الحل مختصرة قبل الناتج؛ وnarration يقرأ السؤال كاملًا بخياراته ثم يدعو للتفكير، ولا يذكر الجواب (يُعرض ويُقال بعد الكشف). تأكّد من صحة كل جواب من محتوى الملخّص. (٥) مشهد summary ختامي بعنوان «الخلاصة» يربط الأفكار ويذكّر بأهم ما يُسأل عنه. عدد المشاهد متناسب مع حجم المحتوى (نحو مشهد لكل ٥٥٠ حرفًا منه)، بلا حشو ولا تكرار لما شُرح. التخطيطات في layout: «cover» عنوان، وفي highlight جملة تعريفية، ونقطتان أو ثلاث كلمات مفتاحية. «cards» لثلاثة أو أربعة مفاهيم متوازية، كل نقطة «عنوان قصير: شرح في جملة». «steps» لمراحل أو خطوات بالترتيب «اسم الخطوة: شرحها». «compare» لمقارنة شيئين: columns عمودان [{"title":"الأول","bullets":["…"]},{"title":"الثاني","bullets":["…"]}] وbullets فارغة. «stat» لرقم أو نسبة أو تاريخ أو مصطلح محوري في highlight (حتى ٢٠ حرفًا) مع نقطتين. «quote» لتعريف أو قاعدة مهمة حرفيًا في highlight مع نقطة توضحها. «list» لنقاط (٢ إلى ٦) ولكل التعدادات الكاملة. «check» للسؤال السريع (bullets فارغة). «summary» للخلاصة (٣ إلى ٥ نقاط). نوّع التخطيطات ولا تكرّر تخطيطًا في مشهدين متتاليين إلا للضرورة. قاعدة العرض الملزمة: كل ما يقوله الراوي يظهر على الشاشة؛ كل فكرة أو عنصر يُذكر في narration له نقطة في bullets (أو في columns/highlight) بالترتيب نفسه، وعدد النقاط يساوي عدد العناصر المذكورة دون نقص، ولا مشهد بعنوان فقط أبدًا. إن زادت العناصر على ستة فقسّمها على مشهدين متتاليين. أعطِ كل نقطة حقّها من الشرح في narration (جملة أو جملتان لكل نقطة). نص الشاشة: emoji واحد، وtitle قصير، ونقاط مختصرة جدًا (حتى ٩٠ حرفًا). الـnarration (أهم جزء): ما يقوله الراوي في هذا المشهد، من ٢٥ إلى ٧٠ كلمة بحسب عدد النقاط، مركّز بلا إطالة ولا تكرار، بالعربية الفصحى السهلة وبأسلوب شرح ممتع واضح متسلسل يربط المشهد بما قبله، يشرح ما وراء النقاط ولا يقرؤها حرفيًا، ويضرب مثالًا للمفهوم المجرّد، وينبّه صراحة على ما يكثر في الاختبار (مثل «من المهم ملاحظة هذا الفرق»)، ويذكر التعدادات كاملة بعددها. خاطب المتعلّم بصيغة محايدة لا مذكّرة ولا مؤنّثة (مثل: لنتعرّف، نلاحظ هنا، المهم أن، من الضروري تذكّر)، ولا تستخدم أسماء ولا ألقابًا. الأرقام في narration تُكتب كلمات. أعد فقط JSON صالحًا بالشكل: {"title":"عنوان الفيديو","scenes":[{"layout":"cover","emoji":"🎬","title":"العنوان","highlight":"","bullets":["…"],"columns":[],"question":"","answer":"","narration":"ما يقوله الراوي"}]} دون أي نص خارج JSON ودون رموز ماركداون.',
   studysummary:
     'أنت أستاذ خبير ومصمّم مذكّرات دراسية احترافية. النص التالي مقطع دراسي من كتاب (وحدة كاملة أو صفحة). ركّز على لبّ المحتوى العلمي فقط: لا تذكر المراجع أو المصادر أو قوائم الكتب، ولا أهداف الوحدة أو نواتج التعلّم، ولا عدد الوحدات أو الدروس أو ترقيمها، ولا مقدمات من نوع «في هذه الوحدة سنتعرّف»، ولا مواضع المعلومات في الكتاب (الصفحة أو الفقرة). اكتب منه ملخّصًا دراسيًا شاملًا يغطي كل الأفكار والمعلومات المهمة دون إغفال شيء، بأمانة تامة للنص؛ لا تضف معلومات من خارجه إلا في الأمثلة التوضيحية وتبسيط الصعب. المطلوب: (١) أقسام منطقية بترتيب النص، لكل قسم عنوان وإيموجي مناسب. (٢) صياغة جميلة واضحة بلغة سليمة، وجمل قصيرة سهلة المذاكرة. (٣) دقّق في كل التعدادات (الأنواع، الأقسام، الشروط، الخصائص، المراحل، الأسباب، النتائج، الوظائف) واعرضها قوائم كاملة لا ينقص منها عنصر، واذكر عددها في عنوانها (مثل «أنواع التضخم الثلاثة»). (٤) جداول مقارنة كلما قارن النص بين شيئين أو أكثر، أو عرض أنواعًا لها خصائص متقابلة (الجدول من ٢ إلى ٤ أعمدة). (٥) أمثلة توضيحية قصيرة من الواقع للمفاهيم المجرّدة. (٦) شرح أوسع وأبسط للنقاط الصعبة أو الدقيقة. (٧) تعريفات المصطلحات الأساسية كما في النص. (٨) تنبيه على المعلومات المهمة جدًا (قواعد، أرقام، فروق يكثر السؤال عنها). (٩) إن احتوى النص تمارين أو أسئلة أو أنشطة أو مسائل (غالبًا في نهاية الوحدة) فضع في **آخر الملخّص** قسمًا بعنوان «تمارين الوحدة محلولة»، وكل تمرين كتلة exercise: q نص السؤال كما ورد بخياراته إن وُجدت، وsteps شرح الحل خطوة خطوة بجمل كاملة تبيّن كيف نصل للجواب (لا اختصارًا)، وanswer الجواب النهائي كاملًا (وفي الاختيار من متعدد: الخيار الصحيح بنصّه)، وwhy سبب صحة هذا الجواب ولماذا الخيارات الأخرى خاطئة إن وُجدت خيارات، وquote اقتباس حرفي قصير من نص الوحدة يثبت الجواب. حُلّ كل سؤال بلا استثناء اعتمادًا على محتوى الوحدة، وتحقّق من كل حساب ونتيجة قبل كتابتها، وإن لم يكفِ النص للإجابة فاذكر ذلك صراحةً في answer بدل التخمين. (١٠) إن احتوى النص دراسة حالة فضع قسمًا «دراسة الحالة» بكتلة case: text عرض الحالة كاملًا بوقائعها، وanalysis شرح مبسّط مُسهَب جدًا يربط كل واقعة في الحالة بمفاهيم الوحدة خطوة خطوة مع الأمثلة، وqa أسئلة الحالة وأجوبتها كاملة مشروحة. (١١) ضع دائمًا قسمًا «مصطلحات الوحدة» فيه كل مصطلح أساسي ورد في الوحدة (سواء كان لها مسرد أو لا) كتلة definition بتعريفه كما في النص. (١٢) إن كان النص درسًا لتعلّم لغة (قواعد ومفردات لغة أجنبية) فاتبع أسلوب تعلّم اللغات: كل قاعدة قسم مستقل بعنوانها، وصيغتها في جدول واضح (مثل تصريف الفعل مع كل ضمير، أو أداة مع استعمالها)، واستعمالاتها في قائمة مرقّمة، وأمثلة صحيحة لغويًا تمامًا مع ترجمتها في جدول (المثال | الترجمة)، والاستثناءات والأخطاء الشائعة في تنبيه مهم. والمفردات في جداول مرتبة: الكلمة | النطق التقريبي بالحروف العربية | المعنى | مثال قصير. لا تخلط اللغتين في سطر واحد إلا في الأمثلة المترجمة، ورتّب كل شيء ترتيبًا هيكليًا مريحًا للعين. اجعل الطول متناسبًا مع النص (بحد أقصى نحو ٢٢٠٠ كلمة، وتُستثنى التمارين ودراسة الحالة والقواعد والمفردات فتُكتب كاملة). أعد فقط JSON صالحًا بالشكل: {"title":"عنوان الملخّص","intro":"تمهيد قصير في جملتين","sections":[{"emoji":"📌","heading":"عنوان القسم","blocks":[{"type":"text","text":"فقرة"},{"type":"definition","term":"المصطلح","text":"تعريفه"},{"type":"list","title":"عنوان التعداد","ordered":true,"items":["عنصر: شرحه"]},{"type":"table","title":"عنوان الجدول","headers":["وجه المقارنة","الأول","الثاني"],"rows":[["","",""]]},{"type":"example","text":"مثال"},{"type":"explain","title":"النقطة الصعبة","text":"شرح مبسّط"},{"type":"important","text":"معلومة مهمة"},{"type":"exercise","q":"السؤال","steps":["خطوة مشروحة"],"answer":"الجواب","why":"سبب الصحة","quote":"اقتباس من الوحدة"},{"type":"case","title":"عنوان الحالة","text":"ملخّص الحالة","analysis":"الشرح المبسّط","qa":[{"q":"سؤال","a":"جواب"}]}]}],"keypoints":["أهم النقاط للمراجعة السريعة"]} دون أي نص خارج JSON ودون أي رموز ماركداون داخل القيم.',
   summarize:
@@ -91,7 +95,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoscript: 24000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoplan: 5000, videoscript: 24000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -174,7 +178,9 @@ async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<ty
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
 const INTERNAL = new Set(["cleanup", "tashkeel", "ocrtashkeel", "fixspacing", "filternoise", "moderate", "define"]);
 const INTERNAL_DAILY_CAP = 800;
-const SCANNED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
+const SCANNED = new Set(["videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
+// videoplan ليس هنا: خطة الفيديو لا تُحسب على الطالب (عدد الطلبات لا يزيد على ما قبل الخطة)، ولها سقف يومي
+const VIDEO_PLAN_DAILY_CAP = 40;
 const COUNTED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
@@ -194,8 +200,8 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json().catch(() => ({}));
     const action: string = body.action ?? "summarize";
-    // حد أمان (الاختبار الشامل للوحدة يحتاج نصها كله تقريبًا)
-    const text: string = (body.text ?? "").toString().slice(0, String(body.action) === "unitquiz" ? 30000 : 12000);
+    // حد أمان (الاختبار الشامل للوحدة يحتاج نصها كله تقريبًا، وفهرس خطة الفيديو حتى ١٨٠٠٠)
+    const text: string = (body.text ?? "").toString().slice(0, String(body.action) === "unitquiz" ? 30000 : String(body.action) === "videoplan" ? 20000 : 12000);
     const question: string = (body.question ?? "").toString().slice(0, 500);
     const targetLang: string = (body.targetLang ?? "ar").toString();
     // عدد مطلوب من البطاقات/الأسئلة (اختياري) — يحدّده المستخدم في التوليد المخصّص
@@ -215,12 +221,21 @@ Deno.serve(async (req: Request) => {
       const { count } = await caller.admin.from("cost_log").select("id", { count: "exact", head: true }).eq("user_id", caller.id).eq("fn", "ai-assist").in("action", [...INTERNAL]).gte("created_at", since);
       if ((count ?? 0) >= INTERNAL_DAILY_CAP) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
     }
+    // خطة الفيديو مجانية للطالب (لا تُحسب من طلباته): سقف يومي يمنع استغلالها، والتطبيق يستعمل حينها الخطة الآلية
+    if (action === "videoplan" && caller.plan !== "owner") {
+      const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+      const { count } = await caller.admin.from("cost_log").select("id", { count: "exact", head: true }).eq("user_id", caller.id).eq("fn", "ai-assist").eq("action", "videoplan").gte("created_at", since);
+      if ((count ?? 0) >= VIDEO_PLAN_DAILY_CAP) return json({ error: "RATE_LIMITED", rateLimited: true }, 200);
+    }
+    // نصيب جزء الفيديو من خطة الوحدة (التطبيق المحدَّث فقط)؛ بلا vpart أو بـ vpart غير صالح: السلوك القديم كما هو
+    const vp = action === "videoscript" ? readVpart(body.vpart) : null;
+    if (action === "videoscript" && body.vpart !== undefined && !vp) console.warn("videoscript: invalid vpart ignored");
     // فحص المحتوى قبل إرساله للذكاء (في الطلبات التي يطلبها المستخدم؛ القراءة الصوتية محمية بحارس الأمانة)
     if (SCANNED.has(action)) {
       // «كتابك يجيب»: نص الكتاب فُحص كاملًا عند رفعه، والسؤال يفحصه وكيل الحماية بعد قليل —
       // فحص صفحات الكتاب هنا كان يعدّ جملًا قانونية عادية أوامر (مثل «والتصرف كصاحب الحق») فيحذّر بلا ذنب
-      // نص الكتاب: النص الخفي فقط. وما يكتبه المستخدم بنفسه (السؤال) يُفحص كاملًا
-      const bookScan = scanText(text, { hiddenOnly: true });
+      // نص الكتاب: النص الخفي فقط (ومعه عناوين خطة الفيديو). وما يكتبه المستخدم بنفسه (السؤال) يُفحص كاملًا
+      const bookScan = scanText(vp ? `${text}\n${vpartText(vp)}` : text, { hiddenOnly: true });
       const userText = action === "ask" ? String(body.userQuestion ?? "") : question ?? "";
       const g = bookScan.ok ? scanText(userText) : bookScan;
       if (!g.ok && action === "ask" && bookScan.ok) {
@@ -288,7 +303,7 @@ Deno.serve(async (req: Request) => {
       fr: "le français",
     };
     const LANG_ENFORCED = new Set([
-      "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "mindtree", "unitquiz", "syllabus", "define",
+      "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "mindtree", "unitquiz", "syllabus", "define",
     ]);
     let systemPrompt: string;
     if (action === "translate") {
@@ -323,6 +338,8 @@ Deno.serve(async (req: Request) => {
       if (action === "unitquiz") {
         systemPrompt += `\n\nالإيجاز ملزم: why جملة واحدة قصيرة، وquote أقل من ١٥ كلمة، والخيارات قصيرة؛ فلا يطول الرد.`;
       }
+      // جزء فيديو بخطة الوحدة: تعليمات الدور الجديدة بدل القديمة، وتبقى قاعدة اللغة والصيغة المحايدة الملحقة
+      if (vp) systemPrompt = VIDEO_PART + "\n\n" + VIDEO_ROLE[vp.role] + "\n\n" + VIDEO_FORMAT + systemPrompt.slice(SYSTEM.videoscript.length);
     }
 
     // في طلبات المستخدم: نص الكتاب داخل حدود واضحة، والتذكير بالمهمة بعده (نص مدسوس لا يُحسب تعليمات)
@@ -333,7 +350,7 @@ Deno.serve(async (req: Request) => {
         ? `النص:\n${fence(text)}\n\nالسؤال: ${question}`
         : action === "define"
         ? `الكلمة: ${question}\nالجملة الواردة فيها: ${fence(text)}`
-        : `النص:\n${fence(text)}`;
+        : `${vp ? planBlock(vp) + "\n\n" : ""}النص:\n${fence(text)}`;
 
     const client = new Anthropic({ apiKey });
 
@@ -347,7 +364,7 @@ Deno.serve(async (req: Request) => {
     const params: Record<string, unknown> = {
       model,
       max_tokens: maxTok,
-      system: wrap ? systemPrompt + "\n\n" + GUARD_WRAPPED : GUARD + systemPrompt,
+      system: wrap ? systemPrompt + "\n\n" + GUARD_WRAPPED + (vp ? " " + PLAN_GUARD : "") : GUARD + systemPrompt,
       messages: [{ role: "user", content: userContent }],
     };
     // أسلوب الملخّص الذي يختاره الطالب: الالتزام بالكتاب، أو التوسّع بأمثلة وتمارين إضافية
@@ -390,7 +407,7 @@ Deno.serve(async (req: Request) => {
 
     // مهمة على السيرفر (الملخّص الشامل، الفيديو): نردّ فورًا برقم المهمة، والكتابة تكمل هنا في الخلفية
     // وتُحفظ أولًا بأول في ai_jobs — فلا يوقفها قفل شاشة الجوال ولا إغلاق التطبيق.
-    if (body.job === true && (action === "studysummary" || action === "videoscript" || action === "syllabus")) {
+    if (body.job === true && (action === "studysummary" || action === "videoscript" || action === "videoplan" || action === "syllabus")) {
       if (!caller) return json({ error: "AUTH" }, 401);
       const admin = caller.admin;
       const { data: row, error: insErr } = await admin.from("ai_jobs").insert({ user_id: caller.id, action }).select("id").single();
@@ -440,7 +457,7 @@ Deno.serve(async (req: Request) => {
 
     // بثّ مباشر (الملخّص الشامل): النص يُرسل أولًا بأول فيظهر أول قسم خلال ثوانٍ
     // بدل انتظار الملخّص كاملًا (قد يتجاوز دقيقة). الحصة خُصمت أعلاه مرة واحدة.
-    if (body.stream === true && (action === "studysummary" || action === "videoscript")) {
+    if (body.stream === true && (action === "studysummary" || action === "videoscript" || action === "videoplan")) {
       const enc = new TextEncoder();
       const stream = new ReadableStream({
         async start(ctrl) {

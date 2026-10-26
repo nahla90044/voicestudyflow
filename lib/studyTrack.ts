@@ -12,7 +12,8 @@ import { distribute, fitSchedule, type BookSchedule } from "./scheduleCore";
 import { supabase } from "./supabase";
 import type { UnitRange } from "./glossaryCore";
 
-type Seen = { s?: number[]; st?: number; v?: number[]; vt?: number; p?: number[]; at?: number; atT?: number; dT?: number }; // at: مكان الوقوف في صوت المختصر، atT: وقته، dT: آخر مرة انتهى فيها الاستماع حتى آخره
+// vg: «جيل» فيديو الوحدة (وقت إعادة توليده): سجل «شوهد» لجيل أقدم لا يُجمع مع الأحدث (أرقام مشاهده لفيديو آخر)
+type Seen = { s?: number[]; st?: number; v?: number[]; vt?: number; vg?: number; p?: number[]; at?: number; atT?: number; dT?: number }; // at: مكان الوقوف في صوت المختصر، atT: وقته، dT: آخر مرة انتهى فيها الاستماع حتى آخره
 /** مفاتيح الوحدات أرقام ("0", "1"…)؛ و"pages" للصفحات المذاكَرة من الكتاب كله */
 export type RawProgress = Record<string, Seen>;
 const PAGES = "pages";
@@ -36,7 +37,12 @@ function merge(a: RawProgress, b: RawProgress): RawProgress {
     const o = out[k] ?? {};
     const newer = (v.atT ?? 0) >= (o.atT ?? 0) ? v : o; // مكان الوقوف: الأحدث من أي جهاز
     const dT = Math.max(o.dT ?? 0, v.dT ?? 0);
-    out[k] = { s: union(o.s, v.s), st: Math.max(o.st ?? 0, v.st ?? 0), v: union(o.v, v.v), vt: Math.max(o.vt ?? 0, v.vt ?? 0), p: union(o.p, v.p), at: newer.at, atT: newer.atT, ...(dT ? { dT } : {}) };
+    // فيديو أُعيد توليده: المشاهد المشاهَدة من الجيل الأحدث وحده (بلا جمع)؛ والجيل نفسه: جمع كما كان
+    const og = o.vg ?? 0;
+    const vgv = v.vg ?? 0;
+    const vid = og === vgv ? { v: union(o.v, v.v), vt: Math.max(o.vt ?? 0, v.vt ?? 0) } : vgv > og ? { v: union(v.v), vt: v.vt ?? 0 } : { v: union(o.v), vt: o.vt ?? 0 };
+    const vg = Math.max(og, vgv);
+    out[k] = { s: union(o.s, v.s), st: Math.max(o.st ?? 0, v.st ?? 0), ...vid, ...(vg ? { vg } : {}), p: union(o.p, v.p), at: newer.at, atT: newer.atT, ...(dT ? { dT } : {}) };
   }
   return out;
 }
@@ -105,6 +111,15 @@ export function markListenDone(pdfPath: string, unit: number): void {
   if (!pdfPath || unit < 0) return;
   const cur = mem.get(pdfPath) ?? {};
   cur[String(unit)] = { ...(cur[String(unit)] ?? {}), dT: Date.now() };
+  mem.set(pdfPath, cur);
+  schedulePush(pdfPath);
+}
+
+/** فيديو الوحدة أُعيد توليده: سجل «شوهد» يبدأ من جديد (المشاهد الجديدة غير القديمة) على كل الأجهزة */
+export function resetVideoSeen(pdfPath: string, unit: number): void {
+  if (!pdfPath || unit < 0) return;
+  const cur = mem.get(pdfPath) ?? {};
+  cur[String(unit)] = { ...(cur[String(unit)] ?? {}), vg: Date.now(), v: [], vt: 0 };
   mem.set(pdfPath, cur);
   schedulePush(pdfPath);
 }

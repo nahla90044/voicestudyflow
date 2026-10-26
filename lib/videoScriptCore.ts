@@ -3,7 +3,10 @@
 // (كاملًا أو أولًا بأول أثناء البثّ)، والدمج بالترتيب، وتقسيم الملخّص إلى أجزاء. مُختبَر في tests/.
 import { parseJsonLenient } from "./jsonRepair.ts";
 import type { Slide, SlideColumn, SlideLayout } from "./ai";
+import { isClosingTitle, isGenericTitle, jaccard, keyWords, neutralize, normKey } from "./qualityCore.ts";
 import { summaryToSpeech, type StudySummary } from "./studySummary.ts";
+import type { VideoPlan } from "./videoPlanCore.ts";
+export { neutralize };
 
 const SLIDE_LAYOUTS: SlideLayout[] = ["cover", "list", "cards", "steps", "compare", "stat", "quote", "summary"];
 
@@ -12,12 +15,38 @@ export type VideoScene = Slide & {
   narration: string;
   question?: string;
   answer?: string;
+  /** علامة الموضوع في خطة الوحدة (T3، أو E1 للتمارين) — لفحص الشمول فقط */
+  topic?: string;
+  /** سؤال ختامي (q) أو تمرين من الكتاب (ex): يُنقل إلى «أسئلة الوحدة» في آخر الفيديو */
+  final?: "q" | "ex";
 };
-/** truncated: الرد قُطع قبل نهايته (بلغ سقف الطول) — مشاهد آخر الجزء ناقصة، فيُعاد توليده */
-export type VideoScript = { title: string; scenes: VideoScene[]; truncated?: boolean };
+/**
+ * truncated: الرد قُطع قبل نهايته (بلغ سقف الطول) — مشاهد آخر الجزء ناقصة، فيُعاد توليده.
+ * v: 2 = «ملخّص الفيديو ٢» (خطة أولًا). done: الجزء اكتمل (لا ما زال يُكتب) — يحدد متى تُلحق الخلاصة والأسئلة.
+ */
+export type VideoScript = {
+  title: string;
+  scenes: VideoScene[];
+  truncated?: boolean;
+  v?: 2;
+  done?: boolean;
+  /** بصمة الجزء المحفوظ (videoPlanCore.partStamp) — لا يُستعمل إلا لنفس نص الجزء ونصيبه من الخطة */
+  ps?: string;
+};
 
 const str = (v: unknown) => String(v ?? "").trim();
 const strs = (v: unknown): string[] => (Array.isArray(v) ? v.map(str).filter(Boolean) : []);
+
+/** علامة الموضوع والسؤال الختامي (ملخّص الفيديو ٢)؛ القيم غير الصالحة تُتجاهل */
+function tags(o: any): Pick<VideoScene, "topic" | "final"> {
+  const out: Pick<VideoScene, "topic" | "final"> = {};
+  const topic = str(o?.topic);
+  if (/^[TE]\d{1,3}$/.test(topic)) out.topic = topic;
+  const f = o?.final;
+  if (f === "ex") out.final = "ex";
+  else if (f === "q" || f === true || f === "true") out.final = "q";
+  return out;
+}
 
 function scene(o: any): VideoScene | null {
   const narration = str(o?.narration);
@@ -26,9 +55,9 @@ function scene(o: any): VideoScene | null {
   if (layoutRaw === "check") {
     const question = str(o?.question);
     if (!question) return null;
-    return { kind: "check", emoji: str(o?.emoji) || "🤔", title: str(o?.title), bullets: [], narration, question, answer: str(o?.answer) };
+    return { kind: "check", emoji: str(o?.emoji) || "🤔", title: str(o?.title), bullets: [], narration, question, answer: str(o?.answer), ...tags(o) };
   }
-  const out: VideoScene = { kind: "slide", emoji: str(o?.emoji) || "📌", title: str(o?.title), bullets: strs(o?.bullets), narration };
+  const out: VideoScene = { kind: "slide", emoji: str(o?.emoji) || "📌", title: str(o?.title), bullets: strs(o?.bullets), narration, ...tags(o) };
   const highlight = str(o?.highlight);
   if (highlight) out.highlight = highlight;
   const columns: SlideColumn[] = Array.isArray(o?.columns)
@@ -118,10 +147,124 @@ export function parseVideo(raw: string): VideoScript | null {
   return part ? { ...part, truncated: true } : null;
 }
 
+/** الدمج القديم (لصق بالترتيب): للمسار القديم وللفيديوهات المحفوظة قبل «ملخّص الفيديو ٢» */
 export function mergeVideo(list: VideoScript[]): VideoScript | null {
   const ok = list.filter((x) => x?.scenes.length);
   if (!ok.length) return null;
   return { title: ok[0].title, scenes: ok.flatMap((x) => x.scenes) };
+}
+
+// ===== ملخّص الفيديو ٢: التركيب النهائي =====
+
+/** نصوص المشاهد التي يبنيها التطبيق نفسه (بلغة الواجهة) */
+export type VideoLabels = { summaryTitle: string; qTitle: string; qBody: string; qBullets: string[]; coverAuto: (title: string, topics: string[]) => string };
+
+/** المشهد بالصيغة المحايدة (أفعال الأمر المذكّرة في أول الجمل → «من المهم…»، «لنفكّر…») */
+export function neutralScene(sc: VideoScene): VideoScene {
+  const out: VideoScene = { ...sc, title: neutralize(sc.title), narration: neutralize(sc.narration), bullets: (sc.bullets ?? []).map(neutralize) };
+  if (sc.highlight) out.highlight = neutralize(sc.highlight);
+  if (sc.question) out.question = neutralize(sc.question);
+  if (sc.answer) out.answer = neutralize(sc.answer);
+  if (sc.columns) out.columns = sc.columns.map((c) => ({ title: neutralize(c.title), bullets: c.bullets.map(neutralize) }));
+  return out;
+}
+
+const screenWords = (s: VideoScene) =>
+  [...new Set(keyWords([s.highlight ?? "", ...(s.bullets ?? []), ...(s.columns ?? []).flatMap((c) => [c.title, ...c.bullets])].join(" ")).filter((w) => w.length >= 2))];
+
+/** نسبة كلمات a التي لا مقابل لها في b (الكلمة نفسها، أو تبدأ إحداهما بالأخرى بثلاثة أحرف فأكثر) */
+function novelty(a: string[], b: string[]): number {
+  if (!a.length) return 1;
+  const miss = a.filter((w) => !b.some((x) => x === w || (Math.min(x.length, w.length) >= 3 && (x.startsWith(w) || w.startsWith(x))))).length;
+  return miss / a.length;
+}
+
+/**
+ * مشهد يعيد مشهدًا سبقه (يُحذف عند التركيب): شرح بالعنوان نفسه (بعد التطبيع: «م169» = «المادة ١٦٩»)
+ * ونقاطه لا تزيد جديدًا على ٣٥٪؛ أو سؤال شبه مطابق لسؤال سبق. العناوين العامة («مثال»، «تطبيق») لا يُحكم عليها.
+ */
+export function isDuplicate(sc: VideoScene, kept: VideoScene[]): boolean {
+  if (sc.kind === "check") {
+    const q = keyWords(sc.question ?? "");
+    return q.length > 0 && kept.some((k) => k.kind === "check" && jaccard(q, keyWords(k.question ?? "")) >= 0.8);
+  }
+  if (sc.layout === "cover" || sc.layout === "summary" || isGenericTitle(sc.title)) return false;
+  const key = normKey(sc.title);
+  const tw = [...new Set(keyWords(sc.title))];
+  const words = screenWords(sc);
+  return kept.some((k) => {
+    if (k.kind !== "slide" || k.layout === "cover" || k.layout === "summary" || isGenericTitle(k.title)) return false;
+    const kw = [...new Set(keyWords(k.title))];
+    const same = (!!key && normKey(k.title) === key) || (tw.length >= 3 && kw.length >= 3 && jaccard(tw, kw) >= 0.8);
+    return same && novelty(words, screenWords(k)) <= 0.35;
+  });
+}
+
+function planCover(plan: VideoPlan, labels: VideoLabels, title: string): VideoScene {
+  const majors = plan.topics.filter((t) => t.major).map((t) => t.title);
+  const bullets = (majors.length >= 3 ? majors : plan.topics.map((t) => t.title)).slice(0, 5);
+  const out: VideoScene = { kind: "slide", layout: "cover", emoji: "🎬", title, bullets, narration: plan.cover?.narration || labels.coverAuto(title, bullets) };
+  if (plan.cover?.highlight) out.highlight = plan.cover.highlight;
+  return out;
+}
+
+/**
+ * الفيديو من أجزائه (ملخّص الفيديو ٢): افتتاح واحد من الخطة، ثم الشرح بترتيب الخطة بلا مكرر،
+ * ثم — بعد اكتمال كل الأجزاء — الخلاصة، فمشهد «أسئلة الوحدة»، فالأسئلة الختامية، فتمارين الكتاب.
+ * list: أجزاء مكتملة ثم جزء يُكتب على الأكثر (العرض بالترتيب). كل قرار يعتمد على ما سبقه فقط،
+ * فنتيجة القائمة الأقصر بداية لنتيجة الأطول: أرقام المشاهد المعروضة لا تتغير أثناء الكتابة.
+ * بلا خطة (الجزء الوحيد): افتتاح النموذج يبقى أولًا، وخلاصته تُؤجَّل لما بعد الشرح.
+ */
+export function assembleVideo(
+  list: VideoScript[],
+  o: { plan: VideoPlan | null; n: number; labels: VideoLabels; unitTitle: string; stats?: { dropped: number } }
+): VideoScript {
+  const { plan, labels } = o;
+  const title = plan?.title || o.unitTitle || list.find((p) => p?.title)?.title || "";
+  const out: VideoScene[] = [];
+  if (plan) out.push(planCover(plan, labels, title));
+  const finalsQ: VideoScene[] = [];
+  const finalsEx: VideoScene[] = [];
+  const sums: VideoScene[] = [];
+  let dropped = 0;
+  for (const part of list) {
+    for (const raw of part?.scenes ?? []) {
+      const sc = neutralScene(raw);
+      if (sc.final === "q") finalsQ.push(sc);
+      else if (sc.final === "ex") finalsEx.push(sc);
+      else if (sc.layout === "summary" || (sc.kind === "slide" && isClosingTitle(sc.title))) {
+        // خاتمة جزء («الخلاصة»، «في الختام»…) في وسط الفيديو: لا تبقى في موضعها (كان يبدو منتهيًا ثم يرجع للشرح)
+        if (!plan) sums.push(sc);
+      } else if (sc.layout === "cover") {
+        if (!plan && !out.length) out.push(sc);
+      } else if (sc.kind === "check" && (!out.length || out[out.length - 1].kind === "check" || out[out.length - 1].layout === "cover")) {
+        // سؤالا فهم متتاليان، أو سؤال قبل أي شرح: لا يقيس فهم ما شُرح → إلى أسئلة النهاية
+        finalsQ.push({ ...sc, final: "q" });
+      } else if (isDuplicate(sc, out)) dropped++;
+      else out.push(sc);
+    }
+  }
+  const allDone = list.length === o.n && list.every((p) => p?.done);
+  if (allDone) {
+    let sum: VideoScene | null = null;
+    if (plan?.summary) sum = { kind: "slide", layout: "summary", emoji: "✨", title: labels.summaryTitle, bullets: plan.summary.bullets.slice(0, 5), narration: plan.summary.narration };
+    // الجزء الوحيد: خلاصته الحقيقية (آخر مشهد summary)، وإلا آخر مشهد خاتمة
+    else if (sums.length) sum = [...sums].reverse().find((x) => x.layout === "summary") ?? sums[sums.length - 1];
+    else if (plan?.keypoints.length) {
+      const k = plan.keypoints.slice(0, 5);
+      sum = { kind: "slide", layout: "summary", emoji: "✨", title: labels.summaryTitle, bullets: k, narration: k.join(". ") };
+    }
+    if (sum) out.push(neutralScene(sum));
+    const qs: VideoScene[] = [];
+    for (const q of finalsQ) {
+      if (isDuplicate(q, [...out, ...qs])) dropped++;
+      else qs.push(q);
+    }
+    if (qs.length || finalsEx.length) out.push({ kind: "slide", layout: "list", emoji: "📝", title: labels.qTitle, bullets: labels.qBullets, narration: labels.qBody });
+    out.push(...qs, ...finalsEx);
+  }
+  if (o.stats) o.stats.dropped = dropped;
+  return { title, scenes: out, v: 2 };
 }
 
 // أصغر من قبل (كان ٩٠٠٠): كل جزء يُكتب كاملًا تحت سقف الرد فلا تضيع مشاهد آخره (٢٤ أكتوبر)
@@ -141,7 +284,10 @@ export function coreForVideo(s: StudySummary): StudySummary {
 }
 const GLOSSARY_RE = /مصطلحات الوحدة|مسرد|glossary/i;
 
-/** أجزاء السيناريو من الملخّص: أقسام كاملة متتالية (≤ ٩٠٠٠ حرف) مع سياق موضعها من الوحدة */
+/**
+ * أجزاء السيناريو من الملخّص (المسار القديم): أقسام كاملة متتالية (≤ ٥٠٠٠ حرف) مع سياق موضعها من الوحدة.
+ * باقٍ للتوليد القديم المنقطع، وعدد أجزائه هو الحد الأعلى لطلبات «ملخّص الفيديو ٢» (لا خصم زيادة).
+ */
 export function videoParts(full: StudySummary, unitTitle: string): string[] {
   const s = coreForVideo(full);
   const secText = s.sections.map((sec) => summaryToSpeech({ title: "", intro: "", sections: [sec], keypoints: [] }));

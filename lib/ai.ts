@@ -10,6 +10,7 @@ import { recordPerf } from "./perf";
 
 export type AiAction =
   | "videoscript"
+  | "videoplan"
   | "studysummary"
   | "summarize"
   | "ask"
@@ -272,7 +273,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
  * طلب ذكاء ببثّ مباشر (الملخّص الشامل): onText يُستدعى بالنص المتراكم كلما وصل جزء،
  * فتعرض الواجهة الأقسام المكتملة فورًا. يعيد النص الكامل. مهلة: لا جديد خلال ٤٥ث → خطأ.
  */
-export async function aiAssistStream(action: AiAction, text: string, onText: (soFar: string) => void, targetLang?: string): Promise<string> {
+export async function aiAssistStream(action: AiAction, text: string, onText: (soFar: string) => void, targetLang?: string, extra?: Record<string, unknown>): Promise<string> {
   const lang = targetLang ?? getCurrentLang();
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token ?? SUPABASE_PUBLIC_KEY;
@@ -292,7 +293,8 @@ export async function aiAssistStream(action: AiAction, text: string, onText: (so
         apikey: SUPABASE_PUBLIC_KEY,
         "x-vsf-version": APP_VERSION,
       },
-      body: JSON.stringify({ action, text, targetLang: lang, stream: true }),
+      // extra: خيارات الطلب (mode/table/deep/vpart…) — لا تضيع في البثّ الاحتياطي
+      body: JSON.stringify({ ...extra, action, text, targetLang: lang, stream: true }),
       signal: ctrl.signal,
     });
     const type = res.headers.get("content-type") ?? "";
@@ -336,7 +338,8 @@ export async function aiAssist(
   timeoutMs = 60000, // الملخّص الشامل لوحدة كاملة يحتاج أطول
   cardType?: string, // نوع البطاقات (flashcards فقط)
   userQuestion?: string, // سؤال المستخدم كما كتبه (لوكيل حماية «كتابك يجيب»)
-  askContext?: { bookId?: string; bookTitle?: string; recent?: string[] } // سياق يُحفظ مع المخالفة للتوثيق
+  askContext?: { bookId?: string; bookTitle?: string; recent?: string[] }, // سياق يُحفظ مع المخالفة للتوثيق
+  extraBody?: Record<string, unknown> // خيارات إضافية للطلب (البثّ الاحتياطي لأجزاء الملخّص والفيديو)
 ): Promise<string> {
   if (!text.trim()) return "";
 
@@ -347,7 +350,7 @@ export async function aiAssist(
   const aiT0 = Date.now();
   const { data, error } = await withTimeout(
     supabase.functions.invoke("ai-assist", {
-      body: { action, text, question, targetLang: lang, count, cardType, userQuestion, askContext },
+      body: { ...extraBody, action, text, question, targetLang: lang, count, cardType, userQuestion, askContext },
     }),
     timeoutMs,
     action

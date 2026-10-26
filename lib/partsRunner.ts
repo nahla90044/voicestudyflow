@@ -8,6 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
 import { aiAssist, aiAssistStream, type AiAction } from "./ai";
+import { keepPartial, visibleParts } from "./partsCore";
 
 const PARALLEL = 3;
 const MAX_TRIES = 3;
@@ -47,13 +48,17 @@ export function whenActive(): Promise<void> {
   });
 }
 
-/** جزء واحد ببثّ مباشر؛ احتياطًا طلب عادي إن تعذّر البثّ والتطبيق في الواجهة. يرمي WENT_AWAY إن انقطع بالخروج */
+/**
+ * جزء واحد ببثّ مباشر؛ احتياطًا طلب عادي إن تعذّر البثّ والتطبيق في الواجهة. يرمي WENT_AWAY إن انقطع بالخروج.
+ * extra: خيارات الطلب نفسها (mode/table/deep/vpart…) — كان البثّ الاحتياطي يُسقطها فيخرج ملخّص بغير أسلوبه (٢٦ أكتوبر)
+ */
 export async function streamPart<P>(
   action: AiAction,
   ctx: string,
   parsePartial: (raw: string) => P | null,
   parseFull: (raw: string) => P | null,
-  onPartial: (p: P, chars: number) => void
+  onPartial: (p: P, chars: number) => void,
+  extra?: Record<string, unknown>
 ): Promise<P> {
   let raw = "";
   let wentAway = false;
@@ -61,16 +66,22 @@ export async function streamPart<P>(
     if (st !== "active") wentAway = true;
   });
   try {
-    raw = await aiAssistStream(action, ctx, (soFar) => {
-      raw = soFar;
-      const p = parsePartial(soFar);
-      if (p) onPartial(p, soFar.length);
-    });
+    raw = await aiAssistStream(
+      action,
+      ctx,
+      (soFar) => {
+        raw = soFar;
+        const p = parsePartial(soFar);
+        if (p) onPartial(p, soFar.length);
+      },
+      undefined,
+      extra
+    );
   } catch (e) {
     const em = (e as Error).message;
     if (em === "USER_QUOTA" || em === "UNSAFE_CONTENT" || em === "ACCOUNT_LOCKED") throw e;
     if (wentAway || AppState.currentState !== "active") throw new Error("WENT_AWAY");
-    raw = await aiAssist(action, ctx, undefined, undefined, undefined, 150000);
+    raw = await aiAssist(action, ctx, undefined, undefined, undefined, 150000, undefined, undefined, undefined, extra);
   } finally {
     sub.remove();
   }
@@ -94,6 +105,10 @@ export async function runParts<P, R>(o: {
   onProgress?: (p: PartsProgress<R>) => void;
   /** عدد الأجزاء معًا (مهام السيرفر: كلها معًا فتبدأ قبل أي قفل للشاشة) */
   parallel?: number;
+  /** العرض بالترتيب الصارم (الفيديو): لا يُعرض جزء قبل اكتمال الذي قبله، فلا تتغير أرقام ما عُرض */
+  inOrder?: boolean;
+  /** حجم الجزء المعروض (عدد المشاهد): إعادة الجزء لا تحلّ محل المعروض حتى تبلغ حجمه */
+  size?: (p: P) => number;
 }): Promise<(P | null)[]> {
   const n = o.parts.length;
   const speed = () => speeds.get(o.speedKey) ?? o.defaultSpeed;
@@ -117,15 +132,7 @@ export async function runParts<P, R>(o: {
     const now = Date.now();
     if (!o.onProgress || (!force && now - lastPaint < 300)) return;
     lastPaint = now;
-    const shown: P[] = [];
-    for (let i = 0; i < n; i++) {
-      const s = final[i] !== undefined ? final[i] : partial[i];
-      if (!s) {
-        if (final[i] === undefined) break; // لم يظهر منه شيء بعد → نحافظ على الترتيب
-        continue; // فشل → نتخطاه
-      }
-      shown.push(s);
-    }
+    const shown = visibleParts(final, partial, o.inOrder);
     o.onProgress({ done, total: n, soFar: o.merge(shown), etaSec: eta(), waiting });
   };
   report(true);
@@ -144,7 +151,7 @@ export async function runParts<P, R>(o: {
         started[i] = Date.now();
         try {
           const p = await o.run(o.parts[i], i, (pp, c) => {
-            partial[i] = pp;
+            partial[i] = o.inOrder ? keepPartial(partial[i], pp, o.size) : pp;
             chars[i] = c;
             report();
           });

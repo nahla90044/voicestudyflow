@@ -19,7 +19,7 @@ import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../compone
 import { VideoStage } from "../components/brand/video-stage";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
-import { markSeen, seenScenes } from "../lib/studyTrack";
+import { markSeen, resetVideoSeen, seenScenes } from "../lib/studyTrack";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
@@ -316,6 +316,9 @@ export default function UnitVideoScreen() {
           setEnded(false);
           setIdx(0);
           await clearVideo(pdfPath, src);
+          // الفيديو الجديد غير القديم: «شوهد» يبدأ من جديد (كان يبقى سجل القديم فيظهر تقدّم خاطئ)
+          if (src.kind === "unit") resetVideoSeen(pdfPath, unitIdx);
+          setSeen(new Set());
           setScript(null);
           setComplete(false);
           setJob(null);
@@ -502,7 +505,7 @@ export default function UnitVideoScreen() {
               <View style={[styles.endCard, { minHeight: Math.max(stageW * (9 / 16), 300) }]}>
                 <LinearGradient colors={["#5B4BF5", "#2A9DF4"]} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
                 <Ionicons name="trophy-outline" size={52} color="#FFFFFF" />
-                <Text style={styles.endTitle}>{t("video.endTitle")}</Text>
+                <Text style={styles.endTitle}>{t("video.endDone")}</Text>
                 <Text style={styles.endSub}>{t("video.endSub")}</Text>
                 <Pressable onPress={() => router.push({ pathname: "/unit-quiz", params: quizParams })} style={styles.endQuiz}>
                   <Ionicons name="school" size={20} color="#3730A3" />
@@ -690,7 +693,7 @@ export default function UnitVideoScreen() {
               width={fullW}
             />
           ) : (
-            <Text style={styles.fsEnd}>{t("video.endTitle")}</Text>
+            <Text style={styles.fsEnd}>{t("video.endDone")}</Text>
           )}
           {ctrls ? (
             <View style={styles.fsCtrls} pointerEvents="box-none">

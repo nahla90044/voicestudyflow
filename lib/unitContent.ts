@@ -9,7 +9,7 @@ import { getCurrentLang } from "./i18n";
 // summary/quiz/mindmap: لوحدات المنهج · pagesummary/pagequiz: لصفحة القارئ الحالية
 // studysummary/pagestudysummary = المستوى «الشامل» (وما حُفظ قبل المستويات بأسلوب الكتاب)؛
 // expand*/brief* = المستويان «الموسّع» و«المختصر» (٢١ أكتوبر)
-export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz" | "glossary" | "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary" | "studysummarypart" | "video" | "videopart";
+export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz" | "glossary" | "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary" | "studysummarypart" | "video" | "videopart" | "videopart2" | "videoplan";
 
 // تجزئة FNV-1a لاسم مفتاح ثابت قصير من مسار الـPDF
 function hashKey(s: string): string {
@@ -62,6 +62,16 @@ export async function removeUnitContentWhere(pdfPath: string, kind: UnitContentK
     if (keys.length) await AsyncStorage.multiRemove(keys);
   } catch {
     // نتجاهل
+  }
+}
+
+/** هل حُفظ شيء من نوعٍ لهذا الكتاب يحقق شرطًا على رقمه (مثل أجزاء فيديو قديمة لوحدة) */
+export async function anyUnitContentWhere(pdfPath: string, kind: UnitContentKind, match: (unit: number) => boolean): Promise<boolean> {
+  try {
+    const prefix = `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:`;
+    return (await AsyncStorage.getAllKeys()).some((k) => k.startsWith(prefix) && match(Number(k.slice(prefix.length))));
+  } catch {
+    return false;
   }
 }
 

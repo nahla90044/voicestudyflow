@@ -19,7 +19,8 @@ const MAX_AGE_MS = 9 * 60 * 1000; // مهمة «قيد التشغيل» أقدم
 const jobKey = (k: string) => `vsf:aijob:${k}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string; table?: boolean };
+/** vpart: نصيب جزء الفيديو من خطة الوحدة (ملخّص الفيديو ٢) — حقل منظّم يقرؤه السيرفر، لا تعليمات داخل نص الكتاب */
+type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string; table?: boolean; vpart?: unknown };
 
 /** آخر مهمة اكتملت لكل جزء (لإعادة توليد مجانية إن رفض وكيل الجودة نتيجتها) */
 const lastDone = new Map<string, string>();
@@ -74,18 +75,21 @@ export async function jobPart<P>(
   onPartial: (p: P, chars: number) => void,
   extra: JobExtra = {},
   /** عدد الأحرف المكتوبة حتى الآن (لتقدّم حقيقي حتى لو لم يكتمل جزء قابل للعرض) */
-  onChars?: (chars: number) => void
+  onChars?: (chars: number) => void,
+  /** إيقاف المتابعة (مهلة خطة الفيديو): المهمة على السيرفر تكمل، والتطبيق يكفّ عن انتظارها */
+  signal?: { aborted: boolean }
 ): Promise<P> {
   const t0 = Date.now();
   try {
-    const r = await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra, onChars);
+    const r = await jobPartInner(action, ctx, key, parsePartial, parseFull, onPartial, extra, onChars, signal);
     recordPerf(`job.${action}`, Date.now() - t0, true, ctx.length);
     return r;
   } catch (e) {
     const m = (e as Error).message;
-    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;
+    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" || m === "RATE_LIMITED" || m === "ABORTED") throw e;
     // احتياط: تعذّرت مهمة السيرفر (أو لم تبدأ الكتابة) → البثّ المباشر المعتاد، فلا يتعطل التوليد أبدًا
-    if (m === "JOB_START" || m === "JOB_STALLED") return streamPart(action, ctx, parsePartial, parseFull, onPartial);
+    // (بخيارات الطلب نفسها: كان البثّ الاحتياطي يُسقط mode/table/deep)
+    if (m === "JOB_START" || m === "JOB_STALLED") return streamPart(action, ctx, parsePartial, parseFull, onPartial, extra);
     throw e;
   }
 }
@@ -98,7 +102,8 @@ async function jobPartInner<P>(
   parseFull: (raw: string) => P | null,
   onPartial: (p: P, chars: number) => void,
   extra: JobExtra = {},
-  onChars?: (chars: number) => void
+  onChars?: (chars: number) => void,
+  signal?: { aborted: boolean }
 ): Promise<P> {
   let id = await AsyncStorage.getItem(jobKey(key)).catch(() => null);
   if (!id) {
@@ -106,7 +111,7 @@ async function jobPartInner<P>(
     freeNext.delete(key);
     id = await startJob(action, ctx, free ? { ...extra, qaRetryOf: free } : extra).catch((e) => {
       const m = (e as Error).message;
-      throw new Error(m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" ? m : "JOB_START");
+      throw new Error(m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" || m === "RATE_LIMITED" ? m : "JOB_START");
     });
     await AsyncStorage.setItem(jobKey(key), id).catch(() => {});
   }
@@ -114,7 +119,9 @@ async function jobPartInner<P>(
   let lastLen = -1;
   let missing = 0;
   for (;;) {
+    if (signal?.aborted) throw new Error("ABORTED");
     if (AppState.currentState !== "active") await whenActive(); // السيرفر يكمل؛ نتابع عند الرجوع
+    if (signal?.aborted) throw new Error("ABORTED");
     const row = await readJob(id).catch(() => null);
     if (!row) {
       // المهمة غير موجودة (حُذفت/حساب آخر) بعد عدة محاولات → نبدأ من جديد
