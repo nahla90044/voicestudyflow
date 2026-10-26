@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { answerIndex, applyKeys, applySolve, chunkPages, dedupe, needsSolve, parseExtract, pickForQuiz } from "../lib/questionFilesCore.ts";
+import { answerIndex, answerNote, batchConfirm, applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, needsSolve, parseExtract, pickForQuiz } from "../lib/questionFilesCore.ts";
 
 test("تقسيم الصفحات لأجزاء بحد أقصى", () => {
   const pages = Array.from({ length: 5 }, (_, i) => ({ page: i + 1, text: "س".repeat(5000) }));
@@ -43,16 +43,51 @@ test("مفتاح الإجابات بصيغه المختلفة", () => {
   assert.equal(answerIndex("لا شيء", q), -1);
 });
 
-test("الحلّ من الكتاب: خيارات للمقالي، ولا يُستبدل جواب الملف", () => {
+test("الحلّ من الكتاب: خيارات للمقالي، وجواب الملف يُتحقق منه", () => {
   const qs = [
     { n: "1", q: "عرّف التنفيذ", type: "essay" as const, options: [], answer: -1, unit: 0 },
     { n: "2", q: "س", type: "mcq" as const, options: ["أ", "ب"], answer: 0, unit: 0, from: "file" as const },
+    { n: "3", q: "ص", type: "mcq" as const, options: ["أ", "ب", "ج"], answer: 2, unit: 0, from: "file" as const },
+    { n: "4", q: "ع", type: "mcq" as const, options: ["أ", "ب"], answer: 1, unit: 0, from: "file" as const },
   ];
-  const out = applySolve(qs, [0, 1], `[{"i":0,"answer":2,"options":["خطأ١","خطأ٢","إنزال الحكم واقعًا","خطأ٣"],"why":"لأن","quote":"هو إنزال","sure":true},{"i":1,"answer":1,"options":[]}]`);
+  assert.ok(qs.every(needsBook), "كل سؤال يُعرض على الكتاب حتى لو له جواب");
+  const out = applySolve(
+    qs,
+    [0, 1, 2, 3],
+    `[{"i":0,"answer":2,"options":["خطأ١","خطأ٢","إنزال الحكم واقعًا","خطأ٣"],"why":"لأن","quote":"هو إنزال","sure":true},{"i":1,"answer":1,"options":[],"sure":true},{"i":2,"answer":2,"options":[]},{"i":3,"answer":0,"options":[],"sure":false}]`
+  );
   assert.equal(out[0].answer, 2);
   assert.equal(out[0].options.length, 4);
-  assert.equal(out[0].from, "book");
-  assert.equal(out[1].answer, 0, "جواب الملف يبقى");
+  assert.equal(answerNote(out[0]), "book");
+  // الكتاب يخالف الملف بيقين: يُعتمد الكتاب ويُذكر جواب الملف
+  assert.equal(out[1].answer, 1);
+  assert.equal(out[1].fileAnswer, 0);
+  assert.equal(answerNote(out[1]), "fileFixed");
+  // مطابق
+  assert.equal(out[2].answer, 2);
+  assert.equal(answerNote(out[2]), "fileOk");
+  // خلاف بلا يقين: يبقى جواب الملف مع ما يرجّحه الكتاب
+  assert.equal(out[3].answer, 1);
+  assert.equal(out[3].bookAnswer, 0);
+  assert.equal(answerNote(out[3]), "fileDoubt");
+  assert.ok(out.every((q) => q.tried));
+});
+
+test("المكرر بين الملفات: يُحذف ما تحقّق منه ملف آخر، ويبقى المتحقَّق منه عند الدمج", () => {
+  const base = { n: "", type: "mcq" as const, options: ["أ", "ب"], unit: 0 };
+  const other = [{ ...base, q: "ما الخطر؟", answer: 1, tried: true, checked: true }];
+  const mine = [
+    { ...base, q: "ما الخَطَر ؟", answer: -1 },
+    { ...base, q: "ما القسط؟", answer: 0 },
+  ];
+  const r = dropKnown(mine, other);
+  assert.equal(r.dropped, 1);
+  assert.equal(r.questions[0].q, "ما القسط؟");
+  // سؤال لم يُتحقق منه في الملف الآخر بعد لا يُحذف (يُحلّ هنا)
+  assert.equal(dropKnown(mine, [{ ...other[0], tried: false }]).dropped, 0);
+  const d = dedupe([{ ...base, q: "س", answer: 0, from: "file" as const }, { ...base, q: "س", answer: 1, tried: true }]);
+  assert.equal(d.length, 1);
+  assert.equal(d[0].answer, 1, "المتحقَّق منه من الكتاب أولى");
 });
 
 test("حذف المكرر يُبقي الأكمل جوابًا، والاختيار للاختبار يلتزم بالوحدات والعدد", () => {
@@ -69,4 +104,17 @@ test("حذف المكرر يُبقي الأكمل جوابًا، والاختي�
   ];
   assert.equal(pickForQuiz(pool, [1], null).length, 2);
   assert.equal(pickForQuiz(pool, null, 2).length, 2);
+});
+
+test("دفعة ملفات: سؤال واحد بمجموع الطلبات، والملف المتعثر يُستثنى", async () => {
+  const asked: number[] = [];
+  const c = batchConfirm(3, async (n) => {
+    asked.push(n);
+    return true;
+  });
+  const a = c(5);
+  c.skip?.();
+  const b = c(7);
+  assert.deepEqual(await Promise.all([a, b]), [true, true]);
+  assert.deepEqual(asked, [12]);
 });

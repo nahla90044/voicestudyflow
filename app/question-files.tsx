@@ -11,8 +11,8 @@ import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../compone
 import { Radius, Spacing } from "../constants/design";
 import { confirmCost } from "../lib/costConfirm";
 import { useDir, useI18n } from "../lib/i18n";
-import { isQFileRunning, listQFiles, pickAndUpload, processQFile, removeQFile, watchQFiles, type QFile, type QFProgress } from "../lib/questionFiles";
-import { pickForQuiz } from "../lib/questionFilesCore";
+import { batchConfirm, isQFileRunning, listQFiles, pickAndUpload, processQFile, removeQFile, watchQFiles, type QFile, type QFProgress } from "../lib/questionFiles";
+import { dedupe, pickForQuiz } from "../lib/questionFilesCore";
 import { useScene } from "../lib/scene";
 import { getSyllabus } from "../lib/syllabus";
 
@@ -30,7 +30,7 @@ export default function QuestionFilesScreen() {
   const [files, setFiles] = useState<QFile[] | null>(null);
   const [units, setUnits] = useState<string[]>([]);
   const [prog, setProg] = useState<Record<string, QFProgress>>({});
-  const [adding, setAdding] = useState<"" | "upload" | "check">("");
+  const [adding, setAdding] = useState<{ s: "upload" | "check"; i: number; n: number } | null>(null);
   const [pickedUnits, setPickedUnits] = useState<number[]>([]); // فارغ = كل الوحدات
   const [count, setCount] = useState(20);
 
@@ -68,17 +68,17 @@ export default function QuestionFilesScreen() {
   async function onAdd() {
     if (adding) return;
     try {
-      const r = await pickAndUpload(bookId, setAdding);
-      setAdding("");
+      const r = await pickAndUpload(bookId, (s, i, n) => setAdding({ s, i, n }));
+      setAdding(null);
       if (!r) return;
-      if ("error" in r) {
-        Alert.alert(t("qfile.title"), r.error);
-        return;
-      }
-      setFiles((x) => [r, ...(x ?? [])]);
-      void processQFile(r, bookPdf, confirm);
+      if (r.errors.length) Alert.alert(t("qfile.title"), [t("qfile.someFailed"), ...r.errors].join("\n"));
+      if (!r.files.length) return;
+      setFiles((x) => [...r.files, ...(x ?? [])]);
+      // دفعة الملفات تُجهَّز معًا، بسؤال واحد عن مجموع الطلبات
+      const ask = r.files.length > 1 ? batchConfirm(r.files.length, (n) => confirmCost(n, "qfile", t, true, `qfile:batch:${n}`)) : confirm;
+      for (const f of r.files) void processQFile(f, bookPdf, ask);
     } catch {
-      setAdding("");
+      setAdding(null);
       Alert.alert(t("qfile.title"), t("qfile.err.generic"));
     }
   }
@@ -97,7 +97,8 @@ export default function QuestionFilesScreen() {
     ]);
   }
 
-  const all = (files ?? []).flatMap((f) => f.questions ?? []);
+  // أسئلة كل الملفات بلا تكرار بينها
+  const all = dedupe((files ?? []).flatMap((f) => f.questions ?? []));
   const ready = pickForQuiz(all, pickedUnits.length ? pickedUnits : null, null);
   const unitsWith = units.map((title, i) => ({ title, i, n: all.filter((q) => q.unit === i && q.answer >= 0 && q.options.length >= 2).length })).filter((u) => u.n > 0);
 
@@ -112,7 +113,19 @@ export default function QuestionFilesScreen() {
     const p = prog[f.id];
     if (p && p.stage !== "done" && p.stage !== "failed")
       return t(`qfile.stage.${p.stage}`, { done: p.stage === "pages" ? p.done : p.done + 1, total: p.total });
-    if (f.status === "ready") return t("qfile.ready", { n: f.questions.length, book: f.questions.filter((q) => q.from === "book").length });
+    if (f.status === "ready") {
+      const fixed = f.questions.filter((q) => q.fileAnswer !== undefined).length;
+      const doubt = f.questions.filter((q) => q.bookAnswer !== undefined || q.sure === false).length;
+      const dropped = f.meta?.dropped ?? 0;
+      return [
+        t("qfile.ready", { n: f.questions.length }),
+        fixed ? t("qfile.fixedN", { n: fixed }) : "",
+        doubt ? t("qfile.doubtN", { n: doubt }) : "",
+        dropped ? t("qfile.droppedN", { n: dropped }) : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
     if (f.status === "failed") return t("qfile.failed");
     return isQFileRunning(f.id) ? t("qfile.working") : t("qfile.paused");
   };
@@ -143,7 +156,7 @@ export default function QuestionFilesScreen() {
             style={({ pressed }) => [styles.btn, { flexDirection: dir.row, backgroundColor: pal.accent, opacity: pressed || adding ? 0.85 : 1 }]}
           >
             {adding ? <ActivityIndicator color={pal.onAccent} /> : <Ionicons name="document-attach-outline" size={20} color={pal.onAccent} />}
-            <Text style={[styles.btnTxt, { color: pal.onAccent }]}>{adding ? t(`qfile.stage.${adding}`) : t("qfile.add")}</Text>
+            <Text style={[styles.btnTxt, { color: pal.onAccent }]}>{adding ? (adding.n > 1 ? t(`qfile.stage.${adding.s}N`, { i: adding.i, n: adding.n }) : t(`qfile.stage.${adding.s}`)) : t("qfile.add")}</Text>
           </Pressable>
 
           {files.map((f) => {

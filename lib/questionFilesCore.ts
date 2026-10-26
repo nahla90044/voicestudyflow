@@ -19,6 +19,14 @@ export type QFQuestion = {
   /** مصدر الجواب: من الملف نفسه، أو حلّه الذكاء من الكتاب */
   from?: "file" | "book";
   sure?: boolean;
+  /** عُرض على نص الكتاب (حُلّ أو تُحقّق منه) — قرار نهلة ٢٦ أكتوبر: كل جواب يُتأكد منه من الكتاب */
+  tried?: boolean;
+  /** جواب الملف طابق الكتاب */
+  checked?: boolean;
+  /** جواب الملف خالف الكتاب بيقين فصُحّح: رقم خيار الملف الأصلي */
+  fileAnswer?: number;
+  /** جواب الملف خالف ما يرجّحه الكتاب دون يقين: يبقى جواب الملف وهذا ما يرجّحه الكتاب */
+  bookAnswer?: number;
 };
 
 /** أجزاء نص الملف (~١٢ ألف حرف)، مع رقم أول صفحة وآخرها لكل جزء */
@@ -122,23 +130,39 @@ export function applyKeys(qs: QFQuestion[], key: Record<string, string>): QFQues
   });
 }
 
-/** حذف المكرر (نفس نص السؤال)؛ يبقى الأكمل جوابًا */
+/** مفتاح السؤال للمقارنة: نصه بعد التطبيع (بلا تشكيل ولا ترقيم ولا فروق همزات) */
+export const qKey = (q: Pick<QFQuestion, "q">) => norm(q.q);
+
+/** وزن الأفضلية عند التكرار: المتحقَّق منه من الكتاب ثم ما له جواب */
+const rank = (q: QFQuestion) => (q.tried && q.answer >= 0 ? 2 : q.answer >= 0 ? 1 : 0);
+
+/** حذف المكرر (نفس نص السؤال، داخل ملف أو عبر الملفات)؛ يبقى الأكمل جوابًا والمتحقَّق منه */
 export function dedupe(qs: QFQuestion[]): QFQuestion[] {
   const seen = new Map<string, number>();
   const out: QFQuestion[] = [];
   for (const q of qs) {
-    const k = norm(q.q);
+    const k = qKey(q);
     const j = seen.get(k);
     if (j === undefined) {
       seen.set(k, out.length);
       out.push(q);
-    } else if (out[j].answer < 0 && q.answer >= 0) out[j] = q;
+    } else if (rank(q) > rank(out[j])) out[j] = q;
   }
   return out;
 }
 
+/** يحذف من أسئلة ملف ما سبق وجوده في ملفات الكتاب الأخرى (متحقَّقًا منه) — فلا يُحلّ مرتين ولا يتكرر في الاختبار */
+export function dropKnown(qs: QFQuestion[], others: QFQuestion[]): { questions: QFQuestion[]; dropped: number } {
+  const known = new Set(others.filter((q) => q.tried && q.answer >= 0).map(qKey));
+  const questions = qs.filter((q) => !known.has(qKey(q)));
+  return { questions, dropped: qs.length - questions.length };
+}
+
 /** يحتاج حلًّا من الكتاب: بلا جواب، أو بلا خيارات (أكمل/مقالي) */
 export const needsSolve = (q: QFQuestion) => q.answer < 0 || q.options.length < 2;
+
+/** يُعرض على الكتاب: كل سؤال لم يُعرض بعد — بلا جواب يُحلّ، وبجواب من الملف يُتحقق منه */
+export const needsBook = (q: QFQuestion) => !q.tried;
 
 /** يطبّق ردّ الحلّ على الأسئلة (بأرقامها في المجموعة المرسلة) */
 export function applySolve(qs: QFQuestion[], idx: number[], raw: string): QFQuestion[] {
@@ -158,16 +182,25 @@ export function applySolve(qs: QFQuestion[], idx: number[], raw: string): QFQues
     const opts = Array.isArray(s?.options) ? s.options.map((y: unknown) => String(y ?? "").trim()).filter(Boolean) : [];
     if (q.options.length < 2 && opts.length >= 2) q.options = opts;
     const a = Number(s?.answer);
+    const sure = s?.sure !== false;
     if (Number.isInteger(a) && a >= 0 && a < q.options.length) {
-      // جواب الملف (إن وُجد) لا يُستبدل
-      if (q.answer < 0 || q.from !== "file") {
+      if (q.from === "file" && q.answer >= 0) {
+        if (a === q.answer) q.checked = true;
+        else if (sure) {
+          // الكتاب يخالف الملف بيقين: يُعتمد جواب الكتاب ويُذكر جواب الملف
+          q.fileAnswer = q.answer;
+          q.answer = a;
+          q.from = "book";
+        } else q.bookAnswer = a; // غير متيقن: يبقى جواب الملف مع تنبيه بما يرجّحه الكتاب
+      } else {
         q.answer = a;
-        q.from = q.from === "file" ? "file" : "book";
+        q.from = "book";
       }
     }
     if (String(s?.why ?? "").trim()) q.why = String(s.why).trim();
     if (String(s?.quote ?? "").trim()) q.quote = String(s.quote).trim();
-    if (s?.sure === false) q.sure = false;
+    if (!sure) q.sure = false;
+    q.tried = true;
     out[idx[i]] = q;
   }
   return out;
@@ -187,4 +220,49 @@ export function pickForQuiz(qs: QFQuestion[], units: number[] | null, count: num
     [a[i], a[j]] = [a[j], a[i]];
   }
   return count ? a.slice(0, count) : a;
+}
+
+/** نوع ملاحظة مصدر الجواب في الاختبار */
+export type AnswerNote = "fileOk" | "fileFixed" | "fileDoubt" | "book" | "bookUnsure" | "file";
+export function answerNote(q: QFQuestion): AnswerNote {
+  if (q.fileAnswer !== undefined) return "fileFixed";
+  if (q.bookAnswer !== undefined) return "fileDoubt";
+  if (q.checked) return "fileOk";
+  if (q.from === "book") return q.sure === false ? "bookUnsure" : "book";
+  return "file";
+}
+
+/** عدد طلبات الحلّ/التحقق المتوقع لعدد أسئلة (مجموعات من ٢٠) */
+export const SOLVE_GROUP = 20;
+export const solveRequests = (n: number) => Math.ceil(n / SOLVE_GROUP);
+
+/** تأكيد التكلفة؛ skip يُستدعى إن تعثّر الملف قبل السؤال (لدفعة الملفات) */
+export type QConfirm = ((n: number) => Promise<boolean>) & { skip?: () => void };
+
+/**
+ * سؤال واحد لدفعة ملفات: ينتظر حتى يقرأ كل ملف صفحاته ويقدّر طلباته، ثم يسأل مرة بالمجموع،
+ * ويوزّع الجواب على الكل. الملف الذي يتعثر قبل التقدير يُستثنى (skip).
+ */
+export function batchConfirm(count: number, ask: (n: number) => Promise<boolean>): QConfirm {
+  let waiting = count;
+  let total = 0;
+  const resolvers: ((ok: boolean) => void)[] = [];
+  const fire = () => {
+    if (waiting > 0) return;
+    if (!resolvers.length) return;
+    const rs = resolvers.splice(0);
+    ask(total).then((ok) => rs.forEach((r) => r(ok)), () => rs.forEach((r) => r(false)));
+  };
+  const fn = ((n: number) =>
+    new Promise<boolean>((resolve) => {
+      total += n;
+      waiting--;
+      resolvers.push(resolve);
+      fire();
+    })) as QConfirm;
+  fn.skip = () => {
+    waiting--;
+    fire();
+  };
+  return fn;
 }

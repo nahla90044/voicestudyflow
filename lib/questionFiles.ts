@@ -13,7 +13,9 @@ import { getCurrentLang } from "./i18n";
 import { dict } from "./i18n/strings";
 import "./notify";
 import { extractPdfPageText } from "./pdfText";
-import { applyKeys, applySolve, chunkPages, dedupe, needsSolve, parseExtract, unitsHint, type QFQuestion } from "./questionFilesCore";
+import { applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, parseExtract, SOLVE_GROUP, unitsHint, type QConfirm, type QFQuestion } from "./questionFilesCore";
+
+export { batchConfirm, type QConfirm } from "./questionFilesCore";
 import { supabase } from "./supabase";
 import { getBookText, getSyllabus } from "./syllabus";
 import { summaryParts } from "./unitSummary";
@@ -27,8 +29,8 @@ export type QFile = {
   status: "reading" | "solving" | "ready" | "failed";
   done_chunks: number;
   total_chunks: number;
-  questions: (QFQuestion & { tried?: boolean })[];
-  meta: { key?: Record<string, string> };
+  questions: QFQuestion[];
+  meta: { key?: Record<string, string>; dropped?: number };
   created_at: string;
 };
 
@@ -36,7 +38,9 @@ export type QFProgress = { id: string; stage: "upload" | "check" | "pages" | "ex
 
 const t = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
 const MAX_BYTES = 60 * 1024 * 1024;
-const PER_SOLVE = 20;
+const PER_SOLVE = SOLVE_GROUP;
+/** طلبات تعمل معًا (استخراج أو تحقق): أسرع دون إغراق الخادم */
+const PARALLEL = 3;
 
 export async function listQFiles(bookId: string): Promise<QFile[]> {
   const { data, error } = await supabase.from("question_files").select("*").eq("book_id", bookId).order("created_at", { ascending: false });
@@ -69,30 +73,47 @@ async function save(id: string, patch: Partial<QFile>) {
   await supabase.from("question_files").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
 }
 
-/** يختار ملف PDF ويرفعه ويفحصه ويُنشئ سجلّه. null = ألغى الطالب الاختيار */
-export async function pickAndUpload(bookId: string, onStage: (s: "upload" | "check") => void): Promise<QFile | { error: string } | null> {
-  const res = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true });
-  if (res.canceled || !res.assets?.[0]) return null;
-  const file = res.assets[0];
-  if ((file.size ?? 0) > MAX_BYTES) return { error: t("qfile.err.size") };
-  const userId = await getUserId();
-  if (!userId) return { error: t("qfile.err.generic") };
+/** يرفع ملفًا واحدًا ويفحصه ويُنشئ سجلّه */
+async function uploadOne(bookId: string, userId: string, file: DocumentPicker.DocumentPickerAsset, onStage: (s: "upload" | "check") => void): Promise<QFile | { error: string }> {
+  const name = (file.name || "").replace(/\.pdf$/i, "").trim() || t("qfile.untitled");
+  if ((file.size ?? 0) > MAX_BYTES) return { error: `${name}: ${t("qfile.err.size")}` };
   onStage("upload");
   const path = `${userId}/${Date.now()}_q${Math.random().toString(36).slice(2, 10)}.pdf`;
   const buffer = await fetch(file.uri).then((r) => r.arrayBuffer());
   const { error: upErr } = await supabase.storage.from("pdfs").upload(path, buffer, { contentType: "application/pdf", upsert: false });
-  if (upErr) return { error: t("qfile.err.generic") };
+  if (upErr) return { error: `${name}: ${t("qfile.err.generic")}` };
   // الفحص الإلزامي نفسه للكتب (الأوامر الخفية والمحتوى) — ودوال القراءة لا تعمل بدونه
   onStage("check");
   const chk = await checkBook(path);
   if (chk.status !== "allow") {
     await supabase.storage.from("pdfs").remove([path]).catch(() => {});
-    return { error: chk.status === "error" ? t("qfile.err.check") : chk.advice || t("qfile.err.blocked") };
+    return { error: `${name}: ${chk.status === "error" ? t("qfile.err.check") : chk.advice || t("qfile.err.blocked")}` };
   }
-  const name = (file.name || "").replace(/\.pdf$/i, "").trim() || t("qfile.untitled");
   const { data, error } = await supabase.from("question_files").insert({ book_id: bookId, pdf_path: path, name }).select("*").single();
-  if (error || !data) return { error: t("qfile.err.generic") };
+  if (error || !data) return { error: `${name}: ${t("qfile.err.generic")}` };
   return data as QFile;
+}
+
+/**
+ * يختار ملف PDF واحدًا أو عدة ملفات معًا (قرار نهلة ٢٦ أكتوبر)، ويرفعها ويفحصها واحدًا واحدًا.
+ * null = ألغى الطالب الاختيار. onStage يُبلغ المرحلة ورقم الملف الحالي من المجموع.
+ */
+export async function pickAndUpload(
+  bookId: string,
+  onStage: (s: "upload" | "check", i: number, n: number) => void
+): Promise<{ files: QFile[]; errors: string[] } | null> {
+  const res = await DocumentPicker.getDocumentAsync({ type: "application/pdf", copyToCacheDirectory: true, multiple: true });
+  if (res.canceled || !res.assets?.length) return null;
+  const userId = await getUserId();
+  if (!userId) return { files: [], errors: [t("qfile.err.generic")] };
+  const files: QFile[] = [];
+  const errors: string[] = [];
+  for (let i = 0; i < res.assets.length; i++) {
+    const r = await uploadOne(bookId, userId, res.assets[i], (s) => onStage(s, i + 1, res.assets.length)).catch(() => ({ error: t("qfile.err.generic") }));
+    if ("error" in r) errors.push(r.error);
+    else files.push(r);
+  }
+  return { files, errors };
 }
 
 /** عدد صفحات الملف ونصوصها (القراءة الضوئية تلقائية للمصوّر) */
@@ -114,16 +135,16 @@ async function readPages(f: QFile, onPage: (done: number, total: number) => void
   return out.sort((a, b) => a.page - b.page);
 }
 
-/** عدد الطلبات المتوقع قبل البدء (أجزاء الاستخراج + الحلّ تقريبًا) */
+/** عدد الطلبات المتوقع قبل البدء: أجزاء الاستخراج + التحقق من كل الأجوبة من الكتاب (نحو ٣٠ سؤالًا لكل جزء) */
 export function estimateRequests(chunks: number): number {
-  return chunks + Math.max(1, Math.ceil(chunks / 2));
+  return chunks + Math.max(1, Math.ceil((chunks * 30) / SOLVE_GROUP));
 }
 
 /**
  * يعالج الملف حتى يجهز (أو يكمل من حيث توقف). confirm يُسأل مرة بعدد الطلبات المتوقع بعد قراءة الصفحات.
  * يعمل في الخلفية: مغادرة الشاشة لا توقفه، وإشعار عند الانتهاء.
  */
-export function processQFile(f: QFile, bookPdf: string, confirm: (n: number) => Promise<boolean>): Promise<void> {
+export function processQFile(f: QFile, bookPdf: string, confirm: QConfirm): Promise<void> {
   const cur = running.get(f.id);
   if (cur) return cur;
   const p = run(f, bookPdf, confirm).finally(() => running.delete(f.id));
@@ -131,8 +152,9 @@ export function processQFile(f: QFile, bookPdf: string, confirm: (n: number) => 
   return p;
 }
 
-async function run(f0: QFile, bookPdf: string, confirm: (n: number) => Promise<boolean>): Promise<void> {
+async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void> {
   let f = { ...f0 };
+  let asked = false;
   activateKeepAwakeAsync("qfile").catch(() => {});
   try {
     const units = (await getSyllabus(bookPdf).catch(() => null))?.data.units ?? [];
@@ -145,20 +167,31 @@ async function run(f0: QFile, bookPdf: string, confirm: (n: number) => Promise<b
       const pages = await readPages(f, (done, total) => emit({ id: f.id, stage: "pages", done, total }));
       const chunks = chunkPages(pages);
       if (!chunks.length) throw new Error("EMPTY");
-      if (f.done_chunks === 0 && !(await confirm(estimateRequests(chunks.length)))) {
-        emit({ id: f.id, stage: "failed", done: 0, total: 0, error: "CANCELLED" });
-        return;
+      if (f.done_chunks === 0) {
+        asked = true;
+        if (!(await confirm(estimateRequests(chunks.length)))) {
+          emit({ id: f.id, stage: "failed", done: 0, total: 0, error: "CANCELLED" });
+          return;
+        }
       }
       await save(f.id, { total_chunks: chunks.length });
-      for (let i = f.done_chunks; i < chunks.length; i++) {
+      // ٣ أجزاء معًا، والحفظ بعد كل دفعة: يكمل من هنا إن أُغلق التطبيق
+      for (let i = f.done_chunks; i < chunks.length; i += PARALLEL) {
         emit({ id: f.id, stage: "extract", done: i, total: chunks.length });
-        const raw = await aiAssist("qextract", `وحدات المقرر (رقم: عنوان — مواضيع):\n${hint || "(لا منهج بعد: unit = -1)"}\n\nنص ملف الأسئلة (الجزء ${i + 1} من ${chunks.length}):\n${chunks[i]}`, undefined, undefined, undefined, 180000);
-        const got = parseExtract(raw);
-        qs = [...qs, ...got.questions];
-        Object.assign(key, got.key);
-        // حفظ بعد كل جزء: يكمل من هنا إن أُغلق التطبيق
-        await save(f.id, { questions: qs, done_chunks: i + 1, meta: { ...f.meta, key } });
-        f = { ...f, done_chunks: i + 1 };
+        const idx = Array.from({ length: Math.min(PARALLEL, chunks.length - i) }, (_, k) => i + k);
+        const raws = await Promise.all(
+          idx.map((j) =>
+            aiAssist("qextract", `وحدات المقرر (رقم: عنوان — مواضيع):\n${hint || "(لا منهج بعد: unit = -1)"}\n\nنص ملف الأسئلة (الجزء ${j + 1} من ${chunks.length}):\n${chunks[j]}`, undefined, undefined, undefined, 180000)
+          )
+        );
+        for (const raw of raws) {
+          const got = parseExtract(raw);
+          qs = [...qs, ...got.questions];
+          Object.assign(key, got.key);
+        }
+        const done = i + idx.length;
+        await save(f.id, { questions: qs, done_chunks: done, meta: { ...f.meta, key } });
+        f = { ...f, done_chunks: done };
       }
       qs = dedupe(applyKeys(qs, key));
       await save(f.id, { questions: qs, status: "solving" });
@@ -166,31 +199,58 @@ async function run(f0: QFile, bookPdf: string, confirm: (n: number) => Promise<b
     }
 
     if (f.status === "solving") {
-      // ما لا جواب له يُحلّ من نص وحدته في الكتاب (مجموعات من ٢٠ سؤالًا)
+      // المكرر في ملفات الكتاب الأخرى (متحقَّقًا منه) يُحذف هنا: لا يُحلّ مرتين ولا يتكرر في الاختبار
+      const others = (await listQFiles(f.book_id).catch(() => [] as QFile[])).filter((o) => o.id !== f.id).flatMap((o) => o.questions ?? []);
+      const kept = dropKnown(qs, others);
+      if (kept.dropped) {
+        qs = kept.questions;
+        f.meta = { ...f.meta, dropped: (f.meta?.dropped ?? 0) + kept.dropped };
+        await save(f.id, { questions: qs, meta: f.meta });
+      }
+      // كل سؤال يُعرض على نص وحدته في الكتاب (قرار نهلة ٢٦ أكتوبر): ما لا جواب له يُحلّ، وجواب الملف يُتحقق منه
       const byUnit = new Map<number, number[]>();
       qs.forEach((q, i) => {
-        if (needsSolve(q) && !q.tried) byUnit.set(q.unit, [...(byUnit.get(q.unit) ?? []), i]);
+        if (needsBook(q)) byUnit.set(q.unit, [...(byUnit.get(q.unit) ?? []), i]);
       });
       const groups: { unit: number; idx: number[] }[] = [];
       byUnit.forEach((idx, unit) => {
         for (let k = 0; k < idx.length; k += PER_SOLVE) groups.push({ unit, idx: idx.slice(k, k + PER_SOLVE) });
       });
-      const ctxCache = new Map<number, string>();
-      for (let g = 0; g < groups.length; g++) {
-        emit({ id: f.id, stage: "solve", done: g, total: groups.length });
-        const { unit, idx } = groups[g];
-        let ctx = ctxCache.get(unit);
-        if (ctx === undefined) {
-          ctx =
+      const ctxCache = new Map<number, Promise<string>>();
+      const ctxOf = (unit: number) => {
+        let c = ctxCache.get(unit);
+        if (!c) {
+          c =
             unit >= 0 && units[unit]
-              ? (await summaryParts(bookPdf, { kind: "unit", unit }).catch(() => [] as string[])).join("\n\n").slice(0, 24000)
-              : await getBookText(bookPdf, 24000).catch(() => "");
-          ctxCache.set(unit, ctx);
+              ? summaryParts(bookPdf, { kind: "unit", unit }).then((p) => p.join("\n\n").slice(0, 24000), () => "")
+              : getBookText(bookPdf, 24000).catch(() => "");
+          ctxCache.set(unit, c);
         }
-        const list = idx.map((i, j) => ({ i: j, q: qs[i].q, options: qs[i].options, ...(qs[i].answerText ? { hint: qs[i].answerText } : {}) }));
-        const raw = await aiAssist("qsolve", `نص الكتاب:\n${ctx || "(غير متاح)"}\n\nالأسئلة:\n${JSON.stringify(list)}`, undefined, undefined, undefined, 180000);
-        qs = applySolve(qs, idx, raw);
-        idx.forEach((i) => (qs[i] = { ...qs[i], tried: true }));
+        return c;
+      };
+      let doneGroups = 0;
+      emit({ id: f.id, stage: "solve", done: 0, total: groups.length });
+      for (let g = 0; g < groups.length; g += PARALLEL) {
+        const batch = groups.slice(g, g + PARALLEL);
+        const raws = await Promise.all(
+          batch.map(async ({ unit, idx }) => {
+            const ctx = await ctxOf(unit);
+            const list = idx.map((i, j) => ({
+              i: j,
+              q: qs[i].q,
+              options: qs[i].options,
+              ...(qs[i].answer >= 0 && qs[i].options[qs[i].answer] ? { given: qs[i].options[qs[i].answer] } : {}),
+              ...(qs[i].answerText ? { hint: qs[i].answerText } : {}),
+            }));
+            return aiAssist("qsolve", `نص الكتاب:\n${ctx || "(غير متاح)"}\n\nالأسئلة:\n${JSON.stringify(list)}`, undefined, undefined, undefined, 180000);
+          })
+        );
+        batch.forEach(({ idx }, k) => {
+          qs = applySolve(qs, idx, raws[k]);
+          idx.forEach((i) => (qs[i] = { ...qs[i], tried: true }));
+        });
+        doneGroups += batch.length;
+        emit({ id: f.id, stage: "solve", done: doneGroups, total: groups.length });
         await save(f.id, { questions: qs });
       }
       await save(f.id, { questions: qs, status: "ready" });
@@ -198,6 +258,7 @@ async function run(f0: QFile, bookPdf: string, confirm: (n: number) => Promise<b
     emit({ id: f.id, stage: "done", done: 1, total: 1 });
     notify(f.name, true);
   } catch (e) {
+    if (!asked) confirm.skip?.();
     const msg = (e as Error).message;
     // الحصة أو الشبكة: يبقى الملف كما هو ويكمل لاحقًا من حيث توقف (لا يُعلَّم فاشلًا)
     emit({ id: f0.id, stage: "failed", done: 0, total: 0, error: msg });
@@ -218,8 +279,8 @@ async function notify(name: string, ok: boolean) {
   } catch {}
 }
 
-/** أسئلة كل ملفات الكتاب الجاهزة (للاختبار) */
+/** أسئلة كل ملفات الكتاب (للاختبار)، بلا تكرار بين الملفات */
 export async function bookQuestions(bookId: string): Promise<QFQuestion[]> {
   const files = await listQFiles(bookId).catch(() => [] as QFile[]);
-  return files.flatMap((f) => f.questions ?? []);
+  return dedupe(files.flatMap((f) => f.questions ?? []));
 }

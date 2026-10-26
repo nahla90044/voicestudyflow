@@ -21,7 +21,7 @@ import { addSavedItem } from "../lib/savedStudy";
 import { generateUnitQuiz, type QuizQ } from "../lib/syllabus";
 import { summaryToSpeech } from "../lib/studySummary";
 import { bookQuestions } from "../lib/questionFiles";
-import { pickForQuiz } from "../lib/questionFilesCore";
+import { answerNote, pickForQuiz, type QFQuestion } from "../lib/questionFilesCore";
 import { pickMix, pickSubset, wrongFor } from "../lib/quickPrepCore";
 import { getCachedSummary, summaryRange } from "../lib/unitSummary";
 import { unitTextParts } from "../lib/unitScope";
@@ -139,6 +139,22 @@ export default function UnitQuizScreen() {
           const all = await bookQuestions(String(book_id ?? ""));
           const us = typeof units === "string" && units !== "all" ? units.split(",").map(Number).filter(Number.isFinite) : null;
           const picked = pickForQuiz(all, us, Number(countParam) > 0 ? Number(countParam) : null);
+          const qNote = (q: QFQuestion) => {
+            switch (answerNote(q)) {
+              case "fileOk":
+                return t("qfile.note.fileOk");
+              case "fileFixed":
+                return t("qfile.note.fileFixed", { x: q.options[q.fileAnswer ?? 0] ?? "" });
+              case "fileDoubt":
+                return t("qfile.note.fileDoubt", { x: q.options[q.bookAnswer ?? 0] ?? "" });
+              case "bookUnsure":
+                return `${t("qfile.fromBook")} ${t("qfile.unsure")}`;
+              case "book":
+                return t("qfile.fromBook");
+              default:
+                return t("qfile.fromFile");
+            }
+          };
           if (on)
             setQuiz(
               picked.map((q) => ({
@@ -148,7 +164,8 @@ export default function UnitQuizScreen() {
                 level: "medium" as const,
                 type: q.type === "essay" ? ("def" as const) : q.type,
                 // مصدر الجواب ظاهر: من الملف، أو حلّه من الكتاب (وغير المؤكد منبَّه)
-                why: [q.from === "book" ? t("qfile.fromBook") : t("qfile.fromFile"), q.sure === false ? t("qfile.unsure") : "", q.why ?? ""].filter(Boolean).join(" "),
+                // مصدر الجواب والتحقق منه من الكتاب (قرار نهلة ٢٦ أكتوبر)
+                why: [qNote(q), q.why ?? ""].filter(Boolean).join(" "),
                 quote: q.quote,
                 unit: q.unit >= 0 ? q.unit : null,
                 page: null,
