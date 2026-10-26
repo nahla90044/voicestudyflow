@@ -2,6 +2,7 @@
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
 import { qaPart } from "./qualityAgent";
+import { stripPartMarker } from "./titleCore";
 import { checkSummaryPart } from "./qualityCore";
 import { jobPart } from "./aiJobs";
 import { getGenId, renewGenId } from "./genId";
@@ -200,7 +201,7 @@ export function mergeSummaries(list: StudySummary[]): StudySummary | null {
       return true;
     })
     .slice(0, 14);
-  return { title: ok[0].title, intro: ok[0].intro, sections, keypoints };
+  return { title: stripPartMarker(ok[0].title), intro: ok[0].intro, sections, keypoints };
 }
 
 /** علامات التمارين والأسئلة ودراسة الحالة في نص الوحدة */

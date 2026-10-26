@@ -7,6 +7,7 @@
 // «ملخّص الفيديو ٢» (٢٦ أكتوبر): خطة واحدة للوحدة أولًا (videoplan، مجانية)، ثم الأجزاء معًا كما كانت،
 // ولكل جزء نصيبه من الخطة — فلا تكرار ولا رجوع لموضوع، والأسئلة الختامية في آخر الفيديو.
 // الفيديوهات المحفوظة قبله تُعرض كما هي (لا تنظيف ولا إعادة توليد آلية).
+import { stripPartMarker } from "./titleCore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
@@ -65,7 +66,13 @@ function videoLabels(): VideoLabels {
 
 export async function getCachedVideo(pdfPath: string, src: SummarySource): Promise<VideoScript | null> {
   const v = await getUnitContent<VideoScript>(pdfPath, cacheIds(src).id, "video").catch(() => null);
-  return v?.scenes?.length ? v : null;
+  if (!v?.scenes?.length) return null;
+  // الفيديوهات المحفوظة قبل ٢٦ أكتوبر: يُحذف «(الجزء الأول)» من عنوانها وافتتاحها عند العرض
+  return {
+    ...v,
+    title: stripPartMarker(v.title ?? ""),
+    scenes: v.scenes.map((sc, i) => (i === 0 || sc.layout === "cover" ? { ...sc, title: stripPartMarker(sc.title ?? ""), narration: sc.narration ? stripPartMarker(sc.narration) : sc.narration } : sc)),
+  };
 }
 
 /** يحذف الفيديو المخزَّن وكل أجزائه وخطته ومهامه، بالمسارين القديم والجديد (إعادة التوليد أو الحذف) */

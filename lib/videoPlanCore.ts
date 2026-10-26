@@ -4,6 +4,7 @@
 // موجزة ثم يفصّلها في قسم آخر (م169 في قسمين). الآن: فهرس الوحدة (planInput) → خطة واحدة تجمع الأقسام
 // المتشابهة في موضوع واحد (normalizePlan، أو fallbackPlan آليًا) → أجزاء بحدود المواضيع، ولكل جزء
 // نصيبه من الخطة (ما شُرح قبله، وما يأتي بعده) فلا يعيد ولا يقفز (planParts).
+import { stripPartMarker } from "./titleCore.ts";
 import { parseJsonLenient } from "./jsonRepair.ts";
 import { keyWords, latinDigits, normKey } from "./qualityCore.ts";
 import { summaryToSpeech, type StudySummary, type SummaryBlock, type SummarySection } from "./studySummary.ts";
@@ -52,7 +53,7 @@ const oneLine = (v: unknown) =>
     .replace(/\s+/g, " ")
     .trim();
 const clip = (s: string, n: number) => (s.length <= n ? s : s.slice(0, Math.max(s.lastIndexOf(" ", n - 1), Math.floor(n * 0.6))).trim() + "…");
-const cleanTitle = (v: unknown) => clip(oneLine(v), 80);
+const cleanTitle = (v: unknown) => clip(stripPartMarker(oneLine(v)), 80);
 
 const isExBlock = (b: SummaryBlock) => b.type === "exercise" || b.type === "case";
 const exCountOf = (blocks: SummaryBlock[]) => blocks.reduce((a, b) => a + (b.type === "exercise" ? 1 : b.type === "case" ? Math.max(1, b.qa.length) : 0), 0);
