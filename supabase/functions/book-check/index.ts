@@ -22,7 +22,11 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 
 const MAX_BYTES = 150 * 1024 * 1024;
 const TEXT_PAGES = 36;
-const IMAGE_PAGES = 12;
+const IMAGE_PAGES = 8;
+// ميزانية زمن رسم صفحات الصور: الكتب المصوّرة الكبيرة (صفحة = صورة ضخمة) كانت تتجاوز حد ذاكرة/معالجة
+// الدالة (خطأ 546) فيفشل الفحص كله ويُرفض الكتاب — الآن تُفحص الصفحات حتى نفاد الميزانية ثم يُكتفى بها
+const IMAGE_BUDGET_MS = 1800;
+const TEXT_BUDGET_MS = 900;
 
 // سياسة المحتوى (قرار نهلة ١٩ أكتوبر ٢٠٢٦)
 const POLICY = `أنت وكيل مراجعة محتوى رصين وناضج لتطبيق دراسي. يصلك نص عيّنة من صفحات كتاب يريد المستخدم رفعه. احكم بحسب السياق والغرض، لا بمجرد ورود الكلمات.
@@ -46,8 +50,53 @@ function b64(bytes: Uint8Array): string {
 
 const LIKELY = new Set(["LIKELY", "VERY_LIKELY"]);
 
+/**
+ * فحص صورة صفحة واحدة (طلب داخلي من الدالة نفسها): لكل صفحة تشغيل مستقل بحدّه الخاص من زمن المعالجة،
+ * فالكتاب المصوّر الكبير لا يتجاوز حد المعالجة (كان يتجاوزه حين تُرسم الصفحات كلها في تشغيل واحد — ٢٦ أكتوبر).
+ */
+async function checkPageImage(pdfPath: string, page: number): Promise<any | null> {
+  const visionKey = Deno.env.get("GOOGLE_VISION_API_KEY");
+  if (!visionKey) return null;
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data: file } = await admin.storage.from("pdfs").download(pdfPath);
+  if (!file) return null;
+  const doc = mupdf.Document.openDocument(new Uint8Array(await file.arrayBuffer()), "application/pdf");
+  let pg: any = null;
+  let pix: any = null;
+  let content = "";
+  try {
+    pg = doc.loadPage(page);
+    // صفحة بحجمها الطبيعي (٧٢ نقطة/بوصة) تكفي لكشف الصور المخلة
+    pix = pg.toPixmap(mupdf.Matrix.scale(1, 1), mupdf.ColorSpace.DeviceRGB, false);
+    content = b64(pix.asJPEG(70, false) as Uint8Array);
+  } finally {
+    try { pix?.destroy?.(); } catch { /* */ }
+    try { pg?.destroy?.(); } catch { /* */ }
+    try { (doc as any).destroy?.(); } catch { /* */ }
+  }
+  if (!content) return null;
+  const vr = await fetch("https://vision.googleapis.com/v1/images:annotate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": visionKey },
+    body: JSON.stringify({ requests: [{ image: { content }, features: [{ type: "SAFE_SEARCH_DETECTION" }] }] }),
+  });
+  const vj = await vr.json().catch(() => ({}));
+  return vj?.responses?.[0]?.safeSearchAnnotation ?? null;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // طلب داخلي لفحص صورة صفحة واحدة (بمفتاح الخدمة فقط — لا يصل إليه المستخدم)
+  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (service && req.headers.get("x-vsf-internal") === service) {
+    try {
+      const b = await req.json().catch(() => ({}));
+      const ann = await checkPageImage(String(b.pdfPath ?? ""), Number(b.page ?? 0));
+      return json({ ann });
+    } catch (e) {
+      return json({ ann: null, error: (e as Error).message });
+    }
+  }
   const outdated = requireUpdatedApp(req, corsHeaders);
   if (outdated) return outdated;
   try {
@@ -81,11 +130,22 @@ Deno.serve(async (req: Request) => {
     // ١) نص عيّنة واسعة + الرموز الخفية والأوامر الموجّهة
     const textPages = pickPages(n, TEXT_PAGES);
     const texts: { i: number; t: string }[] = [];
+    const tText = performance.now();
     for (const i of textPages) {
+      // ميزانية زمن للنص أيضًا (الصفحات المصوّرة ثقيلة التحليل) — يُكتفى بما قُرئ
+      if (performance.now() - tText > TEXT_BUDGET_MS && texts.length >= 6) break;
+      // كل صفحة تُحرَّر فور قراءتها (mupdf يحتفظ بها في ذاكرة WASM حتى تُحرَّر صراحة)
+      let page: any = null;
+      let st: any = null;
       try {
-        texts.push({ i, t: doc.loadPage(i).toStructuredText("preserve-whitespace").asText() });
+        page = doc.loadPage(i);
+        st = page.toStructuredText("preserve-whitespace");
+        texts.push({ i, t: st.asText() });
       } catch {
         texts.push({ i, t: "" });
+      } finally {
+        try { st?.destroy?.(); } catch { /* */ }
+        try { page?.destroy?.(); } catch { /* */ }
       }
     }
     const all = texts.map((x) => x.t).join("\n");
@@ -97,33 +157,31 @@ Deno.serve(async (req: Request) => {
     // ٢ و٣ معًا (بالتوازي لتسريع الرفع): الصور عبر SafeSearch، وسياق النص عبر وكيل السياسة.
     // الحكم بعدها بالأولوية نفسها: الصور أولًا ثم السياق.
     const visionKey = Deno.env.get("GOOGLE_VISION_API_KEY");
+    // الصفحات المرشحة: الأوليان + أقل الصفحات نصًا (صفحات الصور). كل صفحة تُفحص في تشغيل داخلي مستقل بالتوازي
+    const byLowText = [...texts].sort((a, b) => a.t.length - b.t.length).map((x) => x.i);
+    const imgPages = [...new Set([...byLowText.slice(0, IMAGE_PAGES - 2), 0, 1].filter((i) => i < n))].slice(0, IMAGE_PAGES);
+    try { (doc as any).destroy?.(); } catch { /* */ }
     const imagesTask = (async (): Promise<any | null> => {
-      if (!visionKey) return null;
-      const byLowText = [...texts].sort((a, b) => a.t.length - b.t.length).map((x) => x.i);
-      const imgPages = [...new Set([...byLowText.slice(0, IMAGE_PAGES - 2), 0, 1].filter((i) => i < n))].slice(0, IMAGE_PAGES);
-      const requests = [];
-      for (const i of imgPages) {
-        try {
-          const pix = doc.loadPage(i).toPixmap(mupdf.Matrix.scale(1, 1), mupdf.ColorSpace.DeviceRGB, false);
-          requests.push({ image: { content: b64(pix.asJPEG(70, false) as Uint8Array) }, features: [{ type: "SAFE_SEARCH_DETECTION" }] });
-        } catch {
-          // صفحة تعذّر رسمها → نتجاوزها
-        }
-      }
-      if (!requests.length) return null;
-      const vr = await fetch("https://vision.googleapis.com/v1/images:annotate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": visionKey },
-        body: JSON.stringify({ requests }),
-      });
-      const vj = await vr.json().catch(() => ({}));
-      await admin.from("cost_log").insert({ user_id: caller.id, fn: "book-check", action: "safesearch", images: requests.length });
-      return (
-        (vj?.responses ?? []).find((r: any) => {
-          const s = r?.safeSearchAnnotation;
-          return s && LIKELY.has(s.adult) && !LIKELY.has(s.medical);
-        }) ?? null
+      if (!visionKey || !service) return null;
+      const base = Deno.env.get("SUPABASE_URL")!;
+      const anns = await Promise.all(
+        imgPages.map((page) =>
+          fetch(`${base}/functions/v1/book-check`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${service}`, "x-vsf-internal": service },
+            body: JSON.stringify({ pdfPath, page }),
+            signal: AbortSignal.timeout(60_000),
+          })
+            .then((r) => r.json())
+            .then((j) => j?.ann ?? null)
+            .catch(() => null) // صفحة تعذّر فحصها لا تُفشل الكتاب كله
+        )
       );
+      const checked = anns.filter(Boolean).length;
+      await admin.from("cost_log").insert({ user_id: caller.id, fn: "book-check", action: "safesearch", images: checked });
+      if (checked < imgPages.length) console.log("book-check images", { checked, of: imgPages.length });
+      const bad = anns.find((s: any) => s && LIKELY.has(s.adult) && !LIKELY.has(s.medical));
+      return bad ? { safeSearchAnnotation: bad } : null;
     })();
 
     const sample = all.replace(/\s+/g, " ").slice(0, 14000);
