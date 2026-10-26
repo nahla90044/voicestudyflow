@@ -243,7 +243,7 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
       };
       const ctxOf = async (unit: number, idx: number[]) => {
         await fillUnit(unit);
-        return pickPages(await bookPages(), idx.map((i) => qs[i].q + " " + qs[i].options.join(" ")), 40000, ranges[unit]);
+        return pickPages(await bookPages(), idx.map((i) => qs[i].q + " " + qs[i].options.join(" ")), 50000, ranges[unit]);
       };
       let doneGroups = 0;
       emit({ id: f.id, stage: "solve", done: 0, total: groups.length });
@@ -259,7 +259,8 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
               ...(qs[i].answer >= 0 && qs[i].options[qs[i].answer] ? { given: qs[i].options[qs[i].answer] } : {}),
               ...(qs[i].answerText ? { hint: qs[i].answerText } : {}),
             }));
-            return aiAssist("qsolve", `نص الكتاب:\n${ctx || "(غير متاح)"}\n\nالأسئلة:\n${JSON.stringify(list)}`, undefined, undefined, undefined, 180000);
+            // الأسئلة أولًا ثم نص الكتاب: إن قُصّ النص يبقى ما يُسأل عنه
+            return aiAssist("qsolve", `الأسئلة:\n${JSON.stringify(list)}\n\nنص الكتاب:\n${ctx || "(غير متاح)"}`, undefined, undefined, undefined, 180000);
           })
         );
         batch.forEach(({ idx }, k) => {

@@ -226,7 +226,9 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const action: string = body.action ?? "summarize";
     // حد أمان (الاختبار الشامل للوحدة يحتاج نصها كله تقريبًا، وفهرس خطة الفيديو حتى ١٨٠٠٠)
-    const text: string = (body.text ?? "").toString().slice(0, String(body.action) === "unitquiz" ? 30000 : String(body.action) === "videoplan" ? 20000 : 12000);
+    // حد النص لكل إجراء: التحقق من أسئلة الملف يحتاج صفحات الكتاب كاملة (كان يُقص عند ١٢ ألفًا فتضيع الأسئلة في آخره — ٢٦ أكتوبر)
+    const TEXT_CAP: Record<string, number> = { unitquiz: 30000, videoplan: 20000, qsolve: 60000, qextract: 20000 };
+    const text: string = (body.text ?? "").toString().slice(0, TEXT_CAP[String(body.action)] ?? 12000);
     const question: string = (body.question ?? "").toString().slice(0, 500);
     const targetLang: string = (body.targetLang ?? "ar").toString();
     // عدد مطلوب من البطاقات/الأسئلة (اختياري) — يحدّده المستخدم في التوليد المخصّص
