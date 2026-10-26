@@ -266,3 +266,41 @@ export function batchConfirm(count: number, ask: (n: number) => Promise<boolean>
   };
   return fn;
 }
+
+/** كلمات السؤال الدالّة (بلا أدوات قصيرة) للبحث عنها في صفحات الكتاب */
+const words = (s: string) => new Set(norm(s).split(" ").filter((w) => w.length >= 3));
+
+/**
+ * يختار من صفحات الوحدة أقربها لأسئلة المجموعة (بعدد الكلمات المشتركة) حتى حدّ الحروف، مرتبةً بترتيب الكتاب.
+ * الوحدة القصيرة تُرسل كلها؛ الطويلة (مئة صفحة وأكثر) تُرسل منها الصفحات التي تذكر ما في الأسئلة.
+ */
+export function pickPages(pages: { page: number; text: string }[], questions: string[], max = 40000, prefer?: { from: number; to: number }): string {
+  // صفحات الوحدة أولًا إن كانت معروفة (والوحدة القصيرة تُرسل كلها)، ويُكمَّل من بقية الكتاب بالأقرب للأسئلة
+  const inUnit = (p: { page: number }) => !!prefer && p.page >= prefer.from && p.page <= prefer.to;
+  const unitPages = pages.filter((p) => p.text.trim() && inUnit(p)).sort((a, b) => a.page - b.page);
+  const unitLen = unitPages.reduce((n, p) => n + p.text.length, 0);
+  if (prefer && unitPages.length && unitLen <= max * 0.75) {
+    const rest = pickPages(pages.filter((p) => !inUnit(p)), questions, max - unitLen);
+    return [unitPages.map((p) => `[ص ${p.page}]\n${p.text.trim()}`).join("\n\n"), rest].filter(Boolean).join("\n\n");
+  }
+  const all = pages.filter((p) => p.text.trim());
+  const total = all.reduce((n, p) => n + p.text.length, 0);
+  const fmt = (ps: typeof all) => ps.map((p) => `[ص ${p.page}]\n${p.text.trim()}`).join("\n\n");
+  if (total <= max) return fmt(all);
+  const qw = new Set<string>();
+  questions.forEach((q) => words(q).forEach((w) => qw.add(w)));
+  const scored = all.map((p) => {
+    let s = 0;
+    words(p.text).forEach((w) => qw.has(w) && s++);
+    return { p, s: s * (inUnit(p) ? 1.5 : 1) };
+  });
+  scored.sort((a, b) => b.s - a.s || a.p.page - b.p.page);
+  const out: typeof all = [];
+  let len = 0;
+  for (const { p } of scored) {
+    if (len + p.text.length > max) continue;
+    out.push(p);
+    len += p.text.length;
+  }
+  return fmt(out.sort((a, b) => a.page - b.page));
+}

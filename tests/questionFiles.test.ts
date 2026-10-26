@@ -2,7 +2,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { answerIndex, answerNote, batchConfirm, applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, needsSolve, parseExtract, pickForQuiz } from "../lib/questionFilesCore.ts";
+import { answerIndex, answerNote, batchConfirm, pickPages, applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, needsSolve, parseExtract, pickForQuiz } from "../lib/questionFilesCore.ts";
 
 test("تقسيم الصفحات لأجزاء بحد أقصى", () => {
   const pages = Array.from({ length: 5 }, (_, i) => ({ page: i + 1, text: "س".repeat(5000) }));
@@ -117,4 +117,18 @@ test("دفعة ملفات: سؤال واحد بمجموع الطلبات، وا�
   const b = c(7);
   assert.deepEqual(await Promise.all([a, b]), [true, true]);
   assert.deepEqual(asked, [12]);
+});
+
+test("صفحات التحقق: صفحات الوحدة أولًا، ومن الوحدة الطويلة الأقرب للأسئلة", () => {
+  const pages = [
+    { page: 1, text: "مقدمة عامة عن القانون" },
+    { page: 5, text: "عقد التأمين وسيلة قانونية" },
+    { page: 9, text: "القسط يتحدد بقوانين الإحصاء والمقاصة" },
+    { page: 12, text: "حديث عن الضرائب" },
+  ];
+  const a = pickPages(pages, ["كيف يتحدد القسط؟"], 10000, { from: 5, to: 9 });
+  assert.ok(a.indexOf("[ص 5]") < a.indexOf("[ص 9]"));
+  const b = pickPages(pages, ["كيف يتحدد القسط بقوانين الإحصاء؟"], 45);
+  assert.ok(b.includes("[ص 9]"));
+  assert.ok(!b.includes("[ص 12]"));
 });

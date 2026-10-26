@@ -13,12 +13,12 @@ import { getCurrentLang } from "./i18n";
 import { dict } from "./i18n/strings";
 import "./notify";
 import { extractPdfPageText } from "./pdfText";
-import { applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, parseExtract, SOLVE_GROUP, unitsHint, type QConfirm, type QFQuestion } from "./questionFilesCore";
+import { applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, parseExtract, pickPages, SOLVE_GROUP, unitsHint, type QConfirm, type QFQuestion } from "./questionFilesCore";
 
 export { batchConfirm, type QConfirm } from "./questionFilesCore";
 import { supabase } from "./supabase";
-import { getBookText, getSyllabus } from "./syllabus";
-import { summaryParts } from "./unitSummary";
+import { getCachedUnitRanges } from "./glossary";
+import { getSyllabus } from "./syllabus";
 
 export type QFile = {
   id: string;
@@ -157,7 +157,8 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
   let asked = false;
   activateKeepAwakeAsync("qfile").catch(() => {});
   try {
-    const units = (await getSyllabus(bookPdf).catch(() => null))?.data.units ?? [];
+    const syl = await getSyllabus(bookPdf).catch(() => null);
+    const units = syl?.data.units ?? [];
     const hint = unitsHint(units);
     let qs = [...(f.questions ?? [])];
     const key = { ...(f.meta?.key ?? {}) };
@@ -216,17 +217,33 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
       byUnit.forEach((idx, unit) => {
         for (let k = 0; k < idx.length; k += PER_SOLVE) groups.push({ unit, idx: idx.slice(k, k + PER_SOLVE) });
       });
-      const ctxCache = new Map<number, Promise<string>>();
-      const ctxOf = (unit: number) => {
-        let c = ctxCache.get(unit);
-        if (!c) {
-          c =
-            unit >= 0 && units[unit]
-              ? summaryParts(bookPdf, { kind: "unit", unit }).then((p) => p.join("\n\n").slice(0, 24000), () => "")
-              : getBookText(bookPdf, 24000).catch(() => "");
-          ctxCache.set(unit, c);
+      // نص الكتاب من صفحاته المحفوظة: صفحات وحدة السؤال أولًا، ويُكمَّل بأقرب صفحات الكتاب لأسئلة المجموعة
+      // (كان يُرسل ملخّص المنهج وحده أحيانًا فلا يجد النموذج ما يتحقق منه — ٢٦ أكتوبر)
+      let bookPagesP: Promise<{ page: number; text: string }[]> | null = null;
+      const bookPages = () => (bookPagesP ??= loadBookPages(bookPdf));
+      const ranges = syl?.data.ranges ?? (await getCachedUnitRanges(bookPdf, units.length).catch(() => null)) ?? [];
+      // صفحات الوحدة غير المقروءة بعد تُقرأ مرة (الكتاب المصوّر لا يُخزَّن نصه إلا عند قراءته)
+      const filled = new Map<number, Promise<void>>();
+      const fillUnit = (unit: number) => {
+        const rg = ranges[unit];
+        if (!rg) return Promise.resolve();
+        let p = filled.get(unit);
+        if (!p) {
+          p = (async () => {
+            const have = new Set((await bookPages()).map((x) => x.page));
+            const missing = Array.from({ length: rg.to - rg.from + 1 }, (_, k) => rg.from + k).filter((n) => !have.has(n)).slice(0, 80);
+            for (let k = 0; k < missing.length; k += 4) {
+              const got = await Promise.all(missing.slice(k, k + 4).map((n) => extractPdfPageText(bookPdf, n).then((r) => ({ page: n, text: r.text || "" })).catch(() => ({ page: n, text: "" }))));
+              (await bookPages()).push(...got.filter((g) => g.text.trim()));
+            }
+          })();
+          filled.set(unit, p);
         }
-        return c;
+        return p;
+      };
+      const ctxOf = async (unit: number, idx: number[]) => {
+        await fillUnit(unit);
+        return pickPages(await bookPages(), idx.map((i) => qs[i].q + " " + qs[i].options.join(" ")), 40000, ranges[unit]);
       };
       let doneGroups = 0;
       emit({ id: f.id, stage: "solve", done: 0, total: groups.length });
@@ -234,7 +251,7 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
         const batch = groups.slice(g, g + PARALLEL);
         const raws = await Promise.all(
           batch.map(async ({ unit, idx }) => {
-            const ctx = await ctxOf(unit);
+            const ctx = await ctxOf(unit, idx);
             const list = idx.map((i, j) => ({
               i: j,
               q: qs[i].q,
@@ -277,6 +294,18 @@ async function notify(name: string, ok: boolean) {
       trigger: null,
     });
   } catch {}
+}
+
+/** نصوص صفحات الكتاب المحفوظة (المقروءة أو المتعرَّف عليها ضوئيًا) بترتيبها */
+async function loadBookPages(pdfPath: string): Promise<{ page: number; text: string }[]> {
+  const out: { page: number; text: string }[] = [];
+  for (let from = 0; ; from += 500) {
+    const { data, error } = await supabase.from("page_cache").select("page,text").eq("pdf_path", pdfPath).neq("source", "empty").order("page").range(from, from + 499);
+    if (error || !data?.length) break;
+    out.push(...data.map((r: any) => ({ page: Number(r.page), text: String(r.text ?? "") })));
+    if (data.length < 500) break;
+  }
+  return out;
 }
 
 /** أسئلة كل ملفات الكتاب (للاختبار)، بلا تكرار بين الملفات */
