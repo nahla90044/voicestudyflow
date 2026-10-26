@@ -95,7 +95,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoplan: 5000, videoscript: 24000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
