@@ -11,6 +11,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
 import { jobPart } from "./aiJobs";
+import { getGenId, renewGenId } from "./genId";
 import { getCurrentLang } from "./i18n";
 import { dict } from "./i18n/strings";
 import { runParts, type PartsProgress } from "./partsRunner";
@@ -44,6 +45,8 @@ function cacheIds(src: SummarySource) {
 }
 // بصمة الملخّص في المفتاح: مهمة خطة لملخّص قديم (أو لوحدة أخرى بعد إعادة الترقيم) لا يُتصل بها
 const planKey = (pdfPath: string, id: number, sig: string) => `vid2:${pdfPath}:${id}:plan:${sig}`;
+/** نطاق «جلسة التوليد» لفيديو الوحدة (lib/genId): يتجدّد عند الحذف لإعادة التوليد فقط */
+const genScope = (pdfPath: string, id: number) => `vid:${pdfPath}:${id}`;
 
 const tr = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
 function videoLabels(): VideoLabels {
@@ -68,6 +71,8 @@ export async function getCachedVideo(pdfPath: string, src: SummarySource): Promi
 /** يحذف الفيديو المخزَّن وكل أجزائه وخطته ومهامه، بالمسارين القديم والجديد (إعادة التوليد أو الحذف) */
 export async function clearVideo(pdfPath: string, src: SummarySource): Promise<void> {
   const ids = cacheIds(src);
+  // جلسة توليد جديدة: إعادة التوليد اليدوية تُخصم (قرار ١٩ أكتوبر)، أما إعادات الأجزاء الآلية داخلها فمجانية
+  await renewGenId(genScope(pdfPath, ids.id));
   await removeUnitContent(pdfPath, ids.id, "video");
   await removeUnitContent(pdfPath, ids.id, "videoplan");
   await removeUnitContentWhere(pdfPath, "videopart", (u) => u >= ids.id * 1e4 && u < (ids.id + 1) * 1e4);
@@ -185,6 +190,8 @@ export async function getOrMakeVideo(
   const labels = videoLabels();
   const stats = { dropped: 0 };
   const merge = (list: VideoScript[]) => assembleVideo(list, { plan, n, labels, unitTitle, stats });
+  // معرّف جلسة التوليد مع كل جزء: السيرفر يخصم الجزء مرة واحدة في الجلسة، وإعاداته الآلية مجانية
+  const genId = await getGenId(genScope(pdfPath, ids.id));
   const results = await runParts<VideoScript, VideoScript>({
     parts: parts.map((p) => p.text),
     speedKey: "vsf:video:speed",
@@ -193,13 +200,14 @@ export async function getOrMakeVideo(
     load: (i) => getUnitContent<VideoScript>(pdfPath, ids.part2(n, i), "videopart2").then((x) => (x?.scenes?.length && x.ps === stamps[i] ? x : undefined)),
     save: (i, p) => setUnitContent(pdfPath, ids.part2(n, i), "videopart2", { ...p, ps: stamps[i] }),
     // وكيل الجودة: جزء أغفل موضوعًا، أو بلا أسئلته الختامية/تمارينه/أسئلة الفهم، أو يكرر مواضيع غيره → يُعاد مرة مجانًا
+    // (وكل إعادة آلية أخرى للجزء — توقّف، انقطاع، ردّ فارغ — مجانية أيضًا برصيد الجزء على السيرفر)
     run: (ctx, i, onPartial) => {
       const meta = parts[i].meta;
       return qaPart(
         `vid2:${pdfPath}:${ids.part2(n, i)}:${stamps[i]}`,
         "videoscript",
         ctx,
-        (key, qaRetryOf) => jobPart("videoscript", ctx, key, parsePartialVideo, parseVideo, onPartial, { qaRetryOf, vpart: meta }),
+        (key, qaRetryOf) => jobPart("videoscript", ctx, key, parsePartialVideo, parseVideo, onPartial, { qaRetryOf, vpart: meta, genId }),
         (v, c) => checkVideoPart(v, c, meta)
       ).then((v) => ({ ...v, done: true }));
     },

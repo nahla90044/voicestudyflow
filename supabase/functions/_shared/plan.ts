@@ -115,15 +115,20 @@ export async function consume(caller: Caller, kind: "voice" | "ai", amount: numb
 // ===== وكيل العدّاد: خصم مسجَّل في دفتر، وردّ تلقائي لخصم العمل الفاشل =====
 export type Charge = { ok: boolean; id: number | null };
 
-/** يخصم ويسجّل القيد (للمطابقة والردّ). ok=false: انتهت الحصة */
-export async function charge(caller: Caller, kind: "voice" | "ai", amount: number, action: string): Promise<Charge> {
+/**
+ * يخصم ويسجّل القيد (للمطابقة والردّ). ok=false: انتهت الحصة.
+ * extra: حقول إضافية للقيد (part_hash لرصيد الجزء). إن فشل الإدراج بها (قاعدة لم تُحدَّث بعد) يُعاد بدونها
+ * فلا يضيع القيد ولا الردّ.
+ */
+export async function charge(caller: Caller, kind: "voice" | "ai", amount: number, action: string, extra?: Record<string, unknown>): Promise<Charge> {
   const ok = await consume(caller, kind, amount);
   if (!ok || !caller) return { ok, id: null };
-  const { data } = await caller.admin
-    .from("usage_ledger")
-    .insert({ user_id: caller.id, period: periodOf(caller.plan), kind, amount: Math.max(1, Math.round(amount)), action })
-    .select("id")
-    .single();
+  const row = { user_id: caller.id, period: periodOf(caller.plan), kind, amount: Math.max(1, Math.round(amount)), action };
+  let { data, error } = await caller.admin.from("usage_ledger").insert({ ...row, ...extra }).select("id").single();
+  if (error && extra) {
+    console.error("usage_ledger extra", error.message);
+    ({ data } = await caller.admin.from("usage_ledger").insert(row).select("id").single());
+  }
   return { ok, id: (data?.id as number | undefined) ?? null };
 }
 

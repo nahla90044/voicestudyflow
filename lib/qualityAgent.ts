@@ -1,6 +1,7 @@
 // lib/qualityAgent.ts
 // وكيل الجودة للتوليد على أجزاء (الملخّص والفيديو): يفحص كل جزء فور اكتماله، فإن كان معيبًا يطلب
-// إعادة توليده مرة واحدة مجانًا (المهمة المرفوضة تُعلَّم على السيرفر فلا يُخصم من المستخدم).
+// إعادة توليده مرة واحدة مجانًا. المجانية يقرّرها السيرفر برصيد الجزء (نفس الجزء حرفيًا = إعادة لا تُخصم)،
+// سواء جاءت النتيجة الأولى من مهمة أو من بثّ؛ ورقم المهمة السابقة يُرسل أيضًا للتوافق مع السيرفر السابق.
 // المرة الثانية تُقبل كما هي (لا حلقة تكلفة)، وكل رفض يُسجَّل داخليًا للمراجعة.
 import { lastJobId } from "./aiJobs";
 import { recordPerf } from "./perf";
@@ -17,7 +18,7 @@ export async function qaPart<P>(
   if (!why) return first;
   const prev = lastJobId(key);
   recordPerf(`qa.${action}.${why}`, 0, false, ctx.length);
-  if (!prev) return first; // نتيجة من غير مهمة سيرفر: لا إعادة تُحسب على المستخدم
+  // (كانت النتيجة من غير مهمة سيرفر لا تُعاد خشية الخصم؛ رصيد الجزء على السيرفر يجعلها مجانية دائمًا)
   try {
     const second = await make(`${key}:qa`, prev);
     const why2 = check(second, ctx);
@@ -26,6 +27,6 @@ export async function qaPart<P>(
   } catch (e) {
     const m = (e as Error).message;
     if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;
-    return first;
+    return first; // ومنها RETRY_LIMIT: سقف الإعادات المجانية لهذا الجزء → تُقبل الأولى
   }
 }

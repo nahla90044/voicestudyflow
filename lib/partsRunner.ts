@@ -2,16 +2,16 @@
 // محرك مشترك للتوليد الطويل بالذكاء جزءًا جزءًا (الملخّص الشامل، ملخّص الفيديو):
 // - الأجزاء تُولَّد معًا (٣ في الوقت نفسه)، كل جزء ببثّ مباشر يظهر أولًا بأول بالترتيب.
 // - كل جزء يُحفظ على الجهاز فور اكتماله: قفل الشاشة/الخروج لا يضيّع ما اكتمل.
-// - الجزء المنقطع (التطبيق خرج من الواجهة) يُعاد تلقائيًا عند الرجوع ولا يُحسب محاولة فاشلة.
+// - الجزء المنقطع (التطبيق خرج من الواجهة) يُعاد تلقائيًا عند الرجوع ولا يُحسب محاولة فاشلة (حتى ٥ مرات).
 // - وقت متبقٍّ من سرعة الكتابة الفعلية المقيسة على الجهاز (تتحسّن مع كل استخدام).
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 
-import { aiAssist, aiAssistStream, type AiAction } from "./ai";
-import { keepPartial, visibleParts } from "./partsCore";
+import { aiAssistStream, type AiAction } from "./ai";
+import { afterPartError, keepPartial, visibleParts } from "./partsCore";
+import { recordPerf } from "./perf";
 
 const PARALLEL = 3;
-const MAX_TRIES = 3;
 
 export type PartsProgress<R> = { done: number; total: number; soFar: R | null; etaSec: number | null; waiting: boolean };
 
@@ -49,8 +49,10 @@ export function whenActive(): Promise<void> {
 }
 
 /**
- * جزء واحد ببثّ مباشر؛ احتياطًا طلب عادي إن تعذّر البثّ والتطبيق في الواجهة. يرمي WENT_AWAY إن انقطع بالخروج.
+ * جزء واحد ببثّ مباشر (احتياط مهمة السيرفر حين يتعذّر إنشاؤها). يرمي WENT_AWAY إن انقطع بالخروج.
  * extra: خيارات الطلب نفسها (mode/table/deep/vpart…) — كان البثّ الاحتياطي يُسقطها فيخرج ملخّص بغير أسلوبه (٢٦ أكتوبر)
+ * لا طلب عادي احتياطي بعد فشل البثّ (٢٦ أكتوبر): مهلته ١٥٠ ث أقصر من زمن الجزء الطويل، فكان السيرفر يكمله ويخصمه
+ * والتطبيق يرمي نتيجته؛ الآن يُرمى الخطأ ويعيد المحرك الجزء بمهمة جديدة (مجانية برصيد الجزء على السيرفر).
  */
 export async function streamPart<P>(
   action: AiAction,
@@ -79,9 +81,10 @@ export async function streamPart<P>(
     );
   } catch (e) {
     const em = (e as Error).message;
-    if (em === "USER_QUOTA" || em === "UNSAFE_CONTENT" || em === "ACCOUNT_LOCKED") throw e;
+    if (em === "USER_QUOTA" || em === "UNSAFE_CONTENT" || em === "ACCOUNT_LOCKED" || em === "RETRY_LIMIT") throw e;
     if (wentAway || AppState.currentState !== "active") throw new Error("WENT_AWAY");
-    raw = await aiAssist(action, ctx, undefined, undefined, undefined, 150000, undefined, undefined, undefined, extra);
+    recordPerf(`stream.${action}.failed`, 0, false, raw.length);
+    throw new Error("STREAM_FAILED");
   } finally {
     sub.remove();
   }
@@ -138,11 +141,15 @@ export async function runParts<P, R>(o: {
   report(true);
   const queue = o.parts.map((_, i) => i).filter((i) => final[i] === undefined);
   let quota: Error | null = null;
+  // اسم المحرك في سجل الأعطال (vsf:video:speed → video)
+  const name = o.speedKey.replace(/^vsf:/, "").replace(/:speed$/, "");
   const worker = async () => {
     while (queue.length && !quota) {
       const i = queue.shift()!;
-      for (let tries = 0; final[i] === undefined && !quota; ) {
-        if (AppState.currentState !== "active" && !o.parallel) {
+      for (let tries = 0, aways = 0, attempt = 0; final[i] === undefined && !quota; attempt++) {
+        // مهام السيرفر (parallel) تبدأ أول محاولة حتى قبل القفل؛ أما كل إعادة فتنتظر الرجوع للواجهة دائمًا
+        // (كانت إعادة «الخروج من الواجهة» تتكرر فورًا في الخلفية بلا حد — وكل طلب يُخصم)
+        if (AppState.currentState !== "active" && (!o.parallel || attempt > 0)) {
           waiting = true;
           report(true);
           await whenActive();
@@ -160,10 +167,15 @@ export async function runParts<P, R>(o: {
           learnSpeed(o.speedKey, chars[i], (Date.now() - started[i]) / 1000);
         } catch (e) {
           const m = (e as Error).message;
+          const step = afterPartError(m, tries, aways);
+          tries = step.tries;
+          aways = step.aways;
+          // كل عطل يُسجَّل (كان يُسجَّل النجاح وحده، فلا يُعرف ما حدث إلا من قيود الخصم)
+          recordPerf(`parts.${name}.${/^[A-Z_0-9]+$/.test(m) ? m : "ERROR"}`, Date.now() - started[i], false, o.parts[i].length);
           // انتهاء الحصة أو محتوى غير آمن أو حساب موقوف → يتوقف كل شيء فورًا (لا إعادة محاولة)
-          if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") quota = e as Error;
-          else if (m !== "WENT_AWAY" && ++tries >= MAX_TRIES) final[i] = null; // فشل حقيقي متكرر
-          else if (m !== "WENT_AWAY") await new Promise((r) => setTimeout(r, 1500 * tries)); // مهلة قبل إعادة المحاولة
+          if (step.verdict === "stop") quota = e as Error;
+          else if (step.verdict === "fail") final[i] = null; // فشل حقيقي متكرر، أو بلغ السيرفر سقف الإعادات المجانية
+          else if (step.verdict === "retry") await new Promise((r) => setTimeout(r, step.delayMs)); // مهلة قبل إعادة المحاولة
           chars[i] = 0;
         }
       }

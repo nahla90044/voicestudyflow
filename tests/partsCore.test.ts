@@ -29,3 +29,40 @@ test("keepPartial: محاولة جديدة بمشهدين لا تحلّ محل �
   assert.deepEqual(keepPartial(null, { n: 1 }, size), { n: 1 });
   assert.deepEqual(keepPartial(six, { n: 1 }), { n: 1 }); // بلا قياس: الأحدث دائمًا (السلوك القديم)
 });
+
+// ===== إعادة الجزء بعد خطأ (٢٦ أكتوبر) =====
+import { afterPartError, MAX_AWAY, MAX_TRIES } from "../lib/partsCore.ts";
+
+test("afterPartError: الحصة/المحتوى/الحساب توقف كل شيء، وسقف الإعادات المجانية يُفشل الجزء فورًا", () => {
+  for (const m of ["USER_QUOTA", "UNSAFE_CONTENT", "ACCOUNT_LOCKED"]) assert.equal(afterPartError(m, 0, 0).verdict, "stop");
+  const r = afterPartError("RETRY_LIMIT", 0, 0);
+  assert.equal(r.verdict, "fail");
+  assert.equal(r.tries, 0);
+});
+
+test("afterPartError: الأخطاء العادية تُعاد بمهلة متزايدة حتى ٣ محاولات", () => {
+  let tries = 0;
+  const seen: string[] = [];
+  for (let k = 0; k < MAX_TRIES; k++) {
+    const r = afterPartError("JOB_STALLED", tries, 0);
+    tries = r.tries;
+    seen.push(r.verdict);
+    if (r.verdict === "retry") assert.equal(r.delayMs, 1500 * tries);
+  }
+  assert.deepEqual(seen, ["retry", "retry", "fail"]);
+});
+
+test("afterPartError: الخروج من الواجهة ينتظر الرجوع ولا يُحسب محاولة — حتى ٥ مرات ثم يُحسب (كان بلا حد)", () => {
+  let aways = 0;
+  let tries = 0;
+  for (let k = 0; k < MAX_AWAY; k++) {
+    const r = afterPartError("WENT_AWAY", tries, aways);
+    assert.equal(r.verdict, "waitActive");
+    aways = r.aways;
+    tries = r.tries;
+  }
+  assert.equal(tries, 0);
+  const r = afterPartError("WENT_AWAY", tries, aways);
+  assert.equal(r.verdict, "retry");
+  assert.equal(r.tries, 1);
+});

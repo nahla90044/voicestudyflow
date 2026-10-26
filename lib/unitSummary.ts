@@ -4,6 +4,7 @@
 import { qaPart } from "./qualityAgent";
 import { checkSummaryPart } from "./qualityCore";
 import { jobPart } from "./aiJobs";
+import { getGenId, renewGenId } from "./genId";
 import { getSummaryMode } from "./summaryPrefs";
 import { runParts, type PartsProgress } from "./partsRunner";
 import { bookPages, getCachedUnitRanges, getUnitRanges } from "./glossary";
@@ -102,9 +103,19 @@ export async function summaryRange(pdfPath: string, src: SummarySource): Promise
   return rg ? { from: rg.from, to: rg.to } : null;
 }
 
+/**
+ * نطاق «جلسة التوليد» لملخّص (lib/genId): الصفحة/الوحدة/النطاق نفسه بكل مستوياته، ويتجدّد عند الحذف لإعادة التلخيص فقط.
+ * بلا المستوى عمدًا: «إعادة التلخيص بصفحات محددة» تحذف بلا مستوى ثم تولّد بمستوى الطالب (والمستوى داخل البصمة أصلًا)
+ */
+function sumGenScope(pdfPath: string, src: SummarySource): string {
+  return `sum:${pdfPath}:${src.kind}:${summaryCacheKey(src).id}`;
+}
+
 /** إعادة التلخيص: يحذف الملخّص المخزَّن وكل أجزائه ومهامه، فيُكتب من جديد */
 export async function clearSummary(pdfPath: string, src: SummarySource): Promise<void> {
   const k = summaryCacheKey(src);
+  // جلسة توليد جديدة: إعادة التلخيص اليدوية تُخصم (قرار ١٩ أكتوبر)، أما إعادات الأجزاء الآلية داخلها فمجانية
+  await renewGenId(sumGenScope(pdfPath, src));
   await removeUnitContent(pdfPath, k.id, k.kind);
   const base = partBase(src);
   await removeUnitContentWhere(pdfPath, "studysummarypart", (u) => u >= base && u < base + 1e4);
@@ -250,6 +261,8 @@ export async function getOrMakeSummary(
   const n = parts.length;
   const mode: SummaryLevel = src.level ?? (await getSummaryMode(pdfPath)) ?? "strict";
   const partId = summaryPartId(src, n);
+  // معرّف جلسة التوليد مع كل جزء: السيرفر يخصم الجزء مرة واحدة في الجلسة، وإعاداته الآلية مجانية
+  const genId = await getGenId(sumGenScope(pdfPath, src));
   const results = await runParts<StudySummary, StudySummary>({
     parts,
     speedKey: "vsf:summary:speed",
@@ -263,8 +276,8 @@ export async function getOrMakeSummary(
     run: (ctx, i, onPartial) =>
       qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
         isTableLevel(mode)
-          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true })
-          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf }),
+          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true, genId })
+          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId }),
         // الجدول مكثّف عمدًا: عتبة «قصير» أدنى (يُرفض الفارغ تقريبًا فقط)
         (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.015 : mode === "brief" ? 0.03 : 0.08)),
     merge: mergeSummaries,

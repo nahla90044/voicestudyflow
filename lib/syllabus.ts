@@ -144,7 +144,7 @@ async function unitExcerpts(pdfPath: string, units: { page: number; to: number }
  * طلب المنهج كمهمة سيرفر (مثل الملخّص): لا مهلة تقطعه، ولا يوقفه قفل الشاشة، ويتصل بنفس المهمة بعد
  * الرجوع. onWrite: نسبة ما كُتب تقريبًا (لشريط تقدّم حقيقي بدل التوقف عند رقم ثابت).
  */
-async function syllabusJob(pdfPath: string, text: string, units: number, onWrite?: (ratio: number) => void): Promise<Syllabus | null> {
+async function syllabusJob(pdfPath: string, text: string, units: number, onWrite?: (ratio: number) => void, genId?: string): Promise<Syllabus | null> {
   const { jobPart } = await import("./aiJobs");
   const expected = Math.max(1500, units * 420);
   return jobPart<Syllabus>(
@@ -154,7 +154,7 @@ async function syllabusJob(pdfPath: string, text: string, units: number, onWrite
     () => null,
     (raw) => parseSyllabus(raw),
     () => {},
-    {},
+    genId ? { genId } : {},
     (chars) => onWrite?.(Math.min(0.97, chars / expected))
   ).catch((e) => {
     const m = (e as Error).message;
@@ -201,6 +201,11 @@ export async function generateSyllabus(
 
   // ٣) المحتوى: مواضيع كل وحدة من صفحاتها هي (طلب واحد)، أو تحليل أول الكتاب إن لم توجد بنية
   onStage?.("content");
+  // معرّف جلسة التوليد = بصمة المنهج المحفوظ: إعادة الإنشاء اليدوية تُخصم (طلب واحد)، أما إعادة محاولة
+  // فشلت (المحفوظ لم يتغيّر) أو أول إنشاء تعثّر فمجانية برصيد الجزء على السيرفر
+  const { syllabusGenId } = await import("./genIdCore");
+  const { data: savedSyl } = await supabase.from("book_syllabus").select("data").eq("pdf_path", pdfPath).maybeSingle();
+  const genId = syllabusGenId(savedSyl?.data) || undefined;
   let syl: Syllabus | null = null;
   if (struct.length) {
     const ex = await unitExcerpts(pdfPath, struct);
@@ -215,7 +220,7 @@ export async function generateSyllabus(
       `وtopics محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط (حتى ٨ مواضيع قصيرة)، وoutcome ما يتعلمه الطالب منها في جملة. ` +
       `أعد JSON بالشكل {"title":"…","units":[{"title":"…","about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
       struct.map((u, i) => `### ${i + 1}. ${u.title} (ص ${u.page}–${u.to})\n${ex[i]}`).join("\n\n");
-    const ai = (await syllabusJob(pdfPath, brief, struct.length, onWrite))?.units ?? [];
+    const ai = (await syllabusJob(pdfPath, brief, struct.length, onWrite, genId))?.units ?? [];
     syl = {
       title: "",
       units: struct.map((u, i) => {
@@ -226,7 +231,7 @@ export async function generateSyllabus(
       tips: [],
     };
   } else {
-    const fromAi = await syllabusJob(pdfPath, text, 10, onWrite);
+    const fromAi = await syllabusJob(pdfPath, text, 10, onWrite, genId);
     if (!fromAi?.units.length) throw new Error("تعذّر إنشاء المنهج. يُرجى المحاولة مرة أخرى.");
     // نتيجة الذكاء نفسها تُفحص: لا وحدة مكررة
     const { unitKey } = await import("./unitStructure");

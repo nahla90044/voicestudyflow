@@ -10,6 +10,8 @@ import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { charge, getCaller, refund, type Caller, type Charge } from "../_shared/plan.ts";
 import { requireUpdatedApp } from "../_shared/client.ts";
+import { attemptOutcome, partHash, partScope, type Outcome } from "../_shared/partRetryCore.ts";
+import { claimPartRetry, partAttemptDone } from "../_shared/partRetry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -194,6 +196,29 @@ Deno.serve(async (req: Request) => {
   // وكيل العدّاد: خصم هذا الطلب (إن خُصم) — يُردّ تلقائيًا إن فشل العمل نفسه
   let charged: { caller: Caller; c: Charge } | null = null;
   const refundCharge = (reason: string) => (charged ? refund(charged.caller, charged.c, reason) : Promise.resolve());
+  // «رصيد الجزء»: محاولة هذا الطلب في دفتر الخصم (مدفوعة = أصل السلسلة، أو إعادة مجانية مربوطة به)
+  let attempt: { caller: NonNullable<Caller>; id: number | null; free: boolean } | null = null;
+  let finished = false;
+  /**
+   * حصيلة العمل (مرة واحدة لكل طلب): لأجزاء التوليد يقرّر الدفتر الردّ على مستوى السلسلة كلها
+   * (يُردّ الأصل فقط إن لم تُسلِّم أي محاولة شيئًا)؛ ولغيرها الردّ القديم: لا نتيجة = لا خصم.
+   */
+  const finish = async (outcome: Outcome, reason: string) => {
+    if (finished) return;
+    finished = true;
+    const nothing = outcome === "failed" || outcome === "empty";
+    if (!attempt) {
+      if (nothing) await refundCharge(reason);
+      return;
+    }
+    if (!attempt.id) {
+      if (nothing && !attempt.free) await refundCharge(reason);
+      return;
+    }
+    const r = await partAttemptDone(attempt.caller, attempt.id, outcome, reason);
+    // الدالة غير متاحة (القاعدة لم تُحدَّث) → الردّ القديم للمحاولة المدفوعة
+    if (!r.ok && nothing && !attempt.free) await refundCharge(reason);
+  };
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
@@ -260,10 +285,44 @@ Deno.serve(async (req: Request) => {
         return json({ result: targetLang === "en" ? ASK_OFFTOPIC.en : ASK_OFFTOPIC.ar, offtopic: true });
       }
     }
-    // وكيل الجودة رفض نتيجة مهمة سابقة (ملخّص/فيديو مقطوع أو قصير) → إعادة توليد واحدة مجانية لها:
-    // تُعلَّم المهمة الأصلية ذرّيًا (لنفس المستخدم ونفس الإجراء، منتهية، حديثة، لم تُستعمل) فلا تتكرر المجانية
-    let qaFree = false;
-    if (caller && typeof body.qaRetryOf === "string" && (action === "studysummary" || action === "videoscript" || action === "syllabus")) {
+    // «رصيد الجزء» (قرار نهلة ٢٦ أكتوبر): الطالب يدفع مرة واحدة لكل جزء، وكل إعادة آلية لنفس الجزء مجانية
+    // (انقطاع، ردّ فارغ أو غير مقروء، توقّف المهمة، فشل البثّ، رفض وكيل الجودة) — من أي مسار جاءت (مهمة/بثّ/طلب عادي)
+    // وبلا اعتماد على ما يتذكره التطبيق. البصمة من الطلب نفسه، والمجانية لنفس المستخدم ونفس الإجراء ونفس الجزء
+    // حرفيًا، خلال ٦ ساعات من الدفع، وبسقف ٣ إعادات تُسلِّم نصًا (القواعد في _shared/partRetryCore.ts).
+    // إعادة التوليد اليدوية: التطبيق يرسل genId جديدًا (أو regen) → بصمة جديدة → خصم عادي.
+    const isPart = COUNTED.has(action) && partScope(action, body);
+    let partH = "";
+    let freeRetry = false;
+    if (isPart) {
+      // deep كما يحسبه السيرفر أدناه (يغيّر المخرجات)؛ وvpart بعد تنقيحه (لا حقول عشوائية تغيّر البصمة)
+      partH = await partHash({ action, text, targetLang, mode: body.mode, table: body.table, deep: action === "studysummary" && (body.deep === true || body.mode === "expand"), vpart: vp, genId: body.genId });
+      const cl = body.regen === true ? null : await claimPartRetry(caller, action, partH);
+      // المالكة بلا حد (كبقية السقوف هنا): عند السقف يُسجَّل طلبها خصمًا عاديًا (أصلًا جديدًا) بدل الإيقاف
+      if (cl?.status === "limit" && caller.plan !== "owner") {
+        // السقف: لا خصم ولا توليد (يمنع إعادات مجانية بلا حد لنفس الجزء)
+        console.warn("part retry limit", action, cl.rootId);
+        return json({ error: "RETRY_LIMIT", retryLimit: true }, 200);
+      }
+      if (cl?.status === "free") {
+        freeRetry = true;
+        attempt = { caller, id: cl.attemptId, free: true };
+      }
+    }
+    // التوافق مع النسخ السابقة (قبل رصيد الجزء): وكيل الجودة رفض نتيجة مهمة سابقة → إعادة واحدة مجانية لها:
+    // تُعلَّم المهمة الأصلية ذرّيًا (لنفس المستخدم ونفس الإجراء، منتهية، حديثة، لم تُستعمل) فلا تتكرر المجانية.
+    // لا تُستعمل إلا إن لم يوجد أصل بالبصمة (مهمة سبقت النشر) — فلا تتجاوز سقف الرصيد
+    // سدّ ثغرة (مراجعة ٢٦ أكتوبر): المهمة السابقة يجب أن تكون مدفوعة فعلًا — قيد خصم غير مردود مربوط بها، ومن قبل
+    // رصيد الجزء (بلا part_hash؛ ما بعده تكفيه البصمة). كانت أي مهمة منتهية تصلح، ومنها المهام المجانية نفسها
+    // (إعادات البصمة وما مُنح بهذا المسار)، فتتسلسل طلبات مجانية بلا حد ولأي نص برقم مهمة يرسله التطبيق.
+    const paidJob = async (preHashOnly: boolean) => {
+      let q = caller.admin.from("usage_ledger").select("id").eq("user_id", caller.id).eq("ref", String(body.qaRetryOf)).gt("amount", 0).eq("refunded", false);
+      if (preHashOnly) q = q.is("part_hash", null);
+      return await q.limit(1);
+    };
+    const legacyQa = !freeRetry && typeof body.qaRetryOf === "string" && (action === "studysummary" || action === "videoscript" || action === "syllabus");
+    let paid = legacyQa ? await paidJob(true) : null;
+    if (paid?.error) paid = await paidJob(false); // القاعدة لم تُحدَّث بعد (لا عمود part_hash)
+    if (legacyQa && paid?.data?.length) {
       const { data: prev } = await caller.admin
         .from("ai_jobs")
         .update({ qa_retried: true })
@@ -275,12 +334,14 @@ Deno.serve(async (req: Request) => {
         .gte("created_at", new Date(Date.now() - 6 * 3600_000).toISOString())
         .select("id")
         .maybeSingle();
-      qaFree = !!prev;
+      freeRetry = !!prev;
     }
-    if (COUNTED.has(action) && !qaFree) {
-      const ch = await charge(caller, "ai", 1, action);
+    if (COUNTED.has(action) && !freeRetry) {
+      const ch = await charge(caller, "ai", 1, action, isPart ? { part_hash: partH } : undefined);
       if (!ch.ok) return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
       charged = { caller, c: ch };
+      // الخصم الأول لهذا الجزء = أصل السلسلة: الإعادات التالية لنفس البصمة تُربط به
+      if (isPart) attempt = { caller, id: ch.id, free: false };
     }
 
     // الترجمة: اللغة الهدف يختارها المستخدم (افتراضي العربية للتوافق الخلفي).
@@ -411,14 +472,43 @@ Deno.serve(async (req: Request) => {
       if (!caller) return json({ error: "AUTH" }, 401);
       const admin = caller.admin;
       const { data: row, error: insErr } = await admin.from("ai_jobs").insert({ user_id: caller.id, action }).select("id").single();
-      if (insErr || !row) return json({ error: insErr?.message ?? "JOB_CREATE" }, 500);
+      if (insErr || !row) {
+        // تعذّر إنشاء المهمة: لم يبدأ شيء → لا خصم (كان يرجع ٥٠٠ ويبقى الخصم)
+        await finish("failed", `job_create:${action}`);
+        return json({ error: insErr?.message ?? "JOB_CREATE" }, 500);
+      }
       const jobId = row.id as string;
-      // قيد الخصم مربوط بالمهمة: إن علقت يردّه الحارس تلقائيًا
-      if (charged?.c.id) await admin.from("usage_ledger").update({ ref: jobId }).eq("id", charged.c.id);
+      // قيد المحاولة (المدفوعة أو المجانية) مربوط بالمهمة: إن علقت يكمل الحارس حصيلتها ويردّ عند اللزوم
+      const ledgerId = attempt?.id ?? charged?.c.id;
+      if (ledgerId) await admin.from("usage_ledger").update({ ref: jobId }).eq("id", ledgerId);
+      // التحديث الأخير للمهمة: إن لم يوجد عمود stop_reason بعد (القاعدة لم تُحدَّث) يُعاد بدونه فلا تبقى «قيد التشغيل»
+      const jobFinal = async (f: Record<string, unknown>) => {
+        const { error } = await admin.from("ai_jobs").update(f).eq("id", jobId);
+        if (error && "stop_reason" in f) {
+          const { stop_reason: _drop, ...rest } = f;
+          await admin.from("ai_jobs").update(rest).eq("id", jobId);
+        }
+      };
       const work = (async () => {
         let all = "";
+        let stop: string | null = null;
         let lastSave = Date.now();
         const usage = { in: 0, out: 0 };
+        // كتابات المهمة بالترتيب (نبض/نص/نهاية): لا يكتب نبضٌ متأخر فوق نص أحدث
+        let q: Promise<unknown> = Promise.resolve();
+        const write = (f: Record<string, unknown>) => {
+          q = q.then(() => admin.from("ai_jobs").update(f).eq("id", jobId)).catch(() => {});
+          return q;
+        };
+        // نبض كل ١٠ ث حتى أثناء التفكير (قبل أي نص): التطبيق يعرف أن المهمة حية فلا يتركها ويطلب غيرها (٢٦ أكتوبر:
+        // تفكير النموذج تجاوز ٩٠ ث بلا نص فعُدّت المهمة ميتة وطُلب بثّ وطلب عادي، وكلٌّ خُصم).
+        // partial «مسافة» للنسخ السابقة من التطبيق: كانت تعدّ «لا نص خلال ٩٠ ث» موتًا للمهمة (والمسافة لا تُقرأ نصًا)
+        const beat = setInterval(() => {
+          if (Date.now() - lastSave < 9000) return;
+          lastSave = Date.now();
+          const now = new Date().toISOString();
+          void write(all ? { updated_at: now } : { partial: " ", updated_at: now });
+        }, 10_000);
         try {
           let st = client.messages.stream(params as Parameters<typeof client.messages.stream>[0]);
           if (deep) {
@@ -432,21 +522,39 @@ Deno.serve(async (req: Request) => {
           }
           for await (const ev of st) {
             if (ev.type === "message_start") usage.in = ev.message.usage?.input_tokens ?? 0;
-            if (ev.type === "message_delta") usage.out = ev.usage?.output_tokens ?? usage.out;
+            if (ev.type === "message_delta") {
+              usage.out = ev.usage?.output_tokens ?? usage.out;
+              stop = ev.delta?.stop_reason ?? stop;
+            }
             if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
               all += ev.delta.text;
               if (Date.now() - lastSave > 2500) {
                 lastSave = Date.now();
-                await admin.from("ai_jobs").update({ partial: all, updated_at: new Date().toISOString() }).eq("id", jobId);
+                void write({ partial: all, updated_at: new Date().toISOString() });
               }
             }
           }
-          await admin.from("ai_jobs").update({ status: "done", partial: all, result: all, updated_at: new Date().toISOString() }).eq("id", jobId);
+          clearInterval(beat);
+          await q;
+          const outcome = attemptOutcome({ text: all, stopReason: stop });
+          if (outcome === "empty") {
+            // انتهت بلا نص (مثلًا استهلك التفكير سقف المخرجات كله): «فاشلة» لا «منتهية» — فيعيدها التطبيق
+            // ولا يُحسب على الطالب (كانت تُعلَّم منتهية بنص فارغ ويبقى خصمها)
+            await jobFinal({ status: "failed", partial: all, error: `empty:${stop ?? ""}`, stop_reason: stop, updated_at: new Date().toISOString() });
+          } else {
+            // مقطوعة عند السقف (cut): تبقى «منتهية» ليأخذ التطبيق ما اكتمل منها، والسبب محفوظ للمتابعة
+            await jobFinal({ status: "done", partial: all, result: all, stop_reason: stop, updated_at: new Date().toISOString() });
+          }
+          await finish(outcome, `job_${outcome}:${action}`);
         } catch (e) {
+          clearInterval(beat);
+          await q;
           console.error("ai job", action, (e as Error).message);
-          await refundCharge(`job_failed:${action}`);
-          await admin.from("ai_jobs").update({ status: "failed", partial: all, error: (e as Error).message.slice(0, 300), updated_at: new Date().toISOString() }).eq("id", jobId);
+          // فشل المهمة لا يتحكم فيه التطبيق، وما كُتب منها لا يُستعمل → لم يُسلَّم شيء
+          await jobFinal({ status: "failed", partial: all, error: (e as Error).message.slice(0, 300), stop_reason: stop, updated_at: new Date().toISOString() });
+          await finish("failed", `job_failed:${action}`);
         } finally {
+          clearInterval(beat);
           await logCost(req, { fn: "ai-assist", action, model, input_tokens: usage.in, output_tokens: usage.out });
         }
       })();
@@ -459,22 +567,67 @@ Deno.serve(async (req: Request) => {
     // بدل انتظار الملخّص كاملًا (قد يتجاوز دقيقة). الحصة خُصمت أعلاه مرة واحدة.
     if (body.stream === true && (action === "studysummary" || action === "videoscript" || action === "videoplan")) {
       const enc = new TextEncoder();
+      let st: ReturnType<typeof client.messages.stream> | null = null;
+      let gone = false; // التطبيق أغلق الاتصال
       const stream = new ReadableStream({
         async start(ctrl) {
           const usage = { in: 0, out: 0 };
+          let all = "";
+          let sent = 0; // أحرف النص التي وصلت التطبيق فعلًا
+          let stop: string | null = null;
+          const push = (s: string) => {
+            if (gone) return false;
+            try {
+              ctrl.enqueue(enc.encode(s));
+              return true;
+            } catch {
+              gone = true;
+              return false;
+            }
+          };
+          // نبض أثناء التفكير قبل أول نص: مسافة كل ١٥ ث — كان التطبيق يقطع البثّ بعد ٤٥ ث صمت ويطلب غيره (مخصومًا)
+          const beat = setInterval(() => {
+            if (!sent) push(" ");
+          }, 15_000);
           try {
-            const st = client.messages.stream(plain as Parameters<typeof client.messages.stream>[0]);
+            st = client.messages.stream(plain as Parameters<typeof client.messages.stream>[0]);
             for await (const ev of st) {
               if (ev.type === "message_start") usage.in = ev.message.usage?.input_tokens ?? 0;
-              if (ev.type === "message_delta") usage.out = ev.usage?.output_tokens ?? usage.out;
-              if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") ctrl.enqueue(enc.encode(ev.delta.text));
+              if (ev.type === "message_delta") {
+                usage.out = ev.usage?.output_tokens ?? usage.out;
+                stop = ev.delta?.stop_reason ?? stop;
+              }
+              if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
+                all += ev.delta.text;
+                if (!push(ev.delta.text)) throw new Error("CLIENT_GONE");
+                sent += ev.delta.text.length;
+              }
             }
+            clearInterval(beat);
+            const outcome = attemptOutcome({ text: all, stopReason: stop });
+            await finish(outcome, `stream_${outcome}:${action}`);
           } catch (e) {
-            await refundCharge(`stream_failed:${action}`);
-            ctrl.enqueue(enc.encode(`\n[[STREAM_ERROR:${(e as Error).message}]]`));
+            clearInterval(beat);
+            // لم يصل التطبيقَ شيء → لا خصم. وصله نص ثم انقطع (قد يقطعه التطبيق نفسه) → لا ردّ، وإعادته مجانية بالرصيد
+            await finish(attemptOutcome({ text: all, error: true, delivered: sent }), `stream_failed:${action}`);
+            push(`\n[[STREAM_ERROR:${(e as Error).message}]]`);
           } finally {
-            ctrl.close();
+            clearInterval(beat);
+            try {
+              ctrl.close();
+            } catch {
+              // أُغلق من جهة التطبيق
+            }
             void logCost(req, { fn: "ai-assist", action, model, input_tokens: usage.in, output_tokens: usage.out });
+          }
+        },
+        cancel() {
+          // التطبيق أغلق الاتصال: نوقف التوليد فورًا (كان يكمل على حسابنا بلا قارئ)
+          gone = true;
+          try {
+            st?.abort();
+          } catch {
+            // انتهى أصلًا
           }
         },
       });
@@ -483,8 +636,10 @@ Deno.serve(async (req: Request) => {
 
     // بثّ دائمًا: المكتبة ترفض الطلب غير المبثوث إذا كبر سقف المخرجات (~٢١ ألف رمز) — كان هذا سبب
     // «تعذّر» اختبار ٢٥ سؤالًا فورًا (٢٥ أكتوبر)
+    let lastStop: string | null = null; // سبب توقّف النموذج (حصيلة المحاولة: مكتملة أم مقطوعة عند السقف)
     const ask = async (p: Record<string, unknown>) => {
       const m = await client.messages.stream(p as Parameters<typeof client.messages.stream>[0]).finalMessage();
+      lastStop = m.stop_reason ?? null;
       void logCost(req, { fn: "ai-assist", action, model, input_tokens: m.usage?.input_tokens, output_tokens: m.usage?.output_tokens });
       return m.content
         .filter((b) => b.type === "text")
@@ -518,10 +673,11 @@ Deno.serve(async (req: Request) => {
       result = await ask(params);
     }
 
-    if (!result) await refundCharge(`empty:${action}`); // لا نتيجة = لا خصم
+    // لا نتيجة = لا خصم (ولأجزاء التوليد: الدفتر يقرّر على مستوى السلسلة)
+    await finish(attemptOutcome({ text: result, stopReason: lastStop }), result ? `plain:${action}` : `empty:${action}`);
     return json({ result });
   } catch (error) {
-    await refundCharge("error");
+    await finish("failed", "error");
     return json({ error: (error as Error).message }, 500);
   }
 });
