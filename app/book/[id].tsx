@@ -12,6 +12,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "re
 
 import { BookCover } from "../../components/brand/book-cover";
 import { ExamDateSheet } from "../../components/brand/exam-date-sheet";
+import { StudyKindSheet } from "../../components/brand/study-kind-sheet";
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { PressableScale } from "../../components/brand/motion";
 import { NowPlayingDock } from "../../components/brand/now-playing-dock";
@@ -28,7 +29,8 @@ import { getBookReadiness, setExamDate, type BookReadiness } from "../../lib/rea
 import { unitsProgress } from "../../lib/studyTrack";
 import { getCachedUnitRanges, getUnitRanges, type UnitRange } from "../../lib/glossary";
 import { supabase } from "../../lib/supabase";
-import { getSyllabus, type Syllabus } from "../../lib/syllabus";
+import { getSyllabus, setStudyKind, type Syllabus } from "../../lib/syllabus";
+import { guessStudyKind, needsKindConfirm, studyKindOf, type StudyKind } from "../../lib/studyKindCore";
 
 type Book = { id: string; title: string; pdf_path: string; page_count: number | null };
 type Tab = "units" | "tools" | "saves";
@@ -99,6 +101,7 @@ export default function BookHubScreen() {
   const [ready, setReady] = useState<BookReadiness | null>(null);
   const [noteCount, setNoteCount] = useState(0); // صفحات الملاحظات المكتوبة لهذا الكتاب
   const [examOpen, setExamOpen] = useState(false);
+  const [kindOpen, setKindOpen] = useState(false);
   const [ranges, setRanges] = useState<UnitRange[] | null>(null);
   const [prepOn, setPrepOn] = useState(false); // خطة «الاستعداد السريع» جارية (شارة على الأداة)
 
@@ -303,6 +306,25 @@ export default function BookHubScreen() {
     { key: "focus", labelKey: "book.tool.focus", icon: "timer", go: () => router.push("/pomodoro") },
   ];
 
+  // نوع الدراسة (قرار ٢٧ أكتوبر): المحفوظ مع المنهج، وللكتب السابقة تخمين من وحداتها (لا يُحفظ إلا بتأكيد الطالب)
+  const kindData = syl
+    ? syl.data.kind
+      ? syl.data
+      : { kind: guessStudyKind([syl.data.title ?? "", ...syl.data.units.map((u) => `${u.title}\n${u.topics.join("\n")}`)]).kind }
+    : null;
+  const kindInfo = studyKindOf(kindData);
+  const askKind = !!kindData && needsKindConfirm(kindData);
+  const saveKind = async (k: StudyKind, exam?: string) => {
+    setKindOpen(false);
+    if (!syl) return;
+    try {
+      await setStudyKind(book.pdf_path, k, exam);
+      setSyl({ ...syl, data: { ...syl.data, kind: k, kindOk: true, exam: k === "cert" && exam?.trim() ? exam.trim() : undefined } });
+    } catch {
+      Alert.alert(t("kind.title"), t("kind.err"));
+    }
+  };
+
   return (
     <SceneScreen>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -347,9 +369,35 @@ export default function BookHubScreen() {
                             : t("book.examPast")}
                     </Text>
                   </PressableScale>
+                  {/* نوع الدراسة: يظهر بعد بناء المنهج، ويُغيَّر بضغطة */}
+                  {syl ? (
+                    <PressableScale
+                      onPress={() => setKindOpen(true)}
+                      style={[styles.chip, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
+                    >
+                      <Text style={[styles.chipTxt, { color: pal.ink }]} numberOfLines={1}>
+                        {t(`kind.${kindInfo.kind}`)}
+                        {kindInfo.exam ? ` · ${kindInfo.exam}` : ""}
+                      </Text>
+                    </PressableScale>
+                  ) : null}
                 </View>
               </View>
             </View>
+
+            {askKind ? (
+              <View style={[styles.kindAsk, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: pal.cardBorder }]}>
+                <Text style={[styles.kindAskTxt, { color: pal.ink, textAlign: dir.textAlign }]}>
+                  {t("kind.confirm", { kind: t(`kind.${kindInfo.kind}`) })}
+                </Text>
+                <PressableScale onPress={() => saveKind(kindInfo.kind, kindInfo.exam)} style={[styles.kindBtn, { backgroundColor: pal.accent }]}>
+                  <Text style={[styles.kindBtnTxt, { color: pal.onAccent }]}>{t("kind.yes")}</Text>
+                </PressableScale>
+                <PressableScale onPress={() => setKindOpen(true)} style={[styles.kindBtn, { borderColor: pal.accent, borderWidth: 1 }]}>
+                  <Text style={[styles.kindBtnTxt, { color: pal.accent }]}>{t("kind.change")}</Text>
+                </PressableScale>
+              </View>
+            ) : null}
 
             {pages > 0 && (
               <View style={[styles.progTrack, { backgroundColor: pal.track }]}>
@@ -612,6 +660,7 @@ export default function BookHubScreen() {
           setReady(await getBookReadiness(book.pdf_path));
         }}
       />
+      <StudyKindSheet visible={kindOpen} kind={kindInfo.kind} exam={kindInfo.exam} onClose={() => setKindOpen(false)} onSave={saveKind} />
       {/* الشريط العائم يرافق المستخدم هنا أيضًا */}
       <View style={styles.dockWrap}>
         <NowPlayingDock />
@@ -634,6 +683,10 @@ const styles = StyleSheet.create({
   chips: { flexWrap: "wrap", gap: 6, marginTop: 2 },
   chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: Radius.pill, borderWidth: StyleSheet.hairlineWidth },
   chipTxt: { fontSize: 11.5, fontWeight: "800" },
+  kindAsk: { alignItems: "center", gap: 8, padding: 10, borderRadius: Radius.lg, borderWidth: StyleSheet.hairlineWidth },
+  kindAskTxt: { flex: 1, fontSize: 13.5, fontWeight: "700", lineHeight: 20 },
+  kindBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.pill },
+  kindBtnTxt: { fontSize: 13, fontWeight: "800" },
   progTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
   progFill: { height: 6, borderRadius: 3 },
   cta: { height: 54, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", gap: 10 },

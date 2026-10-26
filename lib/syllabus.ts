@@ -4,13 +4,23 @@
 import { parseArrayLenient, parseJsonLenient } from "./jsonRepair";
 import { recordPerf } from "./perf";
 import { verifiedQuestions } from "./qualityCore";
+import { guessStudyKind, type StudyKind } from "./studyKindCore";
 import { aiAssist } from "./ai";
 import { supabase } from "./supabase";
 
 /** about: نبذة قصيرة عمّا تتناوله الوحدة (ليعرف الطالب ما هو مقبل عليه) */
 export type SyllabusUnit = { title: string; topics: string[]; outcome?: string; about?: string; objectives?: string[] };
 /** ranges: صفحات كل وحدة المتحقَّق منها (من الفهرس) — محفوظة مع المنهج فتصل كل الأجهزة بالصفحات نفسها */
-export type Syllabus = { title?: string; units: SyllabusUnit[]; tips?: string[]; ranges?: { from: number; to: number }[] };
+/** kind/kindOk/exam: «نوع الدراسة» للكتاب (قرار ٢٧ أكتوبر) — مخمَّن عند بناء المنهج ويؤكده الطالب؛ محفوظ مع المنهج فيصل كل الأجهزة */
+export type Syllabus = {
+  title?: string;
+  units: SyllabusUnit[];
+  tips?: string[];
+  ranges?: { from: number; to: number }[];
+  kind?: StudyKind;
+  kindOk?: boolean;
+  exam?: string;
+};
 
 export function parseSyllabus(raw: string): Syllabus | null {
   const m = raw.match(/\{[\s\S]*\}/);
@@ -247,6 +257,13 @@ export async function generateSyllabus(
   const { setUnitRanges } = await import("./glossary");
   if (struct.length) await setUnitRanges(pdfPath, struct.map((u) => ({ from: u.page, to: u.to, found: true })));
   if (struct.length) syl = { ...syl, ranges: struct.map((u) => ({ from: u.page, to: u.to })) };
+  // نوع الدراسة: ما أكّده الطالب يبقى عند إعادة الإنشاء، وإلا يُخمَّن من أول الكتاب ووحداته (بلا طلب)
+  const prev = savedSyl?.data as Syllabus | undefined;
+  if (prev?.kindOk && prev.kind) syl = { ...syl, kind: prev.kind, kindOk: true, exam: prev.exam };
+  else {
+    const g = guessStudyKind([syl.title ?? "", text, ...syl.units.map((u) => `${u.title}\n${u.topics.join("\n")}`)]);
+    syl = { ...syl, kind: g.kind, exam: g.exam };
+  }
   const { error } = await supabase.from("book_syllabus").upsert({ pdf_path: pdfPath, data: syl, done: new Array(syl.units.length).fill(false) });
   if (error) throw new Error("تعذّر حفظ المنهج. يُرجى المحاولة مرة أخرى.");
   return syl;
@@ -370,6 +387,15 @@ export async function generateMindmap(context: string): Promise<MindMap | null> 
 }
 
 /** يحدّث حالة إنجاز وحدة. */
+/** يحفظ «نوع الدراسة» الذي اختاره الطالب أو أكّده (مع المنهج) */
+export async function setStudyKind(pdfPath: string, kind: StudyKind, exam?: string): Promise<void> {
+  const { data } = await supabase.from("book_syllabus").select("data").eq("pdf_path", pdfPath).maybeSingle();
+  if (!data?.data) throw new Error("NO_SYLLABUS");
+  const next: Syllabus = { ...(data.data as Syllabus), kind, kindOk: true, exam: kind === "cert" && exam?.trim() ? exam.trim() : undefined };
+  const { error } = await supabase.from("book_syllabus").update({ data: next }).eq("pdf_path", pdfPath);
+  if (error) throw error;
+}
+
 export async function setUnitDone(pdfPath: string, done: boolean[]): Promise<void> {
   await supabase.from("book_syllabus").update({ done }).eq("pdf_path", pdfPath);
 }
