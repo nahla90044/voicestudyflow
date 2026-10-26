@@ -28,7 +28,7 @@ export { mergeVideo, parsePartialVideo, parseVideo, videoParts, type VideoScene,
 export type VideoProgress = PartsProgress<VideoScript>;
 
 /** مهلة خطة الوحدة (من وقت التطبيق في الواجهة): بعدها تُستعمل الخطة الآلية فلا ينتظر الطالب */
-const PLAN_MS = 45_000;
+const PLAN_MS = 100_000; // خطة الوحدة الطويلة تأخذ نحو دقيقة (٢٦ أكتوبر: ٤٥ ث كانت تُفوّتها فيُستعمل البديل الآلي)
 
 function cacheIds(src: SummarySource) {
   const k = summaryCacheKey(src);
