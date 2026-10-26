@@ -3,15 +3,21 @@
 // ليملأ أي شاشة (آيفون/آيباد، عمودي/أفقي) — فكل المحتوى يظهر كاملًا دائمًا بلا تمرير.
 // حركة مستمرة كالفيديو: خلفية تتحرك ببطء، والنقاط تظهر واحدة بعد الأخرى لحظة نطق الراوي لها
 // (من تقدّم الصوت الفعلي)، وترجمة نصية أسفل الإطار.
+// «شكل الشرائح» (look): يفوّض الرسم للشكل المختار (مجلة / بصري / سينمائي / منوّع — components/brand/slides)،
+// والرسم الحالي (LegacyStage) يبقى كما هو: بلا look، واحتياطًا إن تعثّر الشكل في مشهد.
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { Easing as REasing, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { resolveLayout, splitHead, type SlideLayout } from "../../lib/ai";
 import { useDir, useI18n } from "../../lib/i18n";
+import { useSlideFonts } from "../../lib/slideFonts";
+import { buildModel, captionAt, pickTheme, soloRole, THINK_SECONDS, type SceneRole, type SlideThemePref } from "../../lib/slideThemeCore";
 import type { VideoScene } from "../../lib/videoScriptCore";
 import { SLIDE_GRADIENTS } from "./slide-view";
+import { MIXED_CHROME, SlideBoundary, SlideMotion, THEMES, type SlideCtx, type SlideThemeModule } from "./slides";
 
 export const DW = 1280;
 export const DH = 720;
@@ -37,9 +43,20 @@ type Props = {
   /** مشهد السؤال السريع: السؤال ← التفكير ← الجواب */
   stage: "ask" | "think" | "reveal";
   thinkLeft: number;
-  caption: string | null;
+  /** نص الترجمة جاهزًا (الاستعمال القديم) — وإلا يُحسب من speech والتقدّم */
+  caption?: string | null;
   /** عرض الإطار الفعلي على الشاشة (الارتفاع = العرض × ٩/١٦) */
   width: number;
+  /** شكل الشرائح؛ غيابه = الرسم الحالي كما هو */
+  look?: SlideThemePref;
+  /** دور المشهد في الفيديو (sceneRole) — غيابه = دور المشهد منفردًا */
+  role?: SceneRole;
+  /** ما ينطقه الراوي الآن (الشرح، أو الجواب بعد الكشف) — null = بلا ترجمة */
+  speech?: string | null;
+  playing?: boolean;
+  unitTitle?: string;
+  /** مربع محجوز في الزاوية العليا اليسرى (زر ملء الشاشة) بالنقاط على الشاشة */
+  reserveCorner?: number;
 };
 
 /** عنصر يظهر بحركة ناعمة متى صار visible */
@@ -53,7 +70,118 @@ function Reveal({ visible, children, delay = 0, style }: { visible: boolean; chi
   );
 }
 
-export function VideoStage({ scene, index, total, progress, stage, thinkLeft, caption, width }: Props) {
+export function VideoStage(props: Props) {
+  // «الكلاسيكي» (خيار خامس أضافته نهلة ٢٦ أكتوبر) = الرسم الحالي
+  if (!props.look || props.look === "classic") return <LegacyStage {...props} />;
+  // أي خطأ في رسم الشكل يُرجع هذا المشهد إلى الرسم الحالي، والمشهد التالي يحاول الشكل من جديد
+  const where = `${props.look}:${props.scene?.kind === "check" ? "check" : (props.scene?.layout ?? "auto")}`;
+  return (
+    <SlideBoundary resetKey={`${props.look}|${props.index}`} where={where} fallback={<LegacyStage {...props} />}>
+      <ThemedStage {...props} look={props.look} />
+    </SlideBoundary>
+  );
+}
+
+/** طبقة المشهد: لا تُعاد رسمها مع كل تقدّم للراوي (المشهد يقرأ ctx.sv لا p) */
+const SceneLayer = React.memo(function SceneLayer({ Scene, ctx }: { Scene: SlideThemeModule["Scene"]; ctx: SlideCtx }) {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Scene ctx={ctx} />
+    </View>
+  );
+});
+
+/**
+ * الرسم بالشكل المختار: الخلفية دائمة (بلا key)، والمشهد يُركَّب من جديد مع كل مشهد أو شكل،
+ * ثم الترويسة والترجمة والانتقال. التقدّم قيمة مشتركة واحدة على مستوى الإطار تتبع الصوت بنعومة.
+ */
+function ThemedStage({ scene, index, total, progress, stage, thinkLeft, width, look, role, speech, playing = true, unitTitle = "", reserveCorner = 0 }: Props & { look: SlideThemePref }) {
+  const { t, lang } = useI18n();
+  const dir = useDir();
+  const ff = useSlideFonts();
+  const reduced = useReducedMotion();
+  const scale = width / DW;
+  const height = width * (DH / DW);
+  const r = role ?? soloRole(scene, index, total);
+  const m = useMemo(() => buildModel(scene, index, total, r), [scene, index, total, r]);
+  const theme = pickTheme(look, m);
+  const mixed = look === "mixed";
+  const chrome = mixed ? MIXED_CHROME : THEMES[theme];
+
+  // التقدّم المشترك: يُضبط فورًا عند تغيّر المشهد أو المرحلة أو نزول التقدّم (لا وميض للمشهد السابق)،
+  // وإلا يتقدّم بنعومة ١٨٠ مللي ثانية بين تحديثات الصوت
+  const sv = useSharedValue(progress);
+  const last = useRef<{ key: string; p: number } | null>(null);
+  useLayoutEffect(() => {
+    const key = `${index}|${stage}`;
+    const prev = last.current;
+    if (!prev || prev.key !== key || progress < prev.p || reduced) sv.value = progress;
+    else sv.value = withTiming(progress, { duration: 180, easing: REasing.linear });
+    last.current = { key, p: progress };
+  }, [index, stage, progress, reduced, sv]);
+
+  const corner = reserveCorner > 0 && scale > 0 ? reserveCorner / scale : 0;
+  const compact = width < 600;
+  const ctx = useMemo<SlideCtx>(
+    () => ({
+      m,
+      scene,
+      index,
+      total,
+      theme,
+      mixed,
+      bare: mixed,
+      sv,
+      phase: stage,
+      thinkLeft,
+      thinkSeconds: THINK_SECONDS,
+      playing,
+      reduced,
+      compact,
+      isRTL: dir.isRTL,
+      row: dir.row,
+      align: dir.textAlign,
+      safe: { corner, top: 56, side: 72, bottom: 110 },
+      ff,
+      t,
+      unitTitle,
+      lang: lang === "ar" ? "ar" : "en",
+    }),
+    [m, scene, index, total, theme, mixed, sv, stage, thinkLeft, playing, reduced, compact, dir, corner, ff, t, unitTitle, lang]
+  );
+  const motion = useMemo(() => ({ reduced, playing }), [reduced, playing]);
+  const Backdrop = chrome.Backdrop;
+  const Header = chrome.Header;
+  const Caption = chrome.Caption;
+  const Transition = chrome.Transition;
+
+  return (
+    <View style={[styles.frame, { width, height }]}>
+      <View style={[styles.canvas, { transform: [{ scale }], transformOrigin: "top left" }]} pointerEvents="none">
+        <SlideMotion.Provider value={motion}>
+          <View style={StyleSheet.absoluteFill}>
+            <Backdrop m={m} reduced={reduced} />
+          </View>
+          <SceneLayer key={`${index}|${theme}`} Scene={THEMES[theme].Scene} ctx={ctx} />
+          <View style={StyleSheet.absoluteFill}>
+            <Header ctx={ctx} p={progress} />
+          </View>
+          <View style={StyleSheet.absoluteFill}>
+            <Caption speech={speech ?? null} p={progress} phase={stage} ff={ff} t={t} isRTL={dir.isRTL} />
+          </View>
+          <View style={StyleSheet.absoluteFill}>
+            <Transition index={index} m={m} reduced={reduced} ff={ff} />
+          </View>
+        </SlideMotion.Provider>
+      </View>
+    </View>
+  );
+}
+
+/** الرسم الحالي كما كان قبل الأشكال (للاستعمالات بلا look، واحتياط الأشكال) */
+function LegacyStage({ scene, index, total, progress, stage, thinkLeft, caption: given, speech, width }: Props) {
+  // الترجمة: النص الجاهز إن مُرِّر، وإلا الجملة المنطوقة الآن من speech
+  const caption = given !== undefined ? given : speech ? captionAt(speech, progress).sentence || null : null;
   const dir = useDir();
   const { t } = useI18n();
   const scale = width / DW;

@@ -19,6 +19,10 @@ import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../compone
 import { VideoStage } from "../components/brand/video-stage";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
+import { dict } from "../lib/i18n/strings";
+import { preloadSlideFonts } from "../lib/slideFonts";
+import { useSlideThemePref } from "../lib/slideTheme";
+import { sceneRole, THEME_PREFS, THINK_SECONDS, type SlideThemePref } from "../lib/slideThemeCore";
 import { markSeen, resetVideoSeen, seenScenes } from "../lib/studyTrack";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
@@ -28,9 +32,17 @@ import { confirmCost } from "../lib/costConfirm";
 import { hasVideoJob, startVideoJob, videoJobKey, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking, VOICE_CATALOG } from "../lib/voice";
 
-const THINK_SECONDS = 5;
 const RATES = [1, 1.15, 1.3];
 const KEEP_TAG = "vsf-video-play";
+
+// «شكل الشرائح»: معاينة كل اختيار (تدرّج ألوانه + أيقونة) — الترتيب من THEME_PREFS: منوّع، مجلة، بصري، سينمائي
+const LOOK_PREVIEW: Record<SlideThemePref, { colors: [string, string]; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
+  mixed: { colors: ["#2A2370", "#B4A6FF"], icon: "shuffle", tint: "#FFFFFF" },
+  editorial: { colors: ["#0B0E26", "#3A2F14"], icon: "book", tint: "#F6D58A" },
+  visual: { colors: ["#1A2160", "#2C8F86"], icon: "git-network", tint: "#FFFFFF" },
+  cinematic: { colors: ["#050816", "#151049"], icon: "film", tint: "#F6D58A" },
+  classic: { colors: ["#3B82F6", "#6366F1"], icon: "albums", tint: "#FFFFFF" },
+};
 
 export default function UnitVideoScreen() {
   const { t } = useI18n();
@@ -63,6 +75,13 @@ export default function UnitVideoScreen() {
     setVoiceOpen(false);
     AsyncStorage.setItem("vsf:video:voice", v).catch(() => {});
   }
+
+  // شكل الشرائح: يُحفظ ويسري على كل الفيديوهات فورًا (عرض فقط — لا يعيد الصوت ولا يطلب شيئًا)
+  const [look, setLook] = useSlideThemePref();
+  // خطوط الشرائح تُحمَّل عند فتح الشاشة (لا في بداية التطبيق)؛ قبل اكتمالها تُرسم بخط النظام
+  useEffect(() => {
+    void preloadSlideFonts();
+  }, []);
 
   // دوائر المشاهد: ظاهرة أو مخفية حسب آخر اختيار
   const [showDots, setShowDots] = useState(true);
@@ -353,19 +372,11 @@ export default function UnitVideoScreen() {
   // إطار الفيديو ١٦:٩: يملأ عرض الشاشة (حتى ١١٠٠) — كل شيء ظاهر بلا تمرير
   const stageW = Math.min(winW - Spacing.lg * 2, 1100);
   const fullW = Math.min(winW, winH * (16 / 9));
-  // الترجمة: الجملة التي ينطقها الراوي الآن (من تقدّم الصوت)
-  const capText = (() => {
-    if (!cur || !captions) return null;
-    const txt = cur.kind === "check" && stage === "reveal" && cur.answer ? cur.answer : cur.narration;
-    const sents = txt.match(/[^.!؟?،]+[.!؟?]*/g)?.map((x) => x.trim()).filter(Boolean) ?? [txt];
-    const total = sents.reduce((n, x) => n + x.length, 0) || 1;
-    let acc = 0;
-    for (const x of sents) {
-      acc += x.length;
-      if (acc / total >= prog) return x;
-    }
-    return sents[sents.length - 1];
-  })();
+  // ما ينطقه الراوي الآن (الشرح، أو الجواب بعد الكشف): منه تُحسب الترجمة كلمةً كلمة داخل الإطار
+  const speech = playing && captions && cur ? (cur.kind === "check" && stage === "reveal" && cur.answer ? cur.answer : cur.narration) : null;
+  const sceneTotal = complete ? scenes.length : Math.max(scenes.length, idx + 2);
+  // دور المشهد (افتتاح، شرح، سؤال، خلاصة، «أسئلة الوحدة»، ختامي، تمرين) — يحدد شكله في «منوّع»
+  const role = sceneRole(scenes, idx, [dict.ar["video.qTitle"], dict.en["video.qTitle"]], sceneTotal);
 
   const fmtEta = (sec: number) => {
     const m = Math.round(sec / 60);
@@ -521,12 +532,17 @@ export default function UnitVideoScreen() {
                 <VideoStage
                   scene={cur}
                   index={idx}
-                  total={complete ? scenes.length : Math.max(scenes.length, idx + 2)}
+                  total={sceneTotal}
                   progress={playing ? prog : 1}
                   stage={stage}
                   thinkLeft={thinkLeft}
-                  caption={playing ? capText : null}
                   width={stageW}
+                  look={look}
+                  role={role}
+                  speech={speech}
+                  playing={playing}
+                  unitTitle={script?.title || unitTitle}
+                  reserveCorner={52}
                 />
                 <View style={styles.fsBtn}>
                   <Ionicons name="expand" size={18} color="#FFFFFF" />
@@ -577,17 +593,58 @@ export default function UnitVideoScreen() {
             <Pressable onPress={() => setRateIdx((r) => (r + 1) % RATES.length)} hitSlop={8} style={[styles.small, { backgroundColor: pal.soft }]} accessibilityLabel={t("reader.tool.speed")}>
               <Text style={[styles.rateTxt, { color: pal.ink }]}>{RATES[rateIdx]}×</Text>
             </Pressable>
-            {/* 🎙 صوت الراوي */}
-            <Pressable onPress={() => setVoiceOpen(true)} hitSlop={8} style={[styles.small, { backgroundColor: pal.soft }]} accessibilityLabel={t("video.voice")}>
+            {/* صوت الراوي وشكل الشرائح (الصف ممتلئ: زر واحد بشارة الشكل) */}
+            <Pressable onPress={() => setVoiceOpen(true)} hitSlop={8} style={[styles.small, { backgroundColor: pal.soft }]} accessibilityLabel={t("video.voiceAndLook")}>
               <Ionicons name="mic-outline" size={20} color={pal.ink} />
+              <View style={[styles.lookBadge, { backgroundColor: pal.accent, borderColor: pal.bg }]}>
+                <Ionicons name="color-palette" size={8} color={pal.onAccent} />
+              </View>
             </Pressable>
           </View>
           <Modal visible={voiceOpen} transparent animationType="slide" onRequestClose={() => setVoiceOpen(false)}>
             <Pressable style={styles.voiceMask} onPress={() => setVoiceOpen(false)}>
               <Pressable style={[styles.voiceSheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]} onPress={() => {}}>
+                <ScrollView contentContainerStyle={{ gap: 10 }} showsVerticalScrollIndicator={false}>
+                {/* شكل الشرائح: يُطبَّق فورًا دون إغلاق النافذة ودون إعادة الصوت */}
+                <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.look")}</Text>
+                <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("video.lookHint")}</Text>
+                <View style={[styles.lookGrid, { flexDirection: dir.row }]}>
+                  {THEME_PREFS.map((k) => {
+                    const on = look === k;
+                    const pv = LOOK_PREVIEW[k];
+                    return (
+                      <Pressable
+                        key={k}
+                        onPress={() => setLook(k)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        accessibilityLabel={`${t(`video.look.${k}`)}، ${t(`video.look.${k}Hint`)}`}
+                        style={[styles.lookCard, { flexDirection: dir.row, backgroundColor: pal.soft, borderColor: on ? pal.accent : pal.cardBorder }, on && styles.lookCardOn]}
+                      >
+                        <LinearGradient colors={pv.colors} start={{ x: 1, y: 0 }} end={{ x: 0, y: 1 }} style={styles.lookPreview}>
+                          <Ionicons name={pv.icon} size={22} color={pv.tint} />
+                        </LinearGradient>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={[styles.lookName, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={1}>
+                            {t(`video.look.${k}`)}
+                          </Text>
+                          <Text style={[styles.lookHint, { color: pal.dim, textAlign: dir.textAlign }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
+                            {t(`video.look.${k}Hint`)}
+                          </Text>
+                        </View>
+                        {on ? (
+                          <View style={[styles.lookCheck, { backgroundColor: pal.accent, [dir.isRTL ? "left" : "right"]: 6 }]}>
+                            <Ionicons name="checkmark" size={12} color={pal.onAccent} />
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={[styles.sheetSep, { backgroundColor: pal.cardBorder }]} />
                 <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.voice")}</Text>
                 <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("video.voiceHint")}</Text>
-                <ScrollView contentContainerStyle={[styles.voiceGrid, { flexDirection: dir.row }]}>
+                <View style={[styles.voiceGrid, { flexDirection: dir.row }]}>
                   {VOICE_CATALOG.filter((v) => (v.lang ?? "ar") === "ar").map((v) => {
                     const on = v.voiceId === voiceId;
                     return (
@@ -604,6 +661,7 @@ export default function UnitVideoScreen() {
                       </Pressable>
                     );
                   })}
+                </View>
                 </ScrollView>
               </Pressable>
             </Pressable>
@@ -685,12 +743,17 @@ export default function UnitVideoScreen() {
             <VideoStage
               scene={cur}
               index={idx}
-              total={complete ? scenes.length : Math.max(scenes.length, idx + 2)}
+              total={sceneTotal}
               progress={playing ? prog : 1}
               stage={stage}
               thinkLeft={thinkLeft}
-              caption={playing ? capText : null}
               width={fullW}
+              look={look}
+              role={role}
+              speech={speech}
+              playing={playing}
+              unitTitle={script?.title || unitTitle}
+              reserveCorner={0}
             />
           ) : (
             <Text style={styles.fsEnd}>{t("video.endDone")}</Text>
@@ -729,6 +792,15 @@ const styles = StyleSheet.create({
   voiceMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   voiceSheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 20, paddingBottom: 34, gap: 10, borderWidth: StyleSheet.hairlineWidth, maxHeight: "70%", maxWidth: 620, width: "100%", alignSelf: "center" },
   voiceGrid: { flexWrap: "wrap", gap: 8 },
+  lookBadge: { position: "absolute", top: 4, right: 4, width: 12, height: 12, borderRadius: 6, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  lookGrid: { flexWrap: "wrap", gap: 10 },
+  lookCard: { width: "48.4%", height: 84, borderRadius: 18, borderWidth: 1.5, padding: 10, gap: 10, alignItems: "center" },
+  lookCardOn: { borderWidth: 2.5 },
+  lookPreview: { width: 52, height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  lookName: { fontSize: 15, fontWeight: "900" },
+  lookHint: { fontSize: 12, lineHeight: 16, fontWeight: "600" },
+  lookCheck: { position: "absolute", top: 6, width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  sheetSep: { height: StyleSheet.hairlineWidth, marginVertical: 6 },
   voiceChip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10 },
   voiceTxt: { fontSize: 14.5, fontWeight: "800" },
   dotsToggleTxt: { fontSize: 13, fontWeight: "800" },
