@@ -385,7 +385,9 @@ export default function UnitQuizScreen() {
     : mixMode
     ? t("quiz2.headMix", { step: step + 1, total })
     : mockMode
-    ? t("quiz2.headMock", { step: Math.min(step + 1, total), total })
+    ? done
+      ? t("mock.title")
+      : t("quiz2.headMock", { step: Math.min(step + 1, total), total })
     : pageMode
       ? t("quiz2.headPage", { page: pageNum, step: step + 1, total })
       : t("quiz2.headUnit", { unit: unitIdx + 1, step: step + 1, total });
@@ -487,6 +489,7 @@ export default function UnitQuizScreen() {
           ready0={ready0}
           ready={ready}
           wrong={results.filter((r) => !r).length}
+          msg={mockMode ? t(results.filter(Boolean).length >= Math.ceil(total * 0.7) ? "mock.passLike" : "mock.belowPass") : undefined}
           extra={
             mockMode ? (
               <MockReport answers={mockAnswers} titles={unitTitles} unanswered={Math.max(0, total - results.length)} usedSec={Math.round((Date.now() - startedAt) / 1000)} />
@@ -694,7 +697,7 @@ function MockReport({ answers, titles, unanswered, usedSec }: { answers: { unit:
   );
 }
 
-function Result({ score, total, ready0, ready, wrong, extra }: { score: number; total: number; ready0: number | null; ready: number | null; wrong: number; extra?: React.ReactNode }) {
+function Result({ score, total, ready0, ready, wrong, extra, msg }: { score: number; total: number; ready0: number | null; ready: number | null; wrong: number; extra?: React.ReactNode; msg?: string }) {
   const { t } = useI18n();
   const { pal } = useScene();
   const tone = tones(pal);
@@ -725,7 +728,7 @@ function Result({ score, total, ready0, ready, wrong, extra }: { score: number; 
           </View>
         )}
         <Text style={[styles.resultMsg, { color: pal.ink }]}>
-          {score === total ? t("syllabus.quiz.perfect") : score >= Math.ceil(total / 2) ? t("syllabus.quiz.good") : t("syllabus.quiz.review")}
+          {msg ?? (score === total ? t("syllabus.quiz.perfect") : score >= Math.ceil(total / 2) ? t("syllabus.quiz.good") : t("syllabus.quiz.review"))}
         </Text>
         {wrong > 0 && <Text style={[styles.dim, { color: pal.dim }]}>{t("quiz2.wrongBack", { n: wrong })}</Text>}
       </SceneCard>
