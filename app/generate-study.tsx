@@ -1,6 +1,7 @@
 // app/generate-study.tsx
 // توليد مخصّص: يختار المستخدم الكتاب، والجزء (كامل/نطاق صفحات)، والنوع
 // (بطاقات/اختبار/ملخّص)، والعدد — فيولّد ويُحفظ في مركز المذاكرة.
+import { studyExtra } from "../lib/studyKind";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -126,7 +127,7 @@ export default function GenerateStudyScreen() {
         const n = await addCards(cards.map((c) => ({ ...c, bookId: book.id, bookTitle: book.title, page: whole ? undefined : f })));
         done(t("generate.done.cards", { count: n }));
       } else if (type === "quiz") {
-        const qs = await generateUnitQuiz(text, count);
+        const qs = await generateUnitQuiz(text, count, await studyExtra(book.pdf_path));
         if (qs.length === 0) throw new Error("empty");
         const srcId = f * 100000 + tt;
         await setUnitContent(book.pdf_path, srcId, "pagequiz", qs);

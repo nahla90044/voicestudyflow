@@ -279,9 +279,10 @@ function normLevel(v: any): QuizLevel {
 }
 
 /** يولّد كويز اختيار من متعدد متدرّج الصعوبة من محتوى وحدة (بعدد اختياري). */
-export async function generateUnitQuiz(context: string, count?: number): Promise<QuizQ[]> {
+/** extra: خيارات الطلب — { study: "language" } لكتب اللغة (اختبار مهارة لغوية لا محتوى) */
+export async function generateUnitQuiz(context: string, count?: number, extra?: Record<string, unknown>): Promise<QuizQ[]> {
   // الاختبار الكامل قد يأخذ أكثر من دقيقة: مهلة دقيقتين ونصف، والرد المقطوع تُحفظ أسئلته المكتملة
-  const raw = await aiAssist("unitquiz", context, undefined, undefined, count, 150000);
+  const raw = await aiAssist("unitquiz", context, undefined, undefined, count, 150000, undefined, undefined, undefined, extra);
   try {
     const arr = parseArrayLenient(raw) as any[];
     if (!arr.length) return [];

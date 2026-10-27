@@ -2,6 +2,7 @@
 // اختبار الجاهزية (تصميم 2.0): أسئلة الوحدة أو الصفحة أو «مراجعة الأخطاء».
 // كل إجابة تُسجَّل (lib/readiness) فتتحرّك الجاهزية أمام المستخدم مباشرة، والسؤال
 // الخاطئ يعود بعد يومين. الأسئلة تُولَّد مرة واحدة لكل وحدة وتُخزَّن.
+import { studyExtra } from "../lib/studyKind";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -223,6 +224,8 @@ export default function UnitQuizScreen() {
         const count = pageMode ? 6 : want > 0 ? Math.max(10, want) : await askCount(); // الصفحة الواحدة: ٦ أسئلة مباشرة
         if (!on || count === null) return;
         if (on) setLoading(true);
+        // كتب اللغة: أسئلة مهارة لغوية (قرار ٢٧ أكتوبر)؛ غيرها بلا حقل
+        const langStudy = await studyExtra(pdfPath);
         let ctx = "";
         if (pageMode) {
           const res = await extractPdfPageText(pdfPath, pageNum);
@@ -230,7 +233,8 @@ export default function UnitQuizScreen() {
         } else {
           // محتوى الوحدة نفسه (لا عنوانها وأهدافها): الملخص الشامل إن وُجد، وإلا نص صفحاتها
           const src = { kind: "unit" as const, unit: unitIdx };
-          const sum = (await getCachedSummary(pdfPath, src).catch(() => null)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }).catch(() => null));
+          // كتب اللغة: الاختبار من جمل الدرس نفسها (بلغتها) لا من الملخّص — أكمل الفراغ والتصريف يحتاجان النص الأصلي
+          const sum = langStudy.study ? null : (await getCachedSummary(pdfPath, src).catch(() => null)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }).catch(() => null));
           if (sum) ctx = summaryToSpeech(sum);
           if (ctx.trim().length < 1500) {
             const range = await summaryRange(pdfPath, src).catch(() => null);
@@ -242,7 +246,7 @@ export default function UnitQuizScreen() {
           if (on) setErr(t("syllabus.err.quiz"));
           return;
         }
-        const qs = await generateUnitQuiz(ctx, count || undefined);
+        const qs = await generateUnitQuiz(ctx, count || undefined, langStudy);
         if (qs.length === 0) {
           if (on) setErr(t("syllabus.err.quiz"));
           return;

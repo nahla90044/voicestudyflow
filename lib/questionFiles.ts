@@ -16,6 +16,7 @@ import { extractPdfPageText } from "./pdfText";
 import { applyKeys, applySolve, chunkPages, dedupe, dropKnown, needsBook, parseExtract, pickPages, SOLVE_GROUP, unitsHint, type QConfirm, type QFQuestion } from "./questionFilesCore";
 
 export { batchConfirm, type QConfirm } from "./questionFilesCore";
+import { studyExtra } from "./studyKind";
 import { supabase } from "./supabase";
 import { getCachedUnitRanges } from "./glossary";
 import { getSyllabus } from "./syllabus";
@@ -245,6 +246,8 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
         await fillUnit(unit);
         return pickPages(await bookPages(), idx.map((i) => qs[i].q + " " + qs[i].options.join(" ")), 50000, ranges[unit]);
       };
+      // كتب اللغة: تمارين القواعد تُحلّ بقواعد اللغة (قرار ٢٧ أكتوبر)
+      const study = await studyExtra(bookPdf);
       let doneGroups = 0;
       emit({ id: f.id, stage: "solve", done: 0, total: groups.length });
       for (let g = 0; g < groups.length; g += PARALLEL) {
@@ -260,7 +263,7 @@ async function run(f0: QFile, bookPdf: string, confirm: QConfirm): Promise<void>
               ...(qs[i].answerText ? { hint: qs[i].answerText } : {}),
             }));
             // الأسئلة أولًا ثم نص الكتاب: إن قُصّ النص يبقى ما يُسأل عنه
-            return aiAssist("qsolve", `الأسئلة:\n${JSON.stringify(list)}\n\nنص الكتاب:\n${ctx || "(غير متاح)"}`, undefined, undefined, undefined, 180000);
+            return aiAssist("qsolve", `الأسئلة:\n${JSON.stringify(list)}\n\nنص الكتاب:\n${ctx || "(غير متاح)"}`, undefined, undefined, undefined, 180000, undefined, undefined, undefined, study);
           })
         );
         batch.forEach(({ idx }, k) => {
