@@ -30,6 +30,7 @@ import { useScene } from "../../lib/scene";
 import { deleteSyllabus, regenerateUnits, removeUnits, resetUnitContent, type SyllabusState } from "../../lib/syllabusEdit";
 import { PressableScale } from "../../components/brand/motion";
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
+import { NextStepCard } from "./next-step-card";
 import {
   generateMindmap,
   generateSyllabus,
@@ -588,6 +589,10 @@ export function SyllabusView({ bookId: bookIdProp, title: titleProp, pdfPath: pd
         </View>
       ) : (
         <Scroll {...(embedded ? { style: [styles.scroll, styles.scrollEmbed] } : { contentContainerStyle: styles.scroll, showsVerticalScrollIndicator: false })}>
+          {/* الخطوة التالية: ماذا يفعل الطالب الآن (قرار نهلة ٢٧ أكتوبر) */}
+          {!selecting && canEdit ? (
+            <NextStepCard bookId={bookId} pdfPath={pdfPath} bookTitle={bookTitle} units={syl.units} done={done} prog={prog} ranges={ranges} />
+          ) : null}
           {/* عنوان + تقدّم */}
           <SceneCard style={styles.progCard}>
             {/* داخل صفحة الكتاب: اسم الكتاب ظاهر في أعلاها، فلا يُكرر إلا موضوع المنهج إن وُجد */}
