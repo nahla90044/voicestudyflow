@@ -21,7 +21,7 @@ import { DEFAULT_VOICE_ID, speakText, stopSpeaking, VOICE_CATALOG } from "../lib
 
 /** v: إصدار التقسيم — صفحة حُفظت بتقسيم أقدم تُعاد ترجمتها مرة */
 type PageData = { src: string[]; tr: string[]; v?: number };
-const SPLIT_V = 2;
+const SPLIT_V = 3;
 
 export default function BilingualReaderScreen() {
   const { t } = useI18n();

@@ -9,9 +9,11 @@ export function splitSentences(text: string, max = 60): string[] {
   // العنوان (بلا علامة ويليه حرف كبير) يبقى سطرًا مستقلًا
   const joined = String(text ?? "")
     .replace(/\r/g, "")
-    .replace(/([^.!?…:؟\n])\n+(?=\s*[\p{Ll},;)])/gu, "$1 ");
+    .replace(/([^.!?…:؟\n])\n+(?=\s*[\p{Ll},;)])/gu, "$1 ")
+    // رقم تمرين داخل السطر («… anglais. 2. Nous …») يبدأ جملة جديدة برقمه
+    .replace(/\s(\d{1,2}\.)\s+(?=[\p{Lu}\p{Lo}])/gu, "\n$1 ");
   const parts = joined
-    .split(/\n+|(?<=[.!?…؟])\s+(?=[\p{Lu}\p{Lo}«"“(\d])/u)
+    .split(/\n+|(?<=[.!?…؟])(?<!\b\d{1,2}\.)\s+(?=[\p{Lu}\p{Lo}«"“(\d])/u)
     .map((s) => s.replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const out: string[] = [];

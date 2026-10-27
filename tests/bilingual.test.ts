@@ -33,3 +33,11 @@ test("سطر انكسر في منتصف الجملة يُوصل، والعنوا
   const s = splitSentences("Conjugaison du verbe parler: je parle, nous parlons, vous\nparlez, ils/elles parlent.\nVocabulaire\nLe pain.");
   assert.deepEqual(s, ["Conjugaison du verbe parler: je parle, nous parlons, vous parlez, ils/elles parlent.", "Vocabulaire", "Le pain."]);
 });
+
+test("أرقام التمارين تبدأ جملها", () => {
+  assert.deepEqual(splitSentences("Complétez au présent 1. Tu (parler) ___ anglais. 2. Nous (manger) ___ du pain."), [
+    "Complétez au présent",
+    "1. Tu (parler) ___ anglais.",
+    "2. Nous (manger) ___ du pain.",
+  ]);
+});
