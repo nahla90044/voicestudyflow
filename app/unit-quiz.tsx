@@ -109,6 +109,7 @@ export default function UnitQuizScreen() {
   const [startedAt, setStartedAt] = useState(0);
   const [left, setLeft] = useState(0);
   const [mockAnswers, setMockAnswers] = useState<{ unit: number | null; correct: boolean }[]>([]);
+  const mockLock = useRef(-1);
   const [weak, setWeak] = useState<{ unit: number | null; untested: boolean }>({ unit: null, untested: true });
   const [bookId, setBookId] = useState("");
   const ctxRef = useRef({ unitCount: 0, readFraction: 0 });
@@ -335,6 +336,9 @@ export default function UnitQuizScreen() {
     const correct = opt === q.answer;
     if (mockMode) {
       // كالاختبار الحقيقي: لا يُكشف الجواب أثناءه — يُسجَّل وينتقل للسؤال التالي، والمراجعة في النهاية
+      // ضغطتان سريعتان لا تُحسبان لسؤال واحد مرتين ولا تتخطيان سؤالًا
+      if (mockLock.current === step) return;
+      mockLock.current = step;
       setResults((r) => [...r, correct]);
       setMockAnswers((a) => [...a, { unit: q.unit, correct }]);
       void recordAnswer(pdfPath, q, { unit: q.unit, page: q.page }, correct).catch(() => {});
