@@ -5,8 +5,12 @@ import { parseJsonLenient } from "./jsonRepair.ts";
 
 /** جمل الصفحة: عند علامات نهاية الجملة والأسطر؛ والقطعة القصيرة جدًا (رقم، حرف) تُلحق بما قبلها */
 export function splitSentences(text: string, max = 60): string[] {
-  const parts = String(text ?? "")
+  // سطر انكسر في منتصف جملة (التفاف PDF: لا ينتهي بعلامة ويبدأ التالي بحرف صغير أو فاصلة) يُوصل بما بعده؛
+  // العنوان (بلا علامة ويليه حرف كبير) يبقى سطرًا مستقلًا
+  const joined = String(text ?? "")
     .replace(/\r/g, "")
+    .replace(/([^.!?…:؟\n])\n+(?=\s*[\p{Ll},;)])/gu, "$1 ");
+  const parts = joined
     .split(/\n+|(?<=[.!?…؟])\s+(?=[\p{Lu}\p{Lo}«"“(\d])/u)
     .map((s) => s.replace(/\s+/g, " ").trim())
     .filter(Boolean);

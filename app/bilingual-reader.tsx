@@ -19,7 +19,9 @@ import { useScene } from "../lib/scene";
 import { getUnitContent, setUnitContent } from "../lib/unitContent";
 import { DEFAULT_VOICE_ID, speakText, stopSpeaking, VOICE_CATALOG } from "../lib/voice";
 
-type PageData = { src: string[]; tr: string[] };
+/** v: إصدار التقسيم — صفحة حُفظت بتقسيم أقدم تُعاد ترجمتها مرة */
+type PageData = { src: string[]; tr: string[]; v?: number };
+const SPLIT_V = 2;
 
 export default function BilingualReaderScreen() {
   const { t } = useI18n();
@@ -52,7 +54,7 @@ export default function BilingualReaderScreen() {
       setErr("");
       setData(null);
       const cached = await getUnitContent<PageData>(pdfPath, p, "bilingual").catch(() => null);
-      if (cached?.src?.length) return setData(cached);
+      if (cached?.src?.length && cached.v === SPLIT_V) return setData(cached);
       setBusy(true);
       try {
         const res = await extractPdfPageText(pdfPath, p);
@@ -64,7 +66,7 @@ export default function BilingualReaderScreen() {
         }
         const raw = await aiAssist("bilingual", JSON.stringify(src), undefined, getCurrentLang(), undefined, 90000);
         const tr = parseAligned(raw, src.length);
-        const d = { src, tr };
+        const d = { src, tr, v: SPLIT_V };
         if (tr.some(Boolean)) await setUnitContent(pdfPath, p, "bilingual", d);
         setData(d);
       } catch (e) {

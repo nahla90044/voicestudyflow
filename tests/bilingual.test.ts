@@ -28,3 +28,8 @@ test("قراءة تصحيح الكتابة", async () => {
   assert.equal(parseWriteCheck("لا شيء"), null);
   assert.equal(parseWriteCheck('{"errors":[]}'), null, "بلا نص مصحّح");
 });
+
+test("سطر انكسر في منتصف الجملة يُوصل، والعنوان يبقى", () => {
+  const s = splitSentences("Conjugaison du verbe parler: je parle, nous parlons, vous\nparlez, ils/elles parlent.\nVocabulaire\nLe pain.");
+  assert.deepEqual(s, ["Conjugaison du verbe parler: je parle, nous parlons, vous parlez, ils/elles parlent.", "Vocabulaire", "Le pain."]);
+});
