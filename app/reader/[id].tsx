@@ -472,6 +472,7 @@ export default function ReaderScreen() {
   const dictContextRef = useRef("");
   // كتاب لغة (نوع الدراسة): القاموس يضيف مثالًا ونطقًا وزر البطاقات (قرار ٢٧ أكتوبر)
   const [langBook, setLangBook] = useState(false);
+  const [dictCarded, setDictCarded] = useState(""); // آخر كلمة أُضيفت للبطاقات من القاموس
   useEffect(() => {
     if (!pdfPath) return;
     let on = true;
@@ -4291,14 +4292,16 @@ export default function ReaderScreen() {
                         <Text style={styles.dictSaveTxt}>{t("reader.dict.listen")}</Text>
                       </Pressable>
                       <Pressable
+                        disabled={dictCarded === dictWord}
                         onPress={async () => {
+                          // الكلمة نفسها مرة واحدة: الزر يتحول إلى «أُضيفت ✓» (الرسالة العائمة تختفي خلف النافذة)
                           const n = await addCards([{ front: dictWord, back: dictMeaning, kind: "words", bookId, bookTitle: typeof title === "string" ? title : undefined, page }]).catch(() => 0);
-                          showToast(n ? t("reader.dict.addedCard") : t("reader.dict.cardExists"));
+                          if (n) setDictCarded(dictWord);
                         }}
-                        style={[styles.dictSave, { flexDirection: dir.row }]}
+                        style={[styles.dictSave, { flexDirection: dir.row, opacity: dictCarded === dictWord ? 0.7 : 1 }]}
                       >
-                        <Ionicons name="albums" size={15} color={SKY.onAccent} />
-                        <Text style={styles.dictSaveTxt}>{t("reader.dict.toCards")}</Text>
+                        <Ionicons name={dictCarded === dictWord ? "checkmark-circle" : "albums"} size={15} color={SKY.onAccent} />
+                        <Text style={styles.dictSaveTxt}>{dictCarded === dictWord ? t("reader.dict.addedCard") : t("reader.dict.toCards")}</Text>
                       </Pressable>
                     </>
                   ) : null}

@@ -48,3 +48,11 @@ test("التمرين كاملًا: الجواب بين الخيارات بموض
     assert.equal(new Set(it.options.map((o) => o.toLowerCase())).size, 4);
   }
 });
+
+test("لا خيار من كلمات الجملة نفسها", () => {
+  const items = makeListenItems(TEXT, 8, rnd);
+  for (const it of items) {
+    const inS = new Set(it.sentence.toLowerCase().split(" ").map((w) => w.replace(/[.,;:!?»«"']/g, "")));
+    for (const o of it.options) if (o !== it.answer) assert.ok(!inS.has(o.toLowerCase()), `${o} في: ${it.sentence}`);
+  }
+});

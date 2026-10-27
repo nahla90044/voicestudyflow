@@ -77,7 +77,9 @@ export function makeListenItems(text: string, count = 10, rnd: () => number = Ma
   for (const s of order) {
     const b = pickBlank(s, rnd);
     if (!b) continue;
-    const ds = distractors(b.word, pool, 3, rnd);
+    // لا خيار مضلِّل من كلمات الجملة نفسها (يظهر أمام الطالب فيصير الاختيار سهلًا أو ملتبسًا)
+    const inSentence = new Set(s.split(" ").map(key));
+    const ds = distractors(b.word, pool.filter((p) => !inSentence.has(key(p))), 3, rnd);
     if (ds.length < 3) continue;
     const opts = [b.word, ...ds].map((o) => ({ o, r: rnd() })).sort((a, b2) => a.r - b2.r).map((x) => x.o);
     out.push({ sentence: s, masked: b.masked, answer: b.word, options: opts, answerIndex: opts.indexOf(b.word) });
