@@ -6,7 +6,7 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { gramScale, isLatinText, ROLE_COLORS, roleKind, type GramSentence, type LangBlock } from "../../../lib/langLessonCore";
+import { gramScale, isLatinText, ROLE_COLORS, roleKind, textDir, type GramSentence, type LangBlock } from "../../../lib/langLessonCore";
 
 export { ROLE_COLORS };
 import { Reveal, type SlideCtx } from "./shared";
@@ -35,12 +35,12 @@ function Sentence({ s, pal, ff, align }: { s: GramSentence; pal: Pal; ff: SlideC
                 <Text style={[ff("plex600"), styles.word, { color: pal.ink }]}>{w.w}</Text>
               </View>
               {w.role ? (
-                <Text style={[ff("plex700"), styles.role, { color: c }]} numberOfLines={2}>
+                <Text style={[ff("plex700"), styles.role, { color: c, writingDirection: textDir(w.role) }]} numberOfLines={2}>
                   {w.role}
                 </Text>
               ) : null}
               {w.base || w.tense ? (
-                <Text style={[ff("plex500"), styles.base, { color: pal.dim }]} numberOfLines={2}>
+                <Text style={[ff("plex500"), styles.base, { color: pal.dim, writingDirection: textDir([w.base, w.tense].filter(Boolean).join(" · ")) }]} numberOfLines={2}>
                   {[w.base, w.tense].filter(Boolean).join(" · ")}
                 </Text>
               ) : null}

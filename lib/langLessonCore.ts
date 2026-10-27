@@ -135,3 +135,6 @@ export function gramScale(g: LangBlock, hasTitle = true): number {
   }
   return Math.max(0.6, Math.min(1, room / Math.max(units, 0.01)));
 }
+
+/** اتجاه نص قصير حسب أول حرف قوي فيه (التسميات بالعربية مع أقواس كانت تنقلب داخل سطر لاتيني) */
+export const textDir = (s: string): "rtl" | "ltr" => (/^[^A-Za-zÀ-ÿ؀-ۿ]*[؀-ۿ]/.test(s) ? "rtl" : "ltr");

@@ -5,7 +5,7 @@
 // والتعداد الطويل مجموعات بعناوين. منطق خالص (مُختبَر): القراءة، والقراءة أثناء البثّ، ودمج الأجزاء،
 // وتمييز الأرقام المهمة (📅 تاريخ، 📘 مادة، 📜 مرسوم، ⏳ مدة، 💰 مبلغ، ⛓️ سجن)، والنص للاستماع، وصفحة الطباعة.
 import { parseJsonLenient } from "./jsonRepair.ts";
-import { isLatinText, parseLangBlock, ROLE_COLORS, roleKind, tint, type LangBlock } from "./langLessonCore.ts";
+import { isLatinText, parseLangBlock, ROLE_COLORS, roleKind, textDir, tint, type LangBlock } from "./langLessonCore.ts";
 import type { StudySummary, SummarySection } from "./studySummary.ts";
 
 export type TableGroup = { title: string; items: string[] };
@@ -334,7 +334,7 @@ export function gramHtml(g: LangBlock): string {
         .map((w) => {
           const c = ROLE_COLORS[roleKind(w.role)];
           const sub = [w.base, w.tense].filter(Boolean).join(" · ");
-          return `<span class="g-w"><b style="border-color:${c};background:${tint(c)}">${esc(w.w)}</b>${w.role ? `<i style="color:${c}">${esc(w.role)}</i>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</span>`;
+          return `<span class="g-w"><b style="border-color:${c};background:${tint(c)}">${esc(w.w)}</b>${w.role ? `<i dir="${textDir(w.role)}" style="color:${c}">${esc(w.role)}</i>` : ""}${sub ? `<small dir="${textDir(sub)}">${esc(sub)}</small>` : ""}</span>`;
         })
         .join("")}</div>`
     );

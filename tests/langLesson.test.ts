@@ -100,3 +100,11 @@ test("مقياس المربع: المحتوى الكثير يصغر ولا يف�
   assert.ok(k < 1 && k >= 0.6, String(k));
   assert.equal(gramScale({ conj: { verb: "avoir", tense: "", rows: Array.from({ length: 6 }, () => ["p", "f"] as [string, string]) } }), 1);
 });
+
+test("اتجاه التسمية", async () => {
+  const { textDir } = await import("../lib/langLessonCore.ts");
+  assert.equal(textDir("فاعل (ضمير)"), "rtl");
+  assert.equal(textDir("(فاعل)"), "rtl");
+  assert.equal(textDir("sujet (pronom)"), "ltr");
+  assert.equal(textDir("manger · الماضي المركّب"), "ltr");
+});

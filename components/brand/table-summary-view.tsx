@@ -6,7 +6,7 @@
 import React from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
-import { isLatinText, ROLE_COLORS, roleKind, tint, type LangBlock } from "../../lib/langLessonCore";
+import { isLatinText, ROLE_COLORS, roleKind, textDir, tint, type LangBlock } from "../../lib/langLessonCore";
 import { NUM_COLORS, NUM_EMOJI, TOPIC_COLORS, itemColumns, plainItem, segments, type TableRow, type TableSummary } from "../../lib/tableSummary";
 
 const INK = "#1d2330";
@@ -133,8 +133,8 @@ function GramPaper({ g }: { g: LangBlock }) {
                   <View style={[styles.gBox, { borderColor: c, backgroundColor: tint(c) }]}>
                     <Text style={styles.gWord}>{w.w}</Text>
                   </View>
-                  {w.role ? <Text style={[styles.gRole, { color: c }]}>{w.role}</Text> : null}
-                  {w.base || w.tense ? <Text style={styles.gBase}>{[w.base, w.tense].filter(Boolean).join(" · ")}</Text> : null}
+                  {w.role ? <Text style={[styles.gRole, { color: c, writingDirection: textDir(w.role) }]}>{w.role}</Text> : null}
+                  {w.base || w.tense ? <Text style={[styles.gBase, { writingDirection: textDir([w.base, w.tense].filter(Boolean).join(" · ")) }]}>{[w.base, w.tense].filter(Boolean).join(" · ")}</Text> : null}
                 </View>
               );
             })}
