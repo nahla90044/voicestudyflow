@@ -394,6 +394,8 @@ export async function setStudyKind(pdfPath: string, kind: StudyKind, exam?: stri
   const next: Syllabus = { ...(data.data as Syllabus), kind, kindOk: true, exam: kind === "cert" && exam?.trim() ? exam.trim() : undefined };
   const { error } = await supabase.from("book_syllabus").update({ data: next }).eq("pdf_path", pdfPath);
   if (error) throw error;
+  const { rememberStudyKind } = await import("./studyKind");
+  rememberStudyKind(pdfPath, kind);
 }
 
 export async function setUnitDone(pdfPath: string, done: boolean[]): Promise<void> {

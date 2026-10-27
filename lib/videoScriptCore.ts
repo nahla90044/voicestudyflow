@@ -6,6 +6,7 @@ import type { Slide, SlideColumn, SlideLayout } from "./ai";
 import { isClosingTitle, isGenericTitle, jaccard, keyWords, neutralize, normKey } from "./qualityCore.ts";
 import { summaryToSpeech, type StudySummary } from "./studySummary.ts";
 import type { VideoPlan } from "./videoPlanCore.ts";
+import { parseLangBlock, type LangBlock } from "./langLessonCore.ts";
 export { neutralize };
 
 const SLIDE_LAYOUTS: SlideLayout[] = ["cover", "list", "cards", "steps", "compare", "stat", "quote", "summary"];
@@ -19,6 +20,8 @@ export type VideoScene = Slide & {
   topic?: string;
   /** سؤال ختامي (q) أو تمرين من الكتاب (ex): يُنقل إلى «أسئلة الوحدة» في آخر الفيديو */
   final?: "q" | "ex";
+  /** «مربع الدرس» لكتب اللغة: قاعدة وصيغة وجملة محلّلة وجدول اقتران (lib/langLessonCore) */
+  gram?: LangBlock;
 };
 /**
  * truncated: الرد قُطع قبل نهايته (بلغ سقف الطول) — مشاهد آخر الجزء ناقصة، فيُعاد توليده.
@@ -58,6 +61,8 @@ function scene(o: any): VideoScene | null {
     return { kind: "check", emoji: str(o?.emoji) || "🤔", title: str(o?.title), bullets: [], narration, question, answer: str(o?.answer), ...tags(o) };
   }
   const out: VideoScene = { kind: "slide", emoji: str(o?.emoji) || "📌", title: str(o?.title), bullets: strs(o?.bullets), narration, ...tags(o) };
+  const gram = parseLangBlock(o?.gram);
+  if (gram) out.gram = gram;
   const highlight = str(o?.highlight);
   if (highlight) out.highlight = highlight;
   const columns: SlideColumn[] = Array.isArray(o?.columns)

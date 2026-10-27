@@ -5,6 +5,7 @@
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
 import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
+import { LANGUAGE_STUDY_PROMPT, LANGUAGE_VIDEO_PROMPT } from "../_shared/languageStudyPrompt.ts";
 import { PLAN_GUARD, planBlock, readVpart, VIDEO_FORMAT, VIDEO_PART, VIDEO_PLAN, VIDEO_ROLE, vpartText } from "../_shared/videoPrompt.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
@@ -297,7 +298,7 @@ Deno.serve(async (req: Request) => {
     let freeRetry = false;
     if (isPart) {
       // deep كما يحسبه السيرفر أدناه (يغيّر المخرجات)؛ وvpart بعد تنقيحه (لا حقول عشوائية تغيّر البصمة)
-      partH = await partHash({ action, text, targetLang, mode: body.mode, table: body.table, deep: action === "studysummary" && (body.deep === true || body.mode === "expand"), vpart: vp, genId: body.genId });
+      partH = await partHash({ action, text, targetLang, mode: body.mode, table: body.table, deep: action === "studysummary" && (body.deep === true || body.mode === "expand"), vpart: vp, genId: body.genId, ...(body.study === "language" ? { study: "language" } : {}) });
       const cl = body.regen === true ? null : await claimPartRetry(caller, action, partH);
       // المالكة بلا حد (كبقية السقوف هنا): عند السقف يُسجَّل طلبها خصمًا عاديًا (أصلًا جديدًا) بدل الإيقاف
       if (cl?.status === "limit" && caller.plan !== "owner") {
@@ -365,6 +366,7 @@ Deno.serve(async (req: Request) => {
       en: "English",
       fr: "le français",
     };
+    const LANG_STUDY_ACTIONS = new Set(["videoplan", "videoscript", "studysummary", "summarize", "slides", "unitslides", "mindmap", "mindtree", "flashcards"]);
     const LANG_ENFORCED = new Set([
       "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "mindtree", "unitquiz", "syllabus", "define",
     ]);
@@ -376,6 +378,8 @@ Deno.serve(async (req: Request) => {
       if (LANG_ENFORCED.has(action)) {
         systemPrompt += `\n\nمهم جدًا: اكتب كل المخرجات الموجَّهة للمستخدم (العناوين والنصوص وقيم JSON) بـ${OUT_LANG[targetLang] ?? OUT_LANG.ar} حصرًا لتطابق لغة واجهة التطبيق، مهما كانت لغة النص الأصلي. حافظ على بنية JSON ومفاتيحه الإنجليزية كما هي إن وُجدت.\n\nخاطِب المستخدم بصيغة محايدة تصلح للجميع، لا مذكّرة ولا مؤنّثة: تجنّب أفعال الأمر الموجّهة لجنس معيّن وضمائر «أنتَ/أنتِ»، واستخدم المصدر أو المبني للمجهول (مثل: «المطلوب…»، «يُلاحظ أن…»، «مراجعة هذه النقطة مفيدة»).`;
       }
+      // كتاب لتعلّم لغة (نوع الدراسة — قرار نهلة ٢٧ أكتوبر): القواعد بسلاسة وتبسيط، والاقتران كاملًا، والأمثلة بلغتها
+      if (body.study === "language" && LANG_STUDY_ACTIONS.has(action)) systemPrompt += LANGUAGE_STUDY_PROMPT + (action === "videoscript" ? LANGUAGE_VIDEO_PROMPT : "");
       // عدد مخصّص للبطاقات/الأسئلة (يتجاوز العدد الافتراضي في التعليمات)
       // نوع البطاقات الذي يختاره الطالب (معاني كلمات، تعاريف، أسئلة وأجوبة، مقارنات)
       const CARD_TYPE: Record<string, string> = {

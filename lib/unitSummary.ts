@@ -1,6 +1,7 @@
 // lib/unitSummary.ts
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
+import { studyExtra } from "./studyKind";
 import { qaPart } from "./qualityAgent";
 import { stripPartMarker } from "./titleCore";
 import { checkSummaryPart } from "./qualityCore";
@@ -264,6 +265,8 @@ export async function getOrMakeSummary(
   const partId = summaryPartId(src, n);
   // معرّف جلسة التوليد مع كل جزء: السيرفر يخصم الجزء مرة واحدة في الجلسة، وإعاداته الآلية مجانية
   const genId = await getGenId(sumGenScope(pdfPath, src));
+  // كتب اللغة: شرح القواعد والاقتران (قرار ٢٧ أكتوبر)؛ غيرها بلا حقل
+  const study = await studyExtra(pdfPath);
   const results = await runParts<StudySummary, StudySummary>({
     parts,
     speedKey: "vsf:summary:speed",
@@ -277,8 +280,8 @@ export async function getOrMakeSummary(
     run: (ctx, i, onPartial) =>
       qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
         isTableLevel(mode)
-          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true, genId })
-          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId }),
+          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true, genId, ...study })
+          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId, ...study }),
         // الجدول مكثّف عمدًا: عتبة «قصير» أدنى (يُرفض الفارغ تقريبًا فقط)
         (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.015 : mode === "brief" ? 0.03 : 0.08)),
     merge: mergeSummaries,

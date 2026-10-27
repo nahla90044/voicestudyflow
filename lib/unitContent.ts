@@ -21,20 +21,22 @@ function hashKey(s: string): string {
   return (h >>> 0).toString(16);
 }
 
-function keyFor(pdfPath: string, unit: number, kind: UnitContentKind): string {
-  // نضمّن لغة الواجهة في المفتاح: تبديل اللغة يعيد التوليد بلغة المستخدم بدل عرض
+function keyFor(pdfPath: string, unit: number, kind: UnitContentKind, lang?: string): string {
+  // نضمّن لغة المحتوى في المفتاح: تبديل اللغة يعيد التوليد بلغة المستخدم بدل عرض
   // محتوى مخزَّن بلغة قديمة (كتاب إنجليزي بواجهة إنجليزية → محتوى إنجليزي).
-  return `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:${unit}`;
+  // lang: لغة محتوى غير لغة الواجهة (لغة شرح الفيديو — قرار ٢٧ أكتوبر)؛ الافتراضي لغة الواجهة
+  return `unitc:${kind}:${lang || getCurrentLang()}:${hashKey(pdfPath)}:${unit}`;
 }
 
 /** يُرجع المحتوى المخزَّن لهذه الوحدة إن وُجد، أو null. */
 export async function getUnitContent<T>(
   pdfPath: string,
   unit: number,
-  kind: UnitContentKind
+  kind: UnitContentKind,
+  lang?: string
 ): Promise<T | null> {
   try {
-    const raw = await AsyncStorage.getItem(keyFor(pdfPath, unit, kind));
+    const raw = await AsyncStorage.getItem(keyFor(pdfPath, unit, kind, lang));
     return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -45,19 +47,20 @@ export async function getUnitContent<T>(
 export async function removeUnitContent(
   pdfPath: string,
   unit: number,
-  kind: UnitContentKind
+  kind: UnitContentKind,
+  lang?: string
 ): Promise<void> {
   try {
-    await AsyncStorage.removeItem(keyFor(pdfPath, unit, kind));
+    await AsyncStorage.removeItem(keyFor(pdfPath, unit, kind, lang));
   } catch {
     // نتجاهل
   }
 }
 
 /** يحذف كل محتوى نوعٍ لهذا الكتاب يحقق شرطًا على رقمه (مثل أجزاء ملخّص وحدة عند إعادة التلخيص) */
-export async function removeUnitContentWhere(pdfPath: string, kind: UnitContentKind, match: (unit: number) => boolean): Promise<void> {
+export async function removeUnitContentWhere(pdfPath: string, kind: UnitContentKind, match: (unit: number) => boolean, lang?: string): Promise<void> {
   try {
-    const prefix = `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:`;
+    const prefix = `unitc:${kind}:${lang || getCurrentLang()}:${hashKey(pdfPath)}:`;
     const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(prefix) && match(Number(k.slice(prefix.length))));
     if (keys.length) await AsyncStorage.multiRemove(keys);
   } catch {
@@ -66,9 +69,9 @@ export async function removeUnitContentWhere(pdfPath: string, kind: UnitContentK
 }
 
 /** هل حُفظ شيء من نوعٍ لهذا الكتاب يحقق شرطًا على رقمه (مثل أجزاء فيديو قديمة لوحدة) */
-export async function anyUnitContentWhere(pdfPath: string, kind: UnitContentKind, match: (unit: number) => boolean): Promise<boolean> {
+export async function anyUnitContentWhere(pdfPath: string, kind: UnitContentKind, match: (unit: number) => boolean, lang?: string): Promise<boolean> {
   try {
-    const prefix = `unitc:${kind}:${getCurrentLang()}:${hashKey(pdfPath)}:`;
+    const prefix = `unitc:${kind}:${lang || getCurrentLang()}:${hashKey(pdfPath)}:`;
     return (await AsyncStorage.getAllKeys()).some((k) => k.startsWith(prefix) && match(Number(k.slice(prefix.length))));
   } catch {
     return false;
@@ -80,10 +83,11 @@ export async function setUnitContent<T>(
   pdfPath: string,
   unit: number,
   kind: UnitContentKind,
-  data: T
+  data: T,
+  lang?: string
 ): Promise<void> {
   try {
-    await AsyncStorage.setItem(keyFor(pdfPath, unit, kind), JSON.stringify(data));
+    await AsyncStorage.setItem(keyFor(pdfPath, unit, kind, lang), JSON.stringify(data));
   } catch {
     // التخزين اختياري — لا نُفشل العملية إن تعذّر
   }

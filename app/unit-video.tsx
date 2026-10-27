@@ -18,7 +18,7 @@ import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { VideoStage } from "../components/brand/video-stage";
 import { Radius, Spacing } from "../constants/design";
-import { useDir, useI18n } from "../lib/i18n";
+import { getCurrentLang, useDir, useI18n } from "../lib/i18n";
 import { dict } from "../lib/i18n/strings";
 import { preloadSlideFonts } from "../lib/slideFonts";
 import { useSlideThemePref } from "../lib/slideTheme";
@@ -36,6 +36,12 @@ const RATES = [1, 1.15, 1.3];
 const KEEP_TAG = "vsf-video-play";
 
 // «شكل الشرائح»: معاينة كل اختيار (تدرّج ألوانه + أيقونة) — الترتيب من THEME_PREFS: منوّع، مجلة، بصري، سينمائي
+/** لغات شرح الفيديو (قرار نهلة ٢٧ أكتوبر) — كل اسم بلغته */
+type VideoLang = "ar" | "en" | "fr";
+const VIDEO_LANGS: VideoLang[] = ["ar", "en", "fr"];
+const VIDEO_LANG_NAMES: Record<VideoLang, string> = { ar: "العربية", en: "English", fr: "Français" };
+const isVideoLang = (v: unknown): v is VideoLang => v === "ar" || v === "en" || v === "fr";
+
 const LOOK_PREVIEW: Record<SlideThemePref, { colors: [string, string]; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
   mixed: { colors: ["#2A2370", "#B4A6FF"], icon: "shuffle", tint: "#FFFFFF" },
   editorial: { colors: ["#0B0E26", "#3A2F14"], icon: "book", tint: "#F6D58A" },
@@ -49,7 +55,7 @@ export default function UnitVideoScreen() {
   const dir = useDir();
   const { pal } = useScene();
   const { width: winW, height: winH } = useWindowDimensions();
-  const { pdf_path, unit, page, from, to, title, book_title } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title, vlang: vlangParam } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; vlang?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
@@ -74,6 +80,34 @@ export default function UnitVideoScreen() {
     voiceRef.current = v;
     setVoiceOpen(false);
     AsyncStorage.setItem("vsf:video:voice", v).catch(() => {});
+  }
+
+  // لغة الشرح (قرار نهلة ٢٧ أكتوبر): العربية أو الإنجليزية أو الفرنسية لكل كتاب، والافتراضي لغة الواجهة.
+  // فيديو كل لغة يُحفظ وحده؛ null حتى تُقرأ (لا يبدأ التجهيز قبلها)
+  const langKey = `vsf:video:lang:${pdfPath}`;
+  const [vlang, setVlang] = useState<VideoLang | null>(isVideoLang(vlangParam) ? vlangParam : null);
+  const prevLang = useRef<VideoLang | null>(null); // للرجوع إن أُلغي تجهيز لغة جديدة
+  useEffect(() => {
+    if (vlang) return;
+    AsyncStorage.getItem(langKey)
+      .then((v) => setVlang(isVideoLang(v) ? v : (getCurrentLang() as VideoLang)))
+      .catch(() => setVlang(getCurrentLang() as VideoLang));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function pickLang(l: VideoLang) {
+    if (l === vlang) return;
+    halt();
+    setPlaying(false);
+    setEnded(false);
+    setIdx(0);
+    setScript(null);
+    setComplete(false);
+    setJob(null);
+    setAudioSave(null);
+    prevLang.current = vlang;
+    setVlang(l);
+    setVoiceOpen(false);
+    AsyncStorage.setItem(langKey, l).catch(() => {});
   }
 
   // شكل الشرائح: يُحفظ ويسري على كل الفيديوهات فورًا (عرض فقط — لا يعيد الصوت ولا يطلب شيئًا)
@@ -107,7 +141,8 @@ export default function UnitVideoScreen() {
     let on = true;
     let un: (() => void) | undefined;
     (async () => {
-      const cached = await getCachedVideo(pdfPath, src);
+      if (!vlang) return;
+      const cached = await getCachedVideo(pdfPath, src, vlang);
       if (!on) return;
       if (cached) {
         setScript(cached);
@@ -115,7 +150,7 @@ export default function UnitVideoScreen() {
         return;
       }
       // المتابعة من لحظة فتح الشاشة (أيًّا كان من بدأ التجهيز: هذه الشاشة، أو نسخة أخرى منها، أو الخلفية)
-      const key = videoJobKey(pdfPath, src);
+      const key = videoJobKey(pdfPath, src, vlang);
       let sawRunning = false; // نحتفل فقط بتوليد تابعناه الآن (لا عند فتح فيديو جاهز)
       un = watchVideoJob(key, (j) => {
         if (!on) return;
@@ -138,25 +173,33 @@ export default function UnitVideoScreen() {
         }
       });
       // عدد الطلبات قبل التجهيز (الملخّص الناقص + الفيديو)؛ الإلغاء يرجع للمكان السابق
-      if (!hasVideoJob(pdfPath, src)) {
-        const cost = await videoRequestCost(pdfPath, src, unitTitle).catch(() => null);
+      if (!hasVideoJob(pdfPath, src, vlang)) {
+        const cost = await videoRequestCost(pdfPath, src, unitTitle, vlang).catch(() => null);
         if (!on) return;
         if (cost && !(await confirmCost(cost.pending, "video", t, cost.estimated, key))) {
-          if (on && router.canGoBack()) router.back();
+          // إلغاء بعد تغيير اللغة يرجع للغة السابقة (فيديوها محفوظ)، وإلا يرجع للمكان السابق
+          if (on && prevLang.current) {
+            const back = prevLang.current;
+            prevLang.current = null;
+            setVlang(back);
+            AsyncStorage.setItem(langKey, back).catch(() => {});
+          } else if (on && router.canGoBack()) router.back();
           return;
         }
       }
+      prevLang.current = null;
       if (!on) return;
       const params: Record<string, string> = { pdf_path: pdfPath };
       for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
-      startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params });
+      params.vlang = vlang;
+      startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params }, vlang);
     })();
     return () => {
       on = false;
       un?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfPath, runId]);
+  }, [pdfPath, runId, vlang]);
 
   // اكتمل السيناريو → يظهر في «المحفوظات» (تبويب الملخّصات 🎬) للرجوع إليه
   useEffect(() => {
@@ -334,7 +377,7 @@ export default function UnitVideoScreen() {
           setPlaying(false);
           setEnded(false);
           setIdx(0);
-          await clearVideo(pdfPath, src);
+          await clearVideo(pdfPath, src, vlang ?? undefined);
           // الفيديو الجديد غير القديم: «شوهد» يبدأ من جديد (كان يبقى سجل القديم فيظهر تقدّم خاطئ)
           if (src.kind === "unit") resetVideoSeen(pdfPath, unitIdx);
           setSeen(new Set());
@@ -356,7 +399,7 @@ export default function UnitVideoScreen() {
               style: "destructive",
               onPress: async () => {
                 halt();
-                await clearVideo(pdfPath, src);
+                await clearVideo(pdfPath, src, vlang ?? undefined);
                 await removeSavedItem(`video|${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`);
                 router.back();
               },
@@ -605,6 +648,24 @@ export default function UnitVideoScreen() {
             <Pressable style={styles.voiceMask} onPress={() => setVoiceOpen(false)}>
               <Pressable style={[styles.voiceSheet, { backgroundColor: pal.bg, borderColor: pal.cardBorder }]} onPress={() => {}}>
                 <ScrollView contentContainerStyle={{ gap: 10 }} showsVerticalScrollIndicator={false}>
+                {/* لغة الشرح: يُكتب الشرح ويُقرأ بها (فيديو كل لغة محفوظ وحده) */}
+                <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.lang")}</Text>
+                <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("video.langHint")}</Text>
+                <View style={[styles.voiceGrid, { flexDirection: dir.row }]}>
+                  {VIDEO_LANGS.map((l) => {
+                    const on = l === vlang;
+                    return (
+                      <Pressable
+                        key={l}
+                        onPress={() => pickLang(l)}
+                        style={[styles.voiceChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}
+                      >
+                        <Text style={[styles.voiceTxt, { color: on ? pal.onAccent : pal.ink }]}>{VIDEO_LANG_NAMES[l]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={[styles.sheetSep, { backgroundColor: pal.cardBorder }]} />
                 {/* شكل الشرائح: يُطبَّق فورًا دون إغلاق النافذة ودون إعادة الصوت */}
                 <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.look")}</Text>
                 <Text style={[styles.statusDim, { color: pal.dim, textAlign: dir.textAlign }]}>{t("video.lookHint")}</Text>

@@ -18,6 +18,12 @@ import { buildModel, captionAt, pickTheme, soloRole, THINK_SECONDS, type SceneRo
 import type { VideoScene } from "../../lib/videoScriptCore";
 import { SLIDE_GRADIENTS } from "./slide-view";
 import { MIXED_CHROME, SlideBoundary, SlideMotion, THEMES, type SlideCtx, type SlideThemeModule } from "./slides";
+import { GramScene, GRAM_PALETTES } from "./slides/gram-scene";
+
+/** مشاهد «مربع الدرس» لكتب اللغة بألوان كل شكل (مكوّنات ثابتة: لا يُعاد تركيبها إلا مع المشهد) */
+const GRAM_SCENES = Object.fromEntries(
+  (Object.keys(GRAM_PALETTES) as (keyof typeof GRAM_PALETTES)[]).map((k) => [k, ({ ctx }: { ctx: SlideCtx }) => <GramScene ctx={ctx} palette={k} />])
+) as Record<keyof typeof GRAM_PALETTES, SlideThemeModule["Scene"]>;
 
 export const DW = 1280;
 export const DH = 720;
@@ -72,6 +78,14 @@ function Reveal({ visible, children, delay = 0, style }: { visible: boolean; chi
 
 export function VideoStage(props: Props) {
   // «الكلاسيكي» (خيار خامس أضافته نهلة ٢٦ أكتوبر) = الرسم الحالي
+  // «مربع الدرس» (كتب اللغة) يُرسم بالمسار المشترك في كل الأشكال، ومنها الكلاسيكي (بخلفيته المتدرّجة)
+  if (props.scene?.gram && props.look) {
+    return (
+      <SlideBoundary resetKey={`gram|${props.look}|${props.index}`} where={`${props.look}:gram`} fallback={<LegacyStage {...props} />}>
+        <ThemedStage {...props} look={props.look} />
+      </SlideBoundary>
+    );
+  }
   if (!props.look || props.look === "classic") return <LegacyStage {...props} />;
   // أي خطأ في رسم الشكل يُرجع هذا المشهد إلى الرسم الحالي، والمشهد التالي يحاول الشكل من جديد
   const where = `${props.look}:${props.scene?.kind === "check" ? "check" : (props.scene?.layout ?? "auto")}`;
@@ -104,9 +118,11 @@ function ThemedStage({ scene, index, total, progress, stage, thinkLeft, width, l
   const height = width * (DH / DW);
   const r = role ?? soloRole(scene, index, total);
   const m = useMemo(() => buildModel(scene, index, total, r), [scene, index, total, r]);
-  const theme = pickTheme(look, m);
-  const mixed = look === "mixed";
+  const classic = look === "classic"; // يصل هنا لمشاهد «مربع الدرس» فقط
+  const theme = pickTheme(classic ? "mixed" : look, m);
+  const mixed = look === "mixed" || classic;
   const chrome = mixed ? MIXED_CHROME : THEMES[theme];
+  const gramKey = scene.gram ? (classic ? "classic" : look === "mixed" ? "cinematic" : theme) : null;
 
   // التقدّم المشترك: يُضبط فورًا عند تغيّر المشهد أو المرحلة أو نزول التقدّم (لا وميض للمشهد السابق)،
   // وإلا يتقدّم بنعومة ١٨٠ مللي ثانية بين تحديثات الصوت
@@ -160,9 +176,13 @@ function ThemedStage({ scene, index, total, progress, stage, thinkLeft, width, l
       <View style={[styles.canvas, { transform: [{ scale }], transformOrigin: "top left" }]} pointerEvents="none">
         <SlideMotion.Provider value={motion}>
           <View style={StyleSheet.absoluteFill}>
-            <Backdrop m={m} reduced={reduced} />
+            {classic ? (
+              <LinearGradient colors={SLIDE_GRADIENTS[index % SLIDE_GRADIENTS.length]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            ) : (
+              <Backdrop m={m} reduced={reduced} />
+            )}
           </View>
-          <SceneLayer key={`${index}|${theme}`} Scene={THEMES[theme].Scene} ctx={ctx} />
+          <SceneLayer key={`${index}|${theme}|${gramKey ?? ""}`} Scene={gramKey ? GRAM_SCENES[gramKey] : THEMES[theme].Scene} ctx={ctx} />
           <View style={StyleSheet.absoluteFill}>
             <Header ctx={ctx} p={progress} />
           </View>

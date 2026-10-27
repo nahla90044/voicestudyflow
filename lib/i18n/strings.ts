@@ -1896,6 +1896,8 @@ const ar: Record<string, string> = {
   "video.voiceHint": "الضغط على الصوت يُسمعك عيّنة منه، ويُستعمل للمشاهد التالية.",
   "video.voiceSample": "أهلًا، هذا صوتي في شرح الفيديو.",
   // شكل شرائح «ملخّص الفيديو» (منوّع / مجلة / بصري / سينمائي) ونصوص داخل الشرائح
+  "video.lang": "لغة الشرح",
+  "video.langHint": "يُكتب الشرح ويُقرأ بهذه اللغة، وفيديو كل لغة يُحفظ وحده.",
   "video.look": "شكل الشرائح",
   "video.lookHint": "يسري على كل الفيديوهات بلا أي طلب جديد",
   "video.voiceAndLook": "الصوت والشكل",
@@ -3996,6 +3998,8 @@ const en: Record<string, string> = {
   "video.voiceHint": "Tap a voice to hear a sample; it narrates the next scenes.",
   "video.voiceSample": "Hello, this is my voice for the video.",
   // Video summary slide styles and in-slide labels
+  "video.lang": "Narration language",
+  "video.langHint": "The explanation is written and read in this language; each language's video is saved separately.",
   "video.look": "Slide style",
   "video.lookHint": "Applies to all videos, with no new requests",
   "video.voiceAndLook": "Voice and style",

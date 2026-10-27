@@ -34,14 +34,16 @@ const jobs = new Map<string, VideoJob>();
 const subs = new Map<string, Set<(j: VideoJob) => void>>();
 const viewing = new Map<string, number>();
 
-export function videoJobKey(pdfPath: string, src: SummarySource): string {
+/** lang: لغة شرح غير لغة الواجهة — مهمة مستقلة لكل لغة (قرار ٢٧ أكتوبر) */
+export function videoJobKey(pdfPath: string, src: SummarySource, lang?: string): string {
   const k = summaryCacheKey(src);
-  return `video|${pdfPath}|${k.kind}|${k.id}`;
+  const l = lang && lang !== getCurrentLang() ? `|${lang}` : "";
+  return `video|${pdfPath}|${k.kind}|${k.id}${l}`;
 }
 
 /** فيديو يُجهَّز الآن (لا يُسأل عن تكلفته مرة ثانية عند الرجوع لشاشته) */
-export function hasVideoJob(pdfPath: string, src: SummarySource): boolean {
-  return jobs.get(videoJobKey(pdfPath, src))?.status === "running";
+export function hasVideoJob(pdfPath: string, src: SummarySource, lang?: string): boolean {
+  return jobs.get(videoJobKey(pdfPath, src, lang))?.status === "running";
 }
 
 function emit(j: VideoJob) {
@@ -94,8 +96,8 @@ async function notify(meta: Meta, ok: boolean) {
   } catch {}
 }
 
-export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: string, meta: Meta): string {
-  const key = videoJobKey(pdfPath, src);
+export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: string, meta: Meta, lang?: string): string {
+  const key = videoJobKey(pdfPath, src, lang);
   if (jobs.get(key)?.status === "running") return key;
   let last: VideoJob = { key, status: "running", stage: "summary", done: 0, total: 0, etaSec: null, waiting: false, script: null };
   emit(last);
@@ -119,7 +121,8 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
       }
       emit((last = { ...last, stage: "script", done: 0, total: 0, etaSec: null }));
       const { script, complete } = await getOrMakeVideo(pdfPath, src, summary, unitTitle, (p) =>
-        emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, script: p.soFar ?? last.script }))
+        emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, script: p.soFar ?? last.script })),
+        lang
       );
       emit((last = { ...last, status: complete ? "done" : "failed", script: script ?? last.script, etaSec: 0 }));
       recordPerf("video.total", Date.now() - t0, complete, last.total);

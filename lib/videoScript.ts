@@ -17,6 +17,7 @@ import { getCurrentLang } from "./i18n";
 import { dict } from "./i18n/strings";
 import { runParts, type PartsProgress } from "./partsRunner";
 import { recordPerf } from "./perf";
+import { studyExtra } from "./studyKind";
 import { qaPart } from "./qualityAgent";
 import { checkVideoPart, videoMetrics } from "./qualityCore";
 import type { StudySummary } from "./studySummary";
@@ -49,9 +50,18 @@ const planKey = (pdfPath: string, id: number, sig: string) => `vid2:${pdfPath}:$
 /** نطاق «جلسة التوليد» لفيديو الوحدة (lib/genId): يتجدّد عند الحذف لإعادة التوليد فقط */
 const genScope = (pdfPath: string, id: number) => `vid:${pdfPath}:${id}`;
 
-const tr = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
-function videoLabels(): VideoLabels {
-  const sep = getCurrentLang() === "ar" ? "، " : ", ";
+/**
+ * لغة شرح الفيديو (قرار نهلة ٢٧ أكتوبر): العربية أو الإنجليزية أو الفرنسية، والافتراضي لغة الواجهة.
+ * فيديو كل لغة محفوظ وحده، ومفاتيح مهامه وجلسة توليده بعلامة اللغة (لا يختلط فيديو عربي بفرنسي للوحدة نفسها).
+ */
+const otherLang = (lang?: string) => (lang && lang !== getCurrentLang() ? lang : undefined);
+const jobPath = (pdfPath: string, lang?: string) => (otherLang(lang) ? `${pdfPath}@${lang}` : pdfPath);
+const langExtra = (lang?: string) => (otherLang(lang) ? { targetLang: lang } : {});
+
+const trIn = (lang: string | undefined, k: string) => dict[(lang || getCurrentLang()) as keyof typeof dict]?.[k] ?? dict.ar[k] ?? k;
+function videoLabels(lang?: string): VideoLabels {
+  const tr = (k: string) => trIn(lang, k);
+  const sep = (lang || getCurrentLang()) === "ar" ? "، " : ", ";
   return {
     summaryTitle: tr("video.summaryTitle"),
     qTitle: tr("video.qTitle"),
@@ -64,8 +74,8 @@ function videoLabels(): VideoLabels {
   };
 }
 
-export async function getCachedVideo(pdfPath: string, src: SummarySource): Promise<VideoScript | null> {
-  const v = await getUnitContent<VideoScript>(pdfPath, cacheIds(src).id, "video").catch(() => null);
+export async function getCachedVideo(pdfPath: string, src: SummarySource, lang?: string): Promise<VideoScript | null> {
+  const v = await getUnitContent<VideoScript>(pdfPath, cacheIds(src).id, "video", otherLang(lang)).catch(() => null);
   if (!v?.scenes?.length) return null;
   // الفيديوهات المحفوظة قبل ٢٦ أكتوبر: يُحذف «(الجزء الأول)» من عنوانها وافتتاحها عند العرض
   return {
@@ -76,19 +86,21 @@ export async function getCachedVideo(pdfPath: string, src: SummarySource): Promi
 }
 
 /** يحذف الفيديو المخزَّن وكل أجزائه وخطته ومهامه، بالمسارين القديم والجديد (إعادة التوليد أو الحذف) */
-export async function clearVideo(pdfPath: string, src: SummarySource): Promise<void> {
+export async function clearVideo(pdfPath: string, src: SummarySource, lang?: string): Promise<void> {
   const ids = cacheIds(src);
+  const L = otherLang(lang);
+  const jp = jobPath(pdfPath, lang);
   // جلسة توليد جديدة: إعادة التوليد اليدوية تُخصم (قرار ١٩ أكتوبر)، أما إعادات الأجزاء الآلية داخلها فمجانية
-  await renewGenId(genScope(pdfPath, ids.id));
-  await removeUnitContent(pdfPath, ids.id, "video");
-  await removeUnitContent(pdfPath, ids.id, "videoplan");
-  await removeUnitContentWhere(pdfPath, "videopart", (u) => u >= ids.id * 1e4 && u < (ids.id + 1) * 1e4);
-  await removeUnitContentWhere(pdfPath, "videopart2", (u) => Math.floor(u / 1024) === ids.id);
+  await renewGenId(genScope(jp, ids.id));
+  await removeUnitContent(pdfPath, ids.id, "video", L);
+  await removeUnitContent(pdfPath, ids.id, "videoplan", L);
+  await removeUnitContentWhere(pdfPath, "videopart", (u) => u >= ids.id * 1e4 && u < (ids.id + 1) * 1e4, L);
+  await removeUnitContentWhere(pdfPath, "videopart2", (u) => Math.floor(u / 1024) === ids.id, L);
   try {
     // مفاتيح مهام الفيديو بالمسارين، ومنها مفاتيح إعادة الجودة (:qa) ومهمة الخطة (كانت تبقى فتتصل إعادة التوليد بمهمة قديمة)
     const keys = (await AsyncStorage.getAllKeys()).filter((x) => {
       const o = videoJobKeyOf(x);
-      return !!o && o.pdfPath === pdfPath && o.id === ids.id;
+      return !!o && o.pdfPath === jp && o.id === ids.id;
     });
     if (keys.length) await AsyncStorage.multiRemove(keys);
   } catch {}
@@ -98,8 +110,9 @@ export async function clearVideo(pdfPath: string, src: SummarySource): Promise<v
  * توليد قديم منقطع يُكمَل بالمسار القديم (لا يُخصم مرتين): فقط حين يكون جزءًا واحدًا — أرقام أجزاء المسار القديم
  * المتعددة متصادمة، فما حُفظ منها لا يُعرف لأي جزء هو (استكماله كان يكرر جزءًا مكان آخر).
  */
-async function v1Pending(pdfPath: string, src: SummarySource, oldN: number): Promise<boolean> {
-  if (oldN !== 1) return false;
+async function v1Pending(pdfPath: string, src: SummarySource, oldN: number, lang?: string): Promise<boolean> {
+  // المسار القديم كان بلغة الواجهة فقط
+  if (oldN !== 1 || otherLang(lang)) return false;
   const pid = cacheIds(src).partId(1, 0);
   if (await anyUnitContentWhere(pdfPath, "videopart", (u) => u === pid)) return true;
   return !!(await AsyncStorage.getItem(`vsf:aijob:vid:${pdfPath}:${pid}`).catch(() => null));
@@ -140,10 +153,11 @@ export function activeTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** خطة الوحدة: المحفوظة (لنفس الملخّص)، أو طلب videoplan (مجاني)، أو الآلية عند التعذّر. تُحفظ قبل الأجزاء */
-async function getPlan(pdfPath: string, src: SummarySource, summary: StudySummary, unitTitle: string): Promise<VideoPlan> {
+async function getPlan(pdfPath: string, src: SummarySource, summary: StudySummary, unitTitle: string, lang?: string, study: { study?: string } = {}): Promise<VideoPlan> {
   const ids = cacheIds(src);
   const sig = summarySig(summary);
-  const saved = await getUnitContent<VideoPlan>(pdfPath, ids.id, "videoplan").catch(() => null);
+  const L = otherLang(lang);
+  const saved = await getUnitContent<VideoPlan>(pdfPath, ids.id, "videoplan", L).catch(() => null);
   if (saved?.v === 2 && saved.sig === sig && saved.topics?.length) return saved;
   const t0 = Date.now();
   const signal = { aborted: false };
@@ -151,7 +165,7 @@ async function getPlan(pdfPath: string, src: SummarySource, summary: StudySummar
   let why = "ok";
   try {
     const raw = await activeTimeout(
-      jobPart<string>("videoplan", planInput(summary, unitTitle), planKey(pdfPath, ids.id, sig), () => null, (r) => (r.trim() ? r : null), () => {}, {}, undefined, signal),
+      jobPart<string>("videoplan", planInput(summary, unitTitle), planKey(jobPath(pdfPath, lang), ids.id, sig), () => null, (r) => (r.trim() ? r : null), () => {}, { ...langExtra(lang), ...study }, undefined, signal),
       PLAN_MS
     );
     if (raw == null) {
@@ -169,7 +183,7 @@ async function getPlan(pdfPath: string, src: SummarySource, summary: StudySummar
     recordPerf(`video.v2.plan.${why}`, Date.now() - t0, false);
   }
   recordPerf("video.v2.plan", Date.now() - t0, !plan.auto, plan.topics.length);
-  await setUnitContent(pdfPath, ids.id, "videoplan", plan);
+  await setUnitContent(pdfPath, ids.id, "videoplan", plan, L);
   return plan;
 }
 
@@ -179,42 +193,47 @@ export async function getOrMakeVideo(
   src: SummarySource,
   summary: StudySummary,
   unitTitle: string,
-  onProgress?: (p: VideoProgress) => void
+  onProgress?: (p: VideoProgress) => void,
+  lang?: string
 ): Promise<{ script: VideoScript | null; complete: boolean }> {
-  const cached = await getCachedVideo(pdfPath, src);
+  const cached = await getCachedVideo(pdfPath, src, lang);
   if (cached) return { script: cached, complete: true };
   const oldN = videoParts(summary, unitTitle).length;
   if (!oldN) return { script: null, complete: false };
-  if (await v1Pending(pdfPath, src, oldN)) return getOrMakeVideoV1(pdfPath, src, summary, unitTitle, onProgress);
+  if (await v1Pending(pdfPath, src, oldN, lang)) return getOrMakeVideoV1(pdfPath, src, summary, unitTitle, onProgress);
   const t0 = Date.now();
   const ids = cacheIds(src);
+  const L = otherLang(lang);
+  const jp = jobPath(pdfPath, lang);
+  // كتب اللغة: مربعات القواعد وتحليل الجملة وجداول الاقتران (قرار ٢٧ أكتوبر)؛ غيرها بلا حقل
+  const study = await studyExtra(pdfPath);
   // وحدة قصيرة: جزء واحد بلا خطة (الزمن والتكلفة كاليوم)؛ وإلا الخطة أولًا
-  const plan = oldN === 1 ? null : await getPlan(pdfPath, src, summary, unitTitle);
+  const plan = oldN === 1 ? null : await getPlan(pdfPath, src, summary, unitTitle, lang, study);
   const parts: PlannedPart[] = plan ? planParts(summary, plan, unitTitle, oldN) : [soloPart(summary, unitTitle)];
   if (!parts.length) return { script: null, complete: false };
   const n = parts.length;
   const stamps = parts.map(partStamp);
-  const labels = videoLabels();
+  const labels = videoLabels(lang);
   const stats = { dropped: 0 };
   const merge = (list: VideoScript[]) => assembleVideo(list, { plan, n, labels, unitTitle, stats });
   // معرّف جلسة التوليد مع كل جزء: السيرفر يخصم الجزء مرة واحدة في الجلسة، وإعاداته الآلية مجانية
-  const genId = await getGenId(genScope(pdfPath, ids.id));
+  const genId = await getGenId(genScope(jp, ids.id));
   const results = await runParts<VideoScript, VideoScript>({
     parts: parts.map((p) => p.text),
     speedKey: "vsf:video:speed",
     defaultSpeed: { chars: 7000, rate: 45 },
     // المحفوظ لا يُستعمل إلا لنفس الجزء (بصمته): لا يدخل جزء ملخّص قديم أو وحدة أخرى في هذا الفيديو
-    load: (i) => getUnitContent<VideoScript>(pdfPath, ids.part2(n, i), "videopart2").then((x) => (x?.scenes?.length && x.ps === stamps[i] ? x : undefined)),
-    save: (i, p) => setUnitContent(pdfPath, ids.part2(n, i), "videopart2", { ...p, ps: stamps[i] }),
+    load: (i) => getUnitContent<VideoScript>(pdfPath, ids.part2(n, i), "videopart2", L).then((x) => (x?.scenes?.length && x.ps === stamps[i] ? x : undefined)),
+    save: (i, p) => setUnitContent(pdfPath, ids.part2(n, i), "videopart2", { ...p, ps: stamps[i] }, L),
     // وكيل الجودة: جزء أغفل موضوعًا، أو بلا أسئلته الختامية/تمارينه/أسئلة الفهم، أو يكرر مواضيع غيره → يُعاد مرة مجانًا
     // (وكل إعادة آلية أخرى للجزء — توقّف، انقطاع، ردّ فارغ — مجانية أيضًا برصيد الجزء على السيرفر)
     run: (ctx, i, onPartial) => {
       const meta = parts[i].meta;
       return qaPart(
-        `vid2:${pdfPath}:${ids.part2(n, i)}:${stamps[i]}`,
+        `vid2:${jp}:${ids.part2(n, i)}:${stamps[i]}`,
         "videoscript",
         ctx,
-        (key, qaRetryOf) => jobPart("videoscript", ctx, key, parsePartialVideo, parseVideo, onPartial, { qaRetryOf, vpart: meta, genId }),
+        (key, qaRetryOf) => jobPart("videoscript", ctx, key, parsePartialVideo, parseVideo, onPartial, { qaRetryOf, vpart: meta, genId, ...langExtra(lang), ...study }),
         (v, c) => checkVideoPart(v, c, meta)
       ).then((v) => ({ ...v, done: true }));
     },
@@ -228,7 +247,7 @@ export async function getOrMakeVideo(
   const complete = ok.length === n;
   const script = ok.length ? merge(ok) : null;
   if (script && complete) {
-    await setUnitContent(pdfPath, ids.id, "video", script);
+    await setUnitContent(pdfPath, ids.id, "video", script, L);
     const m = videoMetrics(script);
     recordPerf("video.v2.total", Date.now() - t0, true, n);
     recordPerf("video.v2.examples", 0, true, Math.round(m.examples * 100));
@@ -278,8 +297,9 @@ async function getOrMakeVideoV1(
  * قبل وجود الخطة: عدد أجزاء التقسيم القديم، وهو حد أعلى مضمون (الأجزاء الجديدة لا تزيد عليه).
  * قبل وجود الملخّص يُقدَّر عدد أجزاء الفيديو بعدد أجزاء الملخّص (estimated=true).
  */
-export async function videoRequestCost(pdfPath: string, src: SummarySource, unitTitle: string): Promise<{ pending: number; estimated: boolean }> {
-  if (await getCachedVideo(pdfPath, src)) return { pending: 0, estimated: false };
+export async function videoRequestCost(pdfPath: string, src: SummarySource, unitTitle: string, lang?: string): Promise<{ pending: number; estimated: boolean }> {
+  if (await getCachedVideo(pdfPath, src, lang)) return { pending: 0, estimated: false };
+  const L = otherLang(lang);
   const { getCachedSummary, summaryRequestCost } = await import("./unitSummary");
   const summary = (await getCachedSummary(pdfPath, src)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }));
   if (!summary) {
@@ -288,7 +308,7 @@ export async function videoRequestCost(pdfPath: string, src: SummarySource, unit
   }
   const oldN = videoParts(summary, unitTitle).length;
   const ids = cacheIds(src);
-  if (await v1Pending(pdfPath, src, oldN)) {
+  if (await v1Pending(pdfPath, src, oldN, lang)) {
     const saved = await getUnitContent<VideoScript>(pdfPath, ids.partId(1, 0), "videopart").catch(() => null);
     return { pending: saved?.scenes?.length ? 0 : 1, estimated: false };
   }
@@ -296,12 +316,12 @@ export async function videoRequestCost(pdfPath: string, src: SummarySource, unit
   const missing = async (parts: PlannedPart[]) => {
     const n = parts.length;
     const have = await Promise.all(
-      parts.map((p, i) => getUnitContent<VideoScript>(pdfPath, ids.part2(n, i), "videopart2").then((x) => !!x?.scenes?.length && x.ps === partStamp(p)).catch(() => false))
+      parts.map((p, i) => getUnitContent<VideoScript>(pdfPath, ids.part2(n, i), "videopart2", L).then((x) => !!x?.scenes?.length && x.ps === partStamp(p)).catch(() => false))
     );
     return have.filter((x) => !x).length;
   };
   if (oldN <= 1) return { pending: oldN ? await missing([soloPart(summary, unitTitle)]) : 0, estimated: false };
-  const plan = await getUnitContent<VideoPlan>(pdfPath, ids.id, "videoplan").catch(() => null);
+  const plan = await getUnitContent<VideoPlan>(pdfPath, ids.id, "videoplan", L).catch(() => null);
   if (plan?.v === 2 && plan.sig === summarySig(summary)) return { pending: await missing(planParts(summary, plan, unitTitle, oldN)), estimated: false };
   return { pending: oldN, estimated: false };
 }
