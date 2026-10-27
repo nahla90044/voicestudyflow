@@ -172,3 +172,102 @@ export function unitsFromDividers(pages: { page: number; text: string }[], total
     return { title: title ? `${named?.label ?? u.label}: ${title}` : u.label, page: u.page, to: Math.max(u.page, to), level: 0 };
   });
 }
+
+// ===== عنوان الوحدة في أول سطور صفحتها (٢٧ أكتوبر) =====
+// كتب مثل «قانون التأمين» (الجامعة السعودية الإلكترونية): كل وحدة تبدأ بصفحة طويلة أولها «المقدمة / الوحدة الأولى /
+// عنوانها» ثم النص مباشرة (لا صفحة عنوان قصيرة)، وداخل كل وحدة «المحاضرة الأولى/الثانية/الثالثة» تتكرر — فكان
+// الرأس المتكرر يعدّ المحاضرات وحدات (الأولى، الثالثة، الثانية) ويُسقط الوحدات الخمس عشرة. وبعض عناوين الوحدات
+// مكسورة في طبقة النص («الوحدةال سادسة»، «الوحدةا خلامسةعشرة») فتُملأ من موضعها بين جارتيها.
+
+const UNIT_KIND = /^(?:الوحده|الفصل|الباب|chapter|unit)(?:\s|$)/i; // ‎\b لا يعمل مع الحروف العربية
+const ORD_WORDS = ["", "الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة", "الثامنة", "التاسعة", "العاشرة"];
+/** «الوحدة» + ترتيبها بالكلمات (١ → الأولى، ١٥ → الخامسة عشرة، ٢٠ → العشرون) */
+export function ordinalLabel(n: number, kind = "الوحدة"): string {
+  if (n <= 10) return `${kind} ${ORD_WORDS[n]}`;
+  if (n === 11) return `${kind} الحادية عشرة`;
+  if (n < 20) return `${kind} ${ORD_WORDS[n - 10]} عشرة`;
+  if (n === 20) return `${kind} العشرون`;
+  return `${kind} ${n}`;
+}
+
+/** عنوان مكسور في طبقة نص PDF («خصائ صعقدالتأم ني»): كلمة ملتصقة طويلة جدًا، أو قطعة حرفين ليست كلمة شائعة */
+const SHORT_OK = new Set(["و", "في", "من", "عن", "او", "أو", "لا", "ما", "ان", "إن", "أن", "هو", "هي", "به", "له", "مع", "ثم", "قد", "كل", "تم"]);
+export function brokenTitle(t: string): boolean {
+  const toks = String(t || "").split(/[\s،,:–—\-()]+/).filter((x) => /[\u0600-\u06FF]/.test(x));
+  return toks.some((x) => x.length >= 13) || toks.some((x) => x.length <= 2 && !SHORT_OK.has(x));
+}
+
+/** سطر قصير يبدأ بـ«الوحدة» ولو انكسرت مسافاته (للملء بين وحدتين معروفتين) */
+const looseUnitLine = (line: string) => {
+  const ns = norm(line).replace(/\s+/g, "");
+  return line.length <= 40 && /^الوحده/.test(ns);
+};
+
+export function unitsFromStartLines(pages: { page: number; text: string }[], total: number): HeadingUnit[] {
+  const sorted = [...pages].sort((a, b) => a.page - b.page);
+  type Hit = { ord: number | null; page: number; label: string; title: string };
+  const hits: Hit[] = [];
+  for (const p of sorted) {
+    const text = String(p.text || "");
+    // صفحة فهرس (ثلاث وحدات مختلفة فأكثر) لا تُعدّ بداية
+    if (new Set(findHeadings(text).map((h) => h.key)).size >= 3) continue;
+    const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean).slice(0, 4);
+    for (let i = 0; i < lines.length && i < 3; i++) {
+      const h = parseHeading(lines[i]);
+      const next = (lines[i + 1] ?? "").replace(/\s+/g, " ").trim();
+      // العنوان المكسور يُترك (يبقى رقم الوحدة، ويكتب المنهج عنوانها من محتواها)
+      const titleFrom = (t: string) => (t && t.length <= 140 && !/^(?:المقدمه|المقدمة|املقدمة)$/.test(t) && !brokenTitle(t) ? t : "");
+      if (h && UNIT_KIND.test(h.key)) {
+        hits.push({ ord: ordinalOf(h.key), page: p.page, label: h.label, title: h.title || titleFrom(next) });
+        break;
+      }
+      if (!h && looseUnitLine(lines[i])) {
+        hits.push({ ord: null, page: p.page, label: "", title: titleFrom(next) });
+        break;
+      }
+    }
+  }
+  // ترقيم يُعاد من أوله («الفصل الأول» ثانيةً بعد الرابع) = أقسام متداخلة (أبواب فيها فصول): المصدر غير موثوق هنا
+  const seenOrd = new Set<string>();
+  for (const h of hits) {
+    if (h.ord == null) continue;
+    const k = `${h.label.split(" ")[0]}|${h.ord}`;
+    if (seenOrd.has(k)) return [];
+    seenOrd.add(k);
+  }
+  // تسلسل متزايد من العناوين المقروءة (أول ظهور لكل ترتيب)
+  const strict: Hit[] = [];
+  for (const h of hits) {
+    if (h.ord == null) continue;
+    const last = strict[strict.length - 1];
+    if (!last || (h.ord > last.ord! && h.page > last.page)) strict.push(h);
+  }
+  if (strict.length < 3 || strict[0].ord! > 2) return [];
+  // الملء: ترتيب ناقص بين جارتين، أو بعد الأخيرة، من سطر «الوحدة…» مكسور في موضعه
+  const loose = hits.filter((h) => h.ord == null);
+  const out: Hit[] = [];
+  const take = (ord: number, from: number, to: number) => {
+    const c = loose.find((l) => l.page > from && l.page < to);
+    if (c) out.push({ ...c, ord, label: ordinalLabel(ord, strict[0].label.split(" ")[0] || "الوحدة") });
+    return c;
+  };
+  if (strict[0].ord === 2) take(1, 0, strict[0].page);
+  strict.forEach((s, i) => {
+    out.push(s);
+    const nx = strict[i + 1];
+    if (nx) for (let o = s.ord! + 1; o < nx.ord!; o++) take(o, out[out.length - 1].page, nx.page);
+  });
+  let lastHit = out[out.length - 1];
+  for (let o = lastHit.ord! + 1; ; o++) {
+    const c = take(o, lastHit.page, Infinity);
+    if (!c) break;
+    lastHit = out[out.length - 1];
+  }
+  out.sort((a, b) => a.page - b.page);
+  // التسلسل بعد الملء يجب أن يكون كاملًا (١، ٢، ٣ …) وإلا فالمصدر غير موثوق
+  if (!out.every((h, i) => h.ord === out[0].ord! + i)) return [];
+  return out.map((h, i) => {
+    const to = i + 1 < out.length ? out[i + 1].page - 1 : Math.max(h.page, total || h.page);
+    return { title: h.title ? `${h.label}: ${h.title}` : h.label, page: h.page, to: Math.max(h.page, to), level: 0 };
+  });
+}

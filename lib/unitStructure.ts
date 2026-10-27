@@ -2,7 +2,7 @@
 // فحص بنية وحدات الكتاب قبل اعتمادها في المنهج (مصدرها فهرس القارئ نفسه): لا يُحفظ منهج فيه
 // وحدة مكررة، أو ترتيب مختل، أو «وحدة» بصفحة أو صفحتين وسط وحدات كبيرة، أو صفحات غير متصلة.
 // كل مصدر (فهرس مدمج/مطبوع، رأس الصفحة المتكرر) يُفحص، ويُعتمد أول مصدر سليم.
-import { ordinalOf, parseHeading, tocTitles, unitsFromDividers, unitsFromRunningHeads } from "./unitHeadings.ts";
+import { ordinalOf, parseHeading, tocTitles, unitsFromDividers, unitsFromRunningHeads, unitsFromStartLines } from "./unitHeadings.ts";
 
 export type StructUnit = { title: string; page: number; to: number };
 export type StructCheck = { units: StructUnit[]; sound: boolean; problems: string[] };
@@ -112,8 +112,37 @@ export function pickStructure(cands: Candidate[], toc: TocEntry[], total: number
 export function structureFromPages(pages: { page: number; text: string }[], total: number, extra: Candidate[] = []): Verdict {
   const toc = tocTitles(pages);
   return pickStructure(
-    [{ name: "dividers", units: unitsFromDividers(pages, total, toc) }, ...extra, { name: "running", units: unitsFromRunningHeads(pages, total) }],
+    [
+      { name: "dividers", units: unitsFromDividers(pages, total, toc) },
+      ...extra,
+      // عنوان الوحدة في أول سطور صفحتها — قبل الرأس المتكرر (الذي قد يعدّ المحاضرات وحدات)
+      { name: "startlines", units: unitsFromStartLines(pages, total) },
+      { name: "running", units: unitsFromRunningHeads(pages, total) },
+    ],
     toc,
     total
   );
+}
+
+/**
+ * الفاحص الآلي للمنهج المحفوظ (قرار نهلة ٢٧ أكتوبر): علامات خلل يراها الطالب — ترقيم غير متسلسل
+ * («الأولى، الثالثة، الثانية»)، أو وحدة مكررة، أو وحدة تغطي معظم الكتاب بينما غيرها صغير، أو بداية متأخرة.
+ * يُرجع أسباب الشك (فارغة = سليم). يُسجَّل في المراقبة، والإصلاح الذاتي يعيد التقسيم متى وجد تقسيمًا متحقَّقًا منه.
+ */
+export function suspectSyllabus(units: { title: string }[], ranges: ({ from: number; to: number } | null | undefined)[] | undefined, total: number): string[] {
+  const out: string[] = [];
+  const keys = units.map((u) => unitKey(u.title));
+  if (new Set(keys).size < keys.length) out.push("وحدة مكررة");
+  const ords = keys.map(ordinalOf);
+  const known = ords.filter((n): n is number => n != null);
+  if (known.length >= 2 && known.length === ords.length && !known.every((n, i) => i === 0 || n > known[i - 1])) out.push("ترقيم غير متسلسل");
+  const rs = (ranges ?? []).filter((r): r is { from: number; to: number } => !!r && r.to >= r.from);
+  if (total > 0 && rs.length >= 3) {
+    const spans = rs.map((r) => r.to - r.from + 1);
+    const max = Math.max(...spans);
+    const rest = spans.reduce((a, b) => a + b, 0) - max;
+    if (max > total * 0.6 && max > rest * 2) out.push("وحدة تغطي معظم الكتاب");
+    if (rs[0].from > Math.max(20, total * 0.2)) out.push("البداية متأخرة");
+  }
+  return out;
 }

@@ -29,6 +29,27 @@ export function objectivesFrom(pages: { page: number; text: string }[], u: Struc
     .slice(0, 12);
 }
 
+const ORDW = "(?:أولا|أولاً|اولا|اولاً|ثانيا|ثانياً|ثالثا|ثالثاً|رابعا|رابعاً|خامسا|خامساً|سادسا|سادساً|سابعا|سابعاً|ثامنا|ثامناً)";
+const TOPIC_RE = new RegExp(`^(?:(?:توطئة|تابع)\\s+)?(?:المحاضرة\\s+\\S+\\s*[:：]?\\s*)?${ORDW}\\s*[:：]\\s*(.{3,90})$`);
+
+/**
+ * مواضيع الوحدة بلا ذكاء من عناوينها الداخلية («أولاً : ماهية التأمين»، «المحاضرة الثانية : ثانياً : …»)
+ * لكتب المقررات المرقّمة — حتى ٨ مواضيع، بلا تكرار، بترتيب الصفحات.
+ */
+export function topicsFrom(pages: { page: number; text: string }[], u: StructUnit): string[] {
+  const out: string[] = [];
+  for (const p of pages.filter((x) => x.page >= u.page && x.page <= u.to).sort((a, b) => a.page - b.page)) {
+    for (const line of String(p.text || "").split(/\n+/).map((l) => l.replace(/\s+/g, " ").trim())) {
+      const m = line.match(TOPIC_RE);
+      if (!m) continue;
+      const t = m[1].replace(/[\s:：.،-]+$/, "").replace(/^الاتجاه\s+\S+\s*[:：]\s*/, "").trim();
+      if (t.length >= 3 && !out.includes(t)) out.push(t);
+      if (out.length >= 8) return out;
+    }
+  }
+  return out;
+}
+
 /** المنهج المصحَّح من التقسيم المتحقَّق منه */
 export function healedSyllabus(syl: HealSyllabus, units: StructUnit[], pages: { page: number; text: string }[]): HealSyllabus {
   return {
@@ -39,7 +60,7 @@ export function healedSyllabus(syl: HealSyllabus, units: StructUnit[], pages: { 
       const samePages = !!old && syl.ranges?.[i]?.from === u.page && syl.ranges?.[i]?.to === u.to;
       const objectives = objectivesFrom(pages, u);
       if (samePages && old) return { ...old, title: u.title, objectives: old.objectives?.length ? old.objectives : objectives.length ? objectives : undefined };
-      return { title: u.title, topics: [], objectives: objectives.length ? objectives : undefined };
+      return { title: u.title, topics: topicsFrom(pages, u), objectives: objectives.length ? objectives : undefined };
     }),
     ranges: units.map((u) => ({ from: u.page, to: u.to })),
   };

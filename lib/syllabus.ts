@@ -225,7 +225,7 @@ export async function generateSyllabus(
     const objectives = struct.map((u) => objectivesFrom(pages, u));
     const brief =
       `هذه وحدات الكتاب الدقيقة (${struct.length} وحدة) من فهرسه، ومع كل وحدة مقتطف من صفحاتها الأولى. ` +
-      `أعد المنهج بالوحدات نفسها بالضبط وبالترتيب نفسه وبعناوينها حرفيًا (لا تضف ولا تحذف ولا تدمج)، ` +
+      `أعد المنهج بالوحدات نفسها بالضبط وبالترتيب نفسه وبعناوينها حرفيًا (لا تضف ولا تحذف ولا تدمج)؛ والوحدة التي عنوانها رقمها فقط (مثل «الوحدة السادسة») اكتب لها في title عنوانًا قصيرًا دقيقًا من مقتطفها، ` +
       `ولكل وحدة: about نبذة من جملتين بلغة سهلة عمّا تتناوله الوحدة، ` +
       `وtopics محاضراتها أو مواضيعها الفرعية من مقتطفها هي فقط (حتى ٨ مواضيع قصيرة)، وoutcome ما يتعلمه الطالب منها في جملة. ` +
       `أعد JSON بالشكل {"title":"…","units":[{"title":"…","about":"…","topics":["…"],"outcome":"…"}]}.\n\n` +
@@ -236,7 +236,10 @@ export async function generateSyllabus(
       units: struct.map((u, i) => {
         const m = ai.length === struct.length ? ai[i] : matchUnit(u.title, ai);
         const obj = objectives[i].length ? objectives[i] : m?.objectives ?? [];
-        return { title: u.title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about, objectives: obj.length ? obj : undefined };
+        // وحدة بلا عنوان مقروء في الكتاب (رقمها فقط): عنوانها من الذكاء على محتواها
+        const aiTitle = String(m?.title ?? "").split(/[:：]/).slice(-1)[0].trim();
+        const title = !/[:：]/.test(u.title) && aiTitle && !aiTitle.startsWith(u.title) ? `${u.title}: ${aiTitle}` : u.title;
+        return { title, topics: (m?.topics ?? []).map((x) => String(x).trim()).filter(Boolean), outcome: m?.outcome, about: m?.about, objectives: obj.length ? obj : undefined };
       }),
       tips: [],
     };

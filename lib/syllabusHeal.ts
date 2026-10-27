@@ -8,7 +8,8 @@ import { recordPerf } from "./perf";
 import { healedSyllabus, sameStructure, type HealSyllabus } from "./syllabusHealCore";
 import { supabase } from "./supabase";
 
-const KEY = (p: string) => `vsf:heal:v1:${p}`;
+// v2 (٢٧ أكتوبر): كاشف «عنوان الوحدة أول الصفحة» — كل كتاب يُعاد فحصه مرة
+const KEY = (p: string) => `vsf:heal:v2:${p}`;
 const sig = (s: HealSyllabus) => JSON.stringify([s.units.map((u) => u.title), s.ranges ?? []]);
 const inflight = new Map<string, Promise<HealSyllabus | null>>();
 
@@ -42,6 +43,10 @@ async function heal(pdfPath: string, syl: HealSyllabus, done: boolean[]): Promis
     }
     const { structureFromPages } = await import("./unitStructure");
     const v = structureFromPages(pages, total);
+    // الفاحص الآلي (٢٧ أكتوبر): منهج فيه علامة خلل يراها الطالب ولا تقسيم متحقَّق منه يصلحه → يُسجَّل في المراقبة
+    const { suspectSyllabus } = await import("./unitStructure");
+    const suspect = suspectSyllabus(syl.units, syl.ranges, total);
+    if (suspect.length && !v.verified) recordPerf(`syllabus.suspect.${suspect.length}`, 0, false, syl.units.length);
     if (!v.verified || sameStructure(syl, v.units)) {
       await AsyncStorage.setItem(KEY(pdfPath), s0);
       return null;
