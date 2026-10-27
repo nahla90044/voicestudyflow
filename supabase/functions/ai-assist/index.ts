@@ -5,7 +5,7 @@
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
 import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
-import { LANGUAGE_QSOLVE_PROMPT, LANGUAGE_QUIZ_PROMPT, LANGUAGE_STUDY_PROMPT, LANGUAGE_TABLE_PROMPT, LANGUAGE_VIDEO_PROMPT } from "../_shared/languageStudyPrompt.ts";
+import { LANGUAGE_DEFINE_PROMPT, LANGUAGE_QSOLVE_PROMPT, LANGUAGE_QUIZ_PROMPT, LANGUAGE_STUDY_PROMPT, LANGUAGE_TABLE_PROMPT, LANGUAGE_VIDEO_PROMPT } from "../_shared/languageStudyPrompt.ts";
 import { PLAN_GUARD, planBlock, readVpart, VIDEO_FORMAT, VIDEO_PART, VIDEO_PLAN, VIDEO_ROLE, vpartText } from "../_shared/videoPrompt.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
 import Anthropic from "npm:@anthropic-ai/sdk";
@@ -98,7 +98,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 360, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -380,6 +380,7 @@ Deno.serve(async (req: Request) => {
       }
       // كتاب لتعلّم لغة (نوع الدراسة — قرار نهلة ٢٧ أكتوبر): القواعد بسلاسة وتبسيط، والاقتران كاملًا، والأمثلة بلغتها
       if (body.study === "language" && action === "qsolve") systemPrompt += LANGUAGE_QSOLVE_PROMPT;
+      if (body.study === "language" && action === "define") systemPrompt += LANGUAGE_DEFINE_PROMPT;
       if (body.study === "language" && LANG_STUDY_ACTIONS.has(action)) systemPrompt += LANGUAGE_STUDY_PROMPT + (action === "videoscript" ? LANGUAGE_VIDEO_PROMPT : action === "studysummary" && body.table === true ? LANGUAGE_TABLE_PROMPT : action === "unitquiz" || action === "quiz" ? LANGUAGE_QUIZ_PROMPT : "");
       // عدد مخصّص للبطاقات/الأسئلة (يتجاوز العدد الافتراضي في التعليمات)
       // نوع البطاقات الذي يختاره الطالب (معاني كلمات، تعاريف، أسئلة وأجوبة، مقارنات)

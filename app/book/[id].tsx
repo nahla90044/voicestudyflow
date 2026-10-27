@@ -314,6 +314,15 @@ export default function BookHubScreen() {
     : null;
   const kindInfo = studyKindOf(kindData);
   const askKind = !!kindData && needsKindConfirm(kindData);
+  // أدوات نوع الدراسة: كتب اللغة تُضاف لها «تمارين الاستماع» بعد البطاقات
+  const kindTools: typeof tools =
+    kindInfo.kind === "language"
+      ? [
+          ...tools.slice(0, 4),
+          { key: "listen", labelKey: "book.tool.listen", icon: "headset", go: () => router.push({ pathname: "/listen-practice", params: { pdf_path: book.pdf_path, book_title: book.title } }) },
+          ...tools.slice(4),
+        ]
+      : tools;
   const saveKind = async (k: StudyKind, exam?: string) => {
     setKindOpen(false);
     if (!syl) return;
@@ -633,7 +642,7 @@ export default function BookHubScreen() {
 
           {tab === "tools" && (
             <View style={[styles.grid, { flexDirection: dir.row }]}>
-              {tools.map((tl) => (
+              {kindTools.map((tl) => (
                 <PressableScale key={tl.key} onPress={tl.go} style={styles.toolWrap}>
                   <SceneCard padded={false} style={styles.tool}>
                     <View style={[styles.toolIcon, { backgroundColor: pal.soft }]}>

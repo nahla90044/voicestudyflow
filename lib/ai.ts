@@ -228,12 +228,13 @@ export async function fixArabicSpacing(text: string, force = false): Promise<str
 }
 
 /** يُرجع معنى كلمة حسب سياقها في الجملة (قاموس ذكي). */
-export async function defineWord(word: string, context: string): Promise<string> {
+export async function defineWord(word: string, context: string, languageBook = false): Promise<string> {
   const w = word.trim();
   if (!w) return "";
   const { data, error } = await supabase.functions.invoke("ai-assist", {
     // targetLang = لغة الواجهة → معنى الكلمة يتبع لغة التطبيق (إنجليزي لواجهة إنجليزية)
-    body: { action: "define", question: w, text: context.slice(0, 240), targetLang: getCurrentLang() },
+    // كتب اللغة: المعنى + مثال بلغة الكلمة + أصل الفعل وزمنه (قرار ٢٧ أكتوبر)
+    body: { action: "define", question: w, text: context.slice(0, 240), targetLang: getCurrentLang(), ...(languageBook ? { study: "language" } : {}) },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);

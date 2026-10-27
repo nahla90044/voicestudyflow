@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { studyExtra } from "../../lib/studyKind";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import * as ScreenOrientation from "expo-screen-orientation";
@@ -469,6 +470,18 @@ export default function ReaderScreen() {
   const [dictLoading, setDictLoading] = useState(false);
   const [wordSheet, setWordSheet] = useState<SavedWord | null>(null); // «كلماتي»: بطاقة الكلمة المحفوظة
   const dictContextRef = useRef("");
+  // كتاب لغة (نوع الدراسة): القاموس يضيف مثالًا ونطقًا وزر البطاقات (قرار ٢٧ أكتوبر)
+  const [langBook, setLangBook] = useState(false);
+  useEffect(() => {
+    if (!pdfPath) return;
+    let on = true;
+    studyExtra(pdfPath)
+      .then((x) => on && setLangBook(!!x.study))
+      .catch(() => {});
+    return () => {
+      on = false;
+    };
+  }, [pdfPath]);
 
   // وضع القيادة (واجهة كبيرة مبسّطة)
   const [drivingMode, setDrivingMode] = useState(false);
@@ -2502,7 +2515,7 @@ export default function ReaderScreen() {
     setDictLoading(true);
     setDictOpen(true);
     try {
-      const m = await defineWord(word, context);
+      const m = await defineWord(word, context, langBook);
       setDictMeaning(m || t("reader.dict.noMeaning"));
     } catch {
       setDictMeaning(t("reader.dict.meaningFailed"));
@@ -4266,10 +4279,30 @@ export default function ReaderScreen() {
                 <ScrollView style={{ flexGrow: 0, maxHeight: screenH * 0.5 }} showsVerticalScrollIndicator>
                   <Text style={[styles.dictMeaning, { textAlign: dir.textAlign }]}>{dictMeaning}</Text>
                 </ScrollView>
-                <Pressable onPress={() => void saveToMyWords(dictWord, dictContextRef.current)} style={[styles.dictSave, { flexDirection: dir.row }]}>
-                  <Ionicons name="bookmark" size={15} color={SKY.onAccent} />
-                  <Text style={styles.dictSaveTxt}>{t("words.saveMore")}</Text>
-                </Pressable>
+                <View style={{ flexDirection: dir.row, flexWrap: "wrap", gap: 8 }}>
+                  <Pressable onPress={() => void saveToMyWords(dictWord, dictContextRef.current)} style={[styles.dictSave, { flexDirection: dir.row }]}>
+                    <Ionicons name="bookmark" size={15} color={SKY.onAccent} />
+                    <Text style={styles.dictSaveTxt}>{t("words.saveMore")}</Text>
+                  </Pressable>
+                  {langBook ? (
+                    <>
+                      <Pressable onPress={() => void speakText(dictWord, { voiceId: pickVoice() }).catch(() => {})} style={[styles.dictSave, { flexDirection: dir.row }]}>
+                        <Ionicons name="volume-high" size={15} color={SKY.onAccent} />
+                        <Text style={styles.dictSaveTxt}>{t("reader.dict.listen")}</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={async () => {
+                          const n = await addCards([{ front: dictWord, back: dictMeaning, kind: "words", bookId, bookTitle: typeof title === "string" ? title : undefined, page }]).catch(() => 0);
+                          showToast(n ? t("reader.dict.addedCard") : t("reader.dict.cardExists"));
+                        }}
+                        style={[styles.dictSave, { flexDirection: dir.row }]}
+                      >
+                        <Ionicons name="albums" size={15} color={SKY.onAccent} />
+                        <Text style={styles.dictSaveTxt}>{t("reader.dict.toCards")}</Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+                </View>
               </>
             )}
           </View>
