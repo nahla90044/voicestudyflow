@@ -13,6 +13,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "re
 import { BookCover } from "../../components/brand/book-cover";
 import { ExamDateSheet } from "../../components/brand/exam-date-sheet";
 import { StudyKindSheet } from "../../components/brand/study-kind-sheet";
+import { SyllabusView } from "../../components/syllabus/syllabus-view";
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
 import { PressableScale } from "../../components/brand/motion";
 import { NowPlayingDock } from "../../components/brand/now-playing-dock";
@@ -33,7 +34,8 @@ import { getSyllabus, setStudyKind, type Syllabus } from "../../lib/syllabus";
 import { guessStudyKind, needsKindConfirm, studyKindOf, type StudyKind } from "../../lib/studyKindCore";
 
 type Book = { id: string; title: string; pdf_path: string; page_count: number | null };
-type Tab = "units" | "tools" | "saves";
+// «المنهج» أول تبويب والصفحة تفتح عليه (قرار نهلة ٢٧ أكتوبر: الطالب كان يضيع ولا يجد المنهج)
+type Tab = "syllabus" | "units" | "tools" | "saves";
 
 export default function BookHubScreen() {
   const router = useRouter();
@@ -81,7 +83,7 @@ export default function BookHubScreen() {
   const [page, setPage] = useState(1);
   const [syl, setSyl] = useState<{ data: Syllabus; done: boolean[] } | null>(null);
   const [cards, setCards] = useState(0);
-  const [tab, setTab] = useState<Tab>("units");
+  const [tab, setTab] = useState<Tab>("syllabus");
   // «المحفوظات»: العروض وإجابات المساعد المحفوظة من القارئ لهذا الكتاب
   const [saves, setSaves] = useState<StudySave[] | null>(null);
   const [folders, setFolders] = useState<BookFolder[]>([]); // «ملفاتي»: ملفات ينشئها المستخدم ويضع فيها ما يشاء
@@ -451,7 +453,7 @@ export default function BookHubScreen() {
 
           {/* تبويبات الصفحة */}
           <View {...coach.bind("seg")} style={[styles.seg, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}>
-            {(["units", "tools", "saves"] as Tab[]).map((k) => {
+            {(["syllabus", "units", "tools", "saves"] as Tab[]).map((k) => {
               const on = tab === k;
               return (
                 <PressableScale
@@ -468,7 +470,7 @@ export default function BookHubScreen() {
             })}
           </View>
 
-          {tab === "units" && !!ready?.dueMistakes && (
+          {(tab === "units" || tab === "syllabus") && !!ready?.dueMistakes && (
             <PressableScale
               onPress={() => router.push({ pathname: "/unit-quiz", params: { pdf_path: book.pdf_path, mode: "mistakes", book_title: book.title } })}
               style={[styles.mistakes, { flexDirection: dir.row, backgroundColor: pal.card, borderColor: pal.cardBorder }]}
@@ -479,6 +481,22 @@ export default function BookHubScreen() {
               <Text style={[styles.mistakesTxt, { color: pal.ink, textAlign: dir.textAlign }]}>{t("book.mistakes", { n: ready.dueMistakes })}</Text>
               <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
             </PressableScale>
+          )}
+
+          {tab === "syllabus" && (
+            <SyllabusView
+              embedded
+              bookId={book.id}
+              title={book.title}
+              pdfPath={book.pdf_path}
+              onSyllabus={(s) => {
+                // منهج أُنشئ أو تغيّرت وحداته من التبويب: تُحدَّث الوحدات والأدوات ونوع الدراسة في الصفحة
+                if (s && (!syl || syl.data.units.length !== s.units.length || syl.data.kind !== s.kind))
+                  getSyllabus(book.pdf_path)
+                    .then((r) => r && setSyl(r))
+                    .catch(() => {});
+              }}
+            />
           )}
 
           {tab === "units" &&
