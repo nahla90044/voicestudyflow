@@ -117,3 +117,21 @@ export function tint(hex: string, amount = 0.14): string {
   const mix = (h: string) => Math.round(255 - (255 - parseInt(h, 16)) * amount).toString(16).padStart(2, "0");
   return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
 }
+
+/**
+ * مقياس «مربع الدرس» على الشريحة: كلما زاد المحتوى (جمل محلّلة، صيغة، خطأ شائع) صغر الخط بالنسبة نفسها،
+ * فيبقى كله داخل اللوحة ولا يركب على الترجمة أسفلها (طلب نهلة: لا شيء يركب على شيء). ١ = الحجم الكامل.
+ */
+export function gramScale(g: LangBlock, hasTitle = true): number {
+  const room = 8; // ما يتسع له ارتفاع اللوحة بالحجم الكامل (بوحدات سطر تقريبية)
+  let units = hasTitle ? 1 : 0;
+  if (g.rule || g.formula) units += 1 + (g.formula ? 0.8 : 0) + ((g.rule?.length ?? 0) > 80 ? 0.6 : 0);
+  if (g.parse?.length) {
+    for (const s of g.parse) units += 2.2 + (s.words.some((w) => w.base || w.tense) ? 0.6 : 0) + (s.tr ? 0.5 : 0);
+    if (g.mistake) units += 0.9;
+  } else if (g.conj) {
+    // الاقتران بجانب القاعدة: الطول للجدول وحده
+    units = Math.max(units, (hasTitle ? 1 : 0) + 1 + g.conj.rows.length * 0.8);
+  }
+  return Math.max(0.6, Math.min(1, room / Math.max(units, 0.01)));
+}

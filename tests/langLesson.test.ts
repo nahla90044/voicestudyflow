@@ -89,3 +89,14 @@ test("أدوار بالفرنسية من الفيديو الفرنسي", () => {
   assert.equal(roleKind("nom, objet"), "object");
   assert.equal(roleKind("article indéfini"), "prep");
 });
+
+test("مقياس المربع: المحتوى الكثير يصغر ولا يفيض", async () => {
+  const { gramScale } = await import("../lib/langLessonCore.ts");
+  const w = (n: number) => Array.from({ length: n }, (_, i) => ({ w: "w" + i, role: "اسم", base: i === 1 ? "b" : undefined, tense: i === 1 ? "t" : undefined }));
+  const one = { rule: "قاعدة قصيرة", formula: "a + b", parse: [{ words: w(4), tr: "ترجمة" }] };
+  assert.equal(gramScale(one), 1);
+  const two = { ...one, parse: [{ words: w(5), tr: "x" }, { words: w(5), tr: "y" }], mistake: "خطأ شائع" };
+  const k = gramScale(two);
+  assert.ok(k < 1 && k >= 0.6, String(k));
+  assert.equal(gramScale({ conj: { verb: "avoir", tense: "", rows: Array.from({ length: 6 }, () => ["p", "f"] as [string, string]) } }), 1);
+});

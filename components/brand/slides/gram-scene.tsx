@@ -6,7 +6,7 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { isLatinText, ROLE_COLORS, roleKind, type GramSentence, type LangBlock } from "../../../lib/langLessonCore";
+import { gramScale, isLatinText, ROLE_COLORS, roleKind, type GramSentence, type LangBlock } from "../../../lib/langLessonCore";
 
 export { ROLE_COLORS };
 import { Reveal, type SlideCtx } from "./shared";
@@ -98,6 +98,10 @@ export function GramScene({ ctx, palette }: { ctx: SlideCtx; palette: keyof type
   const { ff, align, sv, row } = ctx;
   const title = ctx.scene.title;
   const conjOnly = !!g.conj && !g.parse?.length;
+  // المحتوى الكثير يصغر بالنسبة نفسها فيبقى داخل اللوحة (لا يركب على الترجمة) — العرض يتسع بمقلوب المقياس
+  const k = gramScale(g, !!title);
+  const fit: object =
+    k < 1 ? { width: `${100 / k}%`, marginHorizontal: `${-(100 / k - 100) / 2}%`, transform: [{ scale: k }], transformOrigin: "top center", gap: 16 } : { flex: 1, gap: 16 };
   return (
     <View style={[StyleSheet.absoluteFill, { paddingTop: ctx.safe.top + 26, paddingBottom: ctx.safe.bottom - 6, paddingHorizontal: ctx.safe.side }]}>
       <View style={[styles.panel, { backgroundColor: pal.panel, borderColor: pal.line }]}>
@@ -127,7 +131,8 @@ export function GramScene({ ctx, palette }: { ctx: SlideCtx; palette: keyof type
             <ConjBox g={g} pal={pal} ff={ff} sv={sv} flex={1.15} />
           </View>
         ) : (
-          <View style={{ flex: 1, gap: 16 }}>
+          <View style={{ flex: 1, overflow: "hidden" }}>
+          <View style={fit}>
             <RuleBox g={g} pal={pal} ff={ff} align={align} sv={sv} />
             {(g.parse ?? []).map((s, i) => (
               <Reveal key={i} sv={sv} at={0.22 + i * 0.24}>
@@ -135,12 +140,13 @@ export function GramScene({ ctx, palette }: { ctx: SlideCtx; palette: keyof type
               </Reveal>
             ))}
             {g.mistake ? (
-              <Reveal sv={sv} at={0.78} style={[styles.mistake, { borderColor: ROLE_COLORS.verb, marginTop: "auto" }]}>
+              <Reveal sv={sv} at={0.78} style={[styles.mistake, { borderColor: ROLE_COLORS.verb, marginTop: k < 1 ? 0 : "auto" }]}>
                 <Text style={[ff("plex600"), styles.mistakeTxt, { color: pal.ink, textAlign: align }]} numberOfLines={2}>
                   ⚠️ {g.mistake}
                 </Text>
               </Reveal>
             ) : null}
+          </View>
           </View>
         )}
       </View>
@@ -149,7 +155,7 @@ export function GramScene({ ctx, palette }: { ctx: SlideCtx; palette: keyof type
 }
 
 const styles = StyleSheet.create({
-  panel: { flex: 1, borderRadius: 28, borderWidth: 1, padding: 26, gap: 16 },
+  panel: { flex: 1, borderRadius: 28, borderWidth: 1, padding: 26, gap: 16, overflow: "hidden" },
   emoji: { fontSize: 34 },
   title: { fontSize: 36, lineHeight: 52 },
   ruleBox: { borderWidth: 2, borderRadius: 20, paddingVertical: 14, paddingHorizontal: 18, gap: 10 },
