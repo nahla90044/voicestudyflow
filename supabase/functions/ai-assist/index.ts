@@ -53,6 +53,12 @@ const SYSTEM: Record<string, string> = {
     "أنت خبير في التشكيل العربي (الحركات الإعرابية والبنيوية). شكّل النص التالي تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا. التزم بقواعد النحو والصرف، وانتبه بدقة لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. ممنوع تمامًا تغيير الكلمات أو ترتيبها أو إضافة أو حذف أي شيء — أعد النص نفسه مشكولًا فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة. إن لم يكن النص عربيًا (إنجليزي أو فرنسي أو غيره) فأعده كما هو حرفيًا دون أي تغيير أو تعليق أو اعتذار.",
   ocrtashkeel:
     "أنت خبير في تصحيح النصوص العربية الممسوحة ضوئيًا وتشكيلها. النص التالي مستخرَج بتقنية OCR من كتاب مصوّر وقد يحوي أخطاء مسح: حروف مقروءة خطأ، نقاط أو همزات مشوّهة، كلمات ملتصقة أو مقطوعة. مهمتك خطوتان في مخرج واحد: أولًا صحّح أخطاء المسح الواضحة فقط بإرجاع كل كلمة إلى صورتها الصحيحة المقصودة في الأصل المطبوع — دون إعادة صياغة أو إضافة أو حذف أو تلخيص، وإن شككت في كلمة فأبقِها كما هي. ثانيًا شكّل النص الناتج تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا، بقواعد النحو والصرف، مع الانتباه لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. أعد النص المصحَّح المشكول فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة. إن لم يكن النص عربيًا (إنجليزي أو فرنسي أو غيره) فأعده كما هو حرفيًا دون أي تغيير أو تعليق أو اعتذار.",
+  // القراءة الثنائية لكتب اللغة (٢٧ أكتوبر): ترجمة جمل الصفحة جملةً بجملة بالترتيب نفسه
+  bilingual:
+    'أنت مترجم محترف لطلاب يتعلّمون اللغة. ستصلك مصفوفة JSON بجمل صفحة من كتاب لغة. ترجم كل جملة ترجمة دقيقة وطبيعية تحافظ على المعنى والزمن، بالترتيب نفسه وبعدد الجمل نفسه تمامًا: عنصر لكل جملة ولو كانت عنوانًا أو كلمة واحدة (والعنصر الذي لا معنى لترجمته كرقم صفحة يُعاد كما هو). أعد فقط مصفوفة JSON من النصوص المترجمة ["…","…"] دون أي نص خارجها.',
+  // تصحيح الكتابة لكتب اللغة (٢٧ أكتوبر): يكتب الطالب فقرة بلغة الكتاب فتُصحَّح مع شرح كل خطأ
+  writecheck:
+    'أنت معلّم لغة صبور. النص المرفق كتبه طالب يتعلّم لغته (لغة النص نفسها). صحّحه: corrected النص كاملًا مصحّحًا بلغته الأصلية (لا تترجمه، ولا تغيّر أسلوبه إلا ما يلزم)، وerrors قائمة بكل خطأ: wrong الجزء الخاطئ كما كتبه، right تصحيحه، why شرح القاعدة في جملة قصيرة بسيطة بلغة الشرح، type نوعه: grammar أو conj (تصريف) أو spelling أو vocab أو style. وtip نصيحة واحدة لأكثر ما يحتاج تحسينه، وgood جملة تشجيع صادقة عمّا أحسن فيه. إن لم يكن في النص خطأ فerrors فارغة. أعد فقط JSON صالحًا بالشكل {"corrected":"","errors":[{"wrong":"","right":"","why":"","type":"grammar"}],"tip":"","good":""} دون أي نص خارج JSON.',
   // ورقة المعادلات لكتب الشهادات (٢٧ أكتوبر): كل معادلة في نص الوحدة بمعنى رموزها ومثال محلول منه
   formulas:
     'أنت أستاذ لشهادة مهنية (محاسبة/مالية/إدارة). استخرج من نص الوحدة المرفق **كل** المعادلات والنسب والصيغ الحسابية الواردة فيه صراحةً (لا تخترع معادلة غير موجودة في النص). لكل معادلة: name اسمها بلغة المخرجات مع مقابلها الإنجليزي بين قوسين، formula الصيغة كما تُكتب في المراجع الدولية (بالإنجليزية وبرموز + − × ÷ =)، symbols قائمة [الرمز أو البند كما في الصيغة، معناه بلغة المخرجات]، example مثال رقمي قصير (من النص إن وُجد فيه مثال، وإلا بأرقام بسيطة)، steps حله في خطوات قصيرة تبدأ بأرقامها ١) ٢) ٣)، tip الخطأ الشائع في تطبيقها في سطر. إن لم تكن في النص أي معادلة فأعد {"items":[]}. أعد فقط JSON صالحًا بالشكل {"items":[{"name":"","formula":"","symbols":[["",""]],"example":"","steps":[""],"tip":""}]} دون أي نص خارج JSON.',
@@ -88,6 +94,7 @@ const SYSTEM: Record<string, string> = {
 // ٢٠ أكتوبر ٢٠٢٦ (قرار نهلة): الجيل الأحدث الأرخص — Haiku 5.5 بدل 4.5 (أرخص ١٠ مرات)، وSonnet 5.5 بدل 4.6 (أرخص بالثلث).
 const MODEL: Record<string, string> = {
   qextract: "claude-haiku-5-5", // استخراج الأسئلة كما هي: نسخ منظّم → نموذج سريع رخيص
+  bilingual: "claude-haiku-5-5", // ترجمة جمل الصفحة (مثل «translate»)
   cleanup: "claude-haiku-5-5",
   define: "claude-haiku-5-5",
   slides: "claude-haiku-5-5", // العرض التقديمي: تلخيص بسيط → نموذج سريع
@@ -102,7 +109,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, formulas: 9000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, formulas: 9000, bilingual: 8000, writecheck: 6000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -185,10 +192,10 @@ async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<ty
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
 const INTERNAL = new Set(["cleanup", "tashkeel", "ocrtashkeel", "fixspacing", "filternoise", "moderate", "define"]);
 const INTERNAL_DAILY_CAP = 800;
-const SCANNED = new Set(["formulas", "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
+const SCANNED = new Set(["bilingual", "writecheck", "formulas", "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
 // videoplan ليس هنا: خطة الفيديو لا تُحسب على الطالب (عدد الطلبات لا يزيد على ما قبل الخطة)، ولها سقف يومي
 const VIDEO_PLAN_DAILY_CAP = 40;
-const COUNTED = new Set(["formulas", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
+const COUNTED = new Set(["bilingual", "writecheck", "formulas", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -389,6 +396,9 @@ Deno.serve(async (req: Request) => {
         systemPrompt += action === "unitquiz" || action === "quiz" ? certQuizPrompt(exam) : certStudyPrompt(exam);
       }
       if (body.study === "language" && action === "qsolve") systemPrompt += LANGUAGE_QSOLVE_PROMPT;
+      // لغة الترجمة والشرح = لغة الواجهة؛ نص الطالب المصحَّح يبقى بلغته (لا يدخلان LANG_ENFORCED لهذا)
+      if (action === "bilingual") systemPrompt += `\n\nلغة الترجمة: ${OUT_LANG[targetLang] ?? OUT_LANG.ar}.`;
+      if (action === "writecheck") systemPrompt += `\n\nلغة الشرح (why وtip وgood): ${OUT_LANG[targetLang] ?? OUT_LANG.ar}. أما corrected وwrong وright فبلغة نص الطالب نفسها.`;
       if (body.study === "language" && action === "define") systemPrompt += LANGUAGE_DEFINE_PROMPT;
       if (body.study === "language" && LANG_STUDY_ACTIONS.has(action)) systemPrompt += LANGUAGE_STUDY_PROMPT + (action === "videoscript" ? LANGUAGE_VIDEO_PROMPT : action === "studysummary" && body.table === true ? LANGUAGE_TABLE_PROMPT : action === "unitquiz" || action === "quiz" ? LANGUAGE_QUIZ_PROMPT : "");
       // عدد مخصّص للبطاقات/الأسئلة (يتجاوز العدد الافتراضي في التعليمات)

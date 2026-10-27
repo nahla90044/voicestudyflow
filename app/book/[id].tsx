@@ -320,6 +320,8 @@ export default function BookHubScreen() {
       ? [
           ...tools.slice(0, 4),
           { key: "listen", labelKey: "book.tool.listen", icon: "headset", go: () => router.push({ pathname: "/listen-practice", params: { pdf_path: book.pdf_path, book_title: book.title } }) },
+          { key: "bilingual", labelKey: "book.tool.bilingual", icon: "language", go: () => router.push({ pathname: "/bilingual-reader", params: { pdf_path: book.pdf_path, book_id: book.id, book_title: book.title } }) },
+          { key: "writecheck", labelKey: "book.tool.writecheck", icon: "pencil", go: () => router.push({ pathname: "/writing-check", params: { pdf_path: book.pdf_path, book_title: book.title } }) },
           ...tools.slice(4),
         ]
       : kindInfo.kind === "cert"

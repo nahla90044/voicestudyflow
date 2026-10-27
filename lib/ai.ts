@@ -31,7 +31,9 @@ export type AiAction =
   | "filternoise"
   | "fixspacing"
   | "moderate"
-  | "formulas";
+  | "formulas"
+  | "bilingual"
+  | "writecheck";
 
 /** تخطيطات الشرائح (بأسلوب Gamma): يختار الذكاء الأنسب لمحتوى كل شريحة */
 export type SlideLayout = "cover" | "list" | "cards" | "steps" | "compare" | "stat" | "quote" | "summary";
