@@ -156,6 +156,23 @@ export default function BookHubScreen() {
     }, [bookId])
   );
 
+  // تغيّرت وحدات المنهج وهذه الصفحة مفتوحة (إنشاء أو إصلاح ذاتي بالخلفية): تُعاد صفحات الوحدات
+  useEffect(() => {
+    const n = syl?.data.units.length ?? 0;
+    if (!book?.pdf_path || !n || ranges?.length === n) return;
+    let on = true;
+    const sr = syl!.data.ranges;
+    if (sr && sr.length === n) setRanges(sr.map((r) => ({ from: r.from, to: r.to, found: true })));
+    else
+      getUnitRanges(book.pdf_path, syl!.data.units.map((u) => u.title), Number(book.page_count) || 0)
+        .then((rr) => on && setRanges(rr))
+        .catch(() => {});
+    return () => {
+      on = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syl]);
+
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const backBtn = (
     <PressableScale onPress={goBack}>
