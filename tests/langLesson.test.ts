@@ -58,3 +58,10 @@ test("اتجاه النص", () => {
   assert.equal(isLatinText("Je mange une pomme"), true);
   assert.equal(isLatinText("أكلت تفاحة"), false);
 });
+
+test("اللون الفاتح المُصمت للطباعة", async () => {
+  const { tint } = await import("../lib/langLessonCore.ts");
+  assert.equal(tint("#000000", 0.5), "#808080");
+  assert.equal(tint("#FFFFFF"), "#ffffff");
+  assert.match(tint("#3B82F6"), /^#[0-9a-f]{6}$/);
+});

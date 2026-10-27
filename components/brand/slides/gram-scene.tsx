@@ -6,7 +6,9 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { isLatinText, roleKind, type GramSentence, type LangBlock, type RoleKind } from "../../../lib/langLessonCore";
+import { isLatinText, ROLE_COLORS, roleKind, type GramSentence, type LangBlock } from "../../../lib/langLessonCore";
+
+export { ROLE_COLORS };
 import { Reveal, type SlideCtx } from "./shared";
 
 type Pal = { panel: string; ink: string; dim: string; accent: string; line: string; soft: string };
@@ -19,18 +21,6 @@ export const GRAM_PALETTES: Record<"editorial" | "visual" | "cinematic" | "class
   classic: { panel: "#FFFFFF", ink: "#0F172A", dim: "#64748B", accent: "#2563EB", line: "rgba(15,23,42,0.10)", soft: "rgba(37,99,235,0.07)" },
 };
 
-/** لون ثابت لكل دور في كل الأشكال: الطالب يربط اللون بالدور */
-export const ROLE_COLORS: Record<RoleKind, string> = {
-  subject: "#3B82F6",
-  verb: "#F43F5E",
-  object: "#10B981",
-  noun: "#8B5CF6",
-  adj: "#F59E0B",
-  adv: "#06B6D4",
-  pronoun: "#6366F1",
-  prep: "#94A3B8",
-  other: "#9CA3AF",
-};
 
 function Sentence({ s, pal, ff, align }: { s: GramSentence; pal: Pal; ff: SlideCtx["ff"]; align: "right" | "left" }) {
   const latin = isLatinText(s.words.map((w) => w.w).join(" "));

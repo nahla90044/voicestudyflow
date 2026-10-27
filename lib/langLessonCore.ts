@@ -85,3 +85,24 @@ export function roleKind(role: string): RoleKind {
 
 /** نص بحروف لاتينية (الفرنسية/الإنجليزية): يُرسم من اليسار لليمين مهما كانت لغة الواجهة */
 export const isLatinText = (s: string) => /[A-Za-zÀ-ÿ]/.test(s) && !/[؀-ۿ]/.test(s);
+
+/** لون ثابت لكل دور في كل مكان (الفيديو والملخّص والطباعة): الطالب يربط اللون بالدور */
+export const ROLE_COLORS: Record<RoleKind, string> = {
+  subject: "#3B82F6",
+  verb: "#F43F5E",
+  object: "#10B981",
+  noun: "#8B5CF6",
+  adj: "#F59E0B",
+  adv: "#06B6D4",
+  pronoun: "#6366F1",
+  prep: "#94A3B8",
+  other: "#9CA3AF",
+};
+
+/** لون فاتح مُصمت (مزج باللون الأبيض) — الطباعة على آيفون تحوّل الشفافية سوادًا، فلا ألفا في الورق */
+export function tint(hex: string, amount = 0.14): string {
+  const m = hex.replace("#", "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return "#F3F4F6";
+  const mix = (h: string) => Math.round(255 - (255 - parseInt(h, 16)) * amount).toString(16).padStart(2, "0");
+  return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
+}

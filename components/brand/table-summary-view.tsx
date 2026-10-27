@@ -6,6 +6,7 @@
 import React from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
+import { isLatinText, ROLE_COLORS, roleKind, tint, type LangBlock } from "../../lib/langLessonCore";
 import { NUM_COLORS, NUM_EMOJI, TOPIC_COLORS, itemColumns, plainItem, segments, type TableRow, type TableSummary } from "../../lib/tableSummary";
 
 const INK = "#1d2330";
@@ -94,6 +95,7 @@ function RowBody({ r, edge, wide }: { r: TableRow; edge: string; wide: boolean }
           <Rich text={`🗝️ ${r.key}`} style={styles.small} />
         </View>
       ) : null}
+      {r.gram ? <GramPaper g={r.gram} /> : null}
       {r.compare ? (
         <View style={styles.cmp}>
           {[r.compare.headers, ...r.compare.rows].map((cr, ri) => (
@@ -105,6 +107,58 @@ function RowBody({ r, edge, wide }: { r: TableRow; edge: string; wide: boolean }
               ))}
             </View>
           ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** «مربع الدرس» على الورقة (كتب اللغة): القاعدة وصيغتها، والجملة كلمة كلمة بدورها، وجدول الاقتران، والخطأ الشائع */
+function GramPaper({ g }: { g: LangBlock }) {
+  return (
+    <View style={styles.gram}>
+      {g.rule ? <Text style={[styles.txt, { color: INK, fontWeight: "700" }]}>📐 {g.rule}</Text> : null}
+      {g.formula ? (
+        <View style={styles.gForm}>
+          <Text style={styles.gFormTxt}>{g.formula}</Text>
+        </View>
+      ) : null}
+      {(g.parse ?? []).map((sn, si) => (
+        <View key={si} style={{ gap: 4 }}>
+          <View style={[styles.gSent, { flexDirection: isLatinText(sn.words.map((w) => w.w).join(" ")) ? "row" : "row-reverse" }]}>
+            {sn.words.map((w, i) => {
+              const c = ROLE_COLORS[roleKind(w.role)];
+              return (
+                <View key={i} style={styles.gCol}>
+                  <View style={[styles.gBox, { borderColor: c, backgroundColor: tint(c) }]}>
+                    <Text style={styles.gWord}>{w.w}</Text>
+                  </View>
+                  {w.role ? <Text style={[styles.gRole, { color: c }]}>{w.role}</Text> : null}
+                  {w.base || w.tense ? <Text style={styles.gBase}>{[w.base, w.tense].filter(Boolean).join(" · ")}</Text> : null}
+                </View>
+              );
+            })}
+          </View>
+          {sn.tr ? <Text style={styles.gTr}>«{sn.tr}»</Text> : null}
+        </View>
+      ))}
+      {g.conj ? (
+        <View style={styles.gConj}>
+          <View style={[styles.gConjHead, { backgroundColor: tint(ROLE_COLORS.verb) }]}>
+            <Text style={styles.gConjVerb}>{g.conj.verb}</Text>
+            {g.conj.tense ? <Text style={[styles.gConjTense, { color: ROLE_COLORS.verb }]}>{g.conj.tense}</Text> : null}
+          </View>
+          {g.conj.rows.map(([p, f], i) => (
+            <View key={i} style={styles.gConjRow}>
+              <Text style={[styles.gConjP, { color: ROLE_COLORS.pronoun }]}>{p}</Text>
+              <Text style={styles.gConjF}>{f}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {g.mistake ? (
+        <View style={styles.gMis}>
+          <Text style={[styles.txt, { color: "#9a2a12", fontWeight: "700" }]}>⚠️ {g.mistake}</Text>
         </View>
       ) : null}
     </View>
@@ -203,5 +257,23 @@ const styles = StyleSheet.create({
   cmpSep: { borderRightWidth: 1, borderRightColor: LINE },
   links: { borderWidth: 2, borderColor: "#7A4FC0", borderStyle: "dashed", borderRadius: 12, padding: 10, backgroundColor: "#FAF7FF", gap: 2 },
   lh: { fontWeight: "900", color: "#5b36a0", textAlign: "right", fontSize: 14 },
+  gram: { borderWidth: 2, borderColor: "#c9d2e3", borderRadius: 12, padding: 10, gap: 8, backgroundColor: "#fbfcfe", marginTop: 4 },
+  gForm: { alignSelf: "center", borderWidth: 1.5, borderColor: "#B8892B", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 3 },
+  gFormTxt: { color: "#8a6418", fontWeight: "800", fontSize: 14, writingDirection: "ltr" },
+  gSent: { flexWrap: "wrap", justifyContent: "center", gap: 8 },
+  gCol: { alignItems: "center", gap: 2, maxWidth: 160 },
+  gBox: { borderWidth: 2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
+  gWord: { color: INK, fontSize: 15, fontWeight: "700", writingDirection: "ltr" },
+  gRole: { fontSize: 11, fontWeight: "800", textAlign: "center" },
+  gBase: { color: "#5b6475", fontSize: 10, textAlign: "center" },
+  gTr: { color: "#5b6475", fontSize: 12, textAlign: "center" },
+  gConj: { alignSelf: "center", minWidth: 220, borderWidth: 1, borderColor: LINE, borderRadius: 8, overflow: "hidden" },
+  gConjHead: { flexDirection: "row", justifyContent: "center", alignItems: "baseline", gap: 8, paddingVertical: 4 },
+  gConjVerb: { color: INK, fontWeight: "800", fontSize: 15 },
+  gConjTense: { fontWeight: "700", fontSize: 12 },
+  gConjRow: { flexDirection: "row", borderTopWidth: 1, borderTopColor: LINE, paddingVertical: 3, paddingHorizontal: 12, gap: 12 },
+  gConjP: { width: 70, fontSize: 13, writingDirection: "ltr" },
+  gConjF: { flex: 1, color: INK, fontWeight: "700", fontSize: 14, writingDirection: "ltr" },
+  gMis: { borderWidth: 1.5, borderStyle: "dashed", borderColor: "#F43F5E", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
 });
 

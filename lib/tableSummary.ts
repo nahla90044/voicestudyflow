@@ -5,6 +5,7 @@
 // والتعداد الطويل مجموعات بعناوين. منطق خالص (مُختبَر): القراءة، والقراءة أثناء البثّ، ودمج الأجزاء،
 // وتمييز الأرقام المهمة (📅 تاريخ، 📘 مادة، 📜 مرسوم، ⏳ مدة، 💰 مبلغ، ⛓️ سجن)، والنص للاستماع، وصفحة الطباعة.
 import { parseJsonLenient } from "./jsonRepair.ts";
+import { isLatinText, parseLangBlock, ROLE_COLORS, roleKind, tint, type LangBlock } from "./langLessonCore.ts";
 import type { StudySummary, SummarySection } from "./studySummary.ts";
 
 export type TableGroup = { title: string; items: string[] };
@@ -16,6 +17,8 @@ export type TableRow = {
   key?: string;
   ex?: string[];
   compare?: { headers: string[]; rows: string[][] };
+  /** «مربع الدرس» لكتب اللغة: قاعدة وصيغة وجملة محلّلة وجدول اقتران (قرار نهلة ٢٧ أكتوبر) */
+  gram?: LangBlock;
 };
 export type TableTopic = { topic: string; hook?: string; rows: TableRow[] };
 export type TableSummary = { title: string; topics: TableTopic[]; links: string[] };
@@ -46,7 +49,9 @@ function row(o: any): TableRow | null {
     });
     if (headers.length && rows.length) r.compare = { headers, rows };
   }
-  return r.label || lines.length || items.length || groups.length || r.compare ? r : null;
+  const gram = parseLangBlock(o?.gram);
+  if (gram) r.gram = gram;
+  return r.label || lines.length || items.length || groups.length || r.compare || r.gram ? r : null;
 }
 
 function topic(o: any): TableTopic | null {
@@ -182,6 +187,7 @@ export function tableToSpeech(t: TableSummary): string {
       for (const g of r.groups ?? []) parts.push(`${g.title}: ${g.items.map((x) => plainText(plainItem(x))).join("، ")}`);
       if (r.compare) for (const cr of r.compare.rows) parts.push(cr.map((c, i) => (i === 0 || !r.compare!.headers[i] ? c : `${r.compare!.headers[i]}: ${c}`)).filter(Boolean).join("، "));
       for (const e of r.ex ?? []) parts.push(plainText(e));
+      if (r.gram) parts.push(gramSpeech(r.gram));
       out.push([r.label, ...parts].filter(Boolean).join(". "));
     }
   }
@@ -312,7 +318,53 @@ function rowHtml(r: TableRow, edge: string): string {
         .map((cr) => `<tr>${cr.map((c) => `<td>${lineHtml(c)}</td>`).join("")}</tr>`)
         .join("")}</table>`
     );
+  if (r.gram) out.push(gramHtml(r.gram));
   return out.join("");
+}
+
+/** «مربع الدرس» مطبوعًا: القاعدة وصيغتها، والجملة كلمة كلمة بدورها (والفعل بأصله وزمنه)، وجدول الاقتران، والخطأ الشائع */
+export function gramHtml(g: LangBlock): string {
+  const out: string[] = [];
+  if (g.rule) out.push(`<div class="g-rule">📐 ${esc(g.rule)}</div>`);
+  if (g.formula) out.push(`<div class="g-form" dir="ltr">${esc(g.formula)}</div>`);
+  for (const sn of g.parse ?? []) {
+    const ltr = isLatinText(sn.words.map((w) => w.w).join(" "));
+    out.push(
+      `<div class="g-sent" dir="${ltr ? "ltr" : "rtl"}">${sn.words
+        .map((w) => {
+          const c = ROLE_COLORS[roleKind(w.role)];
+          const sub = [w.base, w.tense].filter(Boolean).join(" · ");
+          return `<span class="g-w"><b style="border-color:${c};background:${tint(c)}">${esc(w.w)}</b>${w.role ? `<i style="color:${c}">${esc(w.role)}</i>` : ""}${sub ? `<small>${esc(sub)}</small>` : ""}</span>`;
+        })
+        .join("")}</div>`
+    );
+    if (sn.tr) out.push(`<div class="g-tr">«${esc(sn.tr)}»</div>`);
+  }
+  if (g.conj) {
+    const c = ROLE_COLORS.verb;
+    out.push(
+      `<table class="g-conj" dir="ltr"><tr><th colspan="2" style="background:${tint(c)}">${esc(g.conj.verb)}${g.conj.tense ? ` <span style="color:${c}">${esc(g.conj.tense)}</span>` : ""}</th></tr>${g.conj.rows
+        .map(([p, f]) => `<tr><td style="color:${ROLE_COLORS.pronoun}">${esc(p)}</td><td><b>${esc(f)}</b></td></tr>`)
+        .join("")}</table>`
+    );
+  }
+  if (g.mistake) out.push(`<div class="g-mis">⚠️ ${esc(g.mistake)}</div>`);
+  return `<div class="gram">${out.join("")}</div>`;
+}
+
+/** نص «مربع الدرس» للاستماع */
+export function gramSpeech(g: LangBlock): string {
+  const parts: string[] = [];
+  if (g.rule) parts.push(g.rule);
+  if (g.formula) parts.push(g.formula);
+  for (const sn of g.parse ?? []) {
+    parts.push(sn.words.map((w) => w.w).join(" "));
+    parts.push(sn.words.map((w) => [w.w, w.role, w.base, w.tense].filter(Boolean).join(" ")).join("، "));
+    if (sn.tr) parts.push(sn.tr);
+  }
+  if (g.conj) parts.push(`${g.conj.verb} ${g.conj.tense}: ${g.conj.rows.map(([p, f]) => `${p} ${f}`).join("، ")}`);
+  if (g.mistake) parts.push(g.mistake);
+  return parts.join(". ");
 }
 
 /** جسم الجدول لوحدة واحدة (يُستعمل وحده أو داخل ملف المذاكرة) */
@@ -371,6 +423,18 @@ html, body { margin: 0; background: #fff; color: #1d2330; }
 .tsum table.cmp { border-collapse: collapse; margin: 4px 0; font-size: 12px; }
 .tsum table.cmp th, .tsum table.cmp td { border: 1px solid #d5d9e1; padding: 3px 8px; }
 .tsum table.cmp th { background: #eef1f6; }
+.tsum .gram { border: 2px solid #c9d2e3; border-radius: 12px; padding: 8px 10px; margin: 6px 0; background: #fbfcfe; break-inside: avoid; }
+.tsum .g-rule { font-weight: 700; margin-bottom: 4px; }
+.tsum .g-form { display: inline-block; border: 1.5px solid #B8892B; color: #8a6418; border-radius: 999px; padding: 2px 12px; font-weight: 800; margin: 2px 0 6px; }
+.tsum .g-sent { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 6px 0 2px; }
+.tsum .g-w { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.tsum .g-w b { border: 2px solid; border-radius: 8px; padding: 2px 10px; font-size: 14px; }
+.tsum .g-w i { font-style: normal; font-weight: 800; font-size: 11px; }
+.tsum .g-w small { color: #5b6475; font-size: 10px; }
+.tsum .g-tr { color: #5b6475; text-align: center; font-size: 12px; }
+.tsum table.g-conj { border-collapse: collapse; margin: 6px auto; font-size: 13px; min-width: 220px; }
+.tsum table.g-conj th, .tsum table.g-conj td { border: 1px solid #d5d9e1; padding: 3px 12px; }
+.tsum .g-mis { border: 1.5px dashed #F43F5E; border-radius: 8px; padding: 4px 8px; margin-top: 6px; color: #9a2a12; font-weight: 700; }
 .tsum .links { margin-top: 10px; border: 2px dashed #7A4FC0; border-radius: 10px; padding: 7px 14px; background: #FAF7FF; break-inside: avoid; }
 .tsum .lh { font-weight: 800; color: #5b36a0; margin-bottom: 4px; }
 .tsum .links ul { margin: 0; padding-right: 20px; line-height: 1.9; font-size: 12.5px; }
