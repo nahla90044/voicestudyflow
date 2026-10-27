@@ -81,7 +81,7 @@ const ROLE_RULES: [RegExp, RoleKind][] = [
   // اسم المفعول/الفاعل الصرفي جزء من الفعل (participe passé) — قبل «مفعول» و«فاعل»
   [/اسم المفعول|اسم الفاعل|participe|participle|gérondif|infinitif|infinitive|مصدر/i, "verb"],
   [/فاعل|مبتدأ|sujet|subject/i, "subject"],
-  [/مفعول|complément|cod|coi|object/i, "object"],
+  [/مفعول|complément|\bcod\b|\bcoi\b|objet|object/i, "object"],
   [/فعل|verbe|verb|auxiliaire|auxiliary/i, "verb"],
   [/صفة|نعت|adjectif|adjective/i, "adj"],
   [/ظرف|حال|adverbe|adverb/i, "adv"],

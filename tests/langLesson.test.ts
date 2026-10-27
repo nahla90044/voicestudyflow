@@ -82,3 +82,10 @@ test("اسم المفعول جزء من الفعل لا مفعول به", () => 
   assert.equal(roleKind("participe passé"), "verb");
   assert.equal(roleKind("اسم، مفعول به"), "object");
 });
+
+test("أدوار بالفرنسية من الفيديو الفرنسي", () => {
+  assert.equal(roleKind("sujet (pronom)"), "subject");
+  assert.equal(roleKind("auxiliaire avoir, avec je"), "verb");
+  assert.equal(roleKind("nom, objet"), "object");
+  assert.equal(roleKind("article indéfini"), "prep");
+});
