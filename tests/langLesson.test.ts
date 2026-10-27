@@ -65,3 +65,20 @@ test("اللون الفاتح المُصمت للطباعة", async () => {
   assert.equal(tint("#FFFFFF"), "#ffffff");
   assert.match(tint("#3B82F6"), /^#[0-9a-f]{6}$/);
 });
+
+test("الاقتران بلا تكرار الضمير", async () => {
+  const { stripPronoun, parseLangBlock } = await import("../lib/langLessonCore.ts");
+  assert.equal(stripPronoun("tu", "tu as"), "as");
+  assert.equal(stripPronoun("il/elle", "il/elle a"), "a");
+  assert.equal(stripPronoun("je", "j'ai"), "j'ai");
+  assert.equal(stripPronoun("nous", "nous avons"), "avons");
+  assert.equal(stripPronoun("I", "I am"), "am");
+  const b = parseLangBlock({ conj: { verb: "avoir", rows: [["je", "j'ai"], ["tu", "tu as"], ["nous", "nous avons"]] } })!;
+  assert.deepEqual(b.conj!.rows.map((r) => r[1]), ["j'ai", "as", "avons"]);
+});
+
+test("اسم المفعول جزء من الفعل لا مفعول به", () => {
+  assert.equal(roleKind("اسم المفعول (معنى الفعل)"), "verb");
+  assert.equal(roleKind("participe passé"), "verb");
+  assert.equal(roleKind("اسم، مفعول به"), "object");
+});

@@ -34,7 +34,11 @@ function Sentence({ s, pal, ff, align }: { s: GramSentence; pal: Pal; ff: SlideC
               <View style={[styles.wordBox, { borderColor: c, backgroundColor: c + "22" }]}>
                 <Text style={[ff("plex600"), styles.word, { color: pal.ink }]}>{w.w}</Text>
               </View>
-              {w.role ? <Text style={[ff("plex700"), styles.role, { color: c }]}>{w.role}</Text> : null}
+              {w.role ? (
+                <Text style={[ff("plex700"), styles.role, { color: c }]} numberOfLines={2}>
+                  {w.role}
+                </Text>
+              ) : null}
               {w.base || w.tense ? (
                 <Text style={[ff("plex500"), styles.base, { color: pal.dim }]} numberOfLines={2}>
                   {[w.base, w.tense].filter(Boolean).join(" · ")}
@@ -152,8 +156,8 @@ const styles = StyleSheet.create({
   rule: { fontSize: 25, lineHeight: 38 },
   formula: { alignSelf: "center", borderWidth: 1.5, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 20 },
   formulaTxt: { fontSize: 24, lineHeight: 34, textAlign: "center", writingDirection: "ltr" },
-  words: { flexWrap: "wrap", justifyContent: "center", gap: 12 },
-  wordCol: { alignItems: "center", gap: 5, maxWidth: 280 },
+  words: { flexWrap: "wrap", justifyContent: "center", columnGap: 18, rowGap: 12 },
+  wordCol: { alignItems: "center", gap: 5, maxWidth: 200 },
   wordBox: { borderWidth: 2, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 16 },
   word: { fontSize: 30, lineHeight: 40, writingDirection: "ltr" },
   role: { fontSize: 17, lineHeight: 24, textAlign: "center" },

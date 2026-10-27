@@ -38,6 +38,15 @@ function sentence(o: any): GramSentence | null {
   return tr ? { words, tr } : { words };
 }
 
+/** صيغة الاقتران بلا تكرار ضميرها («tu as» في صف tu → «as»)؛ المدغم مثل «j'ai» يبقى كما هو */
+export function stripPronoun(p: string, f: string): string {
+  if (!p || !f) return f;
+  const lp = p.toLowerCase();
+  const lf = f.toLowerCase();
+  if (lf.startsWith(lp + " ")) return f.slice(p.length).trim() || f;
+  return f;
+}
+
 /** يقرأ حقل gram من مشهد الفيديو (أو من موضوع الملخّص)؛ null إن لم يكن فيه شيء صالح */
 export function parseLangBlock(o: any): LangBlock | null {
   if (!o || typeof o !== "object") return null;
@@ -55,7 +64,7 @@ export function parseLangBlock(o: any): LangBlock | null {
     const rows = (Array.isArray(c.rows) ? c.rows : [])
       .map((r: any): [string, string] | null => {
         const p = str(Array.isArray(r) ? r[0] : r?.p ?? r?.pronoun);
-        const f = str(Array.isArray(r) ? r[1] : r?.f ?? r?.form);
+        const f = stripPronoun(p, str(Array.isArray(r) ? r[1] : r?.f ?? r?.form));
         return p && f ? [p, f] : null;
       })
       .filter((r: [string, string] | null): r is [string, string] => !!r)
@@ -69,6 +78,8 @@ export function parseLangBlock(o: any): LangBlock | null {
 /** فئة دور الكلمة (للّون): يقرأ الدور بالعربية أو الإنجليزية أو الفرنسية */
 export type RoleKind = "subject" | "verb" | "object" | "noun" | "adj" | "adv" | "pronoun" | "prep" | "other";
 const ROLE_RULES: [RegExp, RoleKind][] = [
+  // اسم المفعول/الفاعل الصرفي جزء من الفعل (participe passé) — قبل «مفعول» و«فاعل»
+  [/اسم المفعول|اسم الفاعل|participe|participle|gérondif|infinitif|infinitive|مصدر/i, "verb"],
   [/فاعل|مبتدأ|sujet|subject/i, "subject"],
   [/مفعول|complément|cod|coi|object/i, "object"],
   [/فعل|verbe|verb|auxiliaire|auxiliary/i, "verb"],

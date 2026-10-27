@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
   gForm: { alignSelf: "center", borderWidth: 1.5, borderColor: "#B8892B", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 3 },
   gFormTxt: { color: "#8a6418", fontWeight: "800", fontSize: 14, writingDirection: "ltr" },
   gSent: { flexWrap: "wrap", justifyContent: "center", gap: 8 },
-  gCol: { alignItems: "center", gap: 2, maxWidth: 160 },
+  gCol: { alignItems: "center", gap: 2, maxWidth: 130 },
   gBox: { borderWidth: 2, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
   gWord: { color: INK, fontSize: 15, fontWeight: "700", writingDirection: "ltr" },
   gRole: { fontSize: 11, fontWeight: "800", textAlign: "center" },
