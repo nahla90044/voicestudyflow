@@ -322,7 +322,19 @@ export default function BookHubScreen() {
           { key: "listen", labelKey: "book.tool.listen", icon: "headset", go: () => router.push({ pathname: "/listen-practice", params: { pdf_path: book.pdf_path, book_title: book.title } }) },
           ...tools.slice(4),
         ]
-      : tools;
+      : kindInfo.kind === "cert"
+        ? [
+            // كتب الشهادات: الاختبار التجريبي بعد المنهج (قرار ٢٧ أكتوبر)
+            tools[0],
+            {
+              key: "mock",
+              labelKey: "book.tool.mock",
+              icon: "timer",
+              go: () => router.push({ pathname: "/mock-exam", params: { pdf_path: book.pdf_path, book_id: book.id, book_title: book.title, exam: kindInfo.exam ?? "" } }),
+            },
+            ...tools.slice(1),
+          ]
+        : tools;
   const saveKind = async (k: StudyKind, exam?: string) => {
     setKindOpen(false);
     if (!syl) return;

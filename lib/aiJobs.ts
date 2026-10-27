@@ -25,7 +25,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * في كل جلسة، وكل إعادة آلية له بعدها مجانية («رصيد الجزء»، ٢٦ أكتوبر).
  */
 // targetLang: لغة مخرجات غير لغة الواجهة (لغة شرح الفيديو)؛ study: نوع دراسة الكتاب (كتب اللغة: شرح القواعد والاقتران)
-type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string; table?: boolean; vpart?: unknown; genId?: string; targetLang?: string; study?: string };
+type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string; table?: boolean; vpart?: unknown; genId?: string; targetLang?: string; study?: string; exam?: string };
 
 /** أخطاء لا تُعاد ولا يُبحث لها عن بديل (الحصة، المحتوى، الحساب، الحد اليومي، سقف الإعادات المجانية للجزء) */
 const STOP = new Set(["USER_QUOTA", "UNSAFE_CONTENT", "ACCOUNT_LOCKED", "RATE_LIMITED", "RETRY_LIMIT"]);

@@ -199,7 +199,7 @@ export function glossaryHtml(items: GlossaryItem[], L: GlossaryLabels, unitIndex
       const kt = TONE[KIND_TONE[it.k] ?? "lavender"];
       const kindChip = `<span class="chip" style="background:${kt.bg};color:${kt.ink};font-size:8.5pt">${esc(L.kindName(it.k))}</span>`;
       const ex = it.ex ? `<div class="ex" dir="auto">${esc(L.example)}: ${esc(it.ex)}</div>` : "";
-      return `<tr><td class="n">${num(i + 1, L.rtl)}</td><td class="t" dir="auto">${esc(it.t)}<br>${kindChip}</td><td dir="auto">${esc(it.m)}${ex}</td><td class="pg">${it.p ? num(it.p, L.rtl) : ""}</td></tr>`;
+      return `<tr><td class="n">${num(i + 1, L.rtl)}</td><td class="t" dir="auto">${esc(it.t)}${it.tr ? `<div class="ex" dir="auto">⇄ ${esc(it.tr)}</div>` : ""}${kindChip}</td><td dir="auto">${esc(it.m)}${ex}</td><td class="pg">${it.p ? num(it.p, L.rtl) : ""}</td></tr>`;
     })
     .join("");
   const unit = L.unitTitle

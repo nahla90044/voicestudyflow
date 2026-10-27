@@ -19,7 +19,8 @@ import { setLastPage } from "../lib/readerPrefs";
 import { getAnswered, getBookReadiness, getDueMistakes, markQuizDone, recordAnswer } from "../lib/readiness";
 import { computeReadiness } from "../lib/readinessCore";
 import { addSavedItem } from "../lib/savedStudy";
-import { generateUnitQuiz, type QuizQ } from "../lib/syllabus";
+import { generateUnitQuiz, getSyllabus, type QuizQ } from "../lib/syllabus";
+import { allocate, clock, pickMock, unitReport, unitWeights } from "../lib/mockExamCore";
 import { summaryToSpeech } from "../lib/studySummary";
 import { bookQuestions } from "../lib/questionFiles";
 import { answerNote, pickForQuiz, type QFQuestion } from "../lib/questionFilesCore";
@@ -47,7 +48,8 @@ export default function UnitQuizScreen() {
   const dir = useDir();
   const { pal } = useScene();
   const tone = tones(pal);
-  const { pdf_path, unit, page, title, book_title, mode, book_id, units, count: countParam } = useLocalSearchParams<{
+  const { pdf_path, unit, page, title, book_title, mode, book_id, units, count: countParam, minutes } = useLocalSearchParams<{
+    minutes?: string;
     book_id?: string;
     units?: string;
     count?: string;
@@ -64,9 +66,11 @@ export default function UnitQuizScreen() {
   const bankMode = mode === "qbank";
   // الاختبار الشامل للاستعداد السريع (٢٥ أكتوبر): من الأسئلة المحفوظة لوحدات مختارة، الأضعف أكثر، بلا توليد
   const mixMode = mode === "mix";
+  // الاختبار التجريبي لكتب الشهادات (٢٧ أكتوبر): أسئلة الوحدات المحفوظة بنسبة حجم كل وحدة، بوقت، ولا يُكشف الجواب حتى النهاية
+  const mockMode = mode === "mock";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
-  const pageMode = !mistakesMode && !bankMode && !mixMode && Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة)
+  const pageMode = !mistakesMode && !bankMode && !mixMode && !mockMode && Number.isFinite(pageNum) && pageNum > 0; // من القارئ (صفحة)
   const srcId = pageMode ? pageNum : unitIdx;
   const kind = pageMode ? "pagequiz" : "quiz";
   const unitTitle = typeof title === "string" ? title : "";
@@ -99,6 +103,12 @@ export default function UnitQuizScreen() {
   const [ready0, setReady0] = useState<number | null>(null);
   const [ready, setReady] = useState<number | null>(null);
   const [lastGain, setLastGain] = useState(0);
+  // الاختبار التجريبي: عناوين الوحدات للتقرير، والوقت، وإجابات كل وحدة
+  const [unitTitles, setUnitTitles] = useState<string[]>([]);
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
+  const [left, setLeft] = useState(0);
+  const [mockAnswers, setMockAnswers] = useState<{ unit: number | null; correct: boolean }[]>([]);
   const [weak, setWeak] = useState<{ unit: number | null; untested: boolean }>({ unit: null, untested: true });
   const [bookId, setBookId] = useState("");
   const ctxRef = useRef({ unitCount: 0, readFraction: 0 });
@@ -179,6 +189,28 @@ export default function UnitQuizScreen() {
         // وحدات المعامل units ("0,2,5")
         const unitList = typeof units === "string" && units !== "all" && units ? units.split(",").map(Number).filter(Number.isFinite) : null;
 
+        if (mockMode) {
+          const syl = await getSyllabus(pdfPath).catch(() => null);
+          const titles = (syl?.data.units ?? []).map((u) => u.title);
+          const w = unitWeights(syl?.data.ranges ?? [], titles.length);
+          const pools = await Promise.all(
+            titles.map(async (_, u) => {
+              const qs = await getUnitContent<QuizQ[]>(pdfPath, u, "quiz").catch(() => null);
+              return { unit: u, qs: qs && qs.some((q) => q.type) ? qs : [] };
+            })
+          );
+          const picked = pickMock(pools, allocate(Number(countParam) || 40, w));
+          if (on) {
+            setUnitTitles(titles);
+            setQuiz(picked.map((q) => ({ ...q, page: null })));
+            const m = Number(minutes) || 0;
+            setStartedAt(Date.now());
+            if (m > 0) setDeadline(Date.now() + m * 60000);
+            if (!picked.length) setErr(t("mock.empty"));
+          }
+          return;
+        }
+
         if (mixMode) {
           const answered = await getAnswered(pdfPath).catch(() => []);
           const us = unitList ?? [];
@@ -234,7 +266,7 @@ export default function UnitQuizScreen() {
           // محتوى الوحدة نفسه (لا عنوانها وأهدافها): الملخص الشامل إن وُجد، وإلا نص صفحاتها
           const src = { kind: "unit" as const, unit: unitIdx };
           // كتب اللغة: الاختبار من جمل الدرس نفسها (بلغتها) لا من الملخّص — أكمل الفراغ والتصريف يحتاجان النص الأصلي
-          const sum = langStudy.study ? null : (await getCachedSummary(pdfPath, src).catch(() => null)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }).catch(() => null));
+          const sum = langStudy.study === "language" ? null : (await getCachedSummary(pdfPath, src).catch(() => null)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }).catch(() => null));
           if (sum) ctx = summaryToSpeech(sum);
           if (ctx.trim().length < 1500) {
             const range = await summaryRange(pdfPath, src).catch(() => null);
@@ -263,11 +295,27 @@ export default function UnitQuizScreen() {
     return () => {
       on = false;
     };
-  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, mistakesMode, bankMode, mixMode, book_id, units, countParam, t]);
+  }, [pdfPath, srcId, kind, pageMode, pageNum, unitIdx, mistakesMode, bankMode, mixMode, mockMode, book_id, units, countParam, t]);
+
+  // عدّاد الاختبار التجريبي: بالساعة لا بالعدّ (يبقى صحيحًا إن خرج التطبيق للخلفية)؛ انتهاء الوقت ينهي الاختبار
+  useEffect(() => {
+    if (!mockMode || !deadline || done) return;
+    const tick = () => {
+      const sec = Math.ceil((deadline - Date.now()) / 1000);
+      setLeft(sec);
+      if (sec <= 0) {
+        setDone(true);
+        void markQuizDone(pdfPath);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [mockMode, deadline, done, pdfPath]);
 
   // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → اختبارات) متى توفّرت الأسئلة
   useEffect(() => {
-    if (!quiz.length || !pdfPath || mistakesMode || bankMode || mixMode) return;
+    if (!quiz.length || !pdfPath || mistakesMode || bankMode || mixMode || mockMode) return;
     addSavedItem({
       key: `quiz|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}`,
       kind: "quiz",
@@ -285,6 +333,14 @@ export default function UnitQuizScreen() {
     if (picked !== null) return;
     const q = quiz[step];
     const correct = opt === q.answer;
+    if (mockMode) {
+      // كالاختبار الحقيقي: لا يُكشف الجواب أثناءه — يُسجَّل وينتقل للسؤال التالي، والمراجعة في النهاية
+      setResults((r) => [...r, correct]);
+      setMockAnswers((a) => [...a, { unit: q.unit, correct }]);
+      void recordAnswer(pdfPath, q, { unit: q.unit, page: q.page }, correct).catch(() => {});
+      next();
+      return;
+    }
     setPicked(opt);
     setResults((r) => [...r, correct]);
     const all = await recordAnswer(pdfPath, q, { unit: q.unit, page: q.page }, correct);
@@ -324,10 +380,12 @@ export default function UnitQuizScreen() {
     ? t("quiz2.headBank", { step: step + 1, total })
     : mixMode
     ? t("quiz2.headMix", { step: step + 1, total })
+    : mockMode
+    ? t("quiz2.headMock", { step: Math.min(step + 1, total), total })
     : pageMode
       ? t("quiz2.headPage", { page: pageNum, step: step + 1, total })
       : t("quiz2.headUnit", { unit: unitIdx + 1, step: step + 1, total });
-  const isWeakUnit = !mistakesMode && !bankMode && !mixMode && !pageMode && weak.unit === unitIdx && !weak.untested;
+  const isWeakUnit = !mistakesMode && !bankMode && !mixMode && !mockMode && !pageMode && weak.unit === unitIdx && !weak.untested;
 
   const levelTone = q ? (q.level === "easy" ? tone.good : q.level === "medium" ? tone.warm : tone.hard) : tone.good;
   const backIcon = dir.isRTL ? "chevron-forward" : "chevron-back";
@@ -337,7 +395,7 @@ export default function UnitQuizScreen() {
       {/* الرأس: رجوع · موضع السؤال · عدّاد الجاهزية */}
       <SceneBanner
         title={total ? headLabel : unitTitle}
-        subtitle={total && unitTitle && unitTitle !== headLabel ? unitTitle : undefined}
+        subtitle={mockMode && deadline && !done ? `⏱ ${clock(left)}` : total && unitTitle && unitTitle !== headLabel ? unitTitle : undefined}
         height={140}
         left={
           <Pressable onPress={() => router.back()} hitSlop={6} accessibilityLabel={t("common.close")}>
@@ -425,6 +483,11 @@ export default function UnitQuizScreen() {
           ready0={ready0}
           ready={ready}
           wrong={results.filter((r) => !r).length}
+          extra={
+            mockMode ? (
+              <MockReport answers={mockAnswers} titles={unitTitles} unanswered={Math.max(0, total - results.length)} usedSec={Math.round((Date.now() - startedAt) / 1000)} />
+            ) : null
+          }
         />
       ) : q ? (
         <>
@@ -587,7 +650,47 @@ function ScoreRing({ pct, size, children }: { pct: number; size: number; childre
 }
 
 /** شاشة النتيجة: الدرجة، والجاهزية قبل/بعد، وما الذي سيعود للمراجعة */
-function Result({ score, total, ready0, ready, wrong }: { score: number; total: number; ready0: number | null; ready: number | null; wrong: number }) {
+/** تقرير الاختبار التجريبي: نسبة كل وحدة، والأضعف، والوقت المستعمل، وما لم يُجب (انتهى الوقت) */
+function MockReport({ answers, titles, unanswered, usedSec }: { answers: { unit: number | null; correct: boolean }[]; titles: string[]; unanswered: number; usedSec: number }) {
+  const { t } = useI18n();
+  const dir = useDir();
+  const { pal } = useScene();
+  const r = unitReport(answers);
+  return (
+    <SceneCard style={{ gap: 12, marginTop: Spacing.lg }}>
+      <Text style={[styles.resultMsg, { color: pal.ink, textAlign: dir.textAlign }]}>{t("mock.report")}</Text>
+      <Text style={[styles.dim, { color: pal.dim, textAlign: dir.textAlign }]}>
+        {t("mock.used", { t: clock(usedSec) })}
+        {unanswered ? ` · ${t("mock.unanswered", { n: unanswered })}` : ""}
+      </Text>
+      {r.units.map((u) => {
+        const weak = u.unit === r.weakest;
+        const c = u.pct >= 70 ? "#15803D" : u.pct >= 50 ? "#D97706" : "#DC2626";
+        return (
+          <View key={u.unit} style={{ gap: 5 }}>
+            <View style={{ flexDirection: dir.row, alignItems: "center", gap: 8 }}>
+              <Text style={[styles.mockUnit, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={2}>
+                {weak ? "⚠️ " : ""}
+                {titles[u.unit] ?? t("qfile.unitN", { n: u.unit + 1 })}
+              </Text>
+              <Text style={[styles.mockPct, { color: c }]}>
+                {u.right}/{u.total} · {u.pct}%
+              </Text>
+            </View>
+            <View style={[styles.mockTrack, { backgroundColor: pal.track }]}>
+              <View style={[styles.mockFill, { width: `${Math.max(3, u.pct)}%`, backgroundColor: c }, dir.isRTL ? { alignSelf: "flex-end" } : null]} />
+            </View>
+          </View>
+        );
+      })}
+      {r.weakest !== null ? (
+        <Text style={[styles.dim, { color: pal.ink, textAlign: dir.textAlign }]}>{t("mock.weakest", { u: titles[r.weakest] ?? t("qfile.unitN", { n: r.weakest + 1 }) })}</Text>
+      ) : null}
+    </SceneCard>
+  );
+}
+
+function Result({ score, total, ready0, ready, wrong, extra }: { score: number; total: number; ready0: number | null; ready: number | null; wrong: number; extra?: React.ReactNode }) {
   const { t } = useI18n();
   const { pal } = useScene();
   const tone = tones(pal);
@@ -622,6 +725,7 @@ function Result({ score, total, ready0, ready, wrong }: { score: number; total: 
         </Text>
         {wrong > 0 && <Text style={[styles.dim, { color: pal.dim }]}>{t("quiz2.wrongBack", { n: wrong })}</Text>}
       </SceneCard>
+      {extra}
       <PressableScale onPress={() => router.back()} style={[styles.nextBtn, { backgroundColor: pal.accent, marginTop: Spacing.lg }]}>
         <Text style={[styles.nextTxt, { color: pal.onAccent }]}>{t("common.done")}</Text>
       </PressableScale>
@@ -701,4 +805,8 @@ const styles = StyleSheet.create({
   resultReadyNum: { fontSize: 28, fontWeight: "900" },
   resultReadyCap: { fontSize: 13, fontWeight: "700", marginTop: 2, textAlign: "center" },
   resultMsg: { fontSize: 16, fontWeight: "900", textAlign: "center" },
+  mockUnit: { flex: 1, fontSize: 14, fontWeight: "800", lineHeight: 21 },
+  mockPct: { fontSize: 13.5, fontWeight: "900" },
+  mockTrack: { height: 7, borderRadius: 4, overflow: "hidden" },
+  mockFill: { height: 7, borderRadius: 4 },
 });

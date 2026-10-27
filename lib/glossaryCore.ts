@@ -108,7 +108,8 @@ export function parseKind(raw: string): BookKind {
 }
 
 export type GlossaryKindTag = "term" | "def" | "word" | "idiom" | "char" | "place";
-export type GlossaryItem = { t: string; m: string; k: GlossaryKindTag; ex?: string; p?: number };
+/** tr: المقابل باللغة الأخرى (كتب الشهادات: المصطلح الإنجليزي ↔ العربي — قرار ٢٧ أكتوبر) */
+export type GlossaryItem = { t: string; m: string; k: GlossaryKindTag; ex?: string; p?: number; tr?: string };
 
 const TAGS = new Set<GlossaryKindTag>(["term", "def", "word", "idiom", "char", "place"]);
 
@@ -120,7 +121,8 @@ function clean(o: unknown): GlossaryItem | null {
   const k0 = String(r?.k ?? r?.kind ?? "term").trim() as GlossaryKindTag;
   const p = Number(r?.p ?? r?.page);
   const ex = String(r?.ex ?? r?.example ?? "").trim();
-  return { t, m, k: TAGS.has(k0) ? k0 : "term", ...(ex ? { ex } : {}), ...(Number.isFinite(p) && p > 0 ? { p } : {}) };
+  const tr = String(r?.tr ?? r?.en ?? "").trim();
+  return { t, m, k: TAGS.has(k0) ? k0 : "term", ...(ex ? { ex } : {}), ...(Number.isFinite(p) && p > 0 ? { p } : {}), ...(tr && tr.toLowerCase() !== t.toLowerCase() ? { tr } : {}) };
 }
 
 /** عناصر القاموس من رد الذكاء. إن انقطع الرد نُنقذ كل عنصر {…} مكتمل. */

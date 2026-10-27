@@ -14,6 +14,7 @@ import {
   type PageText,
   type UnitRange,
 } from "./glossaryCore.ts";
+import { getStudyKind } from "./studyKind";
 import { supabase } from "./supabase";
 import { getUnitContent, removeUnitContent, setUnitContent } from "./unitContent";
 
@@ -167,6 +168,14 @@ const PROMPTS: Record<BookKind, string> = {
     "استخرج من النص أهم المصطلحات والمفاهيم (k=term) مع شرح مبسّط، وأي تعاريف مذكورة صراحةً (k=def). " + COMMON,
 };
 
+/** كتب الشهادات المهنية: قاموس مصطلحات ثنائي اللغة (قرار نهلة ٢٧ أكتوبر) */
+const CERT_PROMPT =
+  "هذا نص من كتاب تحضير لشهادة مهنية (محاسبة/مالية/إدارة مشاريع/مراجعة…). استخرج أهم المصطلحات المهنية (k=term) والتعاريف الرسمية (k=def) والمعادلات والنسب المهمة (k=term، والمعادلة نفسها في ex). " +
+  "t المصطلح كما ورد في النص، وtr مقابله المعتمد مهنيًا باللغة الأخرى (إن كان t إنجليزيًا فالعربي، وإن كان عربيًا فالإنجليزي كما يرد في الاختبارات والمراجع الدولية)، " +
+  "وm تعريف مختصر دقيق بلغة المستخدم، وex مثال قصير أو المعادلة. أعد JSON فقط: مصفوفة عناصر بالشكل " +
+  '[{"t":"المصطلح","tr":"المقابل","m":"التعريف","k":"term","ex":"مثال أو معادلة","p":رقم_الصفحة}] ' +
+  "حيث رقم الصفحة من علامات [صN] في النص. بحد أقصى ٢٠ عنصرًا، كل تعريف أقل من ٢٥ كلمة، دون أي نص خارج JSON ودون تكرار.";
+
 export type GlossaryResult = { items: GlossaryItem[]; kind: BookKind; range: UnitRange; missingPages: boolean };
 
 /**
@@ -184,14 +193,16 @@ export async function getGlossary(
   const [kind, ranges] = await Promise.all([getBookKind(pdfPath, pages), getUnitRanges(pdfPath, titles, pageCount, pages)]);
   const range = ranges[unitIdx] ?? { from: 1, to: pageCount || 1, found: false };
 
+  // كتب الشهادات: قاموس ثنائي اللغة؛ قاموس محفوظ قبله (بلا مقابل) يُعاد مرة بالشكل الجديد
+  const cert = (await getStudyKind(pdfPath).catch(() => "general")) === "cert";
   if (!force) {
     const cached = await getUnitContent<GlossaryItem[]>(pdfPath, unitIdx, "glossary");
-    if (cached?.length) return { items: cached, kind, range, missingPages: false };
+    if (cached?.length && (!cert || cached.some((i) => i.tr))) return { items: cached, kind, range, missingPages: false };
   }
   const ctx = unitContext(pages, range);
   if (!ctx.trim()) return { items: [], kind, range, missingPages: true };
 
-  const raw = await aiAssist("ask", ctx, PROMPTS[kind]);
+  const raw = await aiAssist("ask", ctx, cert ? CERT_PROMPT : PROMPTS[kind]);
   const items = parseGlossary(raw).filter((i) => !i.p || (i.p >= range.from && i.p <= range.to));
   if (items.length) await setUnitContent(pdfPath, unitIdx, "glossary", items);
   return { items, kind, range, missingPages: false };

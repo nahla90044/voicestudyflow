@@ -477,7 +477,7 @@ export default function ReaderScreen() {
     if (!pdfPath) return;
     let on = true;
     studyExtra(pdfPath)
-      .then((x) => on && setLangBook(!!x.study))
+      .then((x) => on && setLangBook(x.study === "language"))
       .catch(() => {});
     return () => {
       on = false;

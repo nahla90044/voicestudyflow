@@ -209,13 +209,13 @@ export default function GlossaryScreen() {
       return;
     }
     setSpeaking(i.t);
-    speakText(`${i.t}. ${i.m}${i.ex ? `. ${i.ex}` : ""}`, { onDone: () => setSpeaking(null), onError: () => setSpeaking(null) });
+    speakText(`${i.t}${i.tr ? `. ${i.tr}` : ""}. ${i.m}${i.ex ? `. ${i.ex}` : ""}`, { onDone: () => setSpeaking(null), onError: () => setSpeaking(null) });
   }
 
   async function saveCards(list: GlossaryItem[]) {
     const fresh = list.filter((i) => !saved.has(i.t));
     if (!fresh.length) return;
-    await addCards(fresh.map((i) => ({ front: i.t, back: i.ex ? `${i.m}\n\n${i.ex}` : i.m, bookId, bookTitle, page: i.p })));
+    await addCards(fresh.map((i) => ({ front: i.tr ? `${i.t} ⇄ ${i.tr}` : i.t, back: i.ex ? `${i.m}\n\n${i.ex}` : i.m, bookId, bookTitle, page: i.p })));
     setSaved((s) => new Set([...s, ...fresh.map((i) => i.t)]));
   }
 
@@ -419,6 +419,12 @@ export default function GlossaryScreen() {
                       <Text style={[styles.kindTag, { color: c }]}>{t(`glossary.k.${i.k}`)}</Text>
                     </View>
                   </View>
+                  {/* المقابل باللغة الأخرى (كتب الشهادات) */}
+                  {!!i.tr && (
+                    <Text style={[styles.trTxt, { color: pal.accent, textAlign: dir.textAlign }]} selectable>
+                      ⇄ {i.tr}
+                    </Text>
+                  )}
                   <Text style={[styles.meaning, { color: pal.ink, textAlign: dir.textAlign }]} selectable>
                     {i.m}
                   </Text>
@@ -526,4 +532,5 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   saveAllTxt: { fontSize: 15.5, fontWeight: "900" },
+  trTxt: { fontSize: 15, fontWeight: "800", marginTop: -2 },
 });
