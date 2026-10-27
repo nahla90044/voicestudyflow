@@ -492,7 +492,7 @@ export default function UnitQuizScreen() {
           msg={mockMode ? t(results.filter(Boolean).length >= Math.ceil(total * 0.7) ? "mock.passLike" : "mock.belowPass") : undefined}
           extra={
             mockMode ? (
-              <MockReport answers={mockAnswers} titles={unitTitles} unanswered={Math.max(0, total - results.length)} usedSec={Math.round((Date.now() - startedAt) / 1000)} />
+              <MockReport answers={mockAnswers} titles={unitTitles} unanswered={Math.max(0, total - results.length)} usedSec={Math.round((Date.now() - startedAt) / 1000)} pdfPath={pdfPath} bookTitle={bookTitle} />
             ) : null
           }
         />
@@ -658,7 +658,7 @@ function ScoreRing({ pct, size, children }: { pct: number; size: number; childre
 
 /** شاشة النتيجة: الدرجة، والجاهزية قبل/بعد، وما الذي سيعود للمراجعة */
 /** تقرير الاختبار التجريبي: نسبة كل وحدة، والأضعف، والوقت المستعمل، وما لم يُجب (انتهى الوقت) */
-function MockReport({ answers, titles, unanswered, usedSec }: { answers: { unit: number | null; correct: boolean }[]; titles: string[]; unanswered: number; usedSec: number }) {
+function MockReport({ answers, titles, unanswered, usedSec, pdfPath, bookTitle }: { answers: { unit: number | null; correct: boolean }[]; titles: string[]; unanswered: number; usedSec: number; pdfPath: string; bookTitle: string }) {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
@@ -692,6 +692,23 @@ function MockReport({ answers, titles, unanswered, usedSec }: { answers: { unit:
       })}
       {r.weakest !== null ? (
         <Text style={[styles.dim, { color: pal.ink, textAlign: dir.textAlign }]}>{t("mock.weakest", { u: titles[r.weakest] ?? t("qfile.unitN", { n: r.weakest + 1 }) })}</Text>
+      ) : null}
+      {/* تدريب نقاط الضعف من التقرير مباشرة: أخطاء هذا الاختبار، ثم الوحدة الأضعف */}
+      {answers.some((a) => !a.correct) ? (
+        <PressableScale
+          onPress={() => router.push({ pathname: "/unit-quiz", params: { pdf_path: pdfPath, mode: "mistakes", book_title: bookTitle } })}
+          style={[styles.nextBtn, { backgroundColor: pal.soft }]}
+        >
+          <Text style={[styles.nextTxt, { color: pal.accent }]}>{t("mock.reviewMistakes")}</Text>
+        </PressableScale>
+      ) : null}
+      {r.weakest !== null ? (
+        <PressableScale
+          onPress={() => router.push({ pathname: "/unit-quiz", params: { pdf_path: pdfPath, unit: String(r.weakest), title: titles[r.weakest!] ?? "", book_title: bookTitle } })}
+          style={[styles.nextBtn, { backgroundColor: pal.soft }]}
+        >
+          <Text style={[styles.nextTxt, { color: pal.accent }]}>{t("mock.drillWeak")}</Text>
+        </PressableScale>
       ) : null}
     </SceneCard>
   );

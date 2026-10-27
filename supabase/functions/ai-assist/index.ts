@@ -53,6 +53,9 @@ const SYSTEM: Record<string, string> = {
     "أنت خبير في التشكيل العربي (الحركات الإعرابية والبنيوية). شكّل النص التالي تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا. التزم بقواعد النحو والصرف، وانتبه بدقة لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. ممنوع تمامًا تغيير الكلمات أو ترتيبها أو إضافة أو حذف أي شيء — أعد النص نفسه مشكولًا فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة. إن لم يكن النص عربيًا (إنجليزي أو فرنسي أو غيره) فأعده كما هو حرفيًا دون أي تغيير أو تعليق أو اعتذار.",
   ocrtashkeel:
     "أنت خبير في تصحيح النصوص العربية الممسوحة ضوئيًا وتشكيلها. النص التالي مستخرَج بتقنية OCR من كتاب مصوّر وقد يحوي أخطاء مسح: حروف مقروءة خطأ، نقاط أو همزات مشوّهة، كلمات ملتصقة أو مقطوعة. مهمتك خطوتان في مخرج واحد: أولًا صحّح أخطاء المسح الواضحة فقط بإرجاع كل كلمة إلى صورتها الصحيحة المقصودة في الأصل المطبوع — دون إعادة صياغة أو إضافة أو حذف أو تلخيص، وإن شككت في كلمة فأبقِها كما هي. ثانيًا شكّل النص الناتج تشكيلًا كاملًا ودقيقًا لمساعدة قارئ آلي على نطقه نطقًا صحيحًا، بقواعد النحو والصرف، مع الانتباه لأسماء الأعلام والمصطلحات الدينية والقانونية والآيات والأحاديث إن وُجدت. أعد النص المصحَّح المشكول فقط، دون أي مقدمة أو تعليق، وابدأ مباشرةً بأول كلمة. إن لم يكن النص عربيًا (إنجليزي أو فرنسي أو غيره) فأعده كما هو حرفيًا دون أي تغيير أو تعليق أو اعتذار.",
+  // ورقة المعادلات لكتب الشهادات (٢٧ أكتوبر): كل معادلة في نص الوحدة بمعنى رموزها ومثال محلول منه
+  formulas:
+    'أنت أستاذ لشهادة مهنية (محاسبة/مالية/إدارة). استخرج من نص الوحدة المرفق **كل** المعادلات والنسب والصيغ الحسابية الواردة فيه صراحةً (لا تخترع معادلة غير موجودة في النص). لكل معادلة: name اسمها بلغة المخرجات مع مقابلها الإنجليزي بين قوسين، formula الصيغة كما تُكتب في المراجع الدولية (بالإنجليزية وبرموز + − × ÷ =)، symbols قائمة [الرمز أو البند كما في الصيغة، معناه بلغة المخرجات]، example مثال رقمي قصير (من النص إن وُجد فيه مثال، وإلا بأرقام بسيطة)، steps حله في خطوات قصيرة تبدأ بأرقامها ١) ٢) ٣)، tip الخطأ الشائع في تطبيقها في سطر. إن لم تكن في النص أي معادلة فأعد {"items":[]}. أعد فقط JSON صالحًا بالشكل {"items":[{"name":"","formula":"","symbols":[["",""]],"example":"","steps":[""],"tip":""}]} دون أي نص خارج JSON.',
   // ملفات الأسئلة الجاهزة (٢٥ أكتوبر): استخراج الأسئلة كما هي من ملف أسئلة الطالب، ثم حلّ ما لا جواب له من نص الكتاب
   qextract:
     'النص المرفق جزء من «ملف أسئلة» رفعه الطالب لمقرر (بنك أسئلة، اختبارات سابقة، أسئلة مراجعة). استخرج **كل** سؤال فيه كما هو بلا تغيير في صياغته ولا حذف، وتجاهل الترويسات وأرقام الصفحات والتعليمات العامة. لكل سؤال: n رقمه في الملف كما ورد (أو "" إن لم يُرقّم)، q نصه كاملًا، type نوعه: mcq (اختيار من متعدد) أو tf (صح وخطأ) أو fill (أكمل الفراغ) أو essay (سؤال مقالي/عرّف/اشرح/عدّد)، options خياراته كما وردت بلا حروف الترقيم (وفي صح وخطأ ["صح","خطأ"]، وفي fill وessay بلا خيارات []). answer: رقم الخيار الصحيح (يبدأ من 0) **فقط** إن كان الجواب الصحيح مذكورًا في الملف نفسه (مظلَّلًا أو بجانبه أو في مفتاح إجابات)، وإلا -1 — لا تخمّن أبدًا. وإن كان الجواب نصًّا (لـfill وessay) فضعه في answerText. وإن وُجد في هذا الجزء «مفتاح إجابات» منفصل (مثل: ١-ب ٢-أ) فضعه في key كقاموس {"رقم السؤال":"الجواب كما ورد"}. unit: رقم الوحدة الأنسب للسؤال من قائمة وحدات المقرر المرفقة في أول النص (أو -1 إن لم تتضح). أعد فقط JSON صالحًا بالشكل: {"questions":[{"n":"1","q":"نص السؤال","type":"mcq","options":["أ","ب","ج","د"],"answer":-1,"answerText":"","unit":0}],"key":{}} دون أي نص خارج JSON.',
@@ -99,7 +102,7 @@ const MODEL: Record<string, string> = {
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
 };
-const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { videoplan: 12000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, formulas: 9000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -182,10 +185,10 @@ async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<ty
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
 const INTERNAL = new Set(["cleanup", "tashkeel", "ocrtashkeel", "fixspacing", "filternoise", "moderate", "define"]);
 const INTERNAL_DAILY_CAP = 800;
-const SCANNED = new Set(["videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
+const SCANNED = new Set(["formulas", "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
 // videoplan ليس هنا: خطة الفيديو لا تُحسب على الطالب (عدد الطلبات لا يزيد على ما قبل الخطة)، ولها سقف يومي
 const VIDEO_PLAN_DAILY_CAP = 40;
-const COUNTED = new Set(["videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
+const COUNTED = new Set(["formulas", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -369,7 +372,7 @@ Deno.serve(async (req: Request) => {
     };
     const LANG_STUDY_ACTIONS = new Set(["videoplan", "videoscript", "studysummary", "summarize", "slides", "unitslides", "mindmap", "mindtree", "flashcards", "unitquiz", "quiz"]);
     const LANG_ENFORCED = new Set([
-      "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "mindtree", "unitquiz", "syllabus", "define",
+      "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "slides", "unitslides", "mindmap", "mindtree", "unitquiz", "syllabus", "define", "formulas",
     ]);
     let systemPrompt: string;
     if (action === "translate") {

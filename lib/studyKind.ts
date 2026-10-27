@@ -22,6 +22,9 @@ export async function getStudyInfo(pdfPath: string): Promise<Info> {
   }
 }
 
+/** النوع المعروف في الذاكرة الآن بلا انتظار (undefined = لم يُقرأ بعد) — للدوال المتزامنة مثل مسار خطوة الخطة */
+export const peekStudyInfo = (pdfPath: string): Info | undefined => memo.get(pdfPath);
+
 export async function getStudyKind(pdfPath: string): Promise<StudyKind> {
   return (await getStudyInfo(pdfPath)).kind;
 }

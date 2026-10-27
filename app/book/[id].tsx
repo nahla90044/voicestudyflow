@@ -332,6 +332,12 @@ export default function BookHubScreen() {
               icon: "timer",
               go: () => router.push({ pathname: "/mock-exam", params: { pdf_path: book.pdf_path, book_id: book.id, book_title: book.title, exam: kindInfo.exam ?? "" } }),
             },
+            {
+              key: "formulas",
+              labelKey: "book.tool.formulas",
+              icon: "calculator",
+              go: () => router.push({ pathname: "/formula-sheet", params: { pdf_path: book.pdf_path, book_title: book.title } }),
+            },
             ...tools.slice(1),
           ]
         : tools;

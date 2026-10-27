@@ -7,6 +7,7 @@
 //   دقائق، فتعثّر الشبكة أو تجدد الحصة لا يبقي الخطة على قراءة الصفحات حتى نهايتها). انتهاء وقت الخطة يوقفه.
 // - كل خطوة تفتح الشاشة الموجودة المناسبة، وإشعار عند انتهاء وقتها، وإعادة توزيع الوقت الباقي عند التأخر أو التقدم.
 // - كل طلب بمهلة (لا انتظار بلا نهاية)، وكل قراءة وكتابة محمية من الأعطال.
+import { peekStudyInfo } from "./studyKind";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { router, type Href } from "expo-router";
@@ -523,6 +524,9 @@ export function routeForStep(s: PrepSession, step: PrepStep, _t?: T, read = fals
       return { pathname: "/unit-quiz", params: { pdf_path: s.pdfPath, title: s.bookTitle, book_title: s.bookTitle, mode: "mistakes", units, count } };
     case "exam":
     default:
+      // كتب الشهادات: الاختبار الشامل في الخطة اختبار تجريبي بوقت الخطوة نفسه (٢٧ أكتوبر)
+      if (peekStudyInfo(s.pdfPath)?.kind === "cert")
+        return { pathname: "/unit-quiz", params: { pdf_path: s.pdfPath, title: s.bookTitle, book_title: s.bookTitle, book_id: s.bookId, mode: "mock", units: "all", count, minutes: String(step.min || 0) } };
       return { pathname: "/unit-quiz", params: { pdf_path: s.pdfPath, title: s.bookTitle, book_title: s.bookTitle, mode: "mix", units, count } };
   }
 }

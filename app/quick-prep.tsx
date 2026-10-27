@@ -35,6 +35,7 @@ import { WEAK_BELOW, type QuestionState } from "../lib/readinessCore";
 import { useScene } from "../lib/scene";
 import { summaryJobKey, watchSummaryJob } from "../lib/summaryJobs";
 import { getCachedSummary } from "../lib/unitSummary";
+import { getStudyInfo } from "../lib/studyKind";
 
 type Phase = "loading" | "nosyl" | "error" | "setup" | "run" | "report";
 type SumState = { kind: "ready" | "busy" | "wait" | "failed"; d?: number; t?: number } | null;
@@ -75,6 +76,10 @@ export default function QuickPrepScreen() {
   const [inputs, setInputs] = useState<{ units: PrepUnit[]; unitCount: number; answered: number[] } | null>(null);
   const [now, setNow] = useState(Date.now());
   const pdfPath = sess?.pdfPath || paramPdf;
+  // نوع الكتاب في الذاكرة: خطوة «الاختبار الشامل» لكتب الشهادات تفتح اختبارًا تجريبيًا بوقت
+  useEffect(() => {
+    if (pdfPath) void getStudyInfo(pdfPath).catch(() => {});
+  }, [pdfPath]);
   const bookTitle = sess?.bookTitle || paramTitle;
 
   // الإعداد

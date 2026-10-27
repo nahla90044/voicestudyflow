@@ -30,7 +30,8 @@ export type AiAction =
   | "unitslides"
   | "filternoise"
   | "fixspacing"
-  | "moderate";
+  | "moderate"
+  | "formulas";
 
 /** تخطيطات الشرائح (بأسلوب Gamma): يختار الذكاء الأنسب لمحتوى كل شريحة */
 export type SlideLayout = "cover" | "list" | "cards" | "steps" | "compare" | "stat" | "quote" | "summary";
