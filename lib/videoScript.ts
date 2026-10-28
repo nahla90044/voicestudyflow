@@ -35,7 +35,10 @@ const PLAN_MS = 100_000; // خطة الوحدة الطويلة تأخذ نحو �
 
 function cacheIds(src: SummarySource) {
   const k = summaryCacheKey(src);
-  const id = (k.kind === "pagestudysummary" ? 1 : 2) * 1e12 + k.id;
+  // نوع الملخّص في المعرّف (٢٨ أكتوبر): فيديو المختصر والموسّع لا يحلّ محل الشامل؛ الشامل بمعرّفه القديم كما هو
+  const lv = src.level ?? "strict";
+  const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : lv === "final" ? 6 : 0);
+  const id = flag * 1e12 + k.id;
   return {
     id,
     // المسار القديم كما هو. تنبيه (٢٦ أكتوبر): id×١٠٠٠٠ يتجاوز دقة الأعداد (٢^٥٣)، فأرقام أجزاء الوحدة
@@ -301,7 +304,8 @@ export async function videoRequestCost(pdfPath: string, src: SummarySource, unit
   if (await getCachedVideo(pdfPath, src, lang)) return { pending: 0, estimated: false };
   const L = otherLang(lang);
   const { getCachedSummary, summaryRequestCost } = await import("./unitSummary");
-  const summary = (await getCachedSummary(pdfPath, src)) ?? (await getCachedSummary(pdfPath, { ...src, level: "expand" }));
+  // نوع مختار (مختصر/موسّع): من ملخّصه هو؛ والشامل يقبل الموسّع الجاهز كما كان
+  const summary = (await getCachedSummary(pdfPath, src)) ?? (src.level ? null : await getCachedSummary(pdfPath, { ...src, level: "expand" }));
   if (!summary) {
     const s = await summaryRequestCost(pdfPath, src);
     return { pending: s.pending + Math.max(1, s.total), estimated: true };

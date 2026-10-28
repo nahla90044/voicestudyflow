@@ -41,6 +41,10 @@ type VideoLang = "ar" | "en" | "fr";
 const VIDEO_LANGS: VideoLang[] = ["ar", "en", "fr"];
 const VIDEO_LANG_NAMES: Record<VideoLang, string> = { ar: "العربية", en: "English", fr: "Français" };
 const isVideoLang = (v: unknown): v is VideoLang => v === "ar" || v === "en" || v === "fr";
+// نوع الفيديو حسب الملخّص الذي يُبنى منه (قرار نهلة ٢٨ أكتوبر): مختصر أو شامل أو موسّع؛ فيديو كل نوع ولغة محفوظ وحده
+type VideoLevel = "brief" | "strict" | "expand";
+const VIDEO_LEVELS: VideoLevel[] = ["brief", "strict", "expand"];
+const isVideoLevel = (v: unknown): v is VideoLevel => v === "brief" || v === "strict" || v === "expand";
 
 const LOOK_PREVIEW: Record<SlideThemePref, { colors: [string, string]; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
   mixed: { colors: ["#2A2370", "#B4A6FF"], icon: "shuffle", tint: "#FFFFFF" },
@@ -55,7 +59,7 @@ export default function UnitVideoScreen() {
   const dir = useDir();
   const { pal } = useScene();
   const { width: winW, height: winH } = useWindowDimensions();
-  const { pdf_path, unit, page, from, to, title, book_title, vlang: vlangParam } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; vlang?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title, vlang: vlangParam, vlevel: vlevelParam } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; vlang?: string; vlevel?: string }>();
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
@@ -63,7 +67,18 @@ export default function UnitVideoScreen() {
   const fromN = Number(from);
   const toN = Number(to);
   const rangeMode = !pageMode && fromN > 0 && toN >= fromN;
-  const src: SummarySource = pageMode ? { kind: "page", page: pageNum } : rangeMode ? { kind: "range", from: fromN, to: toN } : { kind: "unit", unit: unitIdx };
+  const baseSrc: SummarySource = pageMode ? { kind: "page", page: pageNum } : rangeMode ? { kind: "range", from: fromN, to: toN } : { kind: "unit", unit: unitIdx };
+  // نوع الفيديو (آخر اختيار لهذا الكتاب، والافتراضي «شامل» كما كان)؛ null حتى يُقرأ
+  const levelKey = `vsf:video:level:${pdfPath}`;
+  const [vlevel, setVlevel] = useState<VideoLevel | null>(isVideoLevel(vlevelParam) ? vlevelParam : null);
+  useEffect(() => {
+    if (vlevel) return;
+    AsyncStorage.getItem(levelKey)
+      .then((v) => setVlevel(isVideoLevel(v) ? v : "strict"))
+      .catch(() => setVlevel("strict"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const src: SummarySource = vlevel && vlevel !== "strict" ? { ...baseSrc, level: vlevel } : baseSrc;
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
 
@@ -86,7 +101,6 @@ export default function UnitVideoScreen() {
   // فيديو كل لغة يُحفظ وحده؛ null حتى تُقرأ (لا يبدأ التجهيز قبلها)
   const langKey = `vsf:video:lang:${pdfPath}`;
   const [vlang, setVlang] = useState<VideoLang | null>(isVideoLang(vlangParam) ? vlangParam : null);
-  const prevLang = useRef<VideoLang | null>(null); // للرجوع إن أُلغي تجهيز لغة جديدة
   useEffect(() => {
     if (vlang) return;
     AsyncStorage.getItem(langKey)
@@ -104,10 +118,23 @@ export default function UnitVideoScreen() {
     setComplete(false);
     setJob(null);
     setAudioSave(null);
-    prevLang.current = vlang;
     setVlang(l);
     setVoiceOpen(false);
     AsyncStorage.setItem(langKey, l).catch(() => {});
+  }
+  function pickLevel(l: VideoLevel) {
+    if (l === vlevel) return;
+    halt();
+    setPlaying(false);
+    setEnded(false);
+    setIdx(0);
+    setScript(null);
+    setComplete(false);
+    setJob(null);
+    setAudioSave(null);
+    setVlevel(l);
+    setVoiceOpen(false);
+    AsyncStorage.setItem(levelKey, l).catch(() => {});
   }
 
   // شكل الشرائح: يُحفظ ويسري على كل الفيديوهات فورًا (عرض فقط — لا يعيد الصوت ولا يطلب شيئًا)
@@ -134,14 +161,18 @@ export default function UnitVideoScreen() {
   const [script, setScript] = useState<VideoScript | null>(null);
   const [complete, setComplete] = useState(false);
   const [runId, setRunId] = useState(0);
+  // لوحة «قبل البدء» (قرار نهلة ٢٨ أكتوبر): لا يبدأ التجهيز تلقائيًا — تُختار اللغة والنوع ثم «البدء»
+  const [setup, setSetup] = useState(false);
+  const [have, setHave] = useState<Record<string, boolean>>({});
   const scriptRef = useRef<{ script: VideoScript | null; complete: boolean }>({ script: null, complete: false });
   scriptRef.current = { script, complete };
 
   useEffect(() => {
     let on = true;
     let un: (() => void) | undefined;
+    setSetup(false);
     (async () => {
-      if (!vlang) return;
+      if (!vlang || !vlevel) return;
       const cached = await getCachedVideo(pdfPath, src, vlang);
       if (!on) return;
       if (cached) {
@@ -172,34 +203,43 @@ export default function UnitVideoScreen() {
           }
         }
       });
-      // عدد الطلبات قبل التجهيز (الملخّص الناقص + الفيديو)؛ الإلغاء يرجع للمكان السابق
+      // لا يبدأ تلقائيًا: لوحة اللغة والنوع (وعلامة ✓ على ما حُفظ من فيديوهات هذه الوحدة)
       if (!hasVideoJob(pdfPath, src, vlang)) {
-        const cost = await videoRequestCost(pdfPath, src, unitTitle, vlang).catch(() => null);
+        const marks: Record<string, boolean> = {};
+        await Promise.all(
+          VIDEO_LANGS.flatMap((l) =>
+            VIDEO_LEVELS.map((lv) =>
+              getCachedVideo(pdfPath, lv === "strict" ? baseSrc : { ...baseSrc, level: lv }, l)
+                .then((v) => void (marks[`${l}|${lv}`] = !!v))
+                .catch(() => {})
+            )
+          )
+        );
         if (!on) return;
-        if (cost && !(await confirmCost(cost.pending, "video", t, cost.estimated, key))) {
-          // إلغاء بعد تغيير اللغة يرجع للغة السابقة (فيديوها محفوظ)، وإلا يرجع للمكان السابق
-          if (on && prevLang.current) {
-            const back = prevLang.current;
-            prevLang.current = null;
-            setVlang(back);
-            AsyncStorage.setItem(langKey, back).catch(() => {});
-          } else if (on && router.canGoBack()) router.back();
-          return;
-        }
+        setHave(marks);
+        setSetup(true);
       }
-      prevLang.current = null;
-      if (!on) return;
-      const params: Record<string, string> = { pdf_path: pdfPath };
-      for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
-      params.vlang = vlang;
-      startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params }, vlang);
     })();
     return () => {
       on = false;
       un?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfPath, runId, vlang]);
+  }, [pdfPath, runId, vlang, vlevel]);
+
+  /** «البدء» من لوحة الإعداد: عدد الطلبات (كقرار ٢٠ أكتوبر) ثم التجهيز بالخلفية */
+  async function startNow() {
+    if (!vlang || !vlevel) return;
+    const key = videoJobKey(pdfPath, src, vlang);
+    const cost = await videoRequestCost(pdfPath, src, unitTitle, vlang).catch(() => null);
+    if (cost && !(await confirmCost(cost.pending, "video", t, cost.estimated, key))) return;
+    setSetup(false);
+    const params: Record<string, string> = { pdf_path: pdfPath };
+    for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
+    params.vlang = vlang;
+    params.vlevel = vlevel;
+    startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params }, vlang);
+  }
 
   // اكتمل السيناريو → يظهر في «المحفوظات» (تبويب الملخّصات 🎬) للرجوع إليه
   useEffect(() => {
@@ -491,7 +531,52 @@ export default function UnitVideoScreen() {
 
       {preparing ? (
         <View style={styles.center}>
-          {failed ? (
+          {setup && vlang && vlevel ? (
+            <View style={{ alignSelf: "stretch", gap: 12 }}>
+              <View style={[styles.prepIcon, { backgroundColor: pal.soft, alignSelf: "center" }]}>
+                <Ionicons name="videocam-outline" size={34} color={pal.accent} />
+              </View>
+              <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.lang")}</Text>
+              <View style={[styles.voiceGrid, { flexDirection: dir.row }]}>
+                {VIDEO_LANGS.map((l) => {
+                  const on = l === vlang;
+                  return (
+                    <Pressable key={l} onPress={() => pickLang(l)} style={[styles.voiceChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}>
+                      <Text style={[styles.voiceTxt, { color: on ? pal.onAccent : pal.ink }]}>
+                        {VIDEO_LANG_NAMES[l]}
+                        {have[`${l}|${vlevel}`] ? " ✓" : ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.kind")}</Text>
+              {VIDEO_LEVELS.map((lv) => {
+                const on = lv === vlevel;
+                return (
+                  <Pressable
+                    key={lv}
+                    onPress={() => pickLevel(lv)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on }}
+                    style={[styles.kindRow, { flexDirection: dir.row, backgroundColor: on ? pal.soft : "transparent", borderColor: on ? pal.accent : pal.cardBorder }]}
+                  >
+                    <Ionicons name={on ? "radio-button-on" : "radio-button-off"} size={20} color={on ? pal.accent : pal.dim} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[styles.kindName, { color: pal.ink, textAlign: dir.textAlign }]}>
+                        {t(`video.kind.${lv}`)}
+                        {have[`${vlang}|${lv}`] ? `  ✓ ${t("video.kind.saved")}` : ""}
+                      </Text>
+                      <Text style={[styles.kindHint, { color: pal.dim, textAlign: dir.textAlign }]}>{t(`video.kind.${lv}Hint`)}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+              <Pressable onPress={() => void startNow()} style={[styles.primary, { backgroundColor: pal.accent, alignSelf: "stretch", alignItems: "center" }]}>
+                <Text style={[styles.primaryTxt, { color: pal.onAccent }]}>{t("video.setup.start")}</Text>
+              </Pressable>
+            </View>
+          ) : failed ? (
             <>
               <Ionicons name="alert-circle-outline" size={36} color={pal.accent} />
               <Text style={[styles.dim, { color: pal.dim }]}>{job?.status === "quota" ? t("video.quota") : t("video.failed")}</Text>
@@ -661,6 +746,17 @@ export default function UnitVideoScreen() {
                         style={[styles.voiceChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}
                       >
                         <Text style={[styles.voiceTxt, { color: on ? pal.onAccent : pal.ink }]}>{VIDEO_LANG_NAMES[l]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.kind")}</Text>
+                <View style={[styles.voiceGrid, { flexDirection: dir.row }]}>
+                  {VIDEO_LEVELS.map((lv) => {
+                    const on = lv === vlevel;
+                    return (
+                      <Pressable key={lv} onPress={() => pickLevel(lv)} style={[styles.voiceChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}>
+                        <Text style={[styles.voiceTxt, { color: on ? pal.onAccent : pal.ink }]}>{t(`video.kind.${lv}`)}</Text>
                       </Pressable>
                     );
                   })}
@@ -848,6 +944,9 @@ export default function UnitVideoScreen() {
 }
 
 const styles = StyleSheet.create({
+  kindRow: { alignItems: "center", gap: 10, borderWidth: 1.5, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
+  kindName: { fontSize: 15, fontWeight: "800" },
+  kindHint: { fontSize: 12.5, fontWeight: "600", lineHeight: 18 },
   seenRow: { flexWrap: "wrap", gap: 6 },
   dotsToggle: { alignItems: "center", gap: 6 },
   voiceMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
