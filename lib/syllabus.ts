@@ -168,7 +168,7 @@ async function syllabusJob(pdfPath: string, text: string, units: number, onWrite
     (chars) => onWrite?.(Math.min(0.97, chars / expected))
   ).catch((e) => {
     const m = (e as Error).message;
-    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;
+    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" || m === "AI_UNAVAILABLE") throw e;
     return null;
   });
 }

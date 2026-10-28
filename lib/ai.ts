@@ -6,6 +6,7 @@ import { fetch as streamFetch } from "expo/fetch";
 
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
 import { checkSecurity } from "./security";
+import { aiDownError, reportAiDown } from "./aiDown";
 import { recordPerf } from "./perf";
 
 export type AiAction =
@@ -297,6 +298,7 @@ export async function aiAssistStream(action: AiAction, text: string, onText: (so
         requestPaywall("ai");
         throw new Error("USER_QUOTA");
       }
+      if (aiDownError(j?.error)) throw reportAiDown();
       throw new Error(j?.error || `HTTP_${res.status}`);
     }
     const reader = res.body?.getReader();
@@ -355,6 +357,7 @@ export async function aiAssist(
     requestPaywall("ai");
     throw new Error("USER_QUOTA");
   }
+  if (aiDownError(data?.error)) throw reportAiDown();
   if (data?.error) throw new Error(data.error);
 
   setTimeout(refreshUsage, 800); // العدّادات الظاهرة تتحدّث

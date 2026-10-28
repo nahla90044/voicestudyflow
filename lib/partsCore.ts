@@ -47,7 +47,7 @@ export type PartErrorStep = {
 
 /** ماذا يفعل محرك الأجزاء بعد خطأ في جزء (خالص — مُختبَر في tests/partsCore.test.ts) */
 export function afterPartError(code: string, tries: number, aways: number): PartErrorStep {
-  if (code === "USER_QUOTA" || code === "UNSAFE_CONTENT" || code === "ACCOUNT_LOCKED") return { tries, aways, verdict: "stop", delayMs: 0 };
+  if (code === "USER_QUOTA" || code === "UNSAFE_CONTENT" || code === "ACCOUNT_LOCKED" || code === "AI_UNAVAILABLE") return { tries, aways, verdict: "stop", delayMs: 0 };
   // السيرفر بلغ سقف الإعادات المجانية لهذا الجزء: لا فائدة من الإعادة الآن (ولا خصم عليها)
   if (code === "RETRY_LIMIT") return { tries, aways, verdict: "fail", delayMs: 0 };
   if (code === "WENT_AWAY" && aways < MAX_AWAY) return { tries, aways: aways + 1, verdict: "waitActive", delayMs: 0 };

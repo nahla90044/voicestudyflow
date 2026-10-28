@@ -13,6 +13,7 @@ import { streamPart, whenActive } from "./partsRunner";
 import { refreshUsage, requestPaywall } from "./plan";
 import { checkSecurity } from "./security";
 import { APP_VERSION, SUPABASE_FUNCTIONS_URL, SUPABASE_PUBLIC_KEY, supabase } from "./supabase";
+import { aiDownError, reportAiDown } from "./aiDown";
 import { recordPerf } from "./perf";
 
 const POLL_MS = 2000;
@@ -28,7 +29,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 type JobExtra = { deep?: boolean; mode?: string; qaRetryOf?: string; table?: boolean; vpart?: unknown; genId?: string; targetLang?: string; study?: string; exam?: string };
 
 /** أخطاء لا تُعاد ولا يُبحث لها عن بديل (الحصة، المحتوى، الحساب، الحد اليومي، سقف الإعادات المجانية للجزء) */
-const STOP = new Set(["USER_QUOTA", "UNSAFE_CONTENT", "ACCOUNT_LOCKED", "RATE_LIMITED", "RETRY_LIMIT"]);
+const STOP = new Set(["USER_QUOTA", "UNSAFE_CONTENT", "ACCOUNT_LOCKED", "RATE_LIMITED", "RETRY_LIMIT", "AI_UNAVAILABLE"]);
 /** رمز الخطأ للسجل (أسماء الأخطاء المعروفة فقط، لا رسائل حرة) */
 const code = (m: string) => (/^[A-Z_0-9]+$/.test(m) ? m : "ERROR");
 
@@ -62,6 +63,7 @@ async function startJob(action: AiAction, text: string, extra: JobExtra = {}): P
       requestPaywall("ai");
       throw new Error("USER_QUOTA");
     }
+    if (aiDownError(j.error)) throw reportAiDown();
     if (j.retryLimit || j.error === "RETRY_LIMIT") throw new Error("RETRY_LIMIT");
     if (j.error === "RATE_LIMITED") throw new Error("RATE_LIMITED");
     // خطأ من السيرفر نفسه (تعذّر إنشاء المهمة هناك) → البثّ المباشر بديلًا؛ وغيره (الدخول، التحديث…) يُعاد كما هو
@@ -75,7 +77,7 @@ async function startJob(action: AiAction, text: string, extra: JobExtra = {}): P
 /** صف المهمة، أو «غير موجودة» (ردّ فارغ بلا خطأ)، أو «تعذّرت القراءة» (شبكة/مهلة — ليست فقدًا للمهمة) */
 async function readJob(id: string): Promise<JobRead> {
   try {
-    const q = supabase.from("ai_jobs").select("status,partial,result,updated_at").eq("id", id).maybeSingle();
+    const q = supabase.from("ai_jobs").select("status,partial,result,updated_at,error").eq("id", id).maybeSingle();
     const timeout = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 15000));
     const res = await Promise.race([q, timeout]);
     if (res === "timeout") return { kind: "error" };
@@ -182,6 +184,8 @@ async function jobPartInner<P>(
         // فشلت على السيرفر (ومنها الردّ الفارغ): السيرفر ردّ خصمها إن لم يصل شيء → نحدّث العدّاد ونعيد الجزء
         await forget();
         refreshUsage();
+        // توقف الخدمة من جهتنا (نفاد رصيد المزوّد): لا إعادة، ورسالة صادقة
+        if (read.kind === "row" && aiDownError((read.row as { error?: string }).error)) throw reportAiDown();
         throw new Error("JOB_FAILED");
       case "missing":
         // المهمة غير موجودة فعلًا (حُذفت/حساب آخر) بعد عدة قراءات سليمة → نبدأ من جديد

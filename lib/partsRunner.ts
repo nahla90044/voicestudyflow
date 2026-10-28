@@ -81,7 +81,7 @@ export async function streamPart<P>(
     );
   } catch (e) {
     const em = (e as Error).message;
-    if (em === "USER_QUOTA" || em === "UNSAFE_CONTENT" || em === "ACCOUNT_LOCKED" || em === "RETRY_LIMIT") throw e;
+    if (em === "USER_QUOTA" || em === "UNSAFE_CONTENT" || em === "ACCOUNT_LOCKED" || em === "RETRY_LIMIT" || em === "AI_UNAVAILABLE") throw e;
     if (wentAway || AppState.currentState !== "active") throw new Error("WENT_AWAY");
     recordPerf(`stream.${action}.failed`, 0, false, raw.length);
     throw new Error("STREAM_FAILED");

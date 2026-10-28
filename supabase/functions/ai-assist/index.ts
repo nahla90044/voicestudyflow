@@ -195,6 +195,30 @@ const INTERNAL_DAILY_CAP = 800;
 const SCANNED = new Set(["bilingual", "writecheck", "formulas", "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
 // videoplan ليس هنا: خطة الفيديو لا تُحسب على الطالب (عدد الطلبات لا يزيد على ما قبل الخطة)، ولها سقف يومي
 const VIDEO_PLAN_DAILY_CAP = 40;
+// نفاد رصيد مزوّد الذكاء (بلاغ نهلة ٢٨ أكتوبر: التطبيق قال «لا يوجد اتصال» وأعاد المحاولة ٤٨٩ مرة في ساعة):
+// يُرجَع للتطبيق رمز واضح AI_UNAVAILABLE فيتوقف ويعرض السبب الصحيح، ويُفتح قاطع مؤقت (٩٠ ث) يرفض الطلبات الجديدة
+// فورًا بلا استدعاء للمزوّد حتى يُشحن الرصيد.
+const isCreditError = (m: string) => /credit balance|billing|prepay|purchase credits/i.test(m);
+const DOWN_KEY = "ai_down_until";
+// deno-lint-ignore no-explicit-any
+async function markAiDown(admin: any): Promise<void> {
+  try {
+    await admin.from("app_config").upsert({ key: DOWN_KEY, value: new Date(Date.now() + 90_000).toISOString(), updated_at: new Date().toISOString() });
+  } catch {
+    /* القاطع تحسين فقط */
+  }
+}
+// deno-lint-ignore no-explicit-any
+async function aiDownNow(admin: any): Promise<boolean> {
+  try {
+    const { data } = await admin.from("app_config").select("value").eq("key", DOWN_KEY).maybeSingle();
+    const until = Date.parse(String(data?.value ?? ""));
+    return Number.isFinite(until) && until > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 const COUNTED = new Set(["bilingual", "writecheck", "formulas", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
@@ -350,6 +374,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       freeRetry = !!prev;
     }
+    if (await aiDownNow(caller.admin)) return json({ error: "AI_UNAVAILABLE" }, 200);
     if (COUNTED.has(action) && !freeRetry) {
       const ch = await charge(caller, "ai", 1, action, isPart ? { part_hash: partH } : undefined);
       if (!ch.ok) return json({ error: "USER_QUOTA", userQuota: true, plan: caller?.plan ?? "free" }, 200);
@@ -578,8 +603,10 @@ Deno.serve(async (req: Request) => {
           clearInterval(beat);
           await q;
           console.error("ai job", action, (e as Error).message);
+          const down = isCreditError((e as Error).message);
+          if (down) await markAiDown(caller.admin);
           // فشل المهمة لا يتحكم فيه التطبيق، وما كُتب منها لا يُستعمل → لم يُسلَّم شيء
-          await jobFinal({ status: "failed", partial: all, error: (e as Error).message.slice(0, 300), stop_reason: stop, updated_at: new Date().toISOString() });
+          await jobFinal({ status: "failed", partial: all, error: down ? "AI_UNAVAILABLE" : (e as Error).message.slice(0, 300), stop_reason: stop, updated_at: new Date().toISOString() });
           await finish("failed", `job_failed:${action}`);
         } finally {
           clearInterval(beat);
@@ -706,6 +733,11 @@ Deno.serve(async (req: Request) => {
     return json({ result });
   } catch (error) {
     await finish("failed", "error");
+    if (isCreditError((error as Error).message)) {
+      const c = charged?.caller ?? attempt?.caller;
+      if (c) await markAiDown(c.admin);
+      return json({ error: "AI_UNAVAILABLE" }, 200);
+    }
     return json({ error: (error as Error).message }, 500);
   }
 });

@@ -26,7 +26,7 @@ export async function qaPart<P>(
     return why2 ? first : second;
   } catch (e) {
     const m = (e as Error).message;
-    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED") throw e;
+    if (m === "USER_QUOTA" || m === "UNSAFE_CONTENT" || m === "ACCOUNT_LOCKED" || m === "AI_UNAVAILABLE") throw e;
     return first; // ومنها RETRY_LIMIT: سقف الإعادات المجانية لهذا الجزء → تُقبل الأولى
   }
 }
