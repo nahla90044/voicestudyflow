@@ -641,7 +641,7 @@ export default function UnitSummaryScreen() {
               </View>
             </Pressable>
           ) : null}
-          {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} /> : null}
+          {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} rtl={slang ? slang === "ar" : undefined} /> : null}
           {sum && !streaming ? (
             <Pressable
               onPress={onRedo}

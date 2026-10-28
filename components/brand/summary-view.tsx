@@ -13,14 +13,24 @@ import { TableSummaryView } from "./table-summary-view";
 
 const COLORS = ["#5B4BF5", "#0E8F7E", "#E07A1F", "#2563EB", "#B8338C", "#15803D"];
 
-export function SummaryView({ summary, bookTitle }: { summary: StudySummary; bookTitle?: string }) {
+/** rtl: اتجاه لغة الملخّص نفسه (ملخّص إنجليزي/فرنسي في واجهة عربية يُقرأ من اليسار — ٢٨ أكتوبر) */
+export function SummaryView({ summary, bookTitle, rtl }: { summary: StudySummary; bookTitle?: string; rtl?: boolean }) {
   // المختصر/المراجعة الأخيرة بالشكل الجدولي
   if (summary.table) return <TableSummaryView table={summary.table} badge={bookTitle} />;
-  return <ClassicSummaryView summary={summary} bookTitle={bookTitle} />;
+  return <ClassicSummaryView summary={summary} bookTitle={bookTitle} rtl={rtl} />;
 }
 
-function ClassicSummaryView({ summary, bookTitle }: { summary: StudySummary; bookTitle?: string }) {
-  const dir = useDir();
+function ClassicSummaryView({ summary, bookTitle, rtl }: { summary: StudySummary; bookTitle?: string; rtl?: boolean }) {
+  const ui = useDir();
+  const dir =
+    rtl === undefined || rtl === ui.isRTL
+      ? ui
+      : {
+          isRTL: rtl,
+          textAlign: (rtl ? "right" : "left") as "right" | "left",
+          row: (rtl ? "row-reverse" : "row") as "row-reverse" | "row",
+          writingDirection: (rtl ? "rtl" : "ltr") as "rtl" | "ltr",
+        };
   const { t } = useI18n();
   const { pal } = useScene();
   const ta = { textAlign: dir.textAlign } as const;
