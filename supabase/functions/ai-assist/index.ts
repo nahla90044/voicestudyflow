@@ -5,7 +5,7 @@
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
 import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
-import { certQuizPrompt, certStudyPrompt, certTutorPrompt, safeExam } from "../_shared/certStudyPrompt.ts";
+import { certDomain, certDomainPrompt, certQuizPrompt, certStudyPrompt, certTutorPrompt, safeExam } from "../_shared/certStudyPrompt.ts";
 import { LANGUAGE_DEFINE_PROMPT, LANGUAGE_QSOLVE_PROMPT, LANGUAGE_QUIZ_PROMPT, LANGUAGE_STUDY_PROMPT, LANGUAGE_TABLE_PROMPT, LANGUAGE_VIDEO_PROMPT } from "../_shared/languageStudyPrompt.ts";
 import { PLAN_GUARD, planBlock, readVpart, VIDEO_FORMAT, VIDEO_PART, VIDEO_PLAN, VIDEO_ROLE, vpartText } from "../_shared/videoPrompt.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
@@ -421,7 +421,7 @@ Deno.serve(async (req: Request) => {
         systemPrompt += action === "unitquiz" || action === "quiz" ? certQuizPrompt(exam) : certStudyPrompt(exam);
         // شرح المعلّم الخصوصي: الملخّص الشامل/الموسّع وسيناريو الفيديو (لا المختصر ولا المراجعة الأخيرة)
         const tutor = (action === "studysummary" && body.mode !== "brief" && body.mode !== "final") || action === "videoscript";
-        if (tutor) systemPrompt += certTutorPrompt(action === "videoscript");
+        if (tutor) systemPrompt += certTutorPrompt(action === "videoscript") + certDomainPrompt(certDomain(exam, text), action === "videoscript");
       }
       if (body.study === "language" && action === "qsolve") systemPrompt += LANGUAGE_QSOLVE_PROMPT;
       // لغة الترجمة والشرح = لغة الواجهة؛ نص الطالب المصحَّح يبقى بلغته (لا يدخلان LANG_ENFORCED لهذا)

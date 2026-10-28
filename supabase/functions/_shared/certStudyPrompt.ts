@@ -42,3 +42,62 @@ export const certQuizPrompt = (exam: string) => `
 - why في السؤال الحسابي حلّ مفصّل خطوة بخطوة، كل خطوة في سطر مستقل يبدأ برقمها: ١) المعادلة، ٢) التعويض بالأرقام، ٣) الناتج، ثم سطر «الخطأ الشائع:» يشرح من أين جاء أقرب خيار خاطئ.
 - المصطلحات المهنية بمقابلها الإنجليزي بين قوسين عند أول ذكرها في السؤال.
 - quote: المعادلة أو الجملة من نص الوحدة التي يقوم عليها السؤال حرفيًا.`;
+
+// ===== العرض حسب مجال الشهادة (طلب نهلة ٢٨ أكتوبر) =====
+// «المالية والمحاسبة: جداول المحاسبة والمعادلات وtime value of money — الآن يشرح نظري ويحط الأرقام بطريقة تشتت؛
+// والشهادات الثانية يصمم العرض بما يناسبها». المجال من اسم الاختبار، وإلا من مصطلحات نص الوحدة نفسه.
+export type CertDomain = "finance" | "pm" | "it" | "hr" | "supply" | "general";
+
+const EXAM_RE: [CertDomain, RegExp][] = [
+  ["finance", /\b(CMA|CPA|CFA|ACCA|CIA|CIMA|FRM|SOCPA|CFP|DipIFR|IFRS|EA|CA)\b|محاسب|مالي|مالية|زكاة|مراجعة الحسابات/i],
+  ["pm", /\b(PMP|CAPM|PRINCE2|PMI|PgMP|PfMP|Scrum|Agile|ACP)\b|إدارة المشاريع/i],
+  ["it", /\b(CISSP|CISA|CISM|CRISC|CompTIA|Security\+|Network\+|A\+|CCNA|CCNP|AWS|Azure|GCP|ITIL|CEH|OSCP|CCSP)\b|أمن المعلومات|الأمن السيبراني|الشبكات/i],
+  ["hr", /\b(SHRM|CIPD|PHR|SPHR|aPHR|GPHR)\b|الموارد البشرية/i],
+  ["supply", /\b(CSCP|CPIM|CIPS|CPSM|CLTD|CPM)\b|سلاسل الإمداد|المشتريات/i],
+];
+const TEXT_RE: [CertDomain, RegExp][] = [
+  // عبارات مهنية لا تحتمل معنى آخر («مدين/دائن» وحدهما في كتب القانون، وcredit في غيرها)
+  ["finance", /\b(?:NPV|IRR|COGS|EBITDA?|WACC)\b|\b(?:journal entr|debit|present value|future value|annuit|discount rate|depreciation|amortiz|balance sheet|income statement|statement of cash flows|cash flows|contribution margin|break-?even|cost of capital|net income|accounts receivable|accounts payable|retained earnings|working capital|variable cost|fixed cost|overhead|absorption costing|variable costing|process costing|job.order costing|standard cost|activity.based costing|cost of goods)\w*|التكاليف الثابتة|التكاليف المتغيرة|التكاليف غير المباشرة|تكلفة البضاعة المباعة|القيد المحاسبي|قيود اليومية|القيمة الحالية|القيمة المستقبلية|الإهلاك|الميزانية العمومية|قائمة الدخل|قائمة المركز المالي|قائمة التدفقات النقدية|هامش المساهمة|نقطة التعادل|صافي الدخل|رأس المال العامل/gi],
+  ["pm", /\bWBS\b|\b(stakeholder|work breakdown|critical path|earned value|sprint|product backlog|scope baseline|risk register|project charter)\w*|أصحاب المصلحة|المسار الحرج|القيمة المكتسبة|نطاق المشروع|ميثاق المشروع/gi],
+  ["it", /\bTCP\b|\b(encryption|firewall|protocol|access control|vulnerabilit|malware|authentication|IP address|subnet|cloud computing|router|database|cyber)\w*|التشفير|جدار الحماية|البروتوكول|الثغرات|المصادقة|قاعدة البيانات/gi],
+  ["hr", /\b(recruitment|performance appraisal|employee onboarding|employee relations|talent management|job analysis|workforce planning)\w*|التوظيف|تقييم الأداء|الموارد البشرية|تحليل الوظائف/gi],
+  ["supply", /\bEOQ\b|\b(safety stock|reorder point|procurement|supplier selection|logistics|lead time|inventory turnover)\w*|نقطة إعادة الطلب|مخزون الأمان|المشتريات|سلاسل الإمداد/gi],
+];
+
+export function certDomain(exam: string, text: string): CertDomain {
+  for (const [d, re] of EXAM_RE) if (re.test(exam)) return d;
+  const sample = String(text || "").slice(0, 20000);
+  const counts = TEXT_RE.map(([d, re]) => [d, (sample.match(re) ?? []).length] as const).sort((a, b) => b[1] - a[1]);
+  // مجال واضح فقط: ٦ عبارات مهنية فأكثر وضعف أقرب مجال آخر، وإلا «عام» (عرض مناسب بلا تسمية مجال خاطئة)
+  return counts[0][1] >= 6 && counts[0][1] >= 2 * counts[1][1] ? counts[0][0] : "general";
+}
+
+const CALC = "كل حساب بالترتيب: «المعطيات» (البند = القيمة) ← «المعادلة» بالرموز ومعنى كل رمز ← «التعويض» بالأرقام ← «الناتج» برقم واضح ووحدته ← «التفسير» في جملة (ماذا يعني الرقم للقرار).";
+
+const DOMAIN_TEXT: Record<CertDomain, string> = {
+  finance: `طبيعة المادة: **محاسبة ومالية** — الأرقام تُعرض بالطريقة المعتادة في هذه المواد، ولا تُنثر داخل الفقرات أبدًا:
+أ) ${CALC} الحساب كتلة exercise: steps بالترتيب السابق، كل خطوة سطر قصير برقم واحد أو معادلة واحدة، وanswer الناتج النهائي، وwhy التفسير. وإن كانت المعطيات أكثر من ثلاث فقبل الحل جدول table «المعطيات» (البند | الرمز | القيمة).
+ب) القيود المحاسبية جدول table بأعمدة (الحساب | مدين | دائن): الطرف المدين أولًا ثم الدائن، ومجموع المدين = مجموع الدائن، وتحته سطر يشرح سبب كل طرف.
+ج) القوائم المالية والجداول الدورية (الإهلاك، جدول سداد القرض، الموازنة، تكاليف المنتج) بشكلها المهني في table: البنود صفوف والفترات أعمدة، مع الإجماليات.
+د) القيمة الزمنية للنقود (Time Value of Money) لكل مسألة: ١) الخط الزمني جدول (الفترة 0، 1، …، n | التدفق النقدي) ٢) المعادلة المناسبة: PV = FV ÷ (1 + r)^n، FV = PV × (1 + r)^n، الدفعات PV = PMT × [1 − (1 + r)^−n] ÷ r، المستقبلية FV = PMT × [(1 + r)^n − 1] ÷ r، صافي القيمة الحالية NPV = Σ CFt ÷ (1 + r)^t − I0 ٣) مدخلات الآلة المالية جدول (N | I/Y | PV | PMT | FV) والخارج من الجيب بالسالب ٤) الحل خطوة بخطوة ٥) الناتج والتفسير.
+هـ) النسب والمؤشرات جدول (النسبة | المعادلة | ماذا تقيس | الأعلى أفضل أم الأقل).
+و) المقارنات (مثل التكلفة المتغيرة والاستيعابية) جدول، ثم مثال رقمي واحد يُظهر الفرق.
+ز) الأرقام بالأرقام اللاتينية 0-9 مع فواصل الآلاف (1,250,000) والعملة أو الوحدة بجانبها، والنسب مئوية بمنزلتين.`,
+  pm: `طبيعة المادة: **إدارة مشاريع** — العمليات جدول (العملية | المدخلات | الأدوات والأساليب | المخرجات) أو قائمة مرقمة بتسلسلها؛ حسابات القيمة المكتسبة (PV, EV, AC, CV, SV, CPI, SPI, EAC, ETC, VAC) والمسار الحرج والتقديرات: ${CALC} مع جدول يلخّص المعادلات؛ وأسئلة الموقف «ما أفضل ما يفعله مدير المشروع أولًا؟» مع سبب أفضلية الإجابة وخطأ البدائل.`,
+  it: `طبيعة المادة: **تقنية وأمن معلومات** — المقارنات (البروتوكولات، أنواع الضوابط، نماذج الوصول، الخدمات السحابية) جداول؛ الإجراءات خطوات مرقمة؛ جدول «التهديد ← الضابط المناسب ← نوعه (وقائي/كشفي/تصحيحي)»؛ كل اختصار بمعناه الكامل عند أول ذكر؛ والأرقام التي تُحفظ (المنافذ، المعايير، المستويات) جدول.`,
+  hr: `طبيعة المادة: **موارد بشرية** — النماذج والأطر جدول (المرحلة | الهدف | مثال تطبيقي)، والقوانين والسياسات قوائم مختصرة، والحسابات (معدل الدوران، تكلفة التوظيف، العائد على التدريب): ${CALC} وحالات عملية «ما التصرف الصحيح؟» بتحليل.`,
+  supply: `طبيعة المادة: **سلاسل إمداد ومشتريات** — التدفقات والعمليات خطوات مرقمة أو جدول؛ حسابات المخزون (EOQ، مخزون الأمان، نقطة إعادة الطلب، دوران المخزون): ${CALC} والمقارنات (أنظمة المخزون، استراتيجيات الشراء) جداول.`,
+  general: `صمّم العرض بما يناسب طبيعة هذه المادة: ${CALC} والإجراءات خطوات مرقمة، والمقارنات جداول، والأطر والنماذج جدول أو قائمة مرتبة، ولا تُنثر الأرقام داخل الفقرات.`,
+};
+
+const DOMAIN_VIDEO: Record<CertDomain, string> = {
+  finance: `مشهد الحساب layout «steps» بالترتيب (المعطيات، المعادلة، التعويض، الناتج)، ثم الناتج مشهد «stat» برقمه ووحدته؛ القيد المحاسبي مشهد «compare» بعمودين (مدين | دائن)؛ القيمة الزمنية للنقود: مشهد الخط الزمني، ثم مشهد مدخلات الآلة المالية (N، I/Y، PV، PMT، FV)، ثم الحل. الراوي يقرأ الخطوات بترتيبها ولا يسرد أكثر من رقمين في جملة.`,
+  pm: `العمليات مشهد «steps»، والمقارنات «compare»، وحسابات القيمة المكتسبة «steps» ثم الناتج «stat».`,
+  it: `المقارنات مشهد «compare»، والإجراءات «steps»، والمصطلحات المتقاربة «cards».`,
+  hr: `الأطر مشهد «steps» أو «cards»، والمقارنات «compare».`,
+  supply: `العمليات مشهد «steps»، والحسابات «steps» ثم الناتج «stat»، والمقارنات «compare».`,
+  general: `الحسابات مشهد «steps» ثم الناتج «stat»، والمقارنات «compare»، والإجراءات «steps».`,
+};
+
+/** تعليمات العرض لمجال الشهادة (الملخّص الشامل والموسّع وسيناريو الفيديو) */
+export const certDomainPrompt = (domain: CertDomain, video: boolean) => `\n\n${video ? `${DOMAIN_TEXT[domain].split("\n")[0]}\nفي الفيديو: ${DOMAIN_VIDEO[domain]}` : DOMAIN_TEXT[domain]}`;
