@@ -15,7 +15,7 @@ import { getCurrentLang, useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToText, type StudySummary } from "../lib/studySummary";
-import { clearSummary, getCachedSummary, SUMMARY_LEVELS, summaryCacheKey, sumLang, summaryRange, summaryRequestCost, type SummaryLevel, type SummarySource } from "../lib/unitSummary";
+import { CERT_STYLE_AT, clearSummary, getCachedSummary, SUMMARY_LEVELS, summaryCacheKey, sumLang, summaryRange, summaryRequestCost, type SummaryLevel, type SummarySource } from "../lib/unitSummary";
 import { confirmCost } from "../lib/costConfirm";
 import { hasSummaryJob, startSummaryJob, summaryJobKey, watchSummaryJob } from "../lib/summaryJobs";
 import { getUnitContent } from "../lib/unitContent";
@@ -188,6 +188,26 @@ export default function UnitSummaryScreen() {
   }
 
   /** إعادة التلخيص: نفس الصفحات، أو صفحات يحددها الطالب (إن كانت حدود الدرس ناقصة) */
+  // ملخّص كتاب شهادة وُلّد قبل طريقة الشرح الجديدة: اقتراح تحديثه (طلب نهلة ٢٨ أكتوبر)
+  const [cert, setCert] = useState(false);
+  useEffect(() => {
+    import("../lib/studyKind")
+      .then((m) => m.getStudyKind(pdfPath))
+      .then((k) => setCert(k === "cert"))
+      .catch(() => {});
+  }, [pdfPath]);
+  const outdated = cert && !!sum && !streaming && !incomplete && lvl !== "brief" && lvl !== "final" && (sum.madeAt ?? 0) < CERT_STYLE_AT;
+  async function upgradeStyle() {
+    stopSummary();
+    setPlaying(false);
+    await clearSummary(pdfPath, src);
+    setSum(null);
+    setSaved(false);
+    setIncomplete(false);
+    setErr("");
+    setLoading(true);
+    setRunId((n) => n + 1);
+  }
   function onRedo() {
     const restart = async () => {
       stopSummary();
@@ -641,6 +661,15 @@ export default function UnitSummaryScreen() {
               </View>
             </Pressable>
           ) : null}
+          {outdated ? (
+            <View style={[styles.certUp, { backgroundColor: pal.soft, borderColor: pal.accent }]}>
+              <Text style={[styles.certUpTitle, { color: pal.ink, textAlign: dir.textAlign }]}>✨ {t("summary.certUp.title")}</Text>
+              <Text style={[styles.certUpBody, { color: pal.dim, textAlign: dir.textAlign }]}>{t("summary.certUp.body")}</Text>
+              <Pressable onPress={() => void upgradeStyle()} style={({ pressed }) => [styles.certUpBtn, { backgroundColor: pal.accent, opacity: pressed ? 0.85 : 1 }]}>
+                <Text style={[styles.certUpBtnTxt, { color: pal.onAccent }]}>{t("summary.certUp.go")}</Text>
+              </Pressable>
+            </View>
+          ) : null}
           {sum ? <SummaryView summary={sum} bookTitle={unitTitle || bookTitle} rtl={slang ? slang === "ar" : undefined} /> : null}
           {sum && !streaming ? (
             <Pressable
@@ -685,6 +714,11 @@ export default function UnitSummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  certUp: { borderWidth: 1.5, borderRadius: 18, padding: 14, gap: 8, marginBottom: 12 },
+  certUpTitle: { fontSize: 15.5, fontWeight: "900" },
+  certUpBody: { fontSize: 13.5, fontWeight: "600", lineHeight: 21 },
+  certUpBtn: { height: 42, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  certUpBtnTxt: { fontSize: 14.5, fontWeight: "900" },
   langRow: { flexWrap: "wrap", gap: 8, marginBottom: 6 },
   langChip: { paddingHorizontal: 16, height: 40, borderRadius: Radius.pill, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   langTxt: { fontSize: 14.5, fontWeight: "800" },

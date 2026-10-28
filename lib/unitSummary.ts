@@ -93,8 +93,11 @@ export async function getCachedSummary(pdfPath: string, src: SummarySource): Pro
 
 export async function cacheSummary(pdfPath: string, src: SummarySource, s: StudySummary): Promise<void> {
   const k = summaryCacheKey(src);
-  await setUnitContent(pdfPath, k.id, k.kind, s, sumLang(src));
+  await setUnitContent(pdfPath, k.id, k.kind, s.madeAt ? s : { ...s, madeAt: Date.now() }, sumLang(src));
 }
+
+/** نشر طريقة شرح الشهادات الجديدة (المعلّم الخصوصي، المعادلات خطوة بخطوة، دفتر الأستاذ والقوائم) */
+export const CERT_STYLE_AT = Date.parse("2026-10-28T20:00:00Z");
 
 /**
  * نص المصدر **كاملًا** مقسّمًا لأجزاء بالترتيب (جزء واحد للصفحة أو الوحدة القصيرة).
