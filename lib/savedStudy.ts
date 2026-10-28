@@ -19,6 +19,10 @@ export type SavedItem = {
   to?: number;
   /** مستوى الملخّص (مختصر/شامل/موسّع) — بلا قيمة = شامل */
   level?: "brief" | "strict" | "expand" | "final";
+  /** لغة شرح الفيديو (ar/en/fr) — فيديو كل لغة ونوع عنصر مستقل */
+  lang?: string;
+  /** فيديو قيد التجهيز (لم تكتمل أجزاؤه بعد؛ ما اكتمل محفوظ ويكمل من حيث توقف) */
+  partial?: boolean;
   savedAt: number;
   studied?: boolean; // أُشِّر كمدروس من القائمة
   archived?: boolean; // منقول إلى الأرشيف

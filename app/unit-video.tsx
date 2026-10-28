@@ -239,13 +239,18 @@ export default function UnitVideoScreen() {
     params.vlang = vlang;
     params.vlevel = vlevel;
     startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params }, vlang);
+    saveVideoItem(true);
   }
 
   // اكتمل السيناريو → يظهر في «المحفوظات» (تبويب الملخّصات 🎬) للرجوع إليه
-  useEffect(() => {
-    if (!complete || !pdfPath) return;
+  // في «المحفوظات» من لحظة البدء (قيد التجهيز) ثم مكتملًا — طلب نهلة ٢٨ أكتوبر: «اذا انحفظ القاه في المحفوظات
+  // علشان اطمئن ان شغلي محفوظ». لكل لغة ونوع عنصر مستقل (الشامل بالعربية بمفتاحه القديم كما كان)
+  const saveVideoItem = (partial: boolean) => {
+    if (!pdfPath || !vlang || !vlevel) return;
+    const base = `video|${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`;
+    const plain = vlevel === "strict" && vlang === getCurrentLang();
     addSavedItem({
-      key: `video|${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`,
+      key: plain ? base : `${base}|${vlevel}|${vlang}`,
       kind: "video",
       pdfPath,
       bookTitle,
@@ -254,8 +259,14 @@ export default function UnitVideoScreen() {
       unit: pageMode || rangeMode ? undefined : unitIdx,
       from: rangeMode ? fromN : undefined,
       to: rangeMode ? toN : undefined,
+      level: vlevel,
+      lang: vlang,
+      partial,
       savedAt: Date.now(),
     });
+  };
+  useEffect(() => {
+    if (complete) saveVideoItem(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complete]);
 

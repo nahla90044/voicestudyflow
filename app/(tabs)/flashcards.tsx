@@ -260,6 +260,10 @@ export default function FlashcardsScreen() {
     if (it.page != null) params.page = String(it.page);
     if (it.unit != null) params.unit = String(it.unit);
     if (it.kind === "summary") params.level = it.level ?? "strict";
+    if (it.kind === "video") {
+      params.vlevel = it.level ?? "strict";
+      if (it.lang) params.vlang = it.lang;
+    }
     if (it.from != null && it.to != null) {
       params.from = String(it.from);
       params.to = String(it.to);

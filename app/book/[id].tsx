@@ -5,6 +5,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { listSaves, removeSave, type StudySave } from "../../lib/studySaves";
+import { getSavedItems, type SavedItem } from "../../lib/savedStudy";
+import { getCachedVideo } from "../../lib/videoScript";
 import { addSaveRef, createFolder, deleteFolder, forgetSave, loadFolders, type BookFolder } from "../../lib/bookFolders";
 import { loadNotes } from "../../lib/notes";
 import React, { useCallback, useEffect, useState } from "react";
@@ -86,15 +88,33 @@ export default function BookHubScreen() {
   const [tab, setTab] = useState<Tab>("syllabus");
   // «المحفوظات»: العروض وإجابات المساعد المحفوظة من القارئ لهذا الكتاب
   const [saves, setSaves] = useState<StudySave[] | null>(null);
+  // فيديوهات الكتاب في «المحفوظات» (طلب نهلة ٢٨ أكتوبر): من لحظة البدء، وحالتها (مكتمل/قيد التجهيز) من المحفوظ فعلًا
+  const [videos, setVideos] = useState<(SavedItem & { done: boolean })[]>([]);
   const [folders, setFolders] = useState<BookFolder[]>([]); // «ملفاتي»: ملفات ينشئها المستخدم ويضع فيها ما يشاء
   const loadSaves = useCallback(() => {
     if (!bookId) return;
     listSaves(bookId).then(setSaves).catch(() => setSaves([]));
+    if (book?.pdf_path)
+      getSavedItems("video")
+        .then((all) =>
+          Promise.all(
+            all
+              .filter((v) => v.pdfPath === book.pdf_path && !v.archived)
+              .map(async (v) => {
+                const base = v.page != null ? { kind: "page" as const, page: v.page } : v.from != null && v.to != null ? { kind: "range" as const, from: v.from, to: v.to } : { kind: "unit" as const, unit: v.unit ?? 0 };
+                const lv = v.level && v.level !== "strict" ? v.level : undefined;
+                const done = !!(await getCachedVideo(v.pdfPath, lv ? { ...base, level: lv } : base, v.lang).catch(() => null));
+                return { ...v, done };
+              })
+          )
+        )
+        .then((vs) => setVideos(vs.sort((a, b) => b.savedAt - a.savedAt)))
+        .catch(() => setVideos([]));
     loadFolders(bookId).then(setFolders).catch(() => setFolders([]));
     loadNotes(bookId)
       .then((ps) => setNoteCount(ps.filter((p) => p.text.trim() || p.strokes.length).length))
       .catch(() => setNoteCount(0));
-  }, [bookId]);
+  }, [bookId, book?.pdf_path]);
   useFocusEffect(
     useCallback(() => {
       if (tab === "saves") loadSaves();
@@ -656,6 +676,44 @@ export default function BookHubScreen() {
                 <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color={pal.dim} />
               </SceneCard>
             </PressableScale>
+          )}
+          {/* الفيديوهات: كل فيديو بلغته ونوعه، من لحظة البدء (قيد التجهيز) حتى الاكتمال */}
+          {tab === "saves" && videos.length > 0 && (
+            <View style={{ gap: 10 }}>
+              <Text style={[styles.secTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("saves.videos")}</Text>
+              {videos.map((v) => (
+                <PressableScale
+                  key={v.key}
+                  onPress={() => {
+                    const params: Record<string, string> = { pdf_path: v.pdfPath, title: v.label, book_title: v.bookTitle, vlevel: v.level ?? "strict" };
+                    if (v.lang) params.vlang = v.lang;
+                    if (v.page != null) params.page = String(v.page);
+                    if (v.unit != null) params.unit = String(v.unit);
+                    if (v.from != null && v.to != null) {
+                      params.from = String(v.from);
+                      params.to = String(v.to);
+                    }
+                    router.push({ pathname: "/unit-video", params });
+                  }}
+                >
+                  <SceneCard style={{ flexDirection: dir.row, alignItems: "center", gap: 12 }}>
+                    <View style={[styles.toolIcon, { backgroundColor: pal.soft }]}>
+                      <Ionicons name="videocam" size={19} color={pal.accent} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.toolTxt, { color: pal.ink, textAlign: dir.textAlign }]} numberOfLines={2}>{v.label || book.title}</Text>
+                      <Text style={[styles.dim, { color: v.done ? pal.dim : pal.accent, textAlign: dir.textAlign, marginTop: 2 }]} numberOfLines={1}>
+                        {t(`video.kind.${v.level && v.level !== "final" ? v.level : "strict"}`)}
+                        {v.lang ? ` · ${v.lang === "ar" ? "العربية" : v.lang === "en" ? "English" : "Français"}` : ""}
+                        {" · "}
+                        {v.done ? t("saves.videoDone") : t("saves.videoPartial")}
+                      </Text>
+                    </View>
+                    <Ionicons name={v.done ? "checkmark-circle" : "time-outline"} size={20} color={v.done ? "#15803D" : pal.accent} />
+                  </SceneCard>
+                </PressableScale>
+              ))}
+            </View>
           )}
           {tab === "saves" && !!saves?.length && (
             <Text style={[styles.secTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("saves.section")}</Text>
