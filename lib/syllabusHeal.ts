@@ -8,8 +8,8 @@ import { recordPerf } from "./perf";
 import { healedSyllabus, sameStructure, type HealSyllabus } from "./syllabusHealCore";
 import { supabase } from "./supabase";
 
-// v2 (٢٧ أكتوبر): كاشف «عنوان الوحدة أول الصفحة» — كل كتاب يُعاد فحصه مرة
-const KEY = (p: string) => `vsf:heal:v2:${p}`;
+// v2 (٢٧ أكتوبر): كاشف «عنوان الوحدة أول الصفحة»؛ v3 (٢٨ أكتوبر): الفهرس ذو أرقام الصفحات (كتب CMA) — كل كتاب يُعاد فحصه مرة
+const KEY = (p: string) => `vsf:heal:v3:${p}`;
 const sig = (s: HealSyllabus) => JSON.stringify([s.units.map((u) => u.title), s.ranges ?? []]);
 const inflight = new Map<string, Promise<HealSyllabus | null>>();
 

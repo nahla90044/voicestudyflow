@@ -2,6 +2,7 @@
 // فحص بنية وحدات الكتاب قبل اعتمادها في المنهج (مصدرها فهرس القارئ نفسه): لا يُحفظ منهج فيه
 // وحدة مكررة، أو ترتيب مختل، أو «وحدة» بصفحة أو صفحتين وسط وحدات كبيرة، أو صفحات غير متصلة.
 // كل مصدر (فهرس مدمج/مطبوع، رأس الصفحة المتكرر) يُفحص، ويُعتمد أول مصدر سليم.
+import { unitsFromPagedToc } from "./pagedToc.ts";
 import { ordinalOf, parseHeading, tocTitles, unitsFromDividers, unitsFromRunningHeads, unitsFromStartLines } from "./unitHeadings.ts";
 
 export type StructUnit = { title: string; page: number; to: number };
@@ -111,7 +112,7 @@ export function pickStructure(cands: Candidate[], toc: TocEntry[], total: number
 /** الوكيل على نصوص صفحات الكتاب: الفهرس + صفحات العناوين + رأس الصفحة (+ مصادر إضافية كفهرس القارئ) */
 export function structureFromPages(pages: { page: number; text: string }[], total: number, extra: Candidate[] = []): Verdict {
   const toc = tocTitles(pages);
-  return pickStructure(
+  const base = pickStructure(
     [
       { name: "dividers", units: unitsFromDividers(pages, total, toc) },
       ...extra,
@@ -122,6 +123,15 @@ export function structureFromPages(pages: { page: number; text: string }[], tota
     toc,
     total
   );
+  if (base.verified) return base;
+  // فهرس بأرقام صفحات (كتب الشهادات الإنجليزية: «A.1 … 3»، «Study Unit 1: D.1. … 2») — بعد المصادر السابقة
+  // فلا يتغير كتاب كان تقسيمه مُتحقَّقًا منه (بلاغ نهلة ٢٨ أكتوبر: كتاب CMA بـ٤٦٨ صفحة صار وحدتين)
+  const paged = unitsFromPagedToc(pages, total);
+  if (paged.verified) {
+    const chk = checkStructure(paged.units, total);
+    if (chk.units.length >= 3) return { units: chk.units, source: "pagedtoc", verified: true, problems: chk.problems };
+  }
+  return base;
 }
 
 /**
