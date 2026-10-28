@@ -129,6 +129,9 @@ export default function BookHubScreen() {
   // خطة الكتاب (طلب نهلة ٢٨ أكتوبر): تعديلها أو حذفها من شريحة «الخطة»
   const [plan, setPlan] = useState<BookPlan | null>(null);
   const [planOpen, setPlanOpen] = useState(false);
+  // كتاب له منهج: الشريحة تفتح نافذة خطة المنهج نفسها (دمج ٢٨ أكتوبر)، ويُعرض تاريخ نهايتها
+  const [planSignal, setPlanSignal] = useState(0);
+  const [schedEnd, setSchedEnd] = useState<string | null>(null);
   const loadPlan = useCallback(() => {
     if (bookId) getBookPlan(bookId).then(setPlan).catch(() => {});
   }, [bookId]);
@@ -447,11 +450,16 @@ export default function BookHubScreen() {
                     </Text>
                   </PressableScale>
                   <PressableScale
-                    onPress={() => setPlanOpen(true)}
+                    onPress={() => {
+                      if (syl) {
+                        setTab("syllabus");
+                        setPlanSignal((n) => n + 1);
+                      } else setPlanOpen(true);
+                    }}
                     style={[styles.chip, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
                   >
                     <Text style={[styles.chipTxt, { color: pal.ink }]} numberOfLines={1}>
-                      {plan ? t("bookplan.chip", { date: formatExamDate(plan.end_date, lang) }) : t("bookplan.chipNew")}
+                      {(syl ? schedEnd : plan?.end_date) ? t("bookplan.chip", { date: formatExamDate((syl ? schedEnd : plan?.end_date)!, lang) }) : t("bookplan.chipNew")}
                     </Text>
                   </PressableScale>
                   {/* نوع الدراسة: يظهر بعد بناء المنهج، ويُغيَّر بضغطة */}
@@ -543,6 +551,12 @@ export default function BookHubScreen() {
               bookId={book.id}
               title={book.title}
               pdfPath={book.pdf_path}
+              planSignal={planSignal}
+              onPlanSignalDone={() => setPlanSignal(0)}
+              onPlan={(p) => {
+                setSchedEnd(p?.end ?? null);
+                loadPlan();
+              }}
               onSyllabus={(s) => {
                 // منهج أُنشئ أو تغيّرت وحداته من التبويب: تُحدَّث الوحدات والأدوات ونوع الدراسة في الصفحة
                 if (s && (!syl || syl.data.units.length !== s.units.length || syl.data.kind !== s.kind))

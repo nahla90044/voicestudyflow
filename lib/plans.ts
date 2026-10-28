@@ -8,6 +8,8 @@ type GeneratePlanInput = {
   minutesPerPage: number; // دقيقة لكل صفحة (إعداد عام)
   dailyMinutes: number; // الدقائق اليومية
   bufferEvery?: number; // يوم بفر كل X أيام
+  /** نهاية محددة (من جدول المذاكرة): الأيام منها، والدقائق اليومية تُحسب */
+  endDateISO?: string;
 };
 
 // كانت تحسب منتصف الليل المحلي ثم تقرأه بتوقيت UTC، فينقص يومًا في السعودية (+٣):
@@ -29,14 +31,15 @@ export async function generatePlan(input: GeneratePlanInput) {
     minutesPerPage,
     dailyMinutes,
     bufferEvery = 7,
+    endDateISO: fixedEnd,
   } = input;
 
   const pages = Math.max(1, Number(pageCount || 1));
   const mpp = Math.max(0.1, Number(minutesPerPage || 2));
-  const daily = Math.max(5, Number(dailyMinutes || 60));
-
   const totalMinutes = Math.ceil(pages * mpp);
-  const days = planDays(pages, mpp, daily);
+  const spanDays = fixedEnd && fixedEnd >= startDateISO ? Math.round((Date.parse(fixedEnd + "T00:00:00Z") - Date.parse(startDateISO + "T00:00:00Z")) / 86_400_000) + 1 : 0;
+  const daily = spanDays ? Math.max(5, Math.ceil(totalMinutes / spanDays)) : Math.max(5, Number(dailyMinutes || 60));
+  const days = spanDays || planDays(pages, mpp, daily);
   const endDateISO = addDaysISO(startDateISO, days - 1);
 
   // 1) create plan
@@ -103,6 +106,9 @@ export async function getBookPlan(bookId: string): Promise<BookPlan | null> {
 export async function deleteBookPlan(bookId: string): Promise<void> {
   const { error } = await supabase.from("study_plans").delete().eq("book_id", bookId);
   if (error) throw new Error(error.message);
+  // خطة واحدة (دمج ٢٨ أكتوبر): جدول المذاكرة يُحذف معها
+  const { scheduleFromPlan } = await import("./bookPlan");
+  await scheduleFromPlan(bookId, null).catch(() => {});
 }
 
 /** صفحات أُنجزت في الخطة الحالية (تُحفظ عند إعادة بنائها: الجديدة للباقي فقط) */
@@ -118,6 +124,18 @@ export async function rebuildBookPlan(o: { userId: string; bookId: string; start
   const left = Math.max(1, o.pageCount - done);
   // الجديدة أولًا ثم حذف القديمة: إن تعثّر الإنشاء تبقى الخطة السابقة كما هي
   const res = await generatePlan({ userId: o.userId, bookId: o.bookId, startDateISO: o.startDateISO, pageCount: left, minutesPerPage: o.minutesPerPage, dailyMinutes: o.dailyMinutes, bufferEvery: 7 });
+  if (old) await supabase.from("study_plans").delete().eq("id", old.id);
+  // خطة واحدة (دمج ٢٨ أكتوبر): جدول المذاكرة يأخذ التاريخين نفسيهما
+  const { scheduleFromPlan } = await import("./bookPlan");
+  await scheduleFromPlan(o.bookId, { start: o.startDateISO, end: res.plan.end_date as string, minutes: o.dailyMinutes }).catch(() => {});
+  return res;
+}
+
+/** خطة من تاريخين محددين (من جدول المذاكرة) لما بقي من الصفحات — تحل محل السابقة، بلا لمس الجدول */
+export async function replacePlanRange(o: { userId: string; bookId: string; start: string; end: string; pageCount: number; minutesPerPage: number }) {
+  const old = await getBookPlan(o.bookId);
+  const done = old ? await planPagesDone(old.id).catch(() => 0) : 0;
+  const res = await generatePlan({ userId: o.userId, bookId: o.bookId, startDateISO: o.start, endDateISO: o.end, pageCount: Math.max(1, o.pageCount - done), minutesPerPage: o.minutesPerPage, dailyMinutes: 60, bufferEvery: 7 });
   if (old) await supabase.from("study_plans").delete().eq("id", old.id);
   return res;
 }

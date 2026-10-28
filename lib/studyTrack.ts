@@ -200,10 +200,14 @@ export async function getSchedule(pdfPath: string, bookId: string, weights: numb
   if (!bookId) return null;
   const { data: plan } = await supabase.from("study_plans").select("start_date,end_date").eq("book_id", bookId).order("start_date", { ascending: false }).limit(1).maybeSingle();
   if (!plan?.start_date || !plan?.end_date) return null;
-  return { start: plan.start_date, end: plan.end_date, units: distribute(plan.start_date, plan.end_date, weights) };
+  const end = plan.end_date < plan.start_date ? plan.start_date : plan.end_date; // خطط قديمة بيوم ناقص (فرق التوقيت)
+  return { start: plan.start_date, end, units: distribute(plan.start_date, end, weights) };
 }
 
 export async function saveSchedule(pdfPath: string, s: BookSchedule | null): Promise<void> {
   const { error } = await supabase.from("book_syllabus").update({ schedule: s }).eq("pdf_path", pdfPath);
   if (error) throw new Error(error.message);
+  // خطة واحدة (دمج ٢٨ أكتوبر): «خطة الكتاب» (المكتبة ومسار اليوم) تأخذ تاريخي الجدول، أو تُحذف معه
+  const { planFromSchedule } = await import("./bookPlan");
+  await planFromSchedule(pdfPath, s).catch(() => {});
 }

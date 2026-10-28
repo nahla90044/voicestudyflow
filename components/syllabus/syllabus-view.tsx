@@ -65,10 +65,16 @@ type Props = {
   onSyllabus?: (s: Syllabus | null) => void;
   /** فُتحت الشاشة من «تعديل الوحدات» في صفحة الكتاب: تبدأ بوضع التحديد مباشرة */
   startSelect?: boolean;
+  /** شريحة «📅 الخطة» في صفحة الكتاب (دمج ٢٨ أكتوبر): كل زيادة تفتح نافذة الخطة نفسها */
+  planSignal?: number;
+  /** يُبلَّغ بالخطة (الجدول) كلما تغيّرت — لتعرض الشريحة تاريخها */
+  onPlan?: (s: BookSchedule | null) => void;
+  /** فُتحت النافذة استجابة للإشارة (فيُصفّرها الأب، فلا تُفتح ثانية عند العودة للتبويب) */
+  onPlanSignalDone?: () => void;
 };
 
 /** المنهج الدراسي: شاشة مستقلة (app/syllabus/[id]) وأول تبويب في صفحة الكتاب */
-export function SyllabusView({ bookId: bookIdProp, title: titleProp, pdfPath: pdfProp, embedded = false, onSyllabus, startSelect = false }: Props) {
+export function SyllabusView({ bookId: bookIdProp, title: titleProp, pdfPath: pdfProp, embedded = false, onSyllabus, startSelect = false, planSignal = 0, onPlan, onPlanSignalDone }: Props) {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
@@ -105,6 +111,17 @@ export function SyllabusView({ bookId: bookIdProp, title: titleProp, pdfPath: pd
   // تواريخ وحدة واحدة (تقويم)، وإنشاء/تعديل الخطة كاملة (وقت المذاكرة)
   const [rangeSheet, setRangeSheet] = useState<{ mode: "unit"; i: number } | null>(null);
   const [planSheet, setPlanSheet] = useState(false);
+  // الشريحة في صفحة الكتاب تفتح النافذة نفسها
+  useEffect(() => {
+    if (planSignal <= 0) return;
+    setPlanSheet(true);
+    onPlanSignalDone?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planSignal]);
+  useEffect(() => {
+    onPlan?.(plan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan]);
   const [goalMin, setGoalMin] = useState(60);
   const [examISO, setExamISO] = useState<string | null>(null);
   const today = isoOf(new Date());
@@ -145,6 +162,9 @@ export function SyllabusView({ bookId: bookIdProp, title: titleProp, pdfPath: pd
       }
       setRanges(rs);
       const weights = titles.map((_, i) => (rs![i] ? rs![i].to - rs![i].from + 1 : 1));
+      // خطة واحدة (دمج ٢٨ أكتوبر): توحيد الخطة والجدول مرة لكل كتاب قبل العرض
+      const { alignBookPlans } = await import("../../lib/bookPlan");
+      await alignBookPlans(pdfPath, bookId, weights).catch(() => null);
       const [pg, pl, ex] = await Promise.all([unitsProgress(pdfPath, bookId, rs, titles.length), getSchedule(pdfPath, bookId, weights).catch(() => null), getExamDate(bookId)]);
       setProg(pg);
       setPlan(pl);
