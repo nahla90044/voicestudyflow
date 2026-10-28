@@ -56,3 +56,12 @@ test("unit context keeps page markers and stays within budget", () => {
   assert.ok(ctx.length <= 300);
   assert.equal(unitContext(pages, { from: 100, to: 110, found: false }), "");
 });
+
+test("وحدات لا تُعرف بداياتها: الأولى من الصفحة ١ (كتاب من صفحتين لا تُوضع وحدتاه على الثانية)", () => {
+  const pages = [
+    { page: 1, text: "CMA Part 1 Review. Section 1: Cost-Volume-Profit Analysis. Contribution margin…" },
+    { page: 2, text: "Section 2: Budgeting and Variance Analysis. A master budget…" },
+  ];
+  const r = unitRanges(["الوحدة الأولى: تحليل التكلفة والحجم والربح", "الوحدة الثانية: الموازنات"], pages, 2);
+  assert.deepEqual(r.map((x) => [x.from, x.to]), [[1, 1], [2, 2]]);
+});

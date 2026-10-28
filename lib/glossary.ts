@@ -87,7 +87,7 @@ export async function getUnitRanges(pdfPath: string, titles: string[], pageCount
     if (Array.isArray(pinned) && pinned.length === titles.length) return pinned;
   } catch {}
   const ps = pages ?? (await bookPages(pdfPath));
-  const key = `unitranges:v1:${hashKey(pdfPath)}:${titles.length}:${ps.length}`;
+  const key = `unitranges:v2:${hashKey(pdfPath)}:${titles.length}:${ps.length}`; // v2 (٢٨ أكتوبر): الوحدة الأولى من الصفحة ١
   const cached = await AsyncStorage.getItem(key).catch(() => null);
   if (cached) {
     try {
@@ -107,7 +107,7 @@ export async function setUnitRanges(pdfPath: string, r: UnitRange[]): Promise<vo
   await AsyncStorage.setItem(`unitranges:last:${hashKey(pdfPath)}`, JSON.stringify(r)).catch(() => {});
   await AsyncStorage.setItem(`unitranges:toc:${hashKey(pdfPath)}`, JSON.stringify(r)).catch(() => {});
   try {
-    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(`unitranges:v1:${hashKey(pdfPath)}:`));
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(`unitranges:v1:${hashKey(pdfPath)}:`) || k.startsWith(`unitranges:v2:${hashKey(pdfPath)}:`));
     if (keys.length) await AsyncStorage.multiRemove(keys);
   } catch {}
 }
@@ -122,7 +122,7 @@ export async function keepUnitRanges(pdfPath: string, keep: number[]): Promise<v
     } catch {}
   }
   try {
-    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(`unitranges:v1:${h}:`));
+    const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(`unitranges:v1:${h}:`) || k.startsWith(`unitranges:v2:${h}:`));
     if (keys.length) await AsyncStorage.multiRemove(keys);
   } catch {}
 }

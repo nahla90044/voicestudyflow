@@ -81,11 +81,13 @@ export function unitRanges(titles: string[], pages: PageText[], pageCount: numbe
     while (lo >= 0 && starts[lo] === null) lo--;
     let hi = i + 1;
     while (hi < n && starts[hi] === null) hi++;
-    const loPage = lo >= 0 ? (starts[lo] as number) : 1;
     const hiPage = hi < n ? (starts[hi] as number) : total + 1;
-    const loIdx = lo >= 0 ? lo : -1;
     const hiIdx = hi < n ? hi : n;
-    return Math.round(loPage + ((hiPage - loPage) * (i - loIdx)) / (hiIdx - loIdx));
+    // قبل أول وحدة معروفة: الأولى تبدأ من الصفحة ١ (لا يضيع أول الكتاب)، والبقية بالتساوي حتى المعروفة —
+    // كان يُفترض «وحدة قبل الأولى» فتتخطى الأولى أول صفحاته: كتاب من صفحتين صارت وحدتاه في الصفحة الثانية (٢٨ أكتوبر)
+    if (lo < 0) return Math.round(1 + ((hiPage - 1) * i) / hiIdx);
+    const loPage = starts[lo] as number;
+    return Math.round(loPage + ((hiPage - loPage) * (i - lo)) / (hiIdx - lo));
   });
 
   // تصاعدي دائمًا
