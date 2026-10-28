@@ -10,11 +10,12 @@ import { celebrate } from "../components/brand/feedback-host";
 import { SceneBanner, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { SummaryView } from "../components/brand/summary-view";
-import { useDir, useI18n } from "../lib/i18n";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getCurrentLang, useDir, useI18n } from "../lib/i18n";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { addSave, bookIdForPdf, sharePdf } from "../lib/studySaves";
 import { summaryHtml, summaryToText, type StudySummary } from "../lib/studySummary";
-import { clearSummary, getCachedSummary, SUMMARY_LEVELS, summaryCacheKey, summaryRange, summaryRequestCost, type SummaryLevel, type SummarySource } from "../lib/unitSummary";
+import { clearSummary, getCachedSummary, SUMMARY_LEVELS, summaryCacheKey, sumLang, summaryRange, summaryRequestCost, type SummaryLevel, type SummarySource } from "../lib/unitSummary";
 import { confirmCost } from "../lib/costConfirm";
 import { hasSummaryJob, startSummaryJob, summaryJobKey, watchSummaryJob } from "../lib/summaryJobs";
 import { getUnitContent } from "../lib/unitContent";
@@ -26,11 +27,17 @@ import { speechCharsPerSec } from "../lib/voice";
 import { getListenAt, markListenDone, markSeen, setListenAt } from "../lib/studyTrack";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
 
+// لغات الملخّص (مثل الفيديو)
+type SumLang = "ar" | "en" | "fr";
+const SUM_LANGS: SumLang[] = ["ar", "en", "fr"];
+const SUM_LANG_NAMES: Record<SumLang, string> = { ar: "العربية", en: "English", fr: "Français" };
+const isSumLang = (v: unknown): v is SumLang => v === "ar" || v === "en" || v === "fr";
+
 export default function UnitSummaryScreen() {
   const { t } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
-  const { pdf_path, unit, page, from, to, title, book_title, level, autoplay } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; level?: string; autoplay?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title, level, autoplay, slang: slangParam } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; level?: string; autoplay?: string; slang?: string }>();
   // مستوى الملخّص: من المعامل، وإلا يُعرض اختيار المستويات الثلاثة (✓ للجاهز منها)
   const [lvl, setLvl] = useState<SummaryLevel | null>(SUMMARY_LEVELS.includes(level as SummaryLevel) ? (level as SummaryLevel) : null);
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
@@ -41,15 +48,30 @@ export default function UnitSummaryScreen() {
   const fromN = Number(from);
   const toN = Number(to);
   const rangeMode = !pageMode && fromN > 0 && toN >= fromN;
-  const src: SummarySource = { ...(pageMode ? { kind: "page" as const, page: pageNum } : rangeMode ? { kind: "range" as const, from: fromN, to: toN } : { kind: "unit" as const, unit: unitIdx }), level: lvl ?? "strict" };
+  // لغة الملخّص (قرار نهلة ٢٨ أكتوبر): عربي وإنجليزي وفرنسي، كل لغة محفوظة وحدها؛ آخر اختيار لهذا الكتاب
+  const langKey = `vsf:summary:lang:${pdfPath}`;
+  const [slang, setSlang] = useState<SumLang | null>(isSumLang(slangParam) ? slangParam : null);
+  useEffect(() => {
+    if (slang) return;
+    AsyncStorage.getItem(langKey)
+      .then((v) => setSlang(isSumLang(v) ? v : (getCurrentLang() as SumLang)))
+      .catch(() => setSlang(getCurrentLang() as SumLang));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const src: SummarySource = { ...(pageMode ? { kind: "page" as const, page: pageNum } : rangeMode ? { kind: "range" as const, from: fromN, to: toN } : { kind: "unit" as const, unit: unitIdx }), level: lvl ?? "strict", lang: slang ?? undefined };
   // أي المستويات جاهز لهذا المصدر (لعلامة ✓ في الاختيار)
   const [readyLv, setReadyLv] = useState<SummaryLevel[]>([]);
+  // اللغات التي فيها ملخّص محفوظ لهذا المصدر (✓ على شريحة اللغة)
+  const [readyLang, setReadyLang] = useState<SumLang[]>([]);
   useEffect(() => {
-    if (lvl) return;
+    if (!slang) return;
     void Promise.all(SUMMARY_LEVELS.map((l) => getCachedSummary(pdfPath, { ...src, level: l }).then((x) => (x ? l : null)))).then((r) => setReadyLv(r.filter(Boolean) as SummaryLevel[]));
+    void Promise.all(
+      SUM_LANGS.map((g) => Promise.all(SUMMARY_LEVELS.map((l) => getCachedSummary(pdfPath, { ...src, level: l, lang: g }).catch(() => null))).then((xs) => (xs.some(Boolean) ? g : null)))
+    ).then((r) => setReadyLang(r.filter(Boolean) as SumLang[]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lvl, pdfPath]);
-  const savedKey = `summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}${lvl && lvl !== "strict" ? "|" + lvl : ""}`;
+  }, [lvl, pdfPath, slang]);
+  const savedKey = `summary|${pdfPath}|${pageMode ? "p" + pageNum : "u" + unitIdx}${lvl && lvl !== "strict" ? "|" + lvl : ""}${slang && slang !== getCurrentLang() ? "|" + slang : ""}`;
   const { id: srcId, kind } = summaryCacheKey(src);
   const unitTitle = typeof title === "string" ? title : "";
   const bookTitle = typeof book_title === "string" ? book_title : unitTitle;
@@ -121,6 +143,21 @@ export default function UnitSummaryScreen() {
     setSaved(false);
     setLoading(true);
     setLvl(l);
+  }
+  /** تغيير لغة الملخّص: المحفوظ يظهر فورًا، وغير المحفوظ يرجع لاختيار النوع (فلا يبدأ توليد بلا قصد) */
+  async function pickLang(g: SumLang) {
+    if (g === slang) return;
+    stopSummary();
+    setPlaying(false);
+    AsyncStorage.setItem(langKey, g).catch(() => {});
+    const have = lvl ? await getCachedSummary(pdfPath, { ...src, lang: g }).catch(() => null) : null;
+    setSum(null);
+    setErr("");
+    setIncomplete(false);
+    setSaved(false);
+    if (!have) setLvl(null);
+    else setLoading(true);
+    setSlang(g);
   }
   // صفحات الكتاب التي يغطيها الملخّص — ليعرف الطالب هل غطّى الدرس كله
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
@@ -218,12 +255,12 @@ export default function UnitSummaryScreen() {
   useEffect(() => {
     let on = true;
     let unwatch: (() => void) | undefined;
-    if (!lvl) {
-      setLoading(false); // اختيار المستوى أولًا
+    if (!lvl || !slang) {
+      setLoading(false); // اختيار المستوى (واللغة) أولًا
       return;
     }
     (async () => {
-      const cached = await getUnitContent<StudySummary>(pdfPath, srcId, kind);
+      const cached = await getUnitContent<StudySummary>(pdfPath, srcId, kind, sumLang(src));
       if (!on) return;
       if (cached?.sections?.length) {
         setSum(cached);
@@ -271,6 +308,7 @@ export default function UnitSummaryScreen() {
       const params: Record<string, string> = { pdf_path: pdfPath };
       for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
       if (lvl) params.level = lvl; // إشعار الاكتمال يفتح المستوى نفسه (لا اختيار المستويات)
+      if (slang) params.slang = slang;
       startSummaryJob(pdfPath, src, { title: unitTitle || bookTitle, params });
       setIncomplete(false);
       setErr("");
@@ -281,7 +319,7 @@ export default function UnitSummaryScreen() {
       stopSummary();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfPath, srcId, kind, runId, lvl]);
+  }, [pdfPath, srcId, kind, runId, lvl, slang]);
 
   // سجّل العنصر في المحفوظات (يظهر في تبويب البطاقات → ملخّصات) متى توفّر المحتوى
   useEffect(() => {
@@ -290,6 +328,7 @@ export default function UnitSummaryScreen() {
       key: savedKey,
       kind: "summary",
       level: lvl ?? undefined,
+      lang: slang ?? undefined,
       pdfPath,
       bookTitle,
       label: unitTitle || (pageMode ? String(pageNum) : ""),
@@ -421,6 +460,20 @@ export default function UnitSummaryScreen() {
       {!lvl ? (
         // اختيار المستوى: مختصر (للاستماع) · شامل · موسّع — كل مستوى يُحفظ وحده، و✓ للجاهز
         <ScrollView contentContainerStyle={styles.scroll}>
+          <Text style={[styles.modeTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("summary.lang.title")}</Text>
+          <View style={[styles.langRow, { flexDirection: dir.row }]}>
+            {SUM_LANGS.map((g) => {
+              const on = g === slang;
+              return (
+                <Pressable key={g} onPress={() => void pickLang(g)} style={[styles.langChip, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}>
+                  <Text style={[styles.langTxt, { color: on ? pal.onAccent : pal.ink }]}>
+                    {SUM_LANG_NAMES[g]}
+                    {readyLang.includes(g) ? " ✓" : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <Text style={[styles.modeTitle, { color: pal.ink, textAlign: dir.textAlign }]}>{t("summary.level.title")}</Text>
           {SUMMARY_LEVELS.map((m) => (
             <Pressable
@@ -461,6 +514,19 @@ export default function UnitSummaryScreen() {
             <Text style={[styles.levelTxt, { color: pal.ink }]}>{t(`summary.level.${lvl ?? "strict"}`)}</Text>
             <Text style={[styles.levelChange, { color: pal.accent }]}>{t("summary.level.switch")}</Text>
           </Pressable>
+          <View style={[styles.langRow, { flexDirection: dir.row }]}>
+            {SUM_LANGS.map((g) => {
+              const on = g === slang;
+              return (
+                <Pressable key={g} onPress={() => void pickLang(g)} style={[styles.langChipSm, { backgroundColor: on ? pal.accent : pal.soft, borderColor: on ? pal.accent : pal.cardBorder }]}>
+                  <Text style={[styles.langTxtSm, { color: on ? pal.onAccent : pal.ink }]}>
+                    {SUM_LANG_NAMES[g]}
+                    {readyLang.includes(g) && !on ? " ✓" : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           {/* الصوت على «المختصر» فقط (قرار نهلة): الشامل والموسّع للقراءة والطباعة */}
           {lvl === "brief" || lvl === "final" ? (
             <Pressable
@@ -619,6 +685,11 @@ export default function UnitSummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  langRow: { flexWrap: "wrap", gap: 8, marginBottom: 6 },
+  langChip: { paddingHorizontal: 16, height: 40, borderRadius: Radius.pill, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  langTxt: { fontSize: 14.5, fontWeight: "800" },
+  langChipSm: { paddingHorizontal: 12, height: 32, borderRadius: Radius.pill, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  langTxtSm: { fontSize: 13, fontWeight: "800" },
   upgrade: { borderWidth: 1.5, borderRadius: 16, padding: 12, gap: 10, alignItems: "center" },
   upgradeTitle: { fontSize: 15, fontWeight: "900" },
   upgradeSub: { fontSize: 12.5, lineHeight: 19, marginTop: 2 },

@@ -1,6 +1,7 @@
 // lib/unitSummary.ts
 // نص مصدر الملخّص الشامل (صفحة، أو وحدة من المنهج، أو نطاق صفحات) وتوليده/تخزينه —
 // مشترك بين شاشة الملخّص (unit-summary) و«ملف المذاكرة» (study-file) الذي يجمع الوحدات كلها.
+import { getCurrentLang } from "./i18n";
 import { studyExtra } from "./studyKind";
 import { qaPart } from "./qualityAgent";
 import { stripPartMarker } from "./titleCore";
@@ -28,7 +29,14 @@ export const SUMMARY_LEVELS: SummaryLevel[] = ["brief", "strict", "expand", "fin
 export type SummarySource = ({ kind: "page"; page: number } | { kind: "unit"; unit: number } | { kind: "range"; from: number; to: number }) & {
   /** بلا مستوى = «الشامل» (التوافق مع ما سبق) */
   level?: SummaryLevel;
+  /** لغة الملخّص (قرار نهلة ٢٨ أكتوبر: عربي وإنجليزي وفرنسي، كلها محفوظة) — بلا قيمة = لغة الواجهة */
+  lang?: string;
 };
+
+/** لغة تخزين الملخّص: غير لغة الواجهة فقط (لغة الواجهة بمفاتيحها القديمة كما هي) */
+export const sumLang = (src: SummarySource): string | undefined => (src.lang && src.lang !== getCurrentLang() ? src.lang : undefined);
+/** مسار مهام الملخّص بعلامة اللغة (لا تختلط مهمة عربية بإنجليزية للجزء نفسه) */
+const sumPath = (pdfPath: string, src: SummarySource) => (sumLang(src) ? `${pdfPath}@${sumLang(src)}` : pdfPath);
 
 type SummaryKind = "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary";
 
@@ -79,13 +87,13 @@ async function migrateLegacy(pdfPath: string): Promise<void> {
 export async function getCachedSummary(pdfPath: string, src: SummarySource): Promise<StudySummary | null> {
   await migrateLegacy(pdfPath);
   const k = summaryCacheKey(src);
-  const c = await getUnitContent<StudySummary>(pdfPath, k.id, k.kind).catch(() => null);
+  const c = await getUnitContent<StudySummary>(pdfPath, k.id, k.kind, sumLang(src)).catch(() => null);
   return c?.sections?.length ? c : null;
 }
 
 export async function cacheSummary(pdfPath: string, src: SummarySource, s: StudySummary): Promise<void> {
   const k = summaryCacheKey(src);
-  await setUnitContent(pdfPath, k.id, k.kind, s);
+  await setUnitContent(pdfPath, k.id, k.kind, s, sumLang(src));
 }
 
 /**
@@ -110,7 +118,7 @@ export async function summaryRange(pdfPath: string, src: SummarySource): Promise
  * بلا المستوى عمدًا: «إعادة التلخيص بصفحات محددة» تحذف بلا مستوى ثم تولّد بمستوى الطالب (والمستوى داخل البصمة أصلًا)
  */
 function sumGenScope(pdfPath: string, src: SummarySource): string {
-  return `sum:${pdfPath}:${src.kind}:${summaryCacheKey(src).id}`;
+  return `sum:${sumPath(pdfPath, src)}:${src.kind}:${summaryCacheKey(src).id}`;
 }
 
 /** إعادة التلخيص: يحذف الملخّص المخزَّن وكل أجزائه ومهامه، فيُكتب من جديد */
@@ -118,14 +126,15 @@ export async function clearSummary(pdfPath: string, src: SummarySource): Promise
   const k = summaryCacheKey(src);
   // جلسة توليد جديدة: إعادة التلخيص اليدوية تُخصم (قرار ١٩ أكتوبر)، أما إعادات الأجزاء الآلية داخلها فمجانية
   await renewGenId(sumGenScope(pdfPath, src));
-  await removeUnitContent(pdfPath, k.id, k.kind);
+  await removeUnitContent(pdfPath, k.id, k.kind, sumLang(src));
   const base = partBase(src);
-  await removeUnitContentWhere(pdfPath, "studysummarypart", (u) => u >= base && u < base + 1e4);
+  await removeUnitContentWhere(pdfPath, "studysummarypart", (u) => u >= base && u < base + 1e4, sumLang(src));
+  const jp = sumPath(pdfPath, src);
   try {
     const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
     const jobKeys = (await AsyncStorage.getAllKeys()).filter((x) => {
       const m = x.match(/^vsf:aijob:sum:(.*):(\d+)$/);
-      return !!m && m[1] === pdfPath && Number(m[2]) >= base && Number(m[2]) < base + 1e4;
+      return !!m && m[1] === jp && Number(m[2]) >= base && Number(m[2]) < base + 1e4;
     });
     if (jobKeys.length) await AsyncStorage.multiRemove(jobKeys);
   } catch {}
@@ -243,7 +252,7 @@ export async function summaryRequestCost(pdfPath: string, src: SummarySource): P
   if (await getCachedSummary(pdfPath, src)) return { total: 0, pending: 0 };
   const parts = await summaryParts(pdfPath, src);
   const id = summaryPartId(src, parts.length);
-  const saved = await Promise.all(parts.map((_, i) => getUnitContent<StudySummary>(pdfPath, id(i), "studysummarypart").then((x) => !!x?.sections?.length).catch(() => false)));
+  const saved = await Promise.all(parts.map((_, i) => getUnitContent<StudySummary>(pdfPath, id(i), "studysummarypart", sumLang(src)).then((x) => !!x?.sections?.length).catch(() => false)));
   return { total: parts.length, pending: saved.filter((x) => !x).length };
 }
 
@@ -267,21 +276,25 @@ export async function getOrMakeSummary(
   const genId = await getGenId(sumGenScope(pdfPath, src));
   // كتب اللغة: شرح القواعد والاقتران (قرار ٢٧ أكتوبر)؛ غيرها بلا حقل
   const study = await studyExtra(pdfPath);
+  // لغة الملخّص المختارة: تُكتب بها مخرجات السيرفر (targetLang)، وتُحفظ أجزاؤها ومهامها بعلامتها
+  const L = sumLang(src);
+  const langX = L ? { targetLang: L } : {};
+  const jp = sumPath(pdfPath, src);
   const results = await runParts<StudySummary, StudySummary>({
     parts,
     speedKey: "vsf:summary:speed",
     defaultSpeed: { chars: 5000, rate: 40 },
     // جزء محفوظ بالشكل القديم لا يُخلط بالجدول (يُكتب من جديد)
-    load: (i) => getUnitContent<StudySummary>(pdfPath, partId(i), "studysummarypart").then((x) => (x?.sections?.length && (!isTableLevel(mode) || x.table) ? x : undefined)),
-    save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p),
+    load: (i) => getUnitContent<StudySummary>(pdfPath, partId(i), "studysummarypart", L).then((x) => (x?.sections?.length && (!isTableLevel(mode) || x.table) ? x : undefined)),
+    save: (i, p) => setUnitContent(pdfPath, partId(i), "studysummarypart", p, L),
     // مهمة سيرفر لكل جزء: تكمل وتُحفظ حتى لو قُفلت الشاشة أو أُغلق التطبيق
     // جزء فيه تمارين/مسائل/دراسة حالة → تفكير موسّع على السيرفر (يحلّ ويتحقق قبل الكتابة)
     // وكيل الجودة: الجزء الفارغ/المقطوع/القصير جدًا قياسًا بنصه يُعاد توليده مرة واحدة مجانًا
     run: (ctx, i, onPartial) =>
-      qaPart(`sum:${pdfPath}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
+      qaPart(`sum:${jp}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
         isTableLevel(mode)
-          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true, genId, ...study })
-          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId, ...study }),
+          ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true, genId, ...study, ...langX })
+          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId, ...study, ...langX }),
         // الجدول مكثّف عمدًا: عتبة «قصير» أدنى (يُرفض الفارغ تقريبًا فقط)
         (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.015 : mode === "brief" ? 0.03 : 0.08)),
     merge: mergeSummaries,

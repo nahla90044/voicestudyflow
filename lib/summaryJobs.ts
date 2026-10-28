@@ -10,7 +10,7 @@ import { getCurrentLang } from "./i18n";
 import "./notify"; // يضبط عرض الإشعار والتطبيق مفتوح (القارئ مثلًا)
 import { dict } from "./i18n/strings";
 import type { StudySummary } from "./studySummary";
-import { getCachedSummary, getOrMakeSummary, summaryCacheKey, type SummaryProgress, type SummaryLevel, type SummarySource } from "./unitSummary";
+import { getCachedSummary, getOrMakeSummary, summaryCacheKey, sumLang, type SummaryProgress, type SummaryLevel, type SummarySource } from "./unitSummary";
 import { recordPerf } from "./perf";
 
 export type SummaryJob = SummaryProgress & {
@@ -29,7 +29,8 @@ const t = (k: string) => dict[getCurrentLang()]?.[k] ?? dict.ar[k] ?? k;
 
 export function summaryJobKey(pdfPath: string, src: SummarySource): string {
   const k = summaryCacheKey(src);
-  return `${pdfPath}|${k.kind}|${k.id}`;
+  const l = sumLang(src);
+  return `${pdfPath}|${k.kind}|${k.id}${l ? `|${l}` : ""}`;
 }
 
 /** مهمة جارية (أو مكتملة في هذه الجلسة) لهذا المصدر — فلا يُسأل عن الأسلوب وهي تعمل */
