@@ -55,7 +55,7 @@ const LOOK_PREVIEW: Record<SlideThemePref, { colors: [string, string]; icon: key
 };
 
 export default function UnitVideoScreen() {
-  const { t } = useI18n();
+  const { t, lang: uiLang } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -104,8 +104,8 @@ export default function UnitVideoScreen() {
   useEffect(() => {
     if (vlang) return;
     AsyncStorage.getItem(langKey)
-      .then((v) => setVlang(isVideoLang(v) ? v : (getCurrentLang() as VideoLang)))
-      .catch(() => setVlang(getCurrentLang() as VideoLang));
+      .then((v) => setVlang(isVideoLang(v) ? v : (uiLang as VideoLang)))
+      .catch(() => setVlang(uiLang as VideoLang));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   function pickLang(l: VideoLang) {

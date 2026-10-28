@@ -142,7 +142,10 @@ export async function getCachedUnitRanges(pdfPath: string, count: number): Promi
     const raw = await AsyncStorage.getItem(`unitranges:last:${hashKey(pdfPath)}`);
     const r = raw ? (JSON.parse(raw) as UnitRange[]) : null;
     // حدود محفوظة لمنهج سابق بعدد وحدات مختلف لا تُستعمل أبدًا (كانت تُعطي الوحدة صفحات وحدة أخرى)
-    return Array.isArray(r) && r.length === count ? r : null;
+    if (!Array.isArray(r) || r.length !== count) return null;
+    // تقدير قديم تخطّى أول الكتاب (الوحدة الأولى غير معروفة وتبدأ بعد الصفحة ١ — قبل إصلاح ٢٨ أكتوبر): يُعاد حسابه
+    if (r[0] && !r[0].found && r[0].from > 1) return null;
+    return r;
   } catch {
     return null;
   }

@@ -34,7 +34,7 @@ const SUM_LANG_NAMES: Record<SumLang, string> = { ar: "العربية", en: "Eng
 const isSumLang = (v: unknown): v is SumLang => v === "ar" || v === "en" || v === "fr";
 
 export default function UnitSummaryScreen() {
-  const { t } = useI18n();
+  const { t, lang: uiLang } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
   const { pdf_path, unit, page, from, to, title, book_title, level, autoplay, slang: slangParam } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; level?: string; autoplay?: string; slang?: string }>();
@@ -54,8 +54,8 @@ export default function UnitSummaryScreen() {
   useEffect(() => {
     if (slang) return;
     AsyncStorage.getItem(langKey)
-      .then((v) => setSlang(isSumLang(v) ? v : (getCurrentLang() as SumLang)))
-      .catch(() => setSlang(getCurrentLang() as SumLang));
+      .then((v) => setSlang(isSumLang(v) ? v : (uiLang as SumLang)))
+      .catch(() => setSlang(uiLang as SumLang));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const src: SummarySource = { ...(pageMode ? { kind: "page" as const, page: pageNum } : rangeMode ? { kind: "range" as const, from: fromN, to: toN } : { kind: "unit" as const, unit: unitIdx }), level: lvl ?? "strict", lang: slang ?? undefined };
