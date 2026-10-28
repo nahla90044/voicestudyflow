@@ -27,6 +27,14 @@ type Props = {
 
 const MINUTES = [15, 30, 45, 60, 90, 120];
 
+/** «يوم واحد، يومان، ٣ أيام، ١١ يومًا» (والإنجليزية day/days) */
+function daysLabel(n: number, lang: string): string {
+  if (lang !== "ar") return n === 1 ? "1 day" : `${n} days`;
+  if (n === 1) return "يوم واحد";
+  if (n === 2) return "يومان";
+  return n <= 10 ? `${n} أيام` : `${n} يومًا`;
+}
+
 export function PlanSheet({ visible, bookId, pages, plan, onClose, onChanged }: Props) {
   const { t, lang } = useI18n();
   const dir = useDir();
@@ -133,7 +141,7 @@ export function PlanSheet({ visible, bookId, pages, plan, onClose, onChanged }: 
 
           {/* النهاية المحسوبة */}
           <Text style={[styles.ends, { textAlign: dir.textAlign }]}>
-            {t("bookplan.ends", { date: formatExamDate(end, lang), n: days })}
+            {t("bookplan.ends", { date: formatExamDate(end, lang), d: daysLabel(days, lang) })}
             {done > 0 ? ` ${t("bookplan.doneKept", { n: done })}` : ""}
           </Text>
 
