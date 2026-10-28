@@ -305,7 +305,8 @@ export async function videoRequestCost(pdfPath: string, src: SummarySource, unit
   const L = otherLang(lang);
   const { getCachedSummary, summaryRequestCost } = await import("./unitSummary");
   // نوع مختار (مختصر/موسّع): من ملخّصه هو؛ والشامل يقبل الموسّع الجاهز كما كان
-  const summary = (await getCachedSummary(pdfPath, src)) ?? (src.level ? null : await getCachedSummary(pdfPath, { ...src, level: "expand" }));
+  const sameLang = lang && lang !== getCurrentLang() ? await getCachedSummary(pdfPath, { ...src, lang }).catch(() => null) : null;
+  const summary = sameLang ?? (await getCachedSummary(pdfPath, src)) ?? (src.level ? null : await getCachedSummary(pdfPath, { ...src, level: "expand" }));
   if (!summary) {
     const s = await summaryRequestCost(pdfPath, src);
     return { pending: s.pending + Math.max(1, s.total), estimated: true };

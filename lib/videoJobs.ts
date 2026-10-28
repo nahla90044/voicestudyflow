@@ -110,7 +110,9 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
     try {
       // الفيديو يُبنى من الشامل، أو الموسّع إن كان هو الجاهز (لا يُولَّد ملخّص ثانٍ بلا داعٍ)
       // ونوع مختار (مختصر/موسّع، ٢٨ أكتوبر): من ملخّص ذلك النوع وحده
-      const summary = (await getCachedSummary(pdfPath, src)) ?? (src.level ? null : await getCachedSummary(pdfPath, { ...src, level: "expand" })) ?? (await summaryFor(pdfPath, src, meta, (p) =>
+      // وملخّص بلغة الفيديو نفسها إن حُفظ (٢٨ أكتوبر): الفيديو الإنجليزي من الملخّص الإنجليزي لا من ترجمة العربي
+      const sameLang = lang && lang !== getCurrentLang() ? await getCachedSummary(pdfPath, { ...src, lang }).catch(() => null) : null;
+      const summary = sameLang ?? (await getCachedSummary(pdfPath, src)) ?? (src.level ? null : await getCachedSummary(pdfPath, { ...src, level: "expand" })) ?? (await summaryFor(pdfPath, src, meta, (p) =>
           // أرقام التقدّم فقط من مهمة الملخّص — لا هويتها (key): نسخها كان يحوّل كل تحديثات الفيديو التالية
           // لعنوان الملخّص فلا تسمعها شاشة الفيديو أبدًا (تبقى متوقفة حتى يُعاد فتحها)
           emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, stage: "summary" }))

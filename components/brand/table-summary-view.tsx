@@ -3,7 +3,7 @@
 // (كالمطبوع تمامًا، في كل الثيمات): على الشاشة العريضة جدول (الموضوع | العنوان الفرعي | المحتوى)، وعلى
 // الجوال بطاقة لكل موضوع وصفوفه تحته. الكلمة المفتاحية بارزة، والأرقام المهمة بإيموجيها ولونها، والتعداد
 // الطويل مجموعات في مربعات — لا شيء يركب على شيء (طلب نهلة).
-import React from "react";
+import React, { createContext, useContext } from "react";
 import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { isLatinText, ROLE_COLORS, roleKind, textDir, tint, type LangBlock } from "../../lib/langLessonCore";
@@ -13,8 +13,13 @@ const INK = "#1d2330";
 const LINE = "#d5d9e1";
 const AR = (n: number) => String(n).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
 
+// اتجاه لغة الملخّص (٢٨ أكتوبر): المختصر/المراجعة الأخيرة بالإنجليزية أو الفرنسية تُقرأ من اليسار
+const LtrCtx = createContext(false);
+const useS = () => (useContext(LtrCtx) ? stylesLtr : styles);
+
 /** سطر بمقاطعه: كلمة مفتاحية، رقم مهم، مرجع مادة */
 function Rich({ text, style, color = INK }: { text: string; style?: object; color?: string }) {
+  const styles = useS();
   return (
     <Text style={[styles.txt, { color }, style]}>
       {segments(text).map((g, i) =>
@@ -42,10 +47,12 @@ function Rich({ text, style, color = INK }: { text: string; style?: object; colo
 }
 
 function Item({ n, text, edge }: { n: number; text: string; edge: string }) {
+  const styles = useS();
+  const ltr = useContext(LtrCtx);
   return (
     <View style={styles.item}>
       <View style={[styles.n, { backgroundColor: edge }]}>
-        <Text style={styles.nTxt}>{AR(n)}</Text>
+        <Text style={styles.nTxt}>{ltr ? String(n) : AR(n)}</Text>
       </View>
       <View style={{ flex: 1 }}>
         <Rich text={plainItem(text)} />
@@ -55,6 +62,7 @@ function Item({ n, text, edge }: { n: number; text: string; edge: string }) {
 }
 
 function RowBody({ r, edge, wide }: { r: TableRow; edge: string; wide: boolean }) {
+  const styles = useS();
   const cols = wide && r.items ? itemColumns(r.items) : 1;
   let k = r.items?.length ?? 0;
   return (
@@ -115,6 +123,7 @@ function RowBody({ r, edge, wide }: { r: TableRow; edge: string; wide: boolean }
 
 /** «مربع الدرس» على الورقة (كتب اللغة): القاعدة وصيغتها، والجملة كلمة كلمة بدورها، وجدول الاقتران، والخطأ الشائع */
 function GramPaper({ g }: { g: LangBlock }) {
+  const styles = useS();
   return (
     <View style={styles.gram}>
       {g.rule ? <Text style={[styles.txt, { color: INK, fontWeight: "700" }]}>📐 {g.rule}</Text> : null}
@@ -165,7 +174,17 @@ function GramPaper({ g }: { g: LangBlock }) {
   );
 }
 
-export function TableSummaryView({ table, badge }: { table: TableSummary; badge?: string }) {
+export function TableSummaryView({ table, badge, ltr = false }: { table: TableSummary; badge?: string; ltr?: boolean }) {
+  return (
+    <LtrCtx.Provider value={ltr}>
+      <TablePaper table={table} badge={badge} />
+    </LtrCtx.Provider>
+  );
+}
+
+function TablePaper({ table, badge }: { table: TableSummary; badge?: string }) {
+  const styles = useS();
+  const ltr = useContext(LtrCtx);
   const { width } = useWindowDimensions();
   const wide = width >= 700;
   return (
@@ -180,7 +199,7 @@ export function TableSummaryView({ table, badge }: { table: TableSummary; badge?
         {table.topics.map((tp, ti) => {
           const c = TOPIC_COLORS[ti % TOPIC_COLORS.length];
           const head = (
-            <View style={[styles.topic, { backgroundColor: c.bg }, wide ? { width: "15%", borderRightWidth: 5, borderRightColor: c.edge } : { borderTopWidth: 4, borderTopColor: c.edge, borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}>
+            <View style={[styles.topic, { backgroundColor: c.bg }, wide ? (ltr ? { width: "15%", borderLeftWidth: 5, borderLeftColor: c.edge } : { width: "15%", borderRightWidth: 5, borderRightColor: c.edge }) : { borderTopWidth: 4, borderTopColor: c.edge, borderTopLeftRadius: 10, borderTopRightRadius: 10 }]}>
               <Text style={[styles.tname, { color: c.edge }]}>{tp.topic}</Text>
               {tp.hook ? (
                 <View style={styles.hook}>
@@ -277,3 +296,21 @@ const styles = StyleSheet.create({
   gMis: { borderWidth: 1.5, borderStyle: "dashed", borderColor: "#F43F5E", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
 });
 
+
+// نسخة «من اليسار» للملخّص الإنجليزي/الفرنسي: الصفوف بترتيبها الطبيعي، والنص يسارًا، والفواصل في الجهة المقابلة
+const stylesLtr = {
+  ...styles,
+  ...StyleSheet.create({
+    topicRowWide: { ...styles.topicRowWide, flexDirection: "row" },
+    rowWide: { ...styles.rowWide, flexDirection: "row" },
+    subWide: { ...styles.subWide, borderLeftWidth: 0, borderRightWidth: 1, borderRightColor: LINE },
+    body: { ...styles.body, borderLeftWidth: 0, borderRightWidth: 1, borderRightColor: LINE },
+    txt: { ...styles.txt, textAlign: "left", writingDirection: "ltr" },
+    wrap: { ...styles.wrap, flexDirection: "row" },
+    item: { ...styles.item, flexDirection: "row" },
+    gt: { ...styles.gt, textAlign: "left" },
+    cmpRow: { ...styles.cmpRow, flexDirection: "row" },
+    cmpSep: { ...styles.cmpSep, borderRightWidth: 0, borderLeftWidth: 1, borderLeftColor: LINE },
+    lh: { ...styles.lh, textAlign: "left" },
+  }),
+} as unknown as typeof styles;

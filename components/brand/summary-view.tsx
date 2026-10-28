@@ -16,7 +16,7 @@ const COLORS = ["#5B4BF5", "#0E8F7E", "#E07A1F", "#2563EB", "#B8338C", "#15803D"
 /** rtl: اتجاه لغة الملخّص نفسه (ملخّص إنجليزي/فرنسي في واجهة عربية يُقرأ من اليسار — ٢٨ أكتوبر) */
 export function SummaryView({ summary, bookTitle, rtl }: { summary: StudySummary; bookTitle?: string; rtl?: boolean }) {
   // المختصر/المراجعة الأخيرة بالشكل الجدولي
-  if (summary.table) return <TableSummaryView table={summary.table} badge={bookTitle} />;
+  if (summary.table) return <TableSummaryView table={summary.table} badge={bookTitle} ltr={rtl === false} />;
   return <ClassicSummaryView summary={summary} bookTitle={bookTitle} rtl={rtl} />;
 }
 
