@@ -132,10 +132,15 @@ export async function rebuildBookPlan(o: { userId: string; bookId: string; start
 }
 
 /** خطة من تاريخين محددين (من جدول المذاكرة) لما بقي من الصفحات — تحل محل السابقة، بلا لمس الجدول */
-export async function replacePlanRange(o: { userId: string; bookId: string; start: string; end: string; pageCount: number; minutesPerPage: number }) {
+export async function replacePlanRange(o: { userId: string; bookId: string; start: string; end: string; pageCount: number; minutesPerPage: number; minutes?: number }) {
   const old = await getBookPlan(o.bookId);
   const done = old ? await planPagesDone(old.id).catch(() => 0) : 0;
   const res = await generatePlan({ userId: o.userId, bookId: o.bookId, startDateISO: o.start, endDateISO: o.end, pageCount: Math.max(1, o.pageCount - done), minutesPerPage: o.minutesPerPage, dailyMinutes: 60, bufferEvery: 7 });
+  // الدقائق التي اختارها الطالب في جدول المذاكرة (لا المحسوبة من الصفحات) تظهر في المكتبة
+  if (o.minutes && o.minutes > 0) {
+    await supabase.from("study_plans").update({ daily_minutes: Math.round(o.minutes) }).eq("id", res.plan.id);
+    await supabase.from("plan_sessions").update({ minutes: Math.round(o.minutes) }).eq("plan_id", res.plan.id);
+  }
   if (old) await supabase.from("study_plans").delete().eq("id", old.id);
   return res;
 }

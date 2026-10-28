@@ -18,10 +18,10 @@ export async function planFromSchedule(pdfPath: string, s: BookSchedule | null):
     return;
   }
   if (!validRange(s)) return;
-  const { data: cur } = await supabase.from("study_plans").select("start_date,end_date").eq("book_id", book.id).order("start_date", { ascending: false }).limit(1).maybeSingle();
-  if (cur?.start_date === s.start && cur?.end_date === s.end) return; // متطابقتان أصلًا
+  const { data: cur } = await supabase.from("study_plans").select("start_date,end_date,daily_minutes").eq("book_id", book.id).order("start_date", { ascending: false }).limit(1).maybeSingle();
+  if (cur?.start_date === s.start && cur?.end_date === s.end && (!s.minutes || cur?.daily_minutes === s.minutes)) return; // متطابقتان أصلًا
   const { replacePlanRange } = await import("./plans");
-  await replacePlanRange({ userId: book.user_id, bookId: book.id, start: s.start, end: s.end, pageCount: Number(book.page_count) || 1, minutesPerPage: await getMinutesPerPage() });
+  await replacePlanRange({ userId: book.user_id, bookId: book.id, start: s.start, end: s.end, pageCount: Number(book.page_count) || 1, minutesPerPage: await getMinutesPerPage(), minutes: s.minutes });
 }
 
 /** الخطة عُدّلت من الشريحة (أو حُذفت) → جدول المذاكرة بالتاريخين نفسيهما، والوحدات موزعة بصفحاتها */
