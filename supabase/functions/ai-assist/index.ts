@@ -223,6 +223,31 @@ async function aiDownNow(admin: any): Promise<boolean> {
   }
 }
 
+// deno-lint-ignore no-explicit-any
+async function compareTwin(admin: any, client: Anthropic, params: Record<string, unknown>, userContent: string, text: string, usage: { in: number; out: number }): Promise<void> {
+  const { data } = await admin.from("app_config").select("value").eq("key", "compare_videoscript").maybeSingle();
+  const left = Number(data?.value ?? 0);
+  if (!(left > 0)) return;
+  await admin.from("app_config").upsert({ key: "compare_videoscript", value: String(left - 1), updated_at: new Date().toISOString() });
+  const twinModel = "claude-haiku-5-5";
+  const t0 = Date.now();
+  const twin = await client.messages.stream({ ...(params as Parameters<typeof client.messages.stream>[0]), model: twinModel }).finalMessage();
+  const twinText = twin.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b as { text: string }).text)
+    .join("\n");
+  await admin.from("model_compare").insert({
+    status: "done",
+    source: userContent.slice(0, 30000),
+    system: String(params.system ?? "").slice(0, 30000),
+    models: [String(params.model), twinModel],
+    result: {
+      [String(params.model)]: { text, in: usage.in, out: usage.out },
+      [twinModel]: { text: twinText, ms: Date.now() - t0, in: twin.usage?.input_tokens, out: twin.usage?.output_tokens },
+    },
+  });
+}
+
 const COUNTED = new Set(["bilingual", "writecheck", "formulas", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides"]);
 
 Deno.serve(async (req: Request) => {
@@ -612,6 +637,9 @@ Deno.serve(async (req: Request) => {
           } else {
             // مقطوعة عند السقف (cut): تبقى «منتهية» ليأخذ التطبيق ما اكتمل منها، والسبب محفوظ للمتابعة
             await jobFinal({ status: "done", partial: all, result: all, stop_reason: stop, updated_at: new Date().toISOString() });
+            // مقارنة Haiku (اقتراح ٢٨ أكتوبر): بعدد محدد تشغّله المالكة (app_config.compare_videoscript)، يُولَّد
+            // الجزء نفسه بـHaiku بالتعليمات والنص ذاتهما ويُحفظ الاثنان في model_compare — لا يمس ما يراه المستخدم
+            if (action === "videoscript") await compareTwin(caller.admin, client, params, userContent, all, usage).catch(() => {});
           }
           await finish(outcome, `job_${outcome}:${action}`);
         } catch (e) {
