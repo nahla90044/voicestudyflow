@@ -5,7 +5,7 @@
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
 import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
-import { certQuizPrompt, certStudyPrompt, safeExam } from "../_shared/certStudyPrompt.ts";
+import { certQuizPrompt, certStudyPrompt, certTutorPrompt, safeExam } from "../_shared/certStudyPrompt.ts";
 import { LANGUAGE_DEFINE_PROMPT, LANGUAGE_QSOLVE_PROMPT, LANGUAGE_QUIZ_PROMPT, LANGUAGE_STUDY_PROMPT, LANGUAGE_TABLE_PROMPT, LANGUAGE_VIDEO_PROMPT } from "../_shared/languageStudyPrompt.ts";
 import { PLAN_GUARD, planBlock, readVpart, VIDEO_FORMAT, VIDEO_PART, VIDEO_PLAN, VIDEO_ROLE, vpartText } from "../_shared/videoPrompt.ts";
 import { emailFrom, isLocked, LOCKED_BODY, recordIncident, scanText, UNSAFE_BODY } from "../_shared/guard.ts";
@@ -419,6 +419,9 @@ Deno.serve(async (req: Request) => {
       if (body.study === "cert" && LANG_STUDY_ACTIONS.has(action)) {
         const exam = safeExam(body.exam);
         systemPrompt += action === "unitquiz" || action === "quiz" ? certQuizPrompt(exam) : certStudyPrompt(exam);
+        // شرح المعلّم الخصوصي: الملخّص الشامل/الموسّع وسيناريو الفيديو (لا المختصر ولا المراجعة الأخيرة)
+        const tutor = (action === "studysummary" && body.mode !== "brief" && body.mode !== "final") || action === "videoscript";
+        if (tutor) systemPrompt += certTutorPrompt(action === "videoscript");
       }
       if (body.study === "language" && action === "qsolve") systemPrompt += LANGUAGE_QSOLVE_PROMPT;
       // لغة الترجمة والشرح = لغة الواجهة؛ نص الطالب المصحَّح يبقى بلغته (لا يدخلان LANG_ENFORCED لهذا)
@@ -507,7 +510,11 @@ Deno.serve(async (req: Request) => {
 بلا مقدمات وبلا أمثلة وبلا تمارين وبلا دراسة حالة وبلا قسم مصطلحات مستقل. اجعل «المقدمة» سطرًا واحدًا، و«أهم النقاط» من ٣ إلى ٦ هي أهم ما يُحفظ. الطول أقصر من المختصر (بحد أقصى نحو ٤٥٠ كلمة للجزء). لا تضف شيئًا من خارج النص.`;
       params.max_tokens = Math.min(Number(params.max_tokens) || 8000, 8000);
     } else if (action === "studysummary" && body.mode === "strict") {
-      params.system = (params.system as string) + `\n\nأسلوب الطالب المختار: الالتزام بالكتاب. لا تضف أمثلة أو تمارين من خارج النص؛ نظّم محتوى الكتاب نفسه ورتّبه وحلّ تمارينه فقط.`;
+      params.system =
+        (params.system as string) +
+        (body.study === "cert"
+          ? `\n\nأسلوب الطالب المختار: الالتزام بالكتاب في المعلومات — لا معلومة من خارج النص؛ أما الشرح المبسّط والأمثلة والتمارين المحلولة على ما في الكتاب فمطلوبة كما سبق.`
+          : `\n\nأسلوب الطالب المختار: الالتزام بالكتاب. لا تضف أمثلة أو تمارين من خارج النص؛ نظّم محتوى الكتاب نفسه ورتّبه وحلّ تمارينه فقط.`);
     }
     // جزء فيه تمارين/مسائل: تفكير موسّع قبل الكتابة (يحلّ ويتحقق) — أدق بكثير في الحلول
     const deep = (body.deep === true || body.mode === "expand") && action === "studysummary";
