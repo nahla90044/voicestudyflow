@@ -8,7 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const TO = ["nahla90044@gmail.com"];
 const FROM = "VoiceStudyFlow <reports@voicestudyflow.app>";
 
-type State = { ai_down_at: string | null; spend_today: number; spend_limit: number };
+type State = { ai_down_at: string | null; spend_today: number; spend_limit: number; open_tickets?: number; last_ticket?: { id: number; q: string } | null };
 
 Deno.serve(async () => {
   const url = Deno.env.get("SUPABASE_URL");
@@ -36,6 +36,14 @@ Deno.serve(async () => {
   if (Number(s.spend_today) > Number(s.spend_limit) && (await cfg("alert_spend_sent")) !== today) {
     alerts.push({ title: "💸 صرف الذكاء اليوم مرتفع", body: `صُرف اليوم ${s.spend_today}$ على نماذج Claude (الحد ${s.spend_limit}$).` });
     await setCfg("alert_spend_sent", today);
+  }
+  // رسالة دعم جديدة (لم يحلّها الوكيل): مرة لكل رسالة
+  if (s.last_ticket?.id) {
+    const lastSent = Number((await cfg("alert_ticket_sent")) ?? 0);
+    if (s.last_ticket.id > lastSent) {
+      alerts.push({ title: "💬 رسالة دعم جديدة", body: `${s.last_ticket.q}${(s.open_tickets ?? 0) > 1 ? ` — (${s.open_tickets} رسائل مفتوحة)` : ""}` });
+      await setCfg("alert_ticket_sent", String(s.last_ticket.id));
+    }
   }
   if (!alerts.length) return new Response(JSON.stringify({ sent: 0 }));
 

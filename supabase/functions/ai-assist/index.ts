@@ -5,6 +5,7 @@
 // الرد:   { result: string }
 import { logCost } from "../_shared/cost.ts";
 import { TABLE_BRIEF, TABLE_FINAL, TABLE_PART_NOTE } from "../_shared/tableSummaryPrompt.ts";
+import { SUPPORT_PROMPT } from "../_shared/supportGuide.ts";
 import { certDomain, certDomainPrompt, certQuizPrompt, certStudyPrompt, certTutorPrompt, safeExam } from "../_shared/certStudyPrompt.ts";
 import { LANGUAGE_DEFINE_PROMPT, LANGUAGE_QSOLVE_PROMPT, LANGUAGE_QUIZ_PROMPT, LANGUAGE_STUDY_PROMPT, LANGUAGE_TABLE_PROMPT, LANGUAGE_VIDEO_PROMPT } from "../_shared/languageStudyPrompt.ts";
 import { PLAN_GUARD, planBlock, readVpart, VIDEO_FORMAT, VIDEO_PART, VIDEO_PLAN, VIDEO_ROLE, vpartText } from "../_shared/videoPrompt.ts";
@@ -30,6 +31,8 @@ function json(body: unknown, status = 200) {
 }
 
 const SYSTEM: Record<string, string> = {
+  // وكيل الدعم في «المساعدة» (٢٨ أكتوبر): من دليل التطبيق وحده، مجاني للمستخدم (سقف الإجراءات الداخلية)
+  support: SUPPORT_PROMPT,
   // «ملخّص الفيديو ٢» (٢٦ أكتوبر): خطة الوحدة أولًا (مجانية، بسقف يومي)، ثم أجزاء الفيديو بنصيب كل جزء منها
   videoplan: VIDEO_PLAN,
   // تعليمات الفيديو القديمة: للطلبات بلا vpart (نسخ التطبيق السابقة). مع vpart تُستبدل بـ VIDEO_PART (أدناه)
@@ -108,8 +111,9 @@ const MODEL: Record<string, string> = {
   // المنهج: استخراج الوحدات من الفهرس مهمة استخراجية منظّمة → نموذج سريع
   // (كان يأخذ ~٥٠ ثانية على النموذج الأكبر؛ Haiku أسرع بكثير مع تغطية كاملة).
   syllabus: "claude-haiku-5-5",
+  support: "claude-haiku-5-5", // أسئلة الاستخدام من دليل ثابت: سريع ورخيص
 };
-const MAX_TOKENS: Record<string, number> = { videoplan: 20000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, formulas: 9000, bilingual: 8000, writecheck: 6000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
+const MAX_TOKENS: Record<string, number> = { support: 1500, videoplan: 20000, videoscript: 36000, studysummary: 20000, unitslides: 8000, cleanup: 4000, define: 200, syllabus: 12000, unitquiz: 20000, mindmap: 4000, mindtree: 10000, qextract: 28000, qsolve: 16000, formulas: 9000, bilingual: 8000, writecheck: 6000, tashkeel: 4000, ocrtashkeel: 4000, translate: 4000, slides: 2500, filternoise: 4000, fixspacing: 4000, moderate: 300 };
 
 // تحصين ضد حقن الأوامر (Prompt Injection): النص المستخرَج من كتب المستخدم قد
 // يحتوي تعليمات مدسوسة. نأمر النموذج يتجاهلها ويلتزم بمهمته فقط.
@@ -190,7 +194,7 @@ async function askStrike(req: Request, caller: NonNullable<Awaited<ReturnType<ty
 
 // إجراءات يطلبها المستخدم مباشرة → تُحسب من حصته. أما مراحل تجهيز القراءة الداخلية
 // (تنظيف/تشكيل/فحص المحتوى) فلا تُحسب: إيقافها يعطّل القراءة نفسها.
-const INTERNAL = new Set(["cleanup", "tashkeel", "ocrtashkeel", "fixspacing", "filternoise", "moderate", "define"]);
+const INTERNAL = new Set(["cleanup", "tashkeel", "ocrtashkeel", "fixspacing", "filternoise", "moderate", "define", "support"]);
 const INTERNAL_DAILY_CAP = 800;
 const SCANNED = new Set(["bilingual", "writecheck", "formulas", "videoplan", "videoscript", "studysummary", "summarize", "ask", "quiz", "flashcards", "syllabus", "unitquiz", "translate", "mindmap", "mindtree", "qextract", "qsolve", "slides", "unitslides", "define"]);
 // videoplan ليس هنا: خطة الفيديو لا تُحسب على الطالب (عدد الطلبات لا يزيد على ما قبل الخطة)، ولها سقف يومي

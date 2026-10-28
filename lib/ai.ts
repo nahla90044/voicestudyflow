@@ -10,6 +10,7 @@ import { aiDownError, reportAiDown } from "./aiDown";
 import { recordPerf } from "./perf";
 
 export type AiAction =
+  | "support"
   | "videoscript"
   | "videoplan"
   | "studysummary"

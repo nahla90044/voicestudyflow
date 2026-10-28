@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { HowToTour } from "../components/brand/howto-tour";
+import { SupportChat } from "../components/brand/support-chat";
 import { SceneBanner, SceneCard, SceneIconButton, SceneScreen } from "../components/brand/scene-screen";
 import { Radius, Spacing } from "../constants/design";
 import { useDir, useI18n } from "../lib/i18n";
@@ -54,7 +55,9 @@ export default function HelpScreen() {
         }
       />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        {/* وكيل الدعم: إجابة فورية من دليل التطبيق، وما لم يُحلّ يُرسل لفريق الدعم */}
+        <SupportChat />
         <Pressable
           onPress={() => setTour(true)}
           style={[styles.tourBtn, { flexDirection: dir.row, backgroundColor: pal.accent, borderColor: pal.accent }]}

@@ -5,7 +5,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -13,7 +13,7 @@ import { isOwner } from "../../lib/auth";
 import { useDir, useI18n } from "../../lib/i18n";
 import { supabase } from "../../lib/supabase";
 
-type Alerts = { ai_down_at: string | null; spend_today: number; spend_limit: number };
+type Alerts = { ai_down_at: string | null; spend_today: number; spend_limit: number; open_tickets?: number };
 const BILLING = "https://platform.claude.com/settings/billing";
 let registered = false;
 
@@ -55,8 +55,19 @@ export function OwnerAlertCard() {
   if (!a) return null;
   const down = !!a.ai_down_at;
   const over = Number(a.spend_today) > Number(a.spend_limit);
-  if (!down && !over) return null;
+  const tickets = Number(a.open_tickets ?? 0);
+  const inbox =
+    tickets > 0 ? (
+      <Pressable onPress={() => router.push("/support-inbox" as never)} style={({ pressed }) => [styles.inbox, { flexDirection: dir.row, opacity: pressed ? 0.85 : 1 }]}>
+        <Ionicons name="chatbubbles" size={20} color="#175CD3" />
+        <Text style={[styles.inboxTxt, { textAlign: dir.textAlign }]}>{t("owner.alert.tickets", { n: tickets })}</Text>
+        <Ionicons name={dir.isRTL ? "chevron-back" : "chevron-forward"} size={18} color="#175CD3" />
+      </Pressable>
+    ) : null;
+  if (!down && !over) return inbox;
   return (
+    <>
+    {inbox}
     <Pressable onPress={() => void Linking.openURL(BILLING)} style={({ pressed }) => [styles.card, { flexDirection: dir.row, opacity: pressed ? 0.85 : 1 }]}>
       <Ionicons name={down ? "warning" : "cash-outline"} size={24} color="#B42318" />
       <View style={{ flex: 1, gap: 3 }}>
@@ -67,6 +78,7 @@ export function OwnerAlertCard() {
       </View>
       <Ionicons name="open-outline" size={18} color="#B42318" />
     </Pressable>
+    </>
   );
 }
 
@@ -74,4 +86,6 @@ const styles = StyleSheet.create({
   card: { marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 18, borderWidth: 1.5, borderColor: "#F04438", backgroundColor: "#FEF3F2", alignItems: "center", gap: 12 },
   title: { color: "#912018", fontSize: 15.5, fontWeight: "900" },
   body: { color: "#7A271A", fontSize: 13, fontWeight: "600", lineHeight: 20 },
+  inbox: { marginHorizontal: 16, marginTop: 10, padding: 12, borderRadius: 16, borderWidth: 1.5, borderColor: "#84ADFF", backgroundColor: "#EFF8FF", alignItems: "center", gap: 10 },
+  inboxTxt: { flex: 1, color: "#1849A9", fontSize: 14.5, fontWeight: "800" },
 });
