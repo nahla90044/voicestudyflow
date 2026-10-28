@@ -24,3 +24,11 @@ test("الفيديو: مشهد الحساب خطوات والقيد بعمودي
   assert.match(v, /compare/);
   assert.match(certDomainPrompt("finance", false), /N \| I\/Y \| PV \| PMT \| FV/);
 });
+
+test("المالية: دفتر الأستاذ والقوائم وقاعدة المدين والدائن", () => {
+  const p = certDomainPrompt("finance", false);
+  assert.match(p, /دفتر الأستاذ/);
+  assert.match(p, /ميزان مراجعة/);
+  assert.match(p, /يزيد بـ \| ينقص بـ \| الرصيد الطبيعي/);
+  assert.match(p, /النسبة من المبيعات/);
+});
