@@ -56,6 +56,11 @@ verify_jwt = true
 [functions.apple-notifications]
 verify_jwt = false
 
+[functions.ops-alert]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/ops-alert/index.ts"
+
 [functions.ops-mail]
 enabled = true
 verify_jwt = false

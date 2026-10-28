@@ -13,6 +13,7 @@ import { FadeIn } from "../../components/brand/fade-in";
 import { CountUp, PressableScale } from "../../components/brand/motion";
 import { SceneArt } from "../../components/brand/scene-art";
 import { UpgradeBanner } from "../../components/brand/upgrade-banner";
+import { OwnerAlertCard } from "../../components/brand/owner-alert";
 import { WeekBars } from "../../components/brand/week-bars";
 import { Palette, Radius, Spacing } from "../../constants/design";
 import { getDisplayName } from "../../lib/auth";
@@ -333,6 +334,7 @@ export default function HomeScreen() {
 
         <View style={[styles.body, { marginTop: -Math.round(heroH * 0.17) }]}>
           <DownloadIndicator />
+          <OwnerAlertCard />
           <UpgradeBanner />
 
           {/* البطاقة الرئيسية: متابعة الاستماع + أرقام اليوم + الخطوة التالية */}
