@@ -13,7 +13,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BookCover } from "../../components/brand/book-cover";
-import { ExamDateSheet } from "../../components/brand/exam-date-sheet";
+import { ExamDateSheet, formatExamDate } from "../../components/brand/exam-date-sheet";
+import { PlanSheet } from "../../components/brand/plan-sheet";
+import { getBookPlan, type BookPlan } from "../../lib/plans";
 import { StudyKindSheet } from "../../components/brand/study-kind-sheet";
 import { SyllabusView } from "../../components/syllabus/syllabus-view";
 import { CoachHelpButton, useCoachTour } from "../../components/brand/coach-mark";
@@ -41,7 +43,7 @@ type Tab = "syllabus" | "units" | "tools" | "saves";
 
 export default function BookHubScreen() {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const dir = useDir();
   const { pal } = useScene();
   // ألوان الحالة (ممتاز/متوسط/ضعيف) بدرجات تُقرأ على المشهد الفاتح والداكن
@@ -124,6 +126,13 @@ export default function BookHubScreen() {
   const [noteCount, setNoteCount] = useState(0); // صفحات الملاحظات المكتوبة لهذا الكتاب
   const [examOpen, setExamOpen] = useState(false);
   const [kindOpen, setKindOpen] = useState(false);
+  // خطة الكتاب (طلب نهلة ٢٨ أكتوبر): تعديلها أو حذفها من شريحة «الخطة»
+  const [plan, setPlan] = useState<BookPlan | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);
+  const loadPlan = useCallback(() => {
+    if (bookId) getBookPlan(bookId).then(setPlan).catch(() => {});
+  }, [bookId]);
+  useFocusEffect(loadPlan);
   const [ranges, setRanges] = useState<UnitRange[] | null>(null);
   const [prepOn, setPrepOn] = useState(false); // خطة «الاستعداد السريع» جارية (شارة على الأداة)
 
@@ -435,6 +444,14 @@ export default function BookHubScreen() {
                           : ready.daysLeft === 0
                             ? t("book.examToday")
                             : t("book.examPast")}
+                    </Text>
+                  </PressableScale>
+                  <PressableScale
+                    onPress={() => setPlanOpen(true)}
+                    style={[styles.chip, { backgroundColor: pal.soft, borderColor: pal.cardBorder }]}
+                  >
+                    <Text style={[styles.chipTxt, { color: pal.ink }]} numberOfLines={1}>
+                      {plan ? t("bookplan.chip", { date: formatExamDate(plan.end_date, lang) }) : t("bookplan.chipNew")}
                     </Text>
                   </PressableScale>
                   {/* نوع الدراسة: يظهر بعد بناء المنهج، ويُغيَّر بضغطة */}
@@ -782,6 +799,7 @@ export default function BookHubScreen() {
           setReady(await getBookReadiness(book.pdf_path));
         }}
       />
+      <PlanSheet visible={planOpen} bookId={book.id} pages={pages} plan={plan} onClose={() => setPlanOpen(false)} onChanged={loadPlan} />
       <StudyKindSheet visible={kindOpen} kind={kindInfo.kind} exam={kindInfo.exam} onClose={() => setKindOpen(false)} onSave={saveKind} />
       {/* الشريط العائم يرافق المستخدم هنا أيضًا */}
       <View style={styles.dockWrap}>

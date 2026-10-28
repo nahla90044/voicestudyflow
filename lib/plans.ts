@@ -10,10 +10,14 @@ type GeneratePlanInput = {
   bufferEvery?: number; // يوم بفر كل X أيام
 };
 
-function addDaysISO(startISO: string, add: number) {
-  const d = new Date(startISO + "T00:00:00");
-  d.setDate(d.getDate() + add);
-  return d.toISOString().slice(0, 10);
+// كانت تحسب منتصف الليل المحلي ثم تقرأه بتوقيت UTC، فينقص يومًا في السعودية (+٣):
+// خطة يوم واحد كانت تنتهي قبل أن تبدأ (بلاغ ٢٨ أكتوبر: ٢٧ ← ٢٦ أكتوبر)
+const addDaysISO = (iso: string, add: number) => new Date(Date.parse(iso + "T00:00:00Z") + add * 86_400_000).toISOString().slice(0, 10);
+
+/** أيام الخطة لعدد صفحات بدقائق يومية (للمعاينة قبل الحفظ) */
+export function planDays(pages: number, minutesPerPage: number, dailyMinutes: number): number {
+  const total = Math.ceil(Math.max(1, pages) * Math.max(0.1, minutesPerPage || 2));
+  return Math.max(1, Math.ceil(total / Math.max(5, dailyMinutes || 60)));
 }
 
 export async function generatePlan(input: GeneratePlanInput) {
@@ -32,7 +36,7 @@ export async function generatePlan(input: GeneratePlanInput) {
   const daily = Math.max(5, Number(dailyMinutes || 60));
 
   const totalMinutes = Math.ceil(pages * mpp);
-  const days = Math.max(1, Math.ceil(totalMinutes / daily));
+  const days = planDays(pages, mpp, daily);
   const endDateISO = addDaysISO(startDateISO, days - 1);
 
   // 1) create plan
@@ -83,4 +87,37 @@ export async function generatePlan(input: GeneratePlanInput) {
   if (sesErr) throw sesErr;
 
   return { plan, days, totalMinutes };
+}
+
+// ===== تعديل خطة الكتاب وحذفها (طلب نهلة ٢٨ أكتوبر) =====
+
+export type BookPlan = { id: string; start_date: string; end_date: string; daily_minutes: number };
+
+/** أحدث خطة للكتاب (أو null) */
+export async function getBookPlan(bookId: string): Promise<BookPlan | null> {
+  const { data } = await supabase.from("study_plans").select("id,start_date,end_date,daily_minutes").eq("book_id", bookId).order("start_date", { ascending: false }).limit(1).maybeSingle();
+  return (data as BookPlan | null) ?? null;
+}
+
+/** حذف خطط الكتاب (وجلساتها معها) */
+export async function deleteBookPlan(bookId: string): Promise<void> {
+  const { error } = await supabase.from("study_plans").delete().eq("book_id", bookId);
+  if (error) throw new Error(error.message);
+}
+
+/** صفحات أُنجزت في الخطة الحالية (تُحفظ عند إعادة بنائها: الجديدة للباقي فقط) */
+export async function planPagesDone(planId: string): Promise<number> {
+  const { data } = await supabase.from("plan_sessions").select("pages_done").eq("plan_id", planId);
+  return (data ?? []).reduce((a: number, r: { pages_done: number | null }) => a + (Number(r.pages_done) || 0), 0);
+}
+
+/** خطة جديدة للكتاب من تاريخ بدء ودقائق يومية لما بقي من صفحاته (تحل محل السابقة) */
+export async function rebuildBookPlan(o: { userId: string; bookId: string; startDateISO: string; pageCount: number; minutesPerPage: number; dailyMinutes: number }) {
+  const old = await getBookPlan(o.bookId);
+  const done = old ? await planPagesDone(old.id).catch(() => 0) : 0;
+  const left = Math.max(1, o.pageCount - done);
+  // الجديدة أولًا ثم حذف القديمة: إن تعثّر الإنشاء تبقى الخطة السابقة كما هي
+  const res = await generatePlan({ userId: o.userId, bookId: o.bookId, startDateISO: o.startDateISO, pageCount: left, minutesPerPage: o.minutesPerPage, dailyMinutes: o.dailyMinutes, bufferEvery: 7 });
+  if (old) await supabase.from("study_plans").delete().eq("id", old.id);
+  return res;
 }

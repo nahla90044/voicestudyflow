@@ -249,7 +249,8 @@ export default function AddBookScreen() {
 
       // 3) create plan
       if (createPlanNow) {
-        const today = new Date().toISOString().slice(0, 10);
+        const d0 = new Date();
+        const today = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(d0.getDate()).padStart(2, "0")}`; // اليوم المحلي لا UTC
 
         const minutesPerPage = await getMinutesPerPage();
 
