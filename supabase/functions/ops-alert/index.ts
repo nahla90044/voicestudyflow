@@ -24,25 +24,27 @@ Deno.serve(async () => {
   const today = new Date().toISOString().slice(0, 10);
 
   const alerts: { title: string; body: string }[] = [];
+  // علامات «أُرسل» لا تُحفظ إلا بعد وصول التنبيه فعلًا (جهاز أو بريد) — وإلا يُعاد في الدورة التالية
+  const marks: [string, string][] = [];
   // توقف الذكاء: مرة لكل توقف (يُعاد التنبيه إن عاد بعد أن انتهى السابق بساعة)
   if (s.ai_down_at) {
     const last = await cfg("alert_ai_down_sent");
     if (!last || Date.parse(s.ai_down_at) - Date.parse(last) > 60 * 60_000) {
       alerts.push({ title: "⚠️ توقفت خدمة الذكاء", body: "رصيد Anthropic نفد على الأرجح — الملخّصات والفيديو والاختبارات متوقفة للجميع. يلزم الشحن من صفحة الفوترة." });
-      await setCfg("alert_ai_down_sent", s.ai_down_at);
+      marks.push(["alert_ai_down_sent", s.ai_down_at]);
     }
   }
   // تجاوز الصرف: مرة في اليوم
   if (Number(s.spend_today) > Number(s.spend_limit) && (await cfg("alert_spend_sent")) !== today) {
     alerts.push({ title: "💸 صرف الذكاء اليوم مرتفع", body: `صُرف اليوم ${s.spend_today}$ على نماذج Claude (الحد ${s.spend_limit}$).` });
-    await setCfg("alert_spend_sent", today);
+    marks.push(["alert_spend_sent", today]);
   }
   // رسالة دعم جديدة (لم يحلّها الوكيل): مرة لكل رسالة
   if (s.last_ticket?.id) {
     const lastSent = Number((await cfg("alert_ticket_sent")) ?? 0);
     if (s.last_ticket.id > lastSent) {
       alerts.push({ title: "💬 رسالة دعم جديدة", body: `${s.last_ticket.q}${(s.open_tickets ?? 0) > 1 ? ` — (${s.open_tickets} رسائل مفتوحة)` : ""}` });
-      await setCfg("alert_ticket_sent", String(s.last_ticket.id));
+      marks.push(["alert_ticket_sent", String(s.last_ticket.id)]);
     }
   }
   if (!alerts.length) return new Response(JSON.stringify({ sent: 0 }));
@@ -79,5 +81,6 @@ Deno.serve(async () => {
     }).catch(() => null);
     mailed = !!r?.ok;
   }
+  if (pushed > 0 || mailed) for (const [k, v] of marks) await setCfg(k, v);
   return new Response(JSON.stringify({ alerts: alerts.length, pushed, mailed }));
 });
