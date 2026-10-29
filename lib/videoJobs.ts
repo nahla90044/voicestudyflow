@@ -101,7 +101,7 @@ async function notify(meta: Meta, ok: boolean) {
   } catch {}
 }
 
-export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: string, meta: Meta, lang?: string): string {
+export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: string, meta: Meta, lang?: string, note?: string): string {
   const key = videoJobKey(pdfPath, src, lang);
   if (jobs.get(key)?.status === "running") return key;
   let last: VideoJob = { key, status: "running", stage: "summary", done: 0, total: 0, etaSec: null, waiting: false, script: null };
@@ -130,7 +130,8 @@ export function startVideoJob(pdfPath: string, src: SummarySource, unitTitle: st
       emit((last = { ...last, stage: "script", done: 0, total: 0, etaSec: null }));
       const { script, complete } = await getOrMakeVideo(pdfPath, src, summary, unitTitle, (p) =>
         emit((last = { ...last, done: p.done, total: p.total, etaSec: p.etaSec, waiting: p.waiting, script: p.soFar ?? last.script })),
-        lang
+        lang,
+        note
       );
       emit((last = { ...last, status: complete ? "done" : "failed", script: script ?? last.script, etaSec: 0 }));
       recordPerf("video.total", Date.now() - t0, complete, last.total);

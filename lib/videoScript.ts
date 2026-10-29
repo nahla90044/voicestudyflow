@@ -186,9 +186,17 @@ export function activeTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /** خطة الوحدة: المحفوظة (لنفس الملخّص)، أو طلب videoplan (مجاني)، أو الآلية عند التعذّر. تُحفظ قبل الأجزاء */
-async function getPlan(pdfPath: string, src: SummarySource, summary: StudySummary, unitTitle: string, lang?: string, study: { study?: string } = {}): Promise<VideoPlan> {
+/** بصمة قصيرة لملاحظة الطالب (لمفتاح الخطة) */
+const noteSig = (s: string) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16);
+};
+
+async function getPlan(pdfPath: string, src: SummarySource, summary: StudySummary, unitTitle: string, lang?: string, study: { study?: string; note?: string } = {}): Promise<VideoPlan> {
   const ids = cacheIds(src);
-  const sig = summarySig(summary);
+  // ملاحظة الطالب جزء من بصمة الخطة: خطة بملاحظة غير خطة بلاها
+  const sig = summarySig(summary) + (study.note ? `n${noteSig(study.note)}` : "");
   const L = otherLang(lang);
   const saved = await getUnitContent<VideoPlan>(pdfPath, ids.id, "videoplan", L).catch(() => null);
   if (saved?.v === 2 && saved.sig === sig && saved.topics?.length) return saved;
@@ -227,7 +235,9 @@ export async function getOrMakeVideo(
   summary: StudySummary,
   unitTitle: string,
   onProgress?: (p: VideoProgress) => void,
-  lang?: string
+  lang?: string,
+  /** ملاحظة الطالب قبل البدء (٢٩ أكتوبر): تركيز أو أسلوب أو مسائل أكثر — بلا ملاحظة = الطريقة الافتراضية */
+  note?: string
 ): Promise<{ script: VideoScript | null; complete: boolean }> {
   const cached = await getCachedVideo(pdfPath, src, lang);
   if (cached) return { script: cached, complete: true };
@@ -239,7 +249,8 @@ export async function getOrMakeVideo(
   const L = otherLang(lang);
   const jp = jobPath(pdfPath, lang);
   // كتب اللغة: مربعات القواعد وتحليل الجملة وجداول الاقتران (قرار ٢٧ أكتوبر)؛ غيرها بلا حقل
-  const study = await studyExtra(pdfPath);
+  const n0 = (note ?? "").trim().slice(0, 300);
+  const study = { ...(await studyExtra(pdfPath)), ...(n0 ? { note: n0 } : {}) };
   // وحدة قصيرة: جزء واحد بلا خطة (الزمن والتكلفة كاليوم)؛ وإلا الخطة أولًا
   const plan = oldN === 1 ? null : await getPlan(pdfPath, src, summary, unitTitle, lang, study);
   const parts: PlannedPart[] = plan ? planParts(summary, plan, unitTitle, oldN) : [soloPart(summary, unitTitle)];

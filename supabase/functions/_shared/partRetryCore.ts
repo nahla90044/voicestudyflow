@@ -55,6 +55,8 @@ export type PartFields = {
   vpart?: unknown;
   /** معرّف جلسة التوليد: يتغيّر عند إعادة التوليد اليدوية فقط */
   genId?: unknown;
+  /** ملاحظة الطالب على الفيديو (٢٩ أكتوبر): تغيّر المخرجات، فتدخل البصمة (بلا ملاحظة = البصمة القديمة كما هي) */
+  note?: string;
 };
 
 /** النص القانوني لبصمة الجزء: كل ما يغيّر المخرجات، بترتيب ثابت */
@@ -69,6 +71,7 @@ export function partKey(f: PartFields): string {
     d: f.deep === true,
     v: f.vpart ?? null,
     g: genId,
+    ...(f.note ? { n: f.note } : {}),
   });
 }
 

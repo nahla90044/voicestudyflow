@@ -11,7 +11,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 import { celebrate } from "../components/brand/feedback-host";
 import { AmbientSheet, useAmbient } from "../components/brand/ambient-sheet";
@@ -165,6 +165,8 @@ export default function UnitVideoScreen() {
   const [runId, setRunId] = useState(0);
   // لوحة «قبل البدء» (قرار نهلة ٢٨ أكتوبر): لا يبدأ التجهيز تلقائيًا — تُختار اللغة والنوع ثم «البدء»
   const [setup, setSetup] = useState(false);
+  // ملاحظة الطالب قبل البدء (طلب نهلة ٢٩ أكتوبر): تركيز أو أسلوب أو مسائل أكثر؛ فارغة = الطريقة الافتراضية
+  const [note, setNote] = useState("");
   const [have, setHave] = useState<Record<string, boolean>>({});
   const scriptRef = useRef<{ script: VideoScript | null; complete: boolean }>({ script: null, complete: false });
   scriptRef.current = { script, complete };
@@ -249,7 +251,7 @@ export default function UnitVideoScreen() {
     for (const [k, v] of Object.entries({ unit, page, from, to, title, book_title })) if (typeof v === "string") params[k] = v;
     params.vlang = vlang;
     params.vlevel = vlevel;
-    startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params }, vlang);
+    startVideoJob(pdfPath, src, unitTitle, { title: unitTitle || bookTitle, params }, vlang, note.trim() || undefined);
     saveVideoItem(true);
   }
 
@@ -617,6 +619,16 @@ export default function UnitVideoScreen() {
                   </Pressable>
                 );
               })}
+              <Text style={[styles.status, { color: pal.ink, textAlign: dir.textAlign }]}>{t("video.note")}</Text>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder={t("video.notePh")}
+                placeholderTextColor={pal.dim}
+                multiline
+                maxLength={300}
+                style={[styles.noteBox, { color: pal.ink, borderColor: pal.cardBorder, backgroundColor: pal.soft, textAlign: dir.textAlign }]}
+              />
               <Pressable onPress={() => void startNow()} style={[styles.primary, { backgroundColor: pal.accent, alignSelf: "stretch", alignItems: "center" }]}>
                 <Text style={[styles.primaryTxt, { color: pal.onAccent }]}>{t("video.setup.start")}</Text>
               </Pressable>
@@ -991,6 +1003,7 @@ export default function UnitVideoScreen() {
 }
 
 const styles = StyleSheet.create({
+  noteBox: { borderWidth: 1, borderRadius: 16, minHeight: 76, maxHeight: 140, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 10, fontSize: 14.5, lineHeight: 22 },
   kindRow: { alignItems: "center", gap: 10, borderWidth: 1.5, borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
   kindName: { fontSize: 15, fontWeight: "800" },
   kindHint: { fontSize: 12.5, fontWeight: "600", lineHeight: 18 },
