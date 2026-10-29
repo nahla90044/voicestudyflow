@@ -464,6 +464,8 @@ export default function UnitVideoScreen() {
             });
           }
           if (vlang) forgetVideoJob(videoJobKey(pdfPath, src, vlang));
+          // الصياغة الجديدة تظهر في المحفوظات عند «البدء» لا قبله
+          if (vlang && vlevel) await removeSavedItem(videoSaveKey()).catch(() => {});
           await clearVideo(pdfPath, src, vlang ?? undefined);
           // الفيديو الجديد غير القديم: «شوهد» يبدأ من جديد (كان يبقى سجل القديم فيظهر تقدّم خاطئ)
           if (src.kind === "unit") resetVideoSeen(pdfPath, unitIdx);
