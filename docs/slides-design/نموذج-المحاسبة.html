@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>نموذج شرائح المحاسبة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Noto+Kufi+Arabic:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#FBF7EF;--ink:#1E2433;--dim:#6B7280;--navy:#22315E;--teal:#0F8B8D;--gold:#E3A33B;--rose:#D9534F;--green:#2E8B57;--line:#E8E1D3;--card:#FFFFFF;--bg:#EFEAE0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15171d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:"IBM Plex Sans Arabic",Tahoma,sans-serif;color:var(--ink);padding:16px}
+header{max-width:1100px;margin:0 auto 14px;color:var(--ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) header{color:#eee}}
+h1{font-family:"Noto Kufi Arabic";font-size:22px;margin:0 0 4px}
+header p{margin:0;color:var(--dim);font-size:14px}
+.wrap{max-width:1100px;margin:0 auto;display:grid;gap:22px}
+.item{display:grid;gap:8px}
+.cap{font-size:13.5px;color:var(--dim);background:#fff8;border-radius:10px;padding:8px 12px}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .cap{background:#ffffff10;color:#bbb}}
+.cap b{color:var(--teal)}
+/* الشريحة 16:9 */
+.slide{position:relative;aspect-ratio:16/9;width:100%;background:var(--paper);border-radius:18px;overflow:hidden;box-shadow:0 10px 30px #0002;container-type:inline-size}
+.s{position:absolute;inset:0;padding:4.2cqw 5cqw;display:flex;flex-direction:column}
+.kicker{font-size:1.5cqw;color:var(--teal);font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:.8cqw}
+.kicker i{display:inline-block;width:2.6cqw;height:.35cqw;background:var(--teal);border-radius:9px}
+.title{font-family:"Noto Kufi Arabic";font-size:4.2cqw;line-height:1.25;margin:.8cqw 0 1.6cqw;color:var(--navy)}
+.foot{position:absolute;bottom:2.2cqw;inset-inline:5cqw;display:flex;justify-content:space-between;font-size:1.25cqw;color:var(--dim)}
+.chip{display:inline-flex;align-items:center;gap:.6cqw;padding:.5cqw 1.1cqw;border-radius:99px;font-weight:700;font-size:1.45cqw}
+/* ١: فكرة + صورة */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:3cqw;height:100%}
+.art{border-radius:2cqw;background:linear-gradient(160deg,#FCE7C3,#F8D9A8 55%,#F2C48A);position:relative;overflow:hidden}
+.pts{display:grid;gap:1.4cqw;align-content:center}
+.pt{display:flex;gap:1.3cqw;align-items:flex-start;font-size:1.9cqw;line-height:1.5}
+.ic{flex:none;width:4.4cqw;height:4.4cqw;border-radius:1.2cqw;display:grid;place-items:center}
+.ic svg{width:2.6cqw;height:2.6cqw}
+/* ٢: معادلة */
+.eq{display:flex;align-items:center;justify-content:center;gap:1.2cqw;flex-wrap:wrap;margin:1cqw 0 2cqw}
+.term{border-radius:1.6cqw;padding:1.3cqw 1.8cqw;text-align:center;min-width:14cqw}
+.term .k{font-size:1.4cqw;font-weight:700;opacity:.9}
+.term .v{font-family:"Noto Kufi Arabic";font-size:2.6cqw;margin-top:.3cqw}
+.op{font-family:"Noto Kufi Arabic";font-size:4cqw;color:var(--navy)}
+.tape{margin-inline:auto;width:62%;background:#fff;border:1px dashed var(--line);border-radius:1.4cqw;padding:1.4cqw 2cqw;font-size:1.9cqw;display:grid;gap:.6cqw;box-shadow:0 6px 18px #0001}
+.tape div{display:flex;justify-content:space-between}
+.tape .tot{border-top:2px solid var(--ink);padding-top:.6cqw;font-weight:800;color:var(--teal);font-size:2.2cqw}
+/* ٣: حساب T */
+.taccount{margin:0 auto;width:78%;background:#fff;border-radius:1.6cqw;box-shadow:0 8px 22px #0001;padding:1.6cqw 2cqw}
+.tname{font-family:"Noto Kufi Arabic";text-align:center;font-size:2.4cqw;color:var(--navy);border-bottom:.35cqw solid var(--navy);padding-bottom:.6cqw}
+.tcols{display:grid;grid-template-columns:1fr 1fr}
+.tcol{padding:1cqw 1.6cqw;font-size:1.75cqw;display:grid;gap:.6cqw;align-content:start}
+.tcol+ .tcol{border-inline-start:.35cqw solid var(--navy)}
+.tcol h4{margin:0 0 .4cqw;font-size:1.6cqw;text-align:center}
+.row{display:flex;justify-content:space-between}
+.bal{margin-top:1cqw;background:#E7F5EE;color:var(--green);border-radius:1cqw;padding:.8cqw 1.4cqw;display:flex;justify-content:space-between;font-weight:800;font-size:1.9cqw}
+.rule{display:flex;gap:1.2cqw;justify-content:center;margin-top:1.4cqw}
+/* ٤: جدول */
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:1.75cqw;background:#fff;border-radius:1.4cqw;overflow:hidden;box-shadow:0 6px 18px #0001}
+th{background:var(--navy);color:#fff;padding:1cqw;font-weight:700}
+td{padding:1cqw;border-bottom:1px solid var(--line);text-align:center}
+td:first-child{text-align:start;font-weight:700;color:var(--navy)}
+/* ٥: رسم بياني */
+.chart{display:grid;grid-template-columns:repeat(3,1fr);gap:3cqw;align-items:end;height:24cqw;padding:0 3cqw;border-bottom:.3cqw solid var(--ink);margin-top:1cqw}
+.grp{display:flex;gap:1cqw;align-items:end;justify-content:center;height:100%;position:relative}
+.bar{width:5cqw;border-radius:.8cqw .8cqw 0 0;position:relative}
+.bar span{position:absolute;top:-2.4cqw;inset-inline:0;text-align:center;font-size:1.35cqw;font-weight:700}
+.lbls{display:grid;grid-template-columns:repeat(3,1fr);gap:3cqw;padding:0 3cqw;text-align:center;font-size:1.5cqw;margin-top:.8cqw;font-weight:700}
+.var{position:absolute;top:0;padding:.3cqw .9cqw;border-radius:99px;font-size:1.3cqw;font-weight:800;white-space:nowrap}
+.legend{display:flex;gap:2cqw;justify-content:center;margin-top:1.2cqw;font-size:1.4cqw}
+.legend i{display:inline-block;width:1.4cqw;height:1.4cqw;border-radius:.3cqw;margin-inline-end:.5cqw;vertical-align:middle}
+/* ٦: تدفق */
+.flow{display:flex;align-items:center;justify-content:space-between;gap:.6cqw;margin-top:3cqw}
+.step{flex:1;text-align:center;display:grid;gap:.9cqw;justify-items:center}
+.node{width:9cqw;height:9cqw;border-radius:50%;display:grid;place-items:center;box-shadow:0 8px 18px #0002;position:relative}
+.node svg{width:4.6cqw;height:4.6cqw}
+.num{position:absolute;top:-.6cqw;inset-inline-end:-.6cqw;width:3cqw;height:3cqw;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:1.4cqw;font-weight:800}
+.step b{font-size:1.65cqw;color:var(--navy)}
+.step small{font-size:1.25cqw;color:var(--dim);line-height:1.45}
+.arrow{flex:none;width:3cqw;height:3cqw;color:var(--gold)}
+.here{outline:.4cqw dashed var(--gold);outline-offset:.6cqw}
+.sub{font-size:1.8cqw;color:var(--dim);margin-top:-.6cqw}
+</style>
+</head>
+<body>
+<header>
+  <h1>نموذج شرائح الفيديو الجديدة — أسلوب يقترب من NotebookLM</h1>
+  <p>الموضوع من كتاب CMA: الموازنة وتحليل الانحرافات. كل شريحة تحتها ما يُولَّد وما يرسمه التطبيق. للمراجعة قبل التنفيذ.</p>
+</header>
+<div class="wrap">
+
+<!-- ١ فكرة + صورة توضيحية -->
+<div class="item">
+<div class="slide"><div class="s">
+  <div class="hero">
+    <div class="pts">
+      <div class="kicker"><i></i>الفكرة الأولى</div>
+      <div class="title" style="margin-bottom:.4cqw">لماذا لا ننتج بقدر ما نبيع؟</div>
+      <div class="pt"><div class="ic" style="background:#E1F2F2"><svg viewBox="0 0 24 24" fill="none" stroke="#0F8B8D" stroke-width="2"><path d="M3 7h18v13H3zM3 7l3-4h12l3 4M9 12h6"/></svg></div><div>نريد <b>مخزونًا يبقى</b> لأول الشهر القادم</div></div>
+      <div class="pt"><div class="ic" style="background:#FDF0DC"><svg viewBox="0 0 24 24" fill="none" stroke="#E3A33B" stroke-width="2"><path d="M4 20V10l8-6 8 6v10H4z"/><path d="M9 20v-6h6v6"/></svg></div><div>وعندنا <b>مخزون جاهز</b> من أول المدة</div></div>
+      <div class="pt"><div class="ic" style="background:#E7F5EE"><svg viewBox="0 0 24 24" fill="none" stroke="#2E8B57" stroke-width="2"><path d="M5 12l4 4 10-10"/></svg></div><div>فنضيف ما <b>نريده</b>، ونطرح ما <b>نملكه</b></div></div>
+    </div>
+    <div class="art">
+      <!-- مكان الصورة المولّدة: هنا رسم توضيحي يمثّلها -->
+      <svg viewBox="0 0 400 300" style="position:absolute;inset:0;width:100%;height:100%">
+        <circle cx="320" cy="60" r="34" fill="#FFF3D6"/>
+        <rect x="40" y="150" width="190" height="110" rx="10" fill="#22315E"/>
+        <polygon points="40,150 85,115 85,150 130,115 130,150 175,115 175,150 230,150" fill="#2E4580"/>
+        <rect x="190" y="80" width="22" height="70" fill="#22315E"/><rect x="186" y="74" width="30" height="10" rx="3" fill="#2E4580"/>
+        <rect x="65" y="190" width="30" height="40" rx="4" fill="#FCE7C3"/><rect x="110" y="190" width="30" height="40" rx="4" fill="#FCE7C3"/><rect x="155" y="190" width="30" height="40" rx="4" fill="#FCE7C3"/>
+        <g transform="translate(255,175)">
+          <rect x="0" y="40" width="50" height="45" rx="6" fill="#C97B2B"/><rect x="55" y="40" width="50" height="45" rx="6" fill="#D98E3A"/>
+          <rect x="27" y="-8" width="50" height="45" rx="6" fill="#E3A33B"/>
+          <path d="M0 62h50M55 62h50M27 14h50" stroke="#fff6" stroke-width="3"/>
+        </g>
+        <path d="M30 262h340" stroke="#B9844A" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <div class="chip" style="position:absolute;bottom:1.4cqw;inset-inline-start:1.4cqw;background:#fff;color:var(--navy)">🖼️ صورة مولّدة لهذه الفكرة</div>
+    </div>
+  </div>
+  <div class="foot"><span>موازنة الإنتاج</span><span>٢ / ٢٤</span></div>
+</div></div>
+<div class="cap"><b>صورة توضيحية مولّدة</b> لكل فكرة رئيسية (هنا رسم يمثّلها)، بجانبها النقاط بأيقونات تُختار حسب المعنى، وكلمة مفتاحية بارزة في كل نقطة.</div>
+</div>
+
+<!-- ٢ معادلة -->
+<div class="item">
+<div class="slide"><div class="s">
+  <div class="kicker"><i></i>المعادلة</div>
+  <div class="title">موازنة الإنتاج</div>
+  <div class="eq">
+    <div class="term" style="background:#22315E;color:#fff"><div class="k">الإنتاج</div><div class="v">؟</div></div>
+    <div class="op">=</div>
+    <div class="term" style="background:#E1F2F2;color:#0B5E60"><div class="k">المبيعات المقدّرة</div><div class="v">S</div></div>
+    <div class="op">+</div>
+    <div class="term" style="background:#FDF0DC;color:#8A5A12"><div class="k">المخزون المرغوب آخر المدة</div><div class="v">E</div></div>
+    <div class="op">−</div>
+    <div class="term" style="background:#FBE7E6;color:#9B2C28"><div class="k">مخزون أول المدة</div><div class="v">B</div></div>
+  </div>
+  <div class="tape">
+    <div><span>المبيعات المقدّرة (S)</span><span>50,000 وحدة</span></div>
+    <div><span>+ المخزون المرغوب (E)</span><span>8,000</span></div>
+    <div><span>− مخزون أول المدة (B)</span><span>(6,000)</span></div>
+    <div class="tot"><span>= الإنتاج المطلوب</span><span>52,000 وحدة</span></div>
+  </div>
+  <div class="foot"><span>كل رمز بلونه في المعادلة والحساب</span><span>٣ / ٢٤</span></div>
+</div></div>
+<div class="cap"><b>يرسمها التطبيق:</b> المعادلة بأجزاء ملوّنة ومعنى كل رمز، ثم «شريط الآلة الحاسبة» يظهر سطرًا سطرًا مع صوت الراوي، والناتج بارز.</div>
+</div>
+
+<!-- ٣ حساب T -->
+<div class="item">
+<div class="slide"><div class="s">
+  <div class="kicker"><i></i>دفتر الأستاذ</div>
+  <div class="title" style="margin-bottom:1cqw">حساب النقدية</div>
+  <div class="taccount">
+    <div class="tname">النقدية (Cash)</div>
+    <div class="tcols">
+      <div class="tcol"><h4 style="color:var(--green)">مدين Dr</h4>
+        <div class="row"><span>رصيد افتتاحي</span><b>20,000</b></div>
+        <div class="row"><span>تحصيل من العملاء</span><b>35,000</b></div>
+        <div class="row"><span>قرض بنكي</span><b>10,000</b></div>
+      </div>
+      <div class="tcol"><h4 style="color:var(--rose)">دائن Cr</h4>
+        <div class="row"><span>شراء مواد</span><b>18,000</b></div>
+        <div class="row"><span>رواتب</span><b>12,000</b></div>
+        <div class="row"><span>إيجار</span><b>4,000</b></div>
+      </div>
+    </div>
+    <div class="bal"><span>الرصيد الختامي (مدين)</span><span>31,000</span></div>
+  </div>
+  <div class="rule"><span class="chip" style="background:#E7F5EE;color:var(--green)">الأصول تزيد بالمدين ⬆</span><span class="chip" style="background:#FBE7E6;color:var(--rose)">وتنقص بالدائن ⬇</span></div>
+  <div class="foot"><span>القيود تُرحَّل واحدًا واحدًا مع الشرح</span><span>٩ / ٢٤</span></div>
+</div></div>
+<div class="cap"><b>يرسمها التطبيق:</b> حساب على شكل T حقيقي، والمدين أخضر والدائن أحمر، وكل قيد يدخل مع ذكره، ثم الرصيد وقاعدة المدين والدائن.</div>
+</div>
+
+<!-- ٤ جدول مقارنة -->
+<div class="item">
+<div class="slide"><div class="s">
+  <div class="kicker"><i></i>مقارنة</div>
+  <div class="title">الموازنة الثابتة أم المرنة؟</div>
+  <table>
+    <tr><th style="width:26%">وجه المقارنة</th><th>📌 الثابتة (Static)</th><th>🔄 المرنة (Flexible)</th></tr>
+    <tr><td>حجم النشاط</td><td>مستوى واحد يُحدَّد مسبقًا</td><td>تتغيّر مع النشاط الفعلي</td></tr>
+    <tr><td>التكاليف المتغيرة</td><td>بالمستوى المخطط</td><td>تُعاد حسب الكمية الفعلية</td></tr>
+    <tr><td>عدالة تقييم الأداء</td><td>⚠️ أقل</td><td>✅ أعلى</td></tr>
+    <tr><td>متى تُستخدم؟</td><td>التخطيط في بداية الفترة</td><td>الرقابة وتحليل الانحرافات</td></tr>
+  </table>
+  <div class="foot"><span>الصفوف تظهر صفًّا صفًّا مع الراوي</span><span>١٢ / ٢٤</span></div>
+</div></div>
+<div class="cap"><b>يرسمها التطبيق:</b> جدول مقارنة نظيف بأيقونات في العناوين وعلامات ✅ ⚠️ للحكم، ويُكشف صفًّا صفًّا.</div>
+</div>
+
+<!-- ٥ رسم بياني للانحرافات -->
+<div class="item">
+<div class="slide"><div class="s">
+  <div class="kicker"><i></i>الانحرافات</div>
+  <div class="title" style="margin-bottom:.4cqw">المخطط مقابل الفعلي</div>
+  <div class="sub">الانحراف الموجب في التكاليف <b style="color:var(--rose)">غير ملائم (U)</b>، والسالب <b style="color:var(--green)">ملائم (F)</b></div>
+  <div class="chart">
+    <div class="grp"><div class="bar" style="height:70%;background:#9AA9C8"><span>70k</span></div><div class="bar" style="height:78%;background:#22315E"><span>78k</span></div><div class="var" style="background:#FBE7E6;color:var(--rose)">+8k  U</div></div>
+    <div class="grp"><div class="bar" style="height:55%;background:#9AA9C8"><span>55k</span></div><div class="bar" style="height:50%;background:#22315E"><span>50k</span></div><div class="var" style="background:#E7F5EE;color:var(--green)">−5k  F</div></div>
+    <div class="grp"><div class="bar" style="height:40%;background:#9AA9C8"><span>40k</span></div><div class="bar" style="height:43%;background:#22315E"><span>43k</span></div><div class="var" style="background:#FBE7E6;color:var(--rose)">+3k  U</div></div>
+  </div>
+  <div class="lbls"><span>المواد المباشرة</span><span>العمل المباشر</span><span>التكاليف غير المباشرة</span></div>
+  <div class="legend"><span><i style="background:#9AA9C8"></i>المخطط</span><span><i style="background:#22315E"></i>الفعلي</span></div>
+  <div class="foot"><span>الأعمدة تنمو مع الراوي، ثم تظهر بطاقات الانحراف</span><span>١٦ / ٢٤</span></div>
+</div></div>
+<div class="cap"><b>يرسمها التطبيق:</b> رسم أعمدة من أرقام الوحدة نفسها، وبطاقة لكل انحراف بلونه (U أحمر، F أخضر)، بلا أرقام متناثرة في النص.</div>
+</div>
+
+<!-- ٦ تدفق -->
+<div class="item">
+<div class="slide"><div class="s">
+  <div class="kicker"><i></i>الصورة الكاملة</div>
+  <div class="title">دورة المحاسبة — أين نحن؟</div>
+  <div class="flow">
+    <div class="step"><div class="node" style="background:#E1F2F2"><svg viewBox="0 0 24 24" fill="none" stroke="#0F8B8D" stroke-width="1.8"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg><div class="num">١</div></div><b>القيد</b><small>في دفتر اليومية</small></div>
+    <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+    <div class="step"><div class="node" style="background:#FDF0DC"><svg viewBox="0 0 24 24" fill="none" stroke="#E3A33B" stroke-width="1.8"><path d="M4 5h16v14H4zM12 5v14M4 9h16"/></svg><div class="num">٢</div></div><b>الترحيل</b><small>إلى دفتر الأستاذ</small></div>
+    <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+    <div class="step"><div class="node" style="background:#EDE9FE"><svg viewBox="0 0 24 24" fill="none" stroke="#6D4BD8" stroke-width="1.8"><path d="M12 3v18M5 8h14M5 8l-2 6h4zM19 8l-2 6h4z"/></svg><div class="num">٣</div></div><b>ميزان المراجعة</b><small>المدين = الدائن</small></div>
+    <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+    <div class="step"><div class="node" style="background:#FBE7E6"><svg viewBox="0 0 24 24" fill="none" stroke="#D9534F" stroke-width="1.8"><path d="M4 20l4-4M14 4l6 6-9 9H5v-6z"/></svg><div class="num">٤</div></div><b>التسويات</b><small>المستحقات والمقدّمات</small></div>
+    <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+    <div class="step"><div class="node here" style="background:#E7F5EE"><svg viewBox="0 0 24 24" fill="none" stroke="#2E8B57" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><div class="num">٥</div></div><b>القوائم المالية</b><small>الدخل والمركز المالي والتدفقات</small></div>
+  </div>
+  <div class="foot"><span>الإطار الذهبي = موضوع هذه الوحدة</span><span>٢٢ / ٢٤</span></div>
+</div></div>
+<div class="cap"><b>يرسمها التطبيق:</b> مخطط تدفق بأيقونات وأرقام، يضيء الخطوة الحالية ويبيّن موقع الوحدة من الصورة الكاملة.</div>
+</div>
+
+</div>
+</body>
+</html>
