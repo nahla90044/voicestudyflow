@@ -681,7 +681,7 @@ function PlainCentered({ ctx, tone, k, pad }: { ctx: SlideCtx; tone: Tone; k: nu
           {d.term}
         </Text>
         {d.lugha ? row(t("video.s.lugha"), d.lugha, sizes[1], 0.08) : null}
-        {row(t("video.s.istilah"), d.istilah, sizes[2], d.lugha ? 0.35 : 0.08)}
+        {row(t(d.plain ? "video.s.definition" : "video.s.istilah"), d.istilah, sizes[2], d.lugha ? 0.35 : 0.08)}
       </>
     );
     sizes = sizes.slice(3);

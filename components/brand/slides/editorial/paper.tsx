@@ -325,7 +325,7 @@ function Entry({ ctx, label, labelTp, text, tp, labelW, at }: { ctx: SlideCtx; l
 export function DefinePage({ ctx, B }: { ctx: SlideCtx; B: Box }) {
   const { m, isRTL, t } = ctx;
   const k = kOf(ctx);
-  const d = useMemo(() => m.define ?? { term: m.title, istilah: m.highlight ?? "" }, [m]);
+  const d = useMemo(() => m.define ?? { term: m.title, istilah: m.highlight ?? "", plain: true }, [m]);
   const cp = cornerPad(ctx, B, B.top);
   const labelW = ctx.compact ? 170 : 200;
   const extra = m.items;
@@ -336,10 +336,10 @@ export function DefinePage({ ctx, B }: { ctx: SlideCtx; B: Box }) {
     const build = (s: number) => {
       // الوسمان بحجم واحد يتسع فيه أطولهما سطرًا واحدًا
       const base = Math.max(24, 44 * k * Math.max(0.65, s));
-      const label = Math.min(...[t("video.s.lugha"), t("video.s.istilah")].map((x) => fitT(x, labelW, base * 1.35, base, 16, 1.35, 1, "kufi600").size));
+      const label = Math.min(...[t("video.s.lugha"), t(d.plain ? "video.s.definition" : "video.s.istilah")].map((x) => fitT(x, labelW, base * 1.35, base, 16, 1.35, 1, "kufi600").size));
       const size = Math.max(20, 52 * k * s);
       const lab1 = planAt(t("video.s.lugha"), labelW, label, 1.35, 1, "kufi600");
-      const lab2 = planAt(t("video.s.istilah"), labelW, label, 1.35, 1, "kufi600");
+      const lab2 = planAt(t(d.plain ? "video.s.definition" : "video.s.istilah"), labelW, label, 1.35, 1, "kufi600");
       const lug = d.lugha ? planAt(d.lugha, tw, size, 1.62, 6, "amiri400") : null;
       const ist = planAt(d.istilah || " ", tw, size, 1.62, 8, "amiri400");
       const xs = Math.max(15, 24 * k * s);
@@ -369,7 +369,7 @@ export function DefinePage({ ctx, B }: { ctx: SlideCtx; B: Box }) {
             <Grow sv={ctx.sv} at={istAt - 0.02} origin={originStart(isRTL)} style={{ height: 1, backgroundColor: tone.rule, marginVertical: plan.gap }} />
           </>
         ) : null}
-        <Entry ctx={ctx} label={ctx.t("video.s.istilah")} labelTp={plan.lab2} text={withKeyword(ctx, d.istilah, m.keyword)} tp={plan.ist} labelW={labelW} at={istAt} />
+        <Entry ctx={ctx} label={ctx.t(d.plain ? "video.s.definition" : "video.s.istilah")} labelTp={plan.lab2} text={withKeyword(ctx, d.istilah, m.keyword)} tp={plan.ist} labelW={labelW} at={istAt} />
         {extra.length ? (
           <View style={{ marginTop: 24, gap: 8 }}>
             {extra.map((it, i) => (

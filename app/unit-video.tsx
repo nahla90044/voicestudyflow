@@ -669,6 +669,7 @@ export default function UnitVideoScreen() {
             ) : cur ? (
               <Pressable onPress={() => setFull(true)} accessibilityLabel={t("video.fullscreen")} style={{ alignSelf: "center" }}>
                 <VideoStage
+                  contentLang={vlang ?? undefined}
                   scene={cur}
                   index={idx}
                   total={sceneTotal}
@@ -909,6 +910,7 @@ export default function UnitVideoScreen() {
         <Pressable style={styles.fsWrap} onPress={() => setCtrls((v) => !v)}>
           {cur && !ended ? (
             <VideoStage
+                  contentLang={vlang ?? undefined}
               scene={cur}
               index={idx}
               total={sceneTotal}

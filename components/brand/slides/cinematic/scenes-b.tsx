@@ -60,7 +60,7 @@ function DefLabel({ ctx, text, at, gold, w }: { ctx: SlideCtx; text: string; at:
 export function DefineScene({ ctx }: { ctx: SlideCtx }) {
   const { m, ff, t, sv } = ctx;
   const k = ctx.compact ? 1.12 : 1;
-  const d = m.define ?? { term: m.title, istilah: m.highlight ?? m.items.map((it) => it.text).join(" ") };
+  const d = m.define ?? { term: m.title, istilah: m.highlight ?? m.items.map((it) => it.text).join(" "), plain: true };
   const S = sideInset(ctx, 84, 120);
   const W = 1280 - 2 * S;
   const labelW = Math.round(150 * k);
@@ -113,7 +113,7 @@ export function DefineScene({ ctx }: { ctx: SlideCtx }) {
         {row(
           <>
             <View style={{ marginTop: plan.sizes[4] * 0.25 }}>
-              <DefLabel ctx={ctx} text={t("video.s.istilah")} at={istAt} gold w={labelW} />
+              <DefLabel ctx={ctx} text={t(d.plain ? "video.s.definition" : "video.s.istilah")} at={istAt} gold w={labelW} />
             </View>
             <View style={{ flex: 1 }}>
               <Words

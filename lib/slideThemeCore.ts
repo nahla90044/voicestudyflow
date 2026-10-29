@@ -53,7 +53,8 @@ export type SceneModel = {
   /** compare و define(من compare): العمودان، ونقاطهما هي نفس كائنات items */
   columns?: { title: string; items: Item[] }[];
   /** lugha اختيارية؛ عند تعدد النقاط في العمود تُجمع بسطر جديد "\n" */
-  define?: { term: string; lugha?: string; istilah: string };
+  /** plain: تعريف عام (وسمه «التعريف») — «اصطلاحًا» لا تُكتب إلا إذا ذكر الكتاب المعنيين لغةً واصطلاحًا (٢٩ أكتوبر) */
+  define?: { term: string; lugha?: string; istilah: string; plain?: boolean };
   /** from < to دائمًا؛ ruler = مسطرة أيام (يوم/أيام/day و to ≤ ٦٠) */
   range?: { from: number; to: number; unit: string; ruler: boolean };
   /** year بأرقام لاتينية بلا «هـ» (مثل "1433")؛ تُعرض بـ toLocalDigits */
@@ -162,6 +163,10 @@ const LAYOUTS: SlideLayout[] = ["cover", "list", "cards", "steps", "compare", "s
 const TYPES_RE = /أنواع|انواع|أقسام|اقسام|تقسيم|types|kinds/i;
 const LUGHA_RE = /^(في )?اللغة|لغة/;
 const ISTILAH_RE = /اصطلاح/;
+// شريحة اقتباس تُعرض «تعريفًا» فقط إن كانت تعريفًا فعلًا (كانت كل شريحة اقتباس تصير «اصطلاحًا»، ومنها معادلات المحاسبة)
+const DEFINE_CUE = /تعريف|مفهوم|المقصود|يقصد|يُقصد|معنى|ما هو|ما هي|definition|meaning|what is|concept|refers to|défini|signifie/i;
+// معادلة أو حساب (=، ×، ÷، أو رموز رياضية بين أرقام/رموز) → تبقى اقتباسًا بارزًا لا تعريفًا
+const FORMULA_RE = /[=×÷]|\b[A-Za-z]{1,4}\s*[+\-*/^]\s*[A-Za-z0-9(]|\d\s*[+\-*/^]\s*\d/;
 /** كلمة «قاعدة/مادة/نص…» في المشهد → اقتباس حرفي يبقى quote (وغيره من quote تعريف: المصطلح = العنوان).
  * بالكلمات كاملةً بعد التطبيع: «انتقال» لا تُعد «قال»، و«الحكم القضائي» يبقى تعريفًا. */
 const RULE_WORDS = new Set(["قاعده", "القاعده", "مبدا", "المبدا", "ماده", "الماده", "نص", "النص", "حديث", "الحديث", "ايه", "الايه", "قال", "rule", "principle", "article", "says"]);
@@ -431,12 +436,14 @@ function build(s: VideoScene, index: number, total: number, role: SceneRole): Sc
     if (year) {
       out.template = "seal";
       out.seal = { year };
-    } else if (title && !isRuleCue(`${title} ${highlight ?? ""}`)) {
+    } else if (title && !isRuleCue(`${title} ${highlight ?? ""}`) && !FORMULA_RE.test(highlight ?? "")) {
       const { lugha, rest } = lughaFromItems(items);
-      out.template = "define";
-      out.define = { term: title, istilah: highlight ?? "" };
-      if (lugha) out.define.lugha = lugha;
-      items = rest;
+      if (lugha || DEFINE_CUE.test(`${title} ${highlight ?? ""}`)) {
+        out.template = "define";
+        out.define = { term: title, istilah: highlight ?? "", plain: !lugha };
+        if (lugha) out.define.lugha = lugha;
+        items = rest;
+      }
     }
   } else if (base === "stat") {
     const rg = rangeOf(highlight ?? "") ?? rangeOf(title);

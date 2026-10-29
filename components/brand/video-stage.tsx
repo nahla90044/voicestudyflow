@@ -13,6 +13,7 @@ import { Easing as REasing, useReducedMotion, useSharedValue, withTiming } from 
 
 import { resolveLayout, splitHead, type SlideLayout } from "../../lib/ai";
 import { useDir, useI18n } from "../../lib/i18n";
+import { dict } from "../../lib/i18n/strings";
 import { useSlideFonts } from "../../lib/slideFonts";
 import { buildModel, captionAt, pickTheme, soloRole, THINK_SECONDS, type SceneRole, type SlideThemePref } from "../../lib/slideThemeCore";
 import type { VideoScene } from "../../lib/videoScriptCore";
@@ -63,7 +64,30 @@ type Props = {
   unitTitle?: string;
   /** مربع محجوز في الزاوية العليا اليسرى (زر ملء الشاشة) بالنقاط على الشاشة */
   reserveCorner?: number;
+  /** لغة الفيديو (٢٩ أكتوبر): تسميات الشرائح واتجاهها بلغة الشرح لا بلغة الواجهة */
+  contentLang?: "ar" | "en" | "fr";
 };
+
+/** ترجمة واتجاه بلغة الفيديو (فيديو إنجليزي في واجهة عربية: «Summary» لا «الخلاصة»، ومن اليسار) */
+function useContentI18n(contentLang?: "ar" | "en" | "fr") {
+  const ui = useI18n();
+  const uiDir = useDir();
+  return useMemo(() => {
+    const L = contentLang ?? (ui.lang as "ar" | "en" | "fr");
+    if (L === ui.lang) return { t: ui.t, lang: ui.lang, dir: uiDir };
+    const isRTL = L === "ar";
+    const tr = (k: string, v?: Record<string, string | number>) => {
+      let s = dict[L]?.[k] ?? dict.en?.[k] ?? dict.ar[k] ?? k;
+      if (v) for (const key of Object.keys(v)) s = s.replace(new RegExp(`\\{${key}\\}`, "g"), String(v[key]));
+      return s;
+    };
+    return {
+      t: tr,
+      lang: L,
+      dir: { isRTL, textAlign: (isRTL ? "right" : "left") as "right" | "left", row: (isRTL ? "row-reverse" : "row") as "row-reverse" | "row", writingDirection: (isRTL ? "rtl" : "ltr") as "rtl" | "ltr" },
+    };
+  }, [contentLang, ui.lang, ui.t, uiDir]);
+}
 
 /** عنصر يظهر بحركة ناعمة متى صار visible */
 function Reveal({ visible, children, delay = 0, style }: { visible: boolean; children: React.ReactNode; delay?: number; style?: object }) {
@@ -109,9 +133,8 @@ const SceneLayer = React.memo(function SceneLayer({ Scene, ctx }: { Scene: Slide
  * الرسم بالشكل المختار: الخلفية دائمة (بلا key)، والمشهد يُركَّب من جديد مع كل مشهد أو شكل،
  * ثم الترويسة والترجمة والانتقال. التقدّم قيمة مشتركة واحدة على مستوى الإطار تتبع الصوت بنعومة.
  */
-function ThemedStage({ scene, index, total, progress, stage, thinkLeft, width, look, role, speech, playing = true, unitTitle = "", reserveCorner = 0 }: Props & { look: SlideThemePref }) {
-  const { t, lang } = useI18n();
-  const dir = useDir();
+function ThemedStage({ scene, index, total, progress, stage, thinkLeft, width, look, role, speech, playing = true, unitTitle = "", reserveCorner = 0, contentLang }: Props & { look: SlideThemePref }) {
+  const { t, lang, dir } = useContentI18n(contentLang);
   const ff = useSlideFonts();
   const reduced = useReducedMotion();
   const scale = width / DW;
@@ -199,11 +222,10 @@ function ThemedStage({ scene, index, total, progress, stage, thinkLeft, width, l
 }
 
 /** الرسم الحالي كما كان قبل الأشكال (للاستعمالات بلا look، واحتياط الأشكال) */
-function LegacyStage({ scene, index, total, progress, stage, thinkLeft, caption: given, speech, width }: Props) {
+function LegacyStage({ scene, index, total, progress, stage, thinkLeft, caption: given, speech, width, contentLang }: Props) {
   // الترجمة: النص الجاهز إن مُرِّر، وإلا الجملة المنطوقة الآن من speech
   const caption = given !== undefined ? given : speech ? captionAt(speech, progress).sentence || null : null;
-  const dir = useDir();
-  const { t } = useI18n();
+  const { t, dir } = useContentI18n(contentLang);
   const scale = width / DW;
   const height = width * (DH / DW);
   const [c1, c2] = SLIDE_GRADIENTS[index % SLIDE_GRADIENTS.length];
