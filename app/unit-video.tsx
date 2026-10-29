@@ -42,9 +42,9 @@ const VIDEO_LANGS: VideoLang[] = ["ar", "en", "fr"];
 const VIDEO_LANG_NAMES: Record<VideoLang, string> = { ar: "العربية", en: "English", fr: "Français" };
 const isVideoLang = (v: unknown): v is VideoLang => v === "ar" || v === "en" || v === "fr";
 // نوع الفيديو حسب الملخّص الذي يُبنى منه (قرار نهلة ٢٨ أكتوبر): مختصر أو شامل أو موسّع؛ فيديو كل نوع ولغة محفوظ وحده
-type VideoLevel = "brief" | "strict" | "expand";
-const VIDEO_LEVELS: VideoLevel[] = ["brief", "strict", "expand"];
-const isVideoLevel = (v: unknown): v is VideoLevel => v === "brief" || v === "strict" || v === "expand";
+type VideoLevel = "brief" | "simple" | "strict" | "expand";
+const VIDEO_LEVELS: VideoLevel[] = ["brief", "simple", "strict", "expand"];
+const isVideoLevel = (v: unknown): v is VideoLevel => v === "brief" || v === "simple" || v === "strict" || v === "expand";
 
 const LOOK_PREVIEW: Record<SlideThemePref, { colors: [string, string]; icon: keyof typeof Ionicons.glyphMap; tint: string }> = {
   mixed: { colors: ["#2A2370", "#B4A6FF"], icon: "shuffle", tint: "#FFFFFF" },

@@ -37,8 +37,9 @@ function cacheIds(src: SummarySource) {
   const k = summaryCacheKey(src);
   // نوع الملخّص في المعرّف (٢٨ أكتوبر): فيديو المختصر والموسّع لا يحلّ محل الشامل؛ الشامل بمعرّفه القديم كما هو
   const lv = src.level ?? "strict";
+  // «المبسّط»: بإزاحة نصف داخل خانة الشامل (لا خانة جديدة: id×١٠٢٤ يجب أن يبقى تحت ٢^٥٣)
   const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : lv === "final" ? 6 : 0);
-  const id = flag * 1e12 + k.id;
+  const id = flag * 1e12 + (lv === "simple" ? 5e11 : 0) + k.id;
   return {
     id,
     // المسار القديم كما هو. تنبيه (٢٦ أكتوبر): id×١٠٠٠٠ يتجاوز دقة الأعداد (٢^٥٣)، فأرقام أجزاء الوحدة

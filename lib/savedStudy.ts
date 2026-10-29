@@ -18,7 +18,7 @@ export type SavedItem = {
   from?: number; // نطاق صفحات (وحدة من القارئ بلا منهج)
   to?: number;
   /** مستوى الملخّص (مختصر/شامل/موسّع) — بلا قيمة = شامل */
-  level?: "brief" | "strict" | "expand" | "final";
+  level?: "brief" | "strict" | "expand" | "final" | "simple";
   /** لغة شرح الفيديو (ar/en/fr) — فيديو كل لغة ونوع عنصر مستقل */
   lang?: string;
   /** فيديو قيد التجهيز (لم تكتمل أجزاؤه بعد؛ ما اكتمل محفوظ ويكمل من حيث توقف) */

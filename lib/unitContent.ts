@@ -9,7 +9,7 @@ import { getCurrentLang } from "./i18n";
 // summary/quiz/mindmap: لوحدات المنهج · pagesummary/pagequiz: لصفحة القارئ الحالية
 // studysummary/pagestudysummary = المستوى «الشامل» (وما حُفظ قبل المستويات بأسلوب الكتاب)؛
 // expand*/brief* = المستويان «الموسّع» و«المختصر» (٢١ أكتوبر)
-export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz" | "glossary" | "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary" | "studysummarypart" | "video" | "videopart" | "videopart2" | "videoplan" | "formulas" | "bilingual";
+export type UnitContentKind = "summary" | "quiz" | "mindmap" | "pagesummary" | "pagequiz" | "glossary" | "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary" | "simplesummary" | "pagesimplesummary" | "studysummarypart" | "video" | "videopart" | "videopart2" | "videoplan" | "formulas" | "bilingual";
 
 // تجزئة FNV-1a لاسم مفتاح ثابت قصير من مسار الـPDF
 function hashKey(s: string): string {

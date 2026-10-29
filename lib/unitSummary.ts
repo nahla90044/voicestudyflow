@@ -22,9 +22,10 @@ import { unitTextParts } from "./unitScope";
  * مستوى الملخّص: «مختصر» (للاستماع: أهم الأفكار والتعدادات كاملة)، «شامل» (الالتزام بالكتاب)،
  * «موسّع» (أمثلة وتمارين إضافية). كل مستوى يُحفظ وحده، فيمكن أن تجتمع الثلاثة للوحدة نفسها.
  */
-export type SummaryLevel = "brief" | "strict" | "expand" | "final";
-/** «final» = مراجعة أخيرة قبل الاختبار: نقاط للحفظ في صفحة واحدة (٢٤ أكتوبر) */
-export const SUMMARY_LEVELS: SummaryLevel[] = ["brief", "strict", "expand", "final"];
+export type SummaryLevel = "brief" | "strict" | "expand" | "final" | "simple";
+/** «final» = مراجعة أخيرة قبل الاختبار: نقاط للحفظ في صفحة واحدة (٢٤ أكتوبر)
+ *  «simple» = الشرح المبسّط كالمعلّم لأي منهج (طلب نهلة ٢٩ أكتوبر): لطالب يحاول أن يفهم، يعيد ويزيد حتى يفهم */
+export const SUMMARY_LEVELS: SummaryLevel[] = ["brief", "simple", "strict", "expand", "final"];
 
 export type SummarySource = ({ kind: "page"; page: number } | { kind: "unit"; unit: number } | { kind: "range"; from: number; to: number }) & {
   /** بلا مستوى = «الشامل» (التوافق مع ما سبق) */
@@ -38,13 +39,13 @@ export const sumLang = (src: SummarySource): string | undefined => (src.lang && 
 /** مسار مهام الملخّص بعلامة اللغة (لا تختلط مهمة عربية بإنجليزية للجزء نفسه) */
 const sumPath = (pdfPath: string, src: SummarySource) => (sumLang(src) ? `${pdfPath}@${sumLang(src)}` : pdfPath);
 
-type SummaryKind = "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary";
+type SummaryKind = "studysummary" | "pagestudysummary" | "expandsummary" | "pageexpandsummary" | "briefsummary" | "pagebriefsummary" | "finalsummary" | "pagefinalsummary" | "simplesummary" | "pagesimplesummary";
 
 /** مفتاح التخزين لكل مصدر ومستوى (لا يتداخل: الصفحات والنطاقات بأرقام بعيدة عن أرقام الوحدات) */
 export function summaryCacheKey(src: SummarySource): { id: number; kind: SummaryKind } {
   const lv = src.level ?? "strict";
   const page = src.kind === "page";
-  const kind = (`${page ? "page" : ""}${lv === "brief" ? "brief" : lv === "expand" ? "expand" : lv === "final" ? "final" : "study"}summary`) as SummaryKind;
+  const kind = (`${page ? "page" : ""}${lv === "brief" ? "brief" : lv === "expand" ? "expand" : lv === "final" ? "final" : lv === "simple" ? "simple" : "study"}summary`) as SummaryKind;
   if (src.kind === "page") return { id: src.page, kind };
   if (src.kind === "unit") return { id: src.unit, kind };
   return { id: 1_000_000 + src.from * 10_000 + src.to, kind };
@@ -54,7 +55,7 @@ export function summaryCacheKey(src: SummarySource): { id: number; kind: Summary
 function partBase(src: SummarySource): number {
   const k = summaryCacheKey(src);
   const lv = src.level ?? "strict";
-  const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : lv === "final" ? 6 : 0);
+  const flag = (src.kind === "page" ? 1 : 2) + (lv === "expand" ? 2 : lv === "brief" ? 4 : lv === "final" ? 6 : lv === "simple" ? 8 : 0);
   return flag * 1e12 + k.id * 1e4;
 }
 
@@ -297,7 +298,7 @@ export async function getOrMakeSummary(
       qaPart(`sum:${jp}:${partId(i)}`, "studysummary", ctx, (key, qaRetryOf) =>
         isTableLevel(mode)
           ? jobPart("studysummary", ctx, key, parsePartialTablePart, parseFullTablePart, onPartial, { mode, qaRetryOf, table: true, genId, ...study, ...langX })
-          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId, ...study, ...langX }),
+          : jobPart("studysummary", ctx, key, parsePartialPart, parseFullPart, onPartial, { deep: (mode === "strict" || mode === "expand" || mode === "simple") && EXERCISE_RE.test(ctx), mode, qaRetryOf, genId, ...study, ...langX }),
         // الجدول مكثّف عمدًا: عتبة «قصير» أدنى (يُرفض الفارغ تقريبًا فقط)
         (p, c) => checkSummaryPart(p, c, mode === "final" ? 0.015 : mode === "brief" ? 0.03 : 0.08)),
     merge: mergeSummaries,

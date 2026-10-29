@@ -502,7 +502,7 @@ export default function UnitSummaryScreen() {
               style={({ pressed }) => [styles.modeCard, { backgroundColor: pal.card, borderColor: readyLv.includes(m) ? "#15803D" : pal.cardBorder, opacity: pressed ? 0.85 : 1, flexDirection: dir.row }]}
             >
               <View style={[styles.modeIcon, { backgroundColor: pal.soft }]}>
-                <Ionicons name={m === "brief" ? "headset-outline" : m === "strict" ? "book-outline" : m === "final" ? "flash-outline" : "layers-outline"} size={22} color={pal.accent} />
+                <Ionicons name={m === "brief" ? "headset-outline" : m === "strict" ? "book-outline" : m === "final" ? "flash-outline" : m === "simple" ? "happy-outline" : "layers-outline"} size={22} color={pal.accent} />
               </View>
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={[styles.modeName, { color: pal.ink, textAlign: dir.textAlign }]}>{t(`summary.level.${m}`)}</Text>
@@ -530,7 +530,7 @@ export default function UnitSummaryScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* المستوى الحالي، وتغييره */}
           <Pressable onPress={() => { stopSummary(); setPlaying(false); setLvl(null); }} style={[styles.levelChip, { flexDirection: dir.row, borderColor: pal.cardBorder, backgroundColor: pal.soft }]}>
-            <Ionicons name={lvl === "brief" ? "headset-outline" : lvl === "expand" ? "layers-outline" : lvl === "final" ? "flash-outline" : "book-outline"} size={16} color={pal.accent} />
+            <Ionicons name={lvl === "brief" ? "headset-outline" : lvl === "expand" ? "layers-outline" : lvl === "final" ? "flash-outline" : lvl === "simple" ? "happy-outline" : "book-outline"} size={16} color={pal.accent} />
             <Text style={[styles.levelTxt, { color: pal.ink }]}>{t(`summary.level.${lvl ?? "strict"}`)}</Text>
             <Text style={[styles.levelChange, { color: pal.accent }]}>{t("summary.level.switch")}</Text>
           </Pressable>
