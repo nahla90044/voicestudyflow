@@ -27,9 +27,9 @@ import { markSeen, resetVideoSeen, seenScenes } from "../lib/studyTrack";
 import { addSavedItem, removeSavedItem } from "../lib/savedStudy";
 import { useScene } from "../lib/scene";
 import type { SummarySource } from "../lib/unitSummary";
-import { clearVideo, getCachedVideo, saveVideoAudio, sceneSpeech, videoRequestCost, videoSeconds, type VideoScript } from "../lib/videoScript";
+import { archiveVideo, clearVideo, getCachedVideo, getVideoVersion, saveVideoAudio, sceneSpeech, videoRequestCost, videoSeconds, type VideoScript } from "../lib/videoScript";
 import { confirmCost } from "../lib/costConfirm";
-import { hasVideoJob, startVideoJob, videoJobKey, watchVideoJob, type VideoJob } from "../lib/videoJobs";
+import { forgetVideoJob, hasVideoJob, startVideoJob, videoJobKey, watchVideoJob, type VideoJob } from "../lib/videoJobs";
 import { DEFAULT_VOICE_ID, prefetchText, speakText, stopSpeaking, VOICE_CATALOG } from "../lib/voice";
 
 const RATES = [1, 1.15, 1.3];
@@ -59,7 +59,9 @@ export default function UnitVideoScreen() {
   const dir = useDir();
   const { pal } = useScene();
   const { width: winW, height: winH } = useWindowDimensions();
-  const { pdf_path, unit, page, from, to, title, book_title, vlang: vlangParam, vlevel: vlevelParam } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; vlang?: string; vlevel?: string }>();
+  const { pdf_path, unit, page, from, to, title, book_title, vlang: vlangParam, vlevel: vlevelParam, vver } = useLocalSearchParams<{ pdf_path?: string; unit?: string; page?: string; from?: string; to?: string; title?: string; book_title?: string; vlang?: string; vlevel?: string; vver?: string }>();
+  // صياغة سابقة محفوظة (من المحفوظات): تُعرض كما هي بلا توليد ولا إعادة صياغة
+  const version = Number(vver) > 0 ? Number(vver) : null;
   const pdfPath = typeof pdf_path === "string" ? pdf_path : "";
   const unitIdx = Number(unit ?? 0) || 0;
   const pageNum = Number(page);
@@ -173,6 +175,15 @@ export default function UnitVideoScreen() {
     setSetup(false);
     (async () => {
       if (!vlang || !vlevel) return;
+      if (version) {
+        const v = await getVideoVersion(pdfPath, src, version, vlang).catch(() => null);
+        if (!on) return;
+        if (v) {
+          setScript(v);
+          setComplete(true);
+        }
+        return;
+      }
       const cached = await getCachedVideo(pdfPath, src, vlang);
       if (!on) return;
       if (cached) {
@@ -247,10 +258,8 @@ export default function UnitVideoScreen() {
   // علشان اطمئن ان شغلي محفوظ». لكل لغة ونوع عنصر مستقل (الشامل بالعربية بمفتاحه القديم كما كان)
   const saveVideoItem = (partial: boolean) => {
     if (!pdfPath || !vlang || !vlevel) return;
-    const base = `video|${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`;
-    const plain = vlevel === "strict" && vlang === getCurrentLang();
     addSavedItem({
-      key: plain ? base : `${base}|${vlevel}|${vlang}`,
+      key: videoSaveKey(),
       kind: "video",
       pdfPath,
       bookTitle,
@@ -265,8 +274,13 @@ export default function UnitVideoScreen() {
       savedAt: Date.now(),
     });
   };
+  function videoSaveKey(): string {
+    const base = `video|${pdfPath}|${pageMode ? "p" + pageNum : rangeMode ? `r${fromN}-${toN}` : "u" + unitIdx}`;
+    const plain = vlevel === "strict" && vlang === getCurrentLang();
+    return plain ? base : `${base}|${vlevel}|${vlang}`;
+  }
   useEffect(() => {
-    if (complete) saveVideoItem(false);
+    if (complete && !version) saveVideoItem(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complete]);
 
@@ -428,6 +442,26 @@ export default function UnitVideoScreen() {
           setPlaying(false);
           setEnded(false);
           setIdx(0);
+          // الصياغة الحالية لا تضيع (طلب نهلة ٢٩ أكتوبر): تُحفظ «صياغة n» في المحفوظات ثم يُكتب فيديو جديد
+          const n = await archiveVideo(pdfPath, src, vlang ?? undefined).catch(() => null);
+          if (n && vlang && vlevel) {
+            addSavedItem({
+              key: `${videoSaveKey()}|v${n}`,
+              kind: "video",
+              pdfPath,
+              bookTitle,
+              label: `${unitTitle || (pageMode ? String(pageNum) : "")} — ${t("video.version", { n })}`,
+              page: pageMode ? pageNum : undefined,
+              unit: pageMode || rangeMode ? undefined : unitIdx,
+              from: rangeMode ? fromN : undefined,
+              to: rangeMode ? toN : undefined,
+              level: vlevel,
+              lang: vlang,
+              version: n,
+              savedAt: Date.now(),
+            });
+          }
+          if (vlang) forgetVideoJob(videoJobKey(pdfPath, src, vlang));
           await clearVideo(pdfPath, src, vlang ?? undefined);
           // الفيديو الجديد غير القديم: «شوهد» يبدأ من جديد (كان يبقى سجل القديم فيظهر تقدّم خاطئ)
           if (src.kind === "unit") resetVideoSeen(pdfPath, unitIdx);
@@ -522,7 +556,7 @@ export default function UnitVideoScreen() {
     <SceneScreen>
       <SceneBanner
         title={t("video.title")}
-        subtitle={unitTitle || bookTitle || undefined}
+        subtitle={`${unitTitle || bookTitle || ""}${version ? ` — ${t("video.version", { n: version })}` : ""}` || undefined}
         height={150}
         left={
           <Pressable onPress={() => router.back()} hitSlop={8} accessibilityRole="button" accessibilityLabel={t("common.back")}>
@@ -890,7 +924,7 @@ export default function UnitVideoScreen() {
             ) : null}
           </SceneCard>
 
-          {complete ? (
+          {complete && !version ? (
             <Pressable onPress={onVideoOptions} style={[styles.primary, { backgroundColor: pal.soft, flexDirection: dir.row }]}>
               <Ionicons name="options-outline" size={18} color={pal.ink} />
               <Text style={[styles.primaryTxt, { color: pal.ink }]}>{t("video.options")}</Text>

@@ -266,6 +266,7 @@ export default function FlashcardsScreen() {
     if (it.kind === "video") {
       params.vlevel = it.level ?? "strict";
       if (it.lang) params.vlang = it.lang;
+      if (it.version) params.vver = String(it.version);
     }
     if (it.from != null && it.to != null) {
       params.from = String(it.from);

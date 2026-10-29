@@ -51,6 +51,11 @@ function emit(j: VideoJob) {
   subs.get(j.key)?.forEach((f) => f(j));
 }
 
+/** إعادة الصياغة (٢٩ أكتوبر): تُنسى نتيجة المهمة السابقة في الذاكرة — كانت تُعرض فورًا فيظهر «نفس الفيديو» */
+export function forgetVideoJob(key: string): void {
+  if (jobs.get(key)?.status !== "running") jobs.delete(key);
+}
+
 export function watchVideoJob(key: string, fn: (j: VideoJob) => void): () => void {
   if (!subs.has(key)) subs.set(key, new Set());
   subs.get(key)!.add(fn);

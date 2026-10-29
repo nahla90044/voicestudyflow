@@ -23,6 +23,8 @@ export type SavedItem = {
   lang?: string;
   /** فيديو قيد التجهيز (لم تكتمل أجزاؤه بعد؛ ما اكتمل محفوظ ويكمل من حيث توقف) */
   partial?: boolean;
+  /** صياغة سابقة محفوظة للفيديو (١، ٢…) — تُعرض بلا توليد */
+  version?: number;
   savedAt: number;
   studied?: boolean; // أُشِّر كمدروس من القائمة
   archived?: boolean; // منقول إلى الأرشيف

@@ -5,8 +5,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { listSaves, removeSave, type StudySave } from "../../lib/studySaves";
-import { getSavedItems, type SavedItem } from "../../lib/savedStudy";
-import { getCachedVideo } from "../../lib/videoScript";
+import { getSavedItems, removeSavedItem, type SavedItem } from "../../lib/savedStudy";
+import { clearVideo, getCachedVideo, removeVideoVersion } from "../../lib/videoScript";
 import { addSaveRef, createFolder, deleteFolder, forgetSave, loadFolders, type BookFolder } from "../../lib/bookFolders";
 import { loadNotes } from "../../lib/notes";
 import React, { useCallback, useEffect, useState } from "react";
@@ -105,7 +105,7 @@ export default function BookHubScreen() {
               .map(async (v) => {
                 const base = v.page != null ? { kind: "page" as const, page: v.page } : v.from != null && v.to != null ? { kind: "range" as const, from: v.from, to: v.to } : { kind: "unit" as const, unit: v.unit ?? 0 };
                 const lv = v.level && v.level !== "strict" ? v.level : undefined;
-                const done = !!(await getCachedVideo(v.pdfPath, lv ? { ...base, level: lv } : base, v.lang).catch(() => null));
+                const done = v.version ? true : !!(await getCachedVideo(v.pdfPath, lv ? { ...base, level: lv } : base, v.lang).catch(() => null));
                 return { ...v, done };
               })
           )
@@ -293,6 +293,25 @@ export default function BookHubScreen() {
     Alert.alert(t("folders.delete"), t("folders.deleteBody", { name: f.name }), [
       { text: t("common.cancel"), style: "cancel" },
       { text: t("common.delete"), style: "destructive", onPress: () => void deleteFolder(book.id, f.id).then(loadSaves) },
+    ]);
+  };
+  // حذف فيديو أو صياغة من المحفوظات (الطالب يقرر ما يبقى — طلب نهلة ٢٩ أكتوبر)
+  const confirmDeleteVideo = (v: SavedItem & { done: boolean }) => {
+    Alert.alert(t("saves.videoDelete"), t("saves.videoDeleteBody", { name: v.label || book?.title || "" }), [
+      { text: t("common.cancel"), style: "cancel" },
+      {
+        text: t("common.delete"),
+        style: "destructive",
+        onPress: async () => {
+          const base = v.page != null ? { kind: "page" as const, page: v.page } : v.from != null && v.to != null ? { kind: "range" as const, from: v.from, to: v.to } : { kind: "unit" as const, unit: v.unit ?? 0 };
+          const lv = v.level && v.level !== "strict" ? v.level : undefined;
+          const src = lv ? { ...base, level: lv } : base;
+          if (v.version) await removeVideoVersion(v.pdfPath, src, v.version, v.lang).catch(() => {});
+          else await clearVideo(v.pdfPath, src, v.lang).catch(() => {});
+          await removeSavedItem(v.key).catch(() => {});
+          loadSaves();
+        },
+      },
     ]);
   };
   const confirmDeleteSave = (sv: StudySave) => {
@@ -718,6 +737,7 @@ export default function BookHubScreen() {
                   onPress={() => {
                     const params: Record<string, string> = { pdf_path: v.pdfPath, title: v.label, book_title: v.bookTitle, vlevel: v.level ?? "strict" };
                     if (v.lang) params.vlang = v.lang;
+                    if (v.version) params.vver = String(v.version);
                     if (v.page != null) params.page = String(v.page);
                     if (v.unit != null) params.unit = String(v.unit);
                     if (v.from != null && v.to != null) {
@@ -741,6 +761,9 @@ export default function BookHubScreen() {
                       </Text>
                     </View>
                     <Ionicons name={v.done ? "checkmark-circle" : "time-outline"} size={20} color={v.done ? "#15803D" : pal.accent} />
+                    <PressableScale onPress={() => confirmDeleteVideo(v)} style={[styles.trash, { borderColor: pal.cardBorder }]}>
+                      <Ionicons name="trash-outline" size={17} color={tone.bad} accessibilityLabel={t("common.delete")} />
+                    </PressableScale>
                   </SceneCard>
                 </PressableScale>
               ))}

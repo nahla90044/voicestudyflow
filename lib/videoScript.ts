@@ -89,6 +89,35 @@ export async function getCachedVideo(pdfPath: string, src: SummarySource, lang?:
   };
 }
 
+// ===== صياغات الفيديو المحفوظة (طلب نهلة ٢٩ أكتوبر) =====
+// «إعادة الصياغة» لا تمحو الفيديو السابق: يُحفظ «صياغةً» مرقّمة (في المحفوظات) ويُكتب فيديو جديد،
+// فلا يضيع جهد الطالب ولا رصيده، ويقرّر في المحفوظات ما يبقى.
+export type VideoVersion = { n: number; savedAt: number; script: VideoScript };
+
+export async function getVideoVersions(pdfPath: string, src: SummarySource, lang?: string): Promise<VideoVersion[]> {
+  const v = await getUnitContent<VideoVersion[]>(pdfPath, cacheIds(src).id, "videoversions", otherLang(lang)).catch(() => null);
+  return Array.isArray(v) ? v : [];
+}
+
+/** يحفظ الفيديو الحالي المكتمل صياغةً مرقّمة؛ يُرجع رقمها (أو null إن لم يكن فيديو مكتمل) */
+export async function archiveVideo(pdfPath: string, src: SummarySource, lang?: string): Promise<number | null> {
+  const cur = await getCachedVideo(pdfPath, src, lang);
+  if (!cur?.scenes?.length) return null;
+  const list = await getVideoVersions(pdfPath, src, lang);
+  const n = list.reduce((m, x) => Math.max(m, x.n), 0) + 1;
+  await setUnitContent(pdfPath, cacheIds(src).id, "videoversions", [...list, { n, savedAt: Date.now(), script: cur }], otherLang(lang));
+  return n;
+}
+
+export async function getVideoVersion(pdfPath: string, src: SummarySource, n: number, lang?: string): Promise<VideoScript | null> {
+  return (await getVideoVersions(pdfPath, src, lang)).find((x) => x.n === n)?.script ?? null;
+}
+
+export async function removeVideoVersion(pdfPath: string, src: SummarySource, n: number, lang?: string): Promise<void> {
+  const list = (await getVideoVersions(pdfPath, src, lang)).filter((x) => x.n !== n);
+  await setUnitContent(pdfPath, cacheIds(src).id, "videoversions", list, otherLang(lang));
+}
+
 /** يحذف الفيديو المخزَّن وكل أجزائه وخطته ومهامه، بالمسارين القديم والجديد (إعادة التوليد أو الحذف) */
 export async function clearVideo(pdfPath: string, src: SummarySource, lang?: string): Promise<void> {
   const ids = cacheIds(src);
